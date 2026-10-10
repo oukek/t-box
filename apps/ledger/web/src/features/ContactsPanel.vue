@@ -1,149 +1,152 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { SheetSelect, BottomSheet } from "@t-box/ui-kit";
-import { featureApi, useFeatureAction } from "./api";
-import AttachmentButton from "./AttachmentButton.vue";
-import LedgerFormSheet from "./LedgerFormSheet.vue";
-import type { FormValues, LedgerFormField } from "./form";
-import { localDate } from "../bills/format";
+import type { FormValues, LedgerFormField } from './form'
+import { BottomSheet, SheetSelect } from '@t-box/ui-kit'
+import { computed, onMounted, ref } from 'vue'
+import { localDate } from '../bills/format'
+import { featureApi, useFeatureAction } from './api'
+import AttachmentButton from './AttachmentButton.vue'
+import LedgerFormSheet from './LedgerFormSheet.vue'
+
 const props = defineProps<{
-    ledgerId: string;
-    canWrite: boolean;
-    canManage: boolean;
-  }>(),
-  api = featureApi(props.ledgerId),
-  action = useFeatureAction(),
-  rows = ref<any[]>([]),
-  aging = ref<any[]>([]),
-  bucket = ref("all"),
-  contact = ref(""),
-  editor = ref<"create" | "edit" | "adjust" | null>(null),
-  target = ref<any>(),
-  historyTarget = ref<any>(),
-  adjustments = ref<any[]>([]),
-  allAdjustments = ref<any[]>([]),
-  reverseTarget = ref<any>(),
-  attachmentResourceIds = ref<string[]>([]),
-  form = ref<FormValues>({});
+  ledgerId: string
+  canWrite: boolean
+  canManage: boolean
+}>()
+const api = featureApi(props.ledgerId)
+const action = useFeatureAction()
+const rows = ref<any[]>([])
+const aging = ref<any[]>([])
+const bucket = ref('all')
+const contact = ref('')
+const editor = ref<'create' | 'edit' | 'adjust' | null>(null)
+const target = ref<any>()
+const historyTarget = ref<any>()
+const adjustments = ref<any[]>([])
+const allAdjustments = ref<any[]>([])
+const reverseTarget = ref<any>()
+const attachmentResourceIds = ref<string[]>([])
+const form = ref<FormValues>({})
 const visible = computed(() =>
   aging.value.filter(
     (r) =>
-      (bucket.value === "all" || r.bucket === bucket.value) &&
+      (bucket.value === 'all' || r.bucket === bucket.value) &&
       (!contact.value || r.contactId === contact.value),
   ),
-);
+)
 const fields = computed<LedgerFormField[]>(() =>
-  editor.value === "adjust"
+  editor.value === 'adjust'
     ? [
         {
-          key: "kind",
-          label: "调整方式",
-          kind: "select",
+          key: 'kind',
+          label: '调整方式',
+          kind: 'select',
           options: [
-            { value: "extension", label: "展期" },
-            { value: "waiver", label: "减免" },
-            { value: "writeoff", label: "核销" },
+            { value: 'extension', label: '展期' },
+            { value: 'waiver', label: '减免' },
+            { value: 'writeoff', label: '核销' },
           ],
         },
-        ...((form.value.kind === "extension"
-          ? [{ key: "dueDate", label: "新的到期日", kind: "date" }]
+        ...((form.value.kind === 'extension'
+          ? [{ key: 'dueDate', label: '新的到期日', kind: 'date' }]
           : [
               {
-                key: "amount",
-                label: "调整金额",
-                kind: "money",
+                key: 'amount',
+                label: '调整金额',
+                kind: 'money',
                 required: true,
               },
-              { key: "date", label: "调整日期", kind: "date" },
+              { key: 'date', label: '调整日期', kind: 'date' },
             ]) as LedgerFormField[]),
-        { key: "note", label: "调整原因", required: true },
+        { key: 'note', label: '调整原因', required: true },
       ]
     : [
-        { key: "name", label: "对象名称", required: true, max: 80 },
-        { key: "note", label: "备注" },
-        ...(editor.value === "edit"
+        { key: 'name', label: '对象名称', required: true, max: 80 },
+        { key: 'note', label: '备注' },
+        ...(editor.value === 'edit'
           ? ([
-              { key: "archived", label: "归档对象", kind: "checkbox" },
+              { key: 'archived', label: '归档对象', kind: 'checkbox' },
             ] as LedgerFormField[])
           : []),
       ],
-);
+)
 async function load() {
   [rows.value, aging.value, allAdjustments.value] = await Promise.all([
-    api.get("/contacts"),
-    api.get("/debts/aging"),
-    api.get("/debt-adjustments"),
-  ]);
+    api.get('/contacts'),
+    api.get('/debts/aging'),
+    api.get('/debt-adjustments'),
+  ])
 }
 function open(mode: typeof editor.value, row?: any) {
-  attachmentResourceIds.value = [];
-  editor.value = mode;
-  target.value = row;
-  action.error.value = "";
+  attachmentResourceIds.value = []
+  editor.value = mode
+  target.value = row
+  action.error.value = ''
   form.value =
-    mode === "adjust"
+    mode === 'adjust'
       ? {
-          kind: "extension",
+          kind: 'extension',
           amount: row.remaining,
           date: localDate(),
           dueDate: row.dueDate ?? localDate(),
-          note: "",
+          note: '',
         }
       : {
-          name: row?.name ?? "",
-          note: row?.note ?? "",
-          ...(mode === "edit" ? { archived: !!Number(row.archived) } : {}),
-        };
+          name: row?.name ?? '',
+          note: row?.note ?? '',
+          ...(mode === 'edit' ? { archived: !!Number(row.archived) } : {}),
+        }
 }
 async function save() {
-  const mode = editor.value,
-    path =
-      mode === "adjust"
-        ? `/debts/${target.value.id}/adjustments`
-        : mode === "edit"
-          ? `/contacts/${target.value.id}`
-          : "/contacts",
-    body =
-      mode === "adjust"
-        ? {
-            ...form.value,
-            attachmentResourceIds: attachmentResourceIds.value,
-            amount:
-              form.value.kind === "extension"
+  const mode = editor.value
+  const path =
+    mode === 'adjust'
+      ? `/debts/${target.value.id}/adjustments`
+      : mode === 'edit'
+        ? `/contacts/${target.value.id}`
+        : '/contacts'
+  const body =
+    mode === 'adjust'
+      ? {
+          ...form.value,
+          attachmentResourceIds: attachmentResourceIds.value,
+          amount:
+              form.value.kind === 'extension'
                 ? null
                 : String(form.value.amount),
-            date: form.value.kind === "extension" ? null : form.value.date,
-            dueDate:
-              form.value.kind === "extension" ? form.value.dueDate : null,
-          }
-        : form.value;
+          date: form.value.kind === 'extension' ? null : form.value.date,
+          dueDate:
+              form.value.kind === 'extension' ? form.value.dueDate : null,
+        }
+      : form.value
   const result = await action.run(path, body, (k) =>
-    api.write(path, body, mode === "edit" ? "PATCH" : "POST", k),
-  );
+    api.write(path, body, mode === 'edit' ? 'PATCH' : 'POST', k))
   if (result) {
-    editor.value = null;
-    await load();
+    editor.value = null
+    await load()
   }
 }
 async function history(row: any) {
-  historyTarget.value = row;
+  historyTarget.value = row
   try {
-    adjustments.value = await api.get(`/debts/${row.id}/adjustments`);
+    adjustments.value = await api.get(`/debts/${row.id}/adjustments`)
   } catch (e) {
-    action.error.value = (e as Error).message;
+    action.error.value = (e as Error).message
   }
 }
 async function reverse() {
-  const path = `/debt-adjustments/${reverseTarget.value.id}/reversal`;
-  const r = await action.run(path, {}, (k) => api.write(path, {}, "POST", k));
+  const path = `/debt-adjustments/${reverseTarget.value.id}/reversal`
+  const r = await action.run(path, {}, (k) => api.write(path, {}, 'POST', k))
   if (r) {
-    reverseTarget.value = undefined;
-    await load();
-    if (historyTarget.value) await history(historyTarget.value);
+    reverseTarget.value = undefined
+    await load()
+    if (historyTarget.value) {
+      await history(historyTarget.value)
+    }
   }
 }
-onMounted(() => load().catch((e) => (action.error.value = e.message)));
+onMounted(() => load().catch((e) => (action.error.value = e.message)))
 </script>
+
 <template>
   <div>
     <div class="feature-toolbar">
@@ -157,16 +160,18 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
       </button>
     </div>
     <div class="feature-card">
-      <div v-for="row in rows" :key="row.id" class="feature-row">
+      <div
+        v-for="row in rows"
+        :key="row.id"
+        class="feature-row"
+      >
         <div>
-          <strong
-            >{{ row.name }}{{ Number(row.archived) ? " · 已归档" : "" }}</strong
-          ><small>应收 {{ row.receivable }} · 应付 {{ row.payable }} 元</small>
+          <strong>{{ row.name }}{{ Number(row.archived) ? " · 已归档" : "" }}</strong><small>应收 {{ row.receivable }} · 应付 {{ row.payable }} 元</small>
         </div>
         <div class="feature-actions">
           <button @click="contact = contact === row.id ? '' : row.id">
-            {{ contact === row.id ? "查看全部" : "明细" }}</button
-          ><button v-if="canManage" @click="open('edit', row)">编辑</button>
+            {{ contact === row.id ? "查看全部" : "明细" }}
+          </button><button v-if="canManage" @click="open('edit', row)">编辑</button>
         </div>
       </div>
       <p v-if="!rows.length" class="feature-empty">
@@ -185,22 +190,20 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
       ]"
     />
     <div class="feature-card">
-      <div v-for="row in visible" :key="row.id" class="feature-row">
+      <div
+        v-for="row in visible"
+        :key="row.id"
+        class="feature-row"
+      >
         <div>
-          <strong
-            >{{ row.counterparty }} ·
+          <strong>{{ row.counterparty }} ·
             {{ row.direction === "receivable" ? "应收" : "应付" }}
-            {{ row.remaining }} 元</strong
-          ><small
-            >{{ row.dueDate ? "到期 " + row.dueDate : "未设到期日"
-            }}{{
-              Number(row.overdueDays) > 0
-                ? " · 逾期 " + row.overdueDays + " 天"
-                : ""
-            }}</small
-          ><small v-if="Number(row.adjusted) > 0"
-            >累计减免 / 核销 {{ row.adjusted }} 元</small
-          >
+            {{ row.remaining }} 元</strong><small>{{ row.dueDate ? "到期 " + row.dueDate : "未设到期日"
+          }}{{
+            Number(row.overdueDays) > 0
+              ? " · 逾期 " + row.overdueDays + " 天"
+              : ""
+          }}</small><small v-if="Number(row.adjusted) > 0">累计减免 / 核销 {{ row.adjusted }} 元</small>
         </div>
         <div class="feature-actions">
           <AttachmentButton
@@ -209,8 +212,7 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
             :record-id="row.id"
             :can-write="canManage"
           />
-          <button v-if="canManage" @click="history(row)">调整记录</button
-          ><button v-if="canManage" @click="open('adjust', row)">调整</button>
+          <button v-if="canManage" @click="history(row)">调整记录</button><button v-if="canManage" @click="open('adjust', row)">调整</button>
         </div>
       </div>
       <p v-if="!visible.length" class="feature-empty">
@@ -221,12 +223,14 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
       <summary class="feature-section-title">
         减免与核销记录（包含已结清）
       </summary>
-      <div v-for="r in allAdjustments" :key="r.id" class="feature-row">
+      <div
+        v-for="r in allAdjustments"
+        :key="r.id"
+        class="feature-row"
+      >
         <div>
-          <strong
-            >{{ r.counterparty }} · {{ r.kind === "waiver" ? "减免" : "核销" }}
-            {{ r.amount }} 元{{ Number(r.reversed) ? " · 已撤销" : "" }}</strong
-          ><small>{{ r.date }} · {{ r.note }}</small>
+          <strong>{{ r.counterparty }} · {{ r.kind === "waiver" ? "减免" : "核销" }}
+            {{ r.amount }} 元{{ Number(r.reversed) ? " · 已撤销" : "" }}</strong><small>{{ r.date }} · {{ r.note }}</small>
         </div>
         <div class="feature-actions">
           <AttachmentButton
@@ -245,7 +249,9 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
       </div>
       <p v-if="!allAdjustments.length" class="feature-empty">暂无调整记录。</p>
     </details>
-    <p v-if="action.error.value" class="form-error">{{ action.error.value }}</p>
+    <p v-if="action.error.value" class="form-error">
+      {{ action.error.value }}
+    </p>
     <LedgerFormSheet
       v-model="form"
       v-model:attachment-resource-ids="attachmentResourceIds"
@@ -276,13 +282,16 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
       full-height
       compact
       @close="historyTarget = undefined"
-      ><div v-for="r in adjustments" :key="r.id" class="feature-row">
+    >
+      <div
+        v-for="r in adjustments"
+        :key="r.id"
+        class="feature-row"
+      >
         <div>
-          <strong
-            >{{ r.kind === "waiver" ? "减免" : "核销" }} {{ r.amount }} 元{{
-              Number(r.reversed) ? " · 已撤销" : ""
-            }}</strong
-          ><small>{{ r.date }} · {{ r.note }}</small>
+          <strong>{{ r.kind === "waiver" ? "减免" : "核销" }} {{ r.amount }} 元{{
+            Number(r.reversed) ? " · 已撤销" : ""
+          }}</strong><small>{{ r.date }} · {{ r.note }}</small>
         </div>
         <div class="feature-actions">
           <button
@@ -295,8 +304,8 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
       </div>
       <p v-if="!adjustments.length" class="feature-empty">
         暂无减免、核销记录，展期记录保留在操作日志。
-      </p></BottomSheet
-    >
+      </p>
+    </BottomSheet>
     <LedgerFormSheet
       v-model="form"
       :open="!!reverseTarget"

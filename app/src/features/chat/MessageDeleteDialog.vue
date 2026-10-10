@@ -1,39 +1,43 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { Modal } from "@t-box/ui-kit";
-import { deleteMessage } from "./chatStore";
-import { refreshConversationHistory } from "./conversationStore";
+import { Modal } from '@t-box/ui-kit'
+import { ref, watch } from 'vue'
+import { deleteMessage } from './chatStore'
+import { refreshConversationHistory } from './conversationStore'
+
 const props = defineProps<{
-  open: boolean;
-  messageId: string;
-  preview: string;
-}>();
-const emit = defineEmits<{ close: []; deleted: [id: string] }>();
-const busy = ref(false),
-  error = ref("");
+  open: boolean
+  messageId: string
+  preview: string
+}>()
+const emit = defineEmits<{ close: [], deleted: [id: string] }>()
+const busy = ref(false)
+const error = ref('')
 watch(
   () => props.open,
   () => {
-    error.value = "";
+    error.value = ''
   },
-);
+)
 async function remove() {
-  if (busy.value) return;
-  busy.value = true;
-  error.value = "";
-  const id = props.messageId;
+  if (busy.value) {
+    return
+  }
+  busy.value = true
+  error.value = ''
+  const id = props.messageId
   try {
-    await deleteMessage(id);
-    emit("deleted", id);
-    emit("close");
-    void refreshConversationHistory();
+    await deleteMessage(id)
+    emit('deleted', id)
+    emit('close')
+    void refreshConversationHistory()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "删除失败";
+    error.value = cause instanceof Error ? cause.message : '删除失败'
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 </script>
+
 <template>
   <Modal
     :open="open"
@@ -44,18 +48,24 @@ async function remove() {
     <p class="delete-description">
       这个问题和对应的回答会一起删除，其余消息保留。
     </p>
-    <p class="delete-preview">{{ preview }}</p>
+    <p class="delete-preview">
+      {{ preview }}
+    </p>
     <p class="delete-help">已创建的账单、资源和费用记录不会被撤销。</p>
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p
+      v-if="error"
+      class="form-error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
     <div class="delete-actions">
       <button
         type="button"
         class="button button-secondary"
         :disabled="busy"
         @click="emit('close')"
-      >
-        取消</button
-      ><button
+      > 取消</button><button
         type="button"
         class="button delete-confirm"
         :disabled="busy"
@@ -66,6 +76,7 @@ async function remove() {
     </div>
   </Modal>
 </template>
+
 <style scoped>
 .delete-description {
   font-size: 14px;

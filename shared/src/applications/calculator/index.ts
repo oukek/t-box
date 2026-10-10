@@ -1,1 +1,1 @@
-export * from "@t-box/calculator-contracts";
+export * from '@t-box/calculator-contracts'

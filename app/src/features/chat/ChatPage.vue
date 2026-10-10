@@ -1,183 +1,192 @@
 <script setup lang="ts">
-import MessageActions from "./MessageActions.vue";
-import AnswerActions from "./AnswerActions.vue";
-import MessageFooter from "./MessageFooter.vue";
-import GenerationStatus from "./GenerationStatus.vue";
-import MessageDeleteDialog from "./MessageDeleteDialog.vue";
-import {
-  hasFinishedReply,
-  taskBlocksNewMessage,
-  answerCopyText,
-} from "./messagePolicy";
+import type { ApplicationId, Resource } from '@t-box/shared'
+import { AppIcon } from '@t-box/ui-kit'
 import {
   computed,
   nextTick,
+  onBeforeUnmount,
+  onMounted,
   ref,
   watch,
-  onMounted,
-  onBeforeUnmount,
-} from "vue";
-import { type ApplicationId } from "@t-box/shared";
-import ChatComposer from "./ChatComposer.vue";
-import { getApplication } from "../../core/applications";
-import { AppIcon } from "@t-box/ui-kit";
-import ResourceImage from "../../components/ResourceImage.vue";
-import ImageViewer from "../../components/ImageViewer.vue";
+} from 'vue'
+import ImageViewer from '../../components/ImageViewer.vue'
+import ResourceImage from '../../components/ResourceImage.vue'
+import { getApplication } from '../../core/applications'
+import {
+  downloadResource,
+  fileSize,
+  uploadResource,
+} from '../resources/resourcesApi'
+import CustomerSupportEntry from '../support/CustomerSupportEntry.vue'
+import AICenterPanel from './AICenterPanel.vue'
+import AnswerActions from './AnswerActions.vue'
+import ChatComposer from './ChatComposer.vue'
+import {
+  cancelRun,
+  canSendMessage,
+  chatBusy,
+  chatState,
+  dismissUncertainty,
+  newConversation,
+  openConversation,
+  reconnectChat,
+  retryAnswer,
+  sendMessage,
+  takeFailedDraft,
+} from './chatStore'
+import ConversationHistory from './ConversationHistory.vue'
 import {
   conversationHistory,
   refreshConversationHistory,
   resetConversationHistory,
-} from "./conversationStore";
-import ConversationHistory from "./ConversationHistory.vue";
-import TaskPanel from "./TaskPanel.vue";
-import AICenterPanel from "./AICenterPanel.vue";
-import type { Resource } from "@t-box/shared";
+} from './conversationStore'
+import ConversationTitleEditor from './ConversationTitleEditor.vue'
+import GenerationStatus from './GenerationStatus.vue'
+import MessageActions from './MessageActions.vue'
+import MessageDeleteDialog from './MessageDeleteDialog.vue'
+import MessageExecutionTime from './MessageExecutionTime.vue'
+import MessageFooter from './MessageFooter.vue'
 import {
-  uploadResource,
-  downloadResource,
-  fileSize,
-} from "../resources/resourcesApi";
-import MessageExecutionTime from "./MessageExecutionTime.vue";
-import MessageTimeline from "./MessageTimeline.vue";
-import StreamText from "./StreamText.vue";
-import ConversationTitleEditor from "./ConversationTitleEditor.vue";
-import ToolProgress from "./ToolProgress.vue";
-import CustomerSupportEntry from "../support/CustomerSupportEntry.vue";
-import {
-  chatState,
-  chatBusy,
-  canSendMessage,
-  sendMessage,
-  retryAnswer,
-  cancelRun,
-  reconnectChat,
-  newConversation,
-  dismissUncertainty,
-  takeFailedDraft,
-  openConversation,
-} from "./chatStore";
-const props = defineProps<{ active: boolean }>();
-const text = ref("");
-const applicationIds = ref<ApplicationId[]>([]);
-const composer = ref<InstanceType<typeof ChatComposer>>();
-const attachments = ref<Resource[]>([]),
-  previewImage = ref<Resource | null>(null),
-  uploading = ref(false),
-  uploadError = ref(""),
-  historyOpen = ref(false);
+  answerCopyText,
+  hasFinishedReply,
+  taskBlocksNewMessage,
+} from './messagePolicy'
+import MessageTimeline from './MessageTimeline.vue'
+import StreamText from './StreamText.vue'
+import TaskPanel from './TaskPanel.vue'
+import ToolProgress from './ToolProgress.vue'
+
+const props = defineProps<{ active: boolean }>()
+const text = ref('')
+const applicationIds = ref<ApplicationId[]>([])
+const composer = ref<InstanceType<typeof ChatComposer>>()
+const attachments = ref<Resource[]>([])
+const previewImage = ref<Resource | null>(null)
+const uploading = ref(false)
+const uploadError = ref('')
+const historyOpen = ref(false)
 async function pickFiles(files: File[]) {
-  if (uploading.value) return;
-  if (files.length + attachments.value.length > 4) {
-    uploadError.value = "每条消息最多附加 4 个文件";
-    return;
+  if (uploading.value) {
+    return
   }
-  uploading.value = true;
-  uploadError.value = "";
+  if (files.length + attachments.value.length > 4) {
+    uploadError.value = '每条消息最多附加 4 个文件'
+    return
+  }
+  uploading.value = true
+  uploadError.value = ''
   try {
-    for (const file of files)
-      attachments.value.push(await uploadResource(file));
+    for (const file of files) {
+      attachments.value.push(await uploadResource(file))
+    }
   } catch (cause) {
-    uploadError.value = cause instanceof Error ? cause.message : "上传失败";
+    uploadError.value = cause instanceof Error ? cause.message : '上传失败'
   } finally {
-    uploading.value = false;
+    uploading.value = false
   }
 }
 async function download(resource: Resource) {
   try {
-    await downloadResource(resource);
+    await downloadResource(resource)
   } catch (cause) {
-    uploadError.value = cause instanceof Error ? cause.message : "下载失败";
+    uploadError.value = cause instanceof Error ? cause.message : '下载失败'
   }
 }
-const timeline = ref<HTMLDivElement>();
-const followLatest = ref(true);
+const timeline = ref<HTMLDivElement>()
+const followLatest = ref(true)
 function trackScroll() {
-  const box = timeline.value;
-  if (box)
+  const box = timeline.value
+  if (box) {
     followLatest.value =
-      box.scrollHeight - box.scrollTop - box.clientHeight < 90;
+      box.scrollHeight - box.scrollTop - box.clientHeight < 90
+  }
 }
 function followRendered() {
-  if (props.active && followLatest.value)
-    timeline.value?.scrollTo({ top: timeline.value.scrollHeight });
+  if (props.active && followLatest.value) {
+    timeline.value?.scrollTo({ top: timeline.value.scrollHeight })
+  }
 }
-const tasksOpen = ref(false),
-  centerOpen = ref(false),
-  titleOpen = ref(false);
+const tasksOpen = ref(false)
+const centerOpen = ref(false)
+const titleOpen = ref(false)
 async function showTasks() {
-  centerOpen.value = false;
-  await nextTick();
-  tasksOpen.value = true;
+  centerOpen.value = false
+  await nextTick()
+  tasksOpen.value = true
 }
 const currentResources = computed(() =>
   chatState.messages.flatMap((m) => m.resourceRefs || []),
-);
+)
 const hasMessages = computed(
   () => chatState.messages.length > 0 || Boolean(chatState.pendingText),
-);
+)
 const needsNewSession = computed(() =>
   [
-    "SESSION_EXPIRED",
-    "SESSION_INVALID",
-    "LEDGER_NOT_FOUND",
-    "LEDGER_LOCKED",
-    "UNAUTHENTICATED",
+    'SESSION_EXPIRED',
+    'SESSION_INVALID',
+    'LEDGER_NOT_FOUND',
+    'LEDGER_LOCKED',
+    'UNAUTHENTICATED',
   ].includes(chatState.errorCode),
-);
-onMounted(() => void refreshConversationHistory());
-onBeforeUnmount(resetConversationHistory);
+)
+onMounted(() => void refreshConversationHistory())
+onBeforeUnmount(resetConversationHistory)
 watch(
   () => [chatState.conversationId, chatBusy.value] as const,
   ([id, busy]) => {
-    if (id && !busy) void refreshConversationHistory();
+    if (id && !busy) {
+      void refreshConversationHistory()
+    }
   },
-);
+)
 watch(
   () => props.active,
   (active) => {
-    if (active) void refreshConversationHistory();
-    else {
-      historyOpen.value = false;
-      tasksOpen.value = false;
-      centerOpen.value = false;
-      titleOpen.value = false;
-      composer.value?.closeMenus();
+    if (active) {
+      void refreshConversationHistory()
+    } else {
+      historyOpen.value = false
+      tasksOpen.value = false
+      centerOpen.value = false
+      titleOpen.value = false
+      composer.value?.closeMenus()
     }
   },
-);
+)
 const editingMessage = ref<{
-  id: string;
-  revision?: number;
-  conversationId: string;
-} | null>(null);
-const deletingMessage = ref<{ id: string; preview: string } | null>(null);
+  id: string
+  revision?: number
+  conversationId: string
+} | null>(null)
+const deletingMessage = ref<{ id: string, preview: string } | null>(null)
 const messageActionsDisabled = computed(
   () =>
     chatBusy.value ||
-    chatState.connection !== "connected" ||
+    chatState.connection !== 'connected' ||
     taskBlocksNewMessage(chatState.task),
-);
+)
 function beginEdit(message: (typeof chatState.messages)[number]) {
-  if (messageActionsDisabled.value || uploading.value || !canSendMessage.value)
-    return;
+  if (messageActionsDisabled.value || uploading.value || !canSendMessage.value) {
+    return
+  }
   editingMessage.value = {
     id: message.id,
     revision: chatState.conversationRevision,
     conversationId: chatState.conversationId,
-  };
-  text.value = message.content;
+  }
+  text.value = message.content
   attachments.value = (message.attachments || []).map((resource) => ({
     ...resource,
-  }));
-  applicationIds.value = [...(message.applicationIds || [])];
-  uploadError.value = "";
-  nextTick(() => composer.value?.focus());
+  }))
+  applicationIds.value = [...(message.applicationIds || [])]
+  uploadError.value = ''
+  nextTick(() => composer.value?.focus())
 }
 function cancelEdit() {
-  editingMessage.value = null;
-  text.value = "";
-  attachments.value = [];
-  applicationIds.value = [];
+  editingMessage.value = null
+  text.value = ''
+  attachments.value = []
+  applicationIds.value = []
 }
 function submit() {
   if (
@@ -194,58 +203,64 @@ function submit() {
         : undefined,
     )
   ) {
-    text.value = "";
-    attachments.value = [];
-    applicationIds.value = [];
-    editingMessage.value = null;
+    text.value = ''
+    attachments.value = []
+    applicationIds.value = []
+    editingMessage.value = null
   }
 }
 watch(
   () => chatState.failedDraft?.requestId,
   () => {
-    const draft = takeFailedDraft();
-    if (!draft) return;
-    text.value = draft.text;
-    attachments.value = draft.attachments;
-    applicationIds.value = draft.applicationIds;
+    const draft = takeFailedDraft()
+    if (!draft) {
+      return
+    }
+    text.value = draft.text
+    attachments.value = draft.attachments
+    applicationIds.value = draft.applicationIds
     // Admission can fail after switching into the new branch. Retry that draft in the existing branch.
     editingMessage.value =
       draft.sourceMessageId &&
       chatState.messages.some(
         (message) =>
-          message.id === draft.sourceMessageId && message.role === "user",
+          message.id === draft.sourceMessageId && message.role === 'user',
       )
         ? {
             id: draft.sourceMessageId,
             revision: draft.expectedRevision,
             conversationId: chatState.conversationId,
           }
-        : null;
+        : null
   },
-);
+)
 watch(
   () => chatState.conversationId,
   (id, previous) => {
-    if (id === previous) return;
-    editingMessage.value = null;
-    deletingMessage.value = null;
-    text.value = "";
-    attachments.value = [];
-    applicationIds.value = [];
+    if (id === previous) {
+      return
+    }
+    editingMessage.value = null
+    deletingMessage.value = null
+    text.value = ''
+    attachments.value = []
+    applicationIds.value = []
   },
-);
+)
 function deletedMessage(id: string) {
-  if (editingMessage.value?.id === id) cancelEdit();
+  if (editingMessage.value?.id === id) {
+    cancelEdit()
+  }
 }
 function startNew() {
   if (newConversation()) {
-    editingMessage.value = null;
-    deletingMessage.value = null;
-    followLatest.value = true;
-    text.value = "";
-    attachments.value = [];
-    applicationIds.value = [];
-    nextTick(() => composer.value?.focus());
+    editingMessage.value = null
+    deletingMessage.value = null
+    followLatest.value = true
+    text.value = ''
+    attachments.value = []
+    applicationIds.value = []
+    nextTick(() => composer.value?.focus())
   }
 }
 watch(
@@ -253,19 +268,22 @@ watch(
     chatState.messages
       .map(
         (message) =>
-          `${message.content}:${message.timeline?.map((x) => x.revision).join(",")}:${message.toolCalls.map((tool) => tool.status).join(",")}`,
+          `${message.content}:${message.timeline?.map((x) => x.revision).join(',')}:${message.toolCalls.map((tool) => tool.status).join(',')}`,
       )
-      .join(""),
+      .join(''),
     chatState.pendingText,
     props.active,
   ],
   async () => {
-    if (!props.active) return;
-    await nextTick();
-    if (followLatest.value)
-      timeline.value?.scrollTo({ top: timeline.value.scrollHeight });
+    if (!props.active) {
+      return
+    }
+    await nextTick()
+    if (followLatest.value) {
+      timeline.value?.scrollTo({ top: timeline.value.scrollHeight })
+    }
   },
-);
+)
 </script>
 
 <template>
@@ -282,14 +300,12 @@ watch(
         :title="chatState.title || '当前对话'"
         @click="titleOpen = true"
       >
-        <span class="conversation-dot"></span
-        ><span class="current-title">{{ chatState.title || "当前对话" }}</span
-        ><AppIcon name="edit" :size="13" />
+        <span class="conversation-dot" /><span class="current-title">{{ chatState.title || "当前对话" }}</span><AppIcon name="edit" :size="13" />
       </button>
-      <span v-else class="conversation-label"
-        ><span class="conversation-dot"></span
-        >{{ hasMessages ? "当前对话" : "新对话" }}</span
-      >
+      <span
+        v-else
+        class="conversation-label"
+      ><span class="conversation-dot" />{{ hasMessages ? "当前对话" : "新对话" }}</span>
       <div class="chat-toolbar-actions">
         <CustomerSupportEntry :active="props.active" />
         <button
@@ -306,10 +322,8 @@ watch(
           aria-label="查看会话历史"
           @click="historyOpen = true"
         >
-          <AppIcon name="history" :size="17" /><span class="toolbar-text"
-            >历史</span
-          ></button
-        ><button
+          <AppIcon name="history" :size="17" /><span class="toolbar-text">历史</span>
+        </button><button
           v-if="hasMessages"
           class="new-conversation"
           :disabled="chatBusy"
@@ -317,15 +331,12 @@ watch(
           aria-label="新建对话"
           @click="startNew"
         >
-          <AppIcon name="plus" :size="17" /><span class="toolbar-text"
-            >新建对话</span
-          >
+          <AppIcon name="plus" :size="17" /><span class="toolbar-text">新建对话</span>
         </button>
       </div>
     </div>
     <div v-if="chatState.branch" class="branch-notice">
-      <span>修改后的对话分支</span
-      ><button
+      <span>修改后的对话分支</span><button
         type="button"
         :disabled="chatBusy"
         @click="openConversation(chatState.branch.sourceConversationId)"
@@ -335,22 +346,22 @@ watch(
     </div>
     <div
       ref="timeline"
-      @scroll.passive="trackScroll"
       class="chat-timeline"
       :class="{ 'welcome-timeline': !hasMessages }"
       role="log"
       aria-label="对话消息"
       aria-live="polite"
       aria-relevant="additions text"
+      @scroll.passive="trackScroll"
     >
       <div v-if="!hasMessages" class="welcome-content">
         <div class="welcome-symbol" aria-hidden="true">
-          <span></span><span></span><span></span><span></span>
+          <span /><span /><span /><span />
         </div>
         <p class="welcome-eyebrow">T BOX · 你的日常助手</p>
         <h1>有什么<span>想聊的？</span></h1>
         <p class="welcome-description">
-          聊聊想法，安排事情。<br />从一句话开始。
+          聊聊想法，安排事情。<br>从一句话开始。
         </p>
       </div>
       <div v-else class="conversation-messages">
@@ -361,17 +372,16 @@ watch(
           :class="message.role"
         >
           <div class="message-body">
-            <span class="sr-only"
-              >{{ message.role === "user" ? "你" : "T Box" }}：</span
-            >
+            <span class="sr-only">{{ message.role === "user" ? "你" : "T Box" }}：</span>
             <div :class="{ 'message-bubble': message.role === 'user' }">
               <div
                 v-if="message.applicationIds?.length"
                 class="message-app-tags"
               >
-                <span v-for="appId in message.applicationIds" :key="appId"
-                  >@{{ getApplication(appId)?.name || appId }}</span
-                >
+                <span
+                  v-for="appId in message.applicationIds"
+                  :key="appId"
+                >@{{ getApplication(appId)?.name || appId }}</span>
               </div>
               <MessageTimeline
                 v-if="message.role === 'assistant' && message.timeline?.length"
@@ -408,12 +418,11 @@ watch(
                     v-if="resource.mimeType.startsWith('image/')"
                     :resource="resource"
                     @rendered="followRendered"
-                  /><span v-else class="message-file"
-                    ><AppIcon name="file" :size="23" /><span
-                      >{{ resource.name
-                      }}<small>{{ fileSize(resource.size) }}</small></span
-                    ></span
-                  >
+                  /><span
+                    v-else
+                    class="message-file"
+                  ><AppIcon name="file" :size="23" /><span>{{ resource.name
+                  }}<small>{{ fileSize(resource.size) }}</small></span></span>
                 </button>
               </div>
             </div>
@@ -424,9 +433,9 @@ watch(
             />
             <GenerationStatus
               v-if="
-                message.role === 'assistant' &&
-                chatState.activeRun?.assistantMessageId === message.id &&
-                !message.timeline?.length
+                message.role === 'assistant'
+                  && chatState.activeRun?.assistantMessageId === message.id
+                  && !message.timeline?.length
               "
               :waiting="chatState.activeRun?.status === 'waiting_client'"
               @rendered="followRendered"
@@ -436,13 +445,13 @@ watch(
               :text="message.content"
               :created-at="message.createdAt"
               :disabled="
-                messageActionsDisabled ||
-                !hasFinishedReply(chatState.messages, message.id)
+                messageActionsDisabled
+                  || !hasFinishedReply(chatState.messages, message.id)
               "
               :can-edit="
-                canSendMessage &&
-                !uploading &&
-                hasFinishedReply(chatState.messages, message.id)
+                canSendMessage
+                  && !uploading
+                  && hasFinishedReply(chatState.messages, message.id)
               "
               @edit="beginEdit(message)"
               @delete="
@@ -457,9 +466,9 @@ watch(
               />
               <AnswerActions
                 v-if="
-                  message.role === 'assistant' &&
-                  message.outcome !== 'running' &&
-                  chatState.activeRun?.assistantMessageId !== message.id
+                  message.role === 'assistant'
+                    && message.outcome !== 'running'
+                    && chatState.activeRun?.assistantMessageId !== message.id
                 "
                 :text="answerCopyText(message)"
                 :copying-disabled="
@@ -474,7 +483,9 @@ watch(
         <article v-if="chatState.pendingText" class="chat-message user pending">
           <div class="message-body">
             <div class="message-bubble">
-              <p class="message-text">{{ chatState.pendingText }}</p>
+              <p class="message-text">
+                {{ chatState.pendingText }}
+              </p>
               <span class="pending-label">正在发送…</span>
             </div>
           </div>
@@ -482,11 +493,14 @@ watch(
       </div>
     </div>
     <div class="composer-area">
-      <div v-if="editingMessage" class="editing-notice" role="status">
+      <div
+        v-if="editingMessage"
+        class="editing-notice"
+        role="status"
+      >
         <AppIcon name="edit" :size="16" />
         <div>
-          <strong>修改并重新发送</strong
-          ><span>创建新分支，原对话保留在历史中。</span>
+          <strong>修改并重新发送</strong><span>创建新分支，原对话保留在历史中。</span>
         </div>
         <button
           type="button"
@@ -499,15 +513,15 @@ watch(
       </div>
       <button
         v-if="
-          chatState.task &&
-          [
-            'queued',
-            'running',
-            'waiting_client',
-            'paused',
-            'needs_review',
-          ].includes(chatState.task.status) &&
-          !chatBusy
+          chatState.task
+            && [
+              'queued',
+              'running',
+              'waiting_client',
+              'paused',
+              'needs_review',
+            ].includes(chatState.task.status)
+            && !chatBusy
         "
         class="task-resume-notice"
         @click="tasksOpen = true"
@@ -525,10 +539,13 @@ watch(
               : chatState.task.status === "waiting_client"
                 ? "等待你处理，可继续任务"
                 : "任务已暂停，可以继续或发送新消息"
-        }}</span
-        ><span>查看任务</span>
+        }}</span><span>查看任务</span>
       </button>
-      <p v-if="uploadError" class="chat-notice" role="alert">
+      <p
+        v-if="uploadError"
+        class="chat-notice"
+        role="alert"
+      >
         {{ uploadError }}
       </p>
       <div
@@ -558,19 +575,16 @@ watch(
         <button
           v-if="chatState.errorCode === 'AI_NOT_CONFIGURED'"
           @click="reconnectChat"
-        >
-          检查配置</button
-        ><button v-else-if="needsNewSession" @click="startNew">新建对话</button
-        ><button v-else @click="reconnectChat">重新连接</button>
+        > 检查配置</button><button v-else-if="needsNewSession" @click="startNew">新建对话</button><button v-else @click="reconnectChat">重新连接</button>
       </div>
       <div v-if="chatState.storageNotice" class="storage-notice">
         {{ chatState.storageNotice }}
       </div>
       <ChatComposer
-        :max-message-length="chatState.maxMessageLength"
         ref="composer"
         v-model="text"
         v-model:application-ids="applicationIds"
+        :max-message-length="chatState.maxMessageLength"
         :attachments="attachments"
         :can-send="canSendMessage"
         :busy="chatBusy"
@@ -594,15 +608,13 @@ watch(
             ? "对话服务尚未连接"
             : "正在连接对话服务…"
         }}</span>
-        <span v-else-if="chatState.mode === 'unconfigured'"
-          >尚未接入 AI，请在后台配置并启用普通会话模型。<button
-            type="button"
-            class="chat-config-refresh"
-            @click="reconnectChat"
-          >
-            检查配置
-          </button></span
+        <span v-else-if="chatState.mode === 'unconfigured'">尚未接入 AI，请在后台配置并启用普通会话模型。<button
+          type="button"
+          class="chat-config-refresh"
+          @click="reconnectChat"
         >
+          检查配置
+        </button></span>
         <span class="keyboard-hint">Enter 发送 · Shift + Enter 换行</span>
       </div>
     </div>
@@ -630,6 +642,7 @@ watch(
     />
   </section>
 </template>
+
 <style scoped>
 .branch-notice {
   display: flex;

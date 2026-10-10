@@ -1,67 +1,76 @@
 import type {
+  LedgerStatisticPoint,
   LedgerStatistics,
   StatisticPeriod,
-  LedgerStatisticPoint,
-} from "@t-box/ledger-contracts";
-import { monthBounds } from "../validation.js";
-import { date, object, today } from "../ledgers/validation.js";
-import { invalid } from "@t-box/server-foundation/errors";
-import type { LedgerAccess } from "../ledgers/access.js";
-import type { Principal } from "../ledgers/types.js";
-import { cents, money } from "../finance/money.js";
-import { rebuild } from "./projection.js";
-import { audit } from "../ledgers/audit.js";
+} from '@t-box/ledger-contracts'
+import type { LedgerAccess } from '../ledgers/access.js'
+import type { Principal } from '../ledgers/types.js'
+import { invalid } from '@t-box/server-foundation/errors'
+import { cents, money } from '../finance/money.js'
+import { audit } from '../ledgers/audit.js'
+import { date, object, today } from '../ledgers/validation.js'
+import { monthBounds } from '../validation.js'
+import { rebuild } from './projection.js'
+
 export function statisticsPeriod(value: unknown): {
-  period: StatisticPeriod;
-  value: string;
-  start: string;
-  end: string;
+  period: StatisticPeriod
+  value: string
+  start: string
+  end: string
 } {
-  const input = object(value, ["period", "value"]);
-  const period = (input.period ?? "month") as StatisticPeriod;
-  if (!["day", "month", "quarter", "year"].includes(period))
-    invalid("period", "请选择日、月、季度或年");
-  const current = today();
+  const input = object(value, ['period', 'value'])
+  const period = (input.period ?? 'month') as StatisticPeriod
+  if (!['day', 'month', 'quarter', 'year'].includes(period)) {
+    invalid('period', '请选择日、月、季度或年')
+  }
+  const current = today()
   const fallback =
-    period === "day"
+    period === 'day'
       ? current
-      : period === "month"
+      : period === 'month'
         ? current.slice(0, 7)
-        : period === "year"
+        : period === 'year'
           ? current.slice(0, 4)
-          : `${current.slice(0, 4)}-Q${Math.ceil(Number(current.slice(5, 7)) / 3)}`;
-  const selected = input.value ?? fallback;
-  if (typeof selected !== "string") invalid("value", "统计期间格式无效");
-  if (period === "day") {
-    const selectedDate = date(selected);
-    return { period, value: selected, start: selectedDate, end: selectedDate };
+          : `${current.slice(0, 4)}-Q${Math.ceil(Number(current.slice(5, 7)) / 3)}`
+  const selected = input.value ?? fallback
+  if (typeof selected !== 'string') {
+    invalid('value', '统计期间格式无效')
   }
-  if (period === "month") {
-    if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(selected))
-      invalid("value", "月份格式为 YYYY-MM");
-    const [start, end] = monthBounds(selected);
-    return { period, value: selected, start, end };
+  if (period === 'day') {
+    const selectedDate = date(selected)
+    return { period, value: selected, start: selectedDate, end: selectedDate }
   }
-  if (period === "year") {
-    if (!/^[1-9]\d{3}$/.test(selected)) invalid("value", "年份格式为 YYYY");
+  if (period === 'month') {
+    if (!/^[1-9]\d{3}-(?:0[1-9]|1[0-2])$/.test(selected)) {
+      invalid('value', '月份格式为 YYYY-MM')
+    }
+    const [start, end] = monthBounds(selected)
+    return { period, value: selected, start, end }
+  }
+  if (period === 'year') {
+    if (!/^[1-9]\d{3}$/.test(selected)) {
+      invalid('value', '年份格式为 YYYY')
+    }
     return {
       period,
       value: selected,
       start: `${selected}-01-01`,
       end: `${selected}-12-31`,
-    };
+    }
   }
-  const match = /^([1-9]\d{3})-Q([1-4])$/.exec(selected);
-  if (!match) invalid("value", "季度格式为 YYYY-Q1 至 YYYY-Q4");
-  const quarter = Number(match[2]);
+  const match = /^([1-9]\d{3})-Q([1-4])$/.exec(selected)
+  if (!match) {
+    invalid('value', '季度格式为 YYYY-Q1 至 YYYY-Q4')
+  }
+  const quarter = Number(match[2])
   return {
     period,
     value: selected,
-    start: `${match[1]}-${String(quarter * 3 - 2).padStart(2, "0")}-01`,
-    end: monthBounds(`${match[1]}-${String(quarter * 3).padStart(2, "0")}`)[1],
-  };
+    start: `${match[1]}-${String(quarter * 3 - 2).padStart(2, '0')}-01`,
+    end: monthBounds(`${match[1]}-${String(quarter * 3).padStart(2, '0')}`)[1],
+  }
 }
-const numeric = (value: string | null | undefined) => cents(value ?? "0.00");
+const numeric = (value: string | null | undefined) => cents(value ?? '0.00')
 export class StatisticsService {
   constructor(private readonly access: LedgerAccess) {}
   async get(
@@ -69,32 +78,32 @@ export class StatisticsService {
     ledgerId: string,
     query: unknown,
   ): Promise<LedgerStatistics> {
-    const period = statisticsPeriod(query);
-    return this.access.source.transaction("REPEATABLE READ", async (db) => {
+    const period = statisticsPeriod(query)
+    return this.access.source.transaction('REPEATABLE READ', async (db) => {
       const { book } = await this.access.check(
         principal,
         ledgerId,
-        "read",
+        'read',
         false,
         db,
-      );
+      )
       const rows = await db.query(
-        "SELECT stat_date AS date,income,expense,cash_in AS cashIn,cash_out AS cashOut,receivable_delta AS receivableChange,payable_delta AS payableChange,record_count AS count FROM ledger_daily_stats WHERE ledger_id=? AND stat_date BETWEEN ? AND ? ORDER BY stat_date",
+        'SELECT stat_date AS date,income,expense,cash_in AS cashIn,cash_out AS cashOut,receivable_delta AS receivableChange,payable_delta AS payableChange,record_count AS count FROM ledger_daily_stats WHERE ledger_id=? AND stat_date BETWEEN ? AND ? ORDER BY stat_date',
         [ledgerId, period.start, period.end],
-      );
+      )
       const totals = {
         income: 0n,
         expense: 0n,
         cashIn: 0n,
         cashOut: 0n,
         count: 0,
-      };
+      }
       for (const row of rows) {
-        totals.income += numeric(row.income);
-        totals.expense += numeric(row.expense);
-        totals.cashIn += numeric(row.cashIn);
-        totals.cashOut += numeric(row.cashOut);
-        totals.count += Number(row.count);
+        totals.income += numeric(row.income)
+        totals.expense += numeric(row.expense)
+        totals.cashIn += numeric(row.cashIn)
+        totals.cashOut += numeric(row.cashOut)
+        totals.count += Number(row.count)
       }
       const [balances] = await db.query(
         `SELECT
@@ -111,39 +120,41 @@ export class StatisticsService {
           today(),
           ledgerId,
         ],
-      );
+      )
       const categories = await db.query(
-        "SELECT category_id AS category,type,SUM(amount) AS amount,SUM(record_count) AS count FROM ledger_daily_categories WHERE ledger_id=? AND stat_date BETWEEN ? AND ? GROUP BY category_id,type HAVING SUM(amount)<>0 ORDER BY SUM(amount) DESC",
+        'SELECT category_id AS category,type,SUM(amount) AS amount,SUM(record_count) AS count FROM ledger_daily_categories WHERE ledger_id=? AND stat_date BETWEEN ? AND ? GROUP BY category_id,type HAVING SUM(amount)<>0 ORDER BY SUM(amount) DESC',
         [ledgerId, period.start, period.end],
-      );
+      )
       const byDate = new Map<string, LedgerStatisticPoint>(
         rows.map((row: LedgerStatisticPoint) => [
           row.date,
           { ...row, count: Number(row.count) },
         ]),
-      );
-      const series: LedgerStatisticPoint[] = [];
-      let cursor = period.start;
+      )
+      const series: LedgerStatisticPoint[] = []
+      let cursor = period.start
       while (cursor <= period.end) {
         series.push(
           byDate.get(cursor) ?? {
             date: cursor,
-            income: "0.00",
-            expense: "0.00",
-            cashIn: "0.00",
-            cashOut: "0.00",
-            receivableChange: "0.00",
-            payableChange: "0.00",
+            income: '0.00',
+            expense: '0.00',
+            cashIn: '0.00',
+            cashOut: '0.00',
+            receivableChange: '0.00',
+            payableChange: '0.00',
             count: 0,
           },
-        );
-        if (cursor === period.end) break;
-        const next = new Date(`${cursor}T12:00:00Z`);
-        next.setUTCDate(next.getUTCDate() + 1);
-        cursor = next.toISOString().slice(0, 10);
+        )
+        if (cursor === period.end) {
+          break
+        }
+        const next = new Date(`${cursor}T12:00:00Z`)
+        next.setUTCDate(next.getUTCDate() + 1)
+        cursor = next.toISOString().slice(0, 10)
       }
       const [deductions] = await db.query(
-        "SELECT (SELECT COALESCE(SUM(amount),0) FROM ledger_refunds WHERE ledger_id=? AND reversed=FALSE AND refund_date BETWEEN ? AND ?) AS refunded,(SELECT COALESCE(SUM(amount),0) FROM ledger_reimbursement_receipts WHERE ledger_id=? AND reversed=FALSE AND receipt_date BETWEEN ? AND ?) AS reimbursed",
+        'SELECT (SELECT COALESCE(SUM(amount),0) FROM ledger_refunds WHERE ledger_id=? AND reversed=FALSE AND refund_date BETWEEN ? AND ?) AS refunded,(SELECT COALESCE(SUM(amount),0) FROM ledger_reimbursement_receipts WHERE ledger_id=? AND reversed=FALSE AND receipt_date BETWEEN ? AND ?) AS reimbursed',
         [
           ledgerId,
           period.start,
@@ -152,12 +163,12 @@ export class StatisticsService {
           period.start,
           period.end,
         ],
-      );
+      )
       return {
         grossExpense: money(
           totals.expense +
-            numeric(deductions.refunded) +
-            numeric(deductions.reimbursed),
+          numeric(deductions.refunded) +
+          numeric(deductions.reimbursed),
         ),
         refunded: money(numeric(deductions.refunded)),
         reimbursed: money(numeric(deductions.reimbursed)),
@@ -178,24 +189,25 @@ export class StatisticsService {
         currentPayable: money(numeric(balances.currentPayable)),
         categories: categories.map(
           (row: {
-            category: string;
-            type: "income" | "expense";
-            amount: string;
-            count: string;
+            category: string
+            type: 'income' | 'expense'
+            amount: string
+            count: string
           }) => ({ ...row, count: Number(row.count) }),
         ),
         series,
-      };
-    });
+      }
+    })
   }
+
   async rebuild(principal: Principal, ledgerId: string) {
-    await this.access.transaction(principal, ledgerId, "manage", async (db) => {
-      await rebuild(db, ledgerId);
-      await db.query("UPDATE ledgers SET revision=revision+1 WHERE id=?", [
+    await this.access.transaction(principal, ledgerId, 'manage', async (db) => {
+      await rebuild(db, ledgerId)
+      await db.query('UPDATE ledgers SET revision=revision+1 WHERE id=?', [
         ledgerId,
-      ]);
-      await audit(db, ledgerId, principal.user.id, "statistics.rebuilt", null);
-    });
-    return { rebuilt: true };
+      ])
+      await audit(db, ledgerId, principal.user.id, 'statistics.rebuilt', null)
+    })
+    return { rebuilt: true }
   }
 }

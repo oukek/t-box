@@ -1,213 +1,223 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
 import type {
+  ApplicationPublicationEvent,
   ManagedApplication,
   ManagedRelease,
-  ApplicationPublicationEvent,
-} from "@t-box/app-contracts";
-import { request, save, errorMessage } from "../core/api";
-import AdminIcon from "../components/AdminIcon.vue";
-import AdminDialog from "../components/AdminDialog.vue";
-import AdminSelect from "../components/AdminSelect.vue";
+} from '@t-box/app-contracts'
+import { computed, onMounted, reactive, ref } from 'vue'
+import AdminDialog from '../components/AdminDialog.vue'
+import AdminIcon from '../components/AdminIcon.vue'
+import AdminSelect from '../components/AdminSelect.vue'
+import { errorMessage, request, save } from '../core/api'
+
 interface Artifact {
-  digest: string;
-  fileCount: number;
-  bytes: number;
+  digest: string
+  fileCount: number
+  bytes: number
 }
-const applications = ref<ManagedApplication[]>([]),
-  selectedId = ref(""),
-  query = ref(""),
-  error = ref(""),
-  notice = ref(""),
-  loading = ref(true),
-  busy = ref(false),
-  dialogError = ref(""),
-  editorOpen = ref(false),
-  editing = ref<ManagedRelease | null>(null),
-  newApp = ref(false),
-  artifacts = ref<Artifact[]>([]),
-  artifactOrigin = ref(""),
-  historyOpen = ref(false),
-  events = ref<ApplicationPublicationEvent[]>([]);
+const applications = ref<ManagedApplication[]>([])
+const selectedId = ref('')
+const query = ref('')
+const error = ref('')
+const notice = ref('')
+const loading = ref(true)
+const busy = ref(false)
+const dialogError = ref('')
+const editorOpen = ref(false)
+const editing = ref<ManagedRelease | null>(null)
+const newApp = ref(false)
+const artifacts = ref<Artifact[]>([])
+const artifactOrigin = ref('')
+const historyOpen = ref(false)
+const events = ref<ApplicationPublicationEvent[]>([])
 const transition = ref<{
-  entry: ManagedRelease;
-  action: "submit" | "publish";
-  expected: string | null;
-} | null>(null);
+  entry: ManagedRelease
+  action: 'submit' | 'publish'
+  expected: string | null
+} | null>(null)
 const form = reactive({
-  appId: "",
-  kind: "user",
-  version: "1.0.0",
-  name: "",
-  description: "",
-  icon: "apps",
-  color: "blue",
-  releaseNotes: "",
-  artifact: "",
-  runtime: "web",
+  appId: '',
+  kind: 'user',
+  version: '1.0.0',
+  name: '',
+  description: '',
+  icon: 'apps',
+  color: 'blue',
+  releaseNotes: '',
+  artifact: '',
+  runtime: 'web',
   revision: 1,
-});
+})
 const current = computed(() =>
   applications.value.find((a) => a.appId === selectedId.value),
-);
+)
 const filtered = computed(() =>
   applications.value.filter((a) =>
-    (a.appId + " " + a.releases[0]?.release.manifest.name)
+    (a.appId + ' ' + a.releases[0]?.release.manifest.name)
       .toLowerCase()
       .includes(query.value.trim().toLowerCase()),
   ),
-);
+)
 const online = computed(() =>
-  current.value?.releases.find((r) => r.status === "published"),
-);
+  current.value?.releases.find((r) => r.status === 'published'),
+)
 const statusNames = {
-  draft: "草稿",
-  submitted: "待发布",
-  published: "线上版本",
-  retired: "历史版本",
-};
-const canUpload = computed(() => /^[a-z][a-z0-9_-]{0,63}$/.test(form.appId));
+  draft: '草稿',
+  submitted: '待发布',
+  published: '线上版本',
+  retired: '历史版本',
+}
+const canUpload = computed(() => /^[a-z][a-z0-9_-]{0,63}$/.test(form.appId))
 const artifactOptions = computed(() =>
   artifacts.value.map((a) => ({
     value: a.digest,
     label: `${a.digest.slice(0, 12)} · ${a.fileCount} 个文件`,
     description: `${(a.bytes / 1024).toFixed(1)} KB`,
   })),
-);
+)
 const date = (value: string | null) =>
-  value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
+  value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
 async function load() {
-  loading.value = true;
-  error.value = "";
+  loading.value = true
+  error.value = ''
   try {
     const result = await request<{
-      applications: ManagedApplication[];
-      artifactOrigin: string;
-    }>("/applications");
-    applications.value = result.applications;
-    artifactOrigin.value = result.artifactOrigin;
-    if (!current.value) selectedId.value = applications.value[0]?.appId || "";
+      applications: ManagedApplication[]
+      artifactOrigin: string
+    }>('/applications')
+    applications.value = result.applications
+    artifactOrigin.value = result.artifactOrigin
+    if (!current.value) {
+      selectedId.value = applications.value[0]?.appId || ''
+    }
   } catch (e) {
-    error.value = errorMessage(e);
+    error.value = errorMessage(e)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 async function loadArtifacts() {
-  artifacts.value = [];
-  if (!canUpload.value) return;
+  artifacts.value = []
+  if (!canUpload.value) {
+    return
+  }
   try {
-    artifacts.value = await request(`/applications/${form.appId}/artifacts`);
+    artifacts.value = await request(`/applications/${form.appId}/artifacts`)
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   }
 }
 function nextVersion(value: string) {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
-  return match ? `${match[1]}.${match[2]}.${Number(match[3]) + 1}` : "";
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value)
+  return match ? `${match[1]}.${match[2]}.${Number(match[3]) + 1}` : ''
 }
 async function edit(entry?: ManagedRelease, createApplication = false) {
-  newApp.value = createApplication;
-  editing.value = entry || null;
-  dialogError.value = "";
-  const base = entry || online.value || current.value?.releases[0];
-  const r = createApplication ? undefined : base?.release;
+  newApp.value = createApplication
+  editing.value = entry || null
+  dialogError.value = ''
+  const base = entry || online.value || current.value?.releases[0]
+  const r = createApplication ? undefined : base?.release
   Object.assign(form, {
-    appId: r?.appId || "",
-    kind: createApplication ? "user" : current.value?.kind || "user",
+    appId: r?.appId || '',
+    kind: createApplication ? 'user' : current.value?.kind || 'user',
     version: entry
       ? r?.manifest.version
       : r
         ? nextVersion(r.manifest.version)
-        : "1.0.0",
-    name: r?.manifest.name || "",
-    description: r?.manifest.description || "",
-    icon: r?.manifest.icon || "apps",
-    color: r?.manifest.color || "blue",
-    releaseNotes: entry?.releaseNotes || "",
-    artifact: r?.runtime.type === "web" ? r.runtime.integrity.slice(7) : "",
-    runtime: r?.runtime.type || "web",
+        : '1.0.0',
+    name: r?.manifest.name || '',
+    description: r?.manifest.description || '',
+    icon: r?.manifest.icon || 'apps',
+    color: r?.manifest.color || 'blue',
+    releaseNotes: entry?.releaseNotes || '',
+    artifact: r?.runtime.type === 'web' ? r.runtime.integrity.slice(7) : '',
+    runtime: r?.runtime.type || 'web',
     revision: entry?.revision || 1,
-  });
-  editorOpen.value = true;
-  await loadArtifacts();
+  })
+  editorOpen.value = true
+  await loadArtifacts()
 }
 async function upload(event: Event) {
-  const element = event.target as HTMLInputElement,
-    files = Array.from(element.files || []);
-  if (!files.length) return;
-  busy.value = true;
-  dialogError.value = "";
+  const element = event.target as HTMLInputElement
+  const files = Array.from(element.files || [])
+  if (!files.length) {
+    return
+  }
+  busy.value = true
+  dialogError.value = ''
   try {
     if (
       files.length > 2000 ||
       files.some((f) => f.size > 5 * 1024 * 1024) ||
       files.reduce((n, f) => n + f.size, 0) > 20 * 1024 * 1024
-    )
-      throw new Error("最多 2000 个文件，单文件 5 MB，完整应用 20 MB");
-    const data = [];
+    ) {
+      throw new Error('最多 2000 个文件，单文件 5 MB，完整应用 20 MB')
+    }
+    const data = []
     for (const file of files) {
-      const relative = file.webkitRelativePath || file.name;
+      const relative = file.webkitRelativePath || file.name
       const path = file.webkitRelativePath
-        ? relative.slice(relative.indexOf("/") + 1)
-        : relative;
+        ? relative.slice(relative.indexOf('/') + 1)
+        : relative
       const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
+        const reader = new FileReader()
         reader.onload = () =>
-          resolve(String(reader.result).split(",")[1] || "");
-        reader.onerror = () => reject(new Error("读取构建文件失败"));
-        reader.readAsDataURL(file);
-      });
-      data.push({ path, content });
+          resolve(String(reader.result).split(',')[1] || '')
+        reader.onerror = () => reject(new Error('读取构建文件失败'))
+        reader.readAsDataURL(file)
+      })
+      data.push({ path, content })
     }
     const artifact = await save<Artifact>(
       `/applications/${form.appId}/artifacts`,
       { files: data },
-    );
-    await loadArtifacts();
-    form.artifact = artifact.digest;
+    )
+    await loadArtifacts()
+    form.artifact = artifact.digest
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   } finally {
-    busy.value = false;
-    element.value = "";
+    busy.value = false
+    element.value = ''
   }
 }
 async function submitDraft() {
-  busy.value = true;
-  dialogError.value = "";
+  busy.value = true
+  dialogError.value = ''
   try {
     await save(
       editing.value
         ? `/application-releases/${editing.value.release.releaseId}`
-        : "/application-releases",
+        : '/application-releases',
       { ...form },
-      editing.value ? "PATCH" : "POST",
-    );
-    selectedId.value = form.appId;
-    editorOpen.value = false;
-    notice.value = "版本草稿已保存，提交后可发布";
-    await load();
+      editing.value ? 'PATCH' : 'POST',
+    )
+    selectedId.value = form.appId
+    editorOpen.value = false
+    notice.value = '版本草稿已保存，提交后可发布'
+    await load()
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
-function prepare(entry: ManagedRelease, action: "submit" | "publish") {
-  dialogError.value = "";
+function prepare(entry: ManagedRelease, action: 'submit' | 'publish') {
+  dialogError.value = ''
   transition.value = {
     entry,
     action,
     expected: current.value?.currentReleaseId || null,
-  };
+  }
 }
 async function execute() {
-  if (!transition.value) return;
-  busy.value = true;
-  dialogError.value = "";
+  if (!transition.value) {
+    return
+  }
+  busy.value = true
+  dialogError.value = ''
   try {
-    const t = transition.value;
+    const t = transition.value
     await save(
       `/application-releases/${t.entry.release.releaseId}/transitions`,
       {
@@ -215,40 +225,43 @@ async function execute() {
         revision: t.entry.revision,
         expectedCurrentReleaseId: t.expected,
       },
-    );
+    )
     notice.value =
-      t.action === "publish"
-        ? "版本已发布，用户可在应用市场更新"
-        : "版本已提交，内容已锁定";
-    transition.value = null;
-    await load();
+      t.action === 'publish'
+        ? '版本已发布，用户可在应用市场更新'
+        : '版本已提交，内容已锁定'
+    transition.value = null
+    await load()
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 async function showHistory() {
-  if (!current.value) return;
-  busy.value = true;
-  error.value = "";
+  if (!current.value) {
+    return
+  }
+  busy.value = true
+  error.value = ''
   try {
-    events.value = await request(`/applications/${current.value.appId}/events`);
-    historyOpen.value = true;
+    events.value = await request(`/applications/${current.value.appId}/events`)
+    historyOpen.value = true
   } catch (e) {
-    error.value = errorMessage(e);
+    error.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 const eventNames: Record<string, string> = {
-  create_draft: "创建草稿",
-  edit_draft: "修改草稿",
-  submit: "提交版本",
-  publish: "发布版本",
-};
-onMounted(load);
+  create_draft: '创建草稿',
+  edit_draft: '修改草稿',
+  submit: '提交版本',
+  publish: '发布版本',
+}
+onMounted(load)
 </script>
+
 <template>
   <header class="page-heading">
     <div>
@@ -264,10 +277,20 @@ onMounted(load);
       <AdminIcon name="plus" :size="16" />添加应用
     </button>
   </header>
-  <p v-if="error" class="alert" role="alert">
+  <p
+    v-if="error"
+    class="alert"
+    role="alert"
+  >
     {{ error }} <button @click="load">重试</button>
   </p>
-  <p v-if="notice" class="success" role="status">{{ notice }}</p>
+  <p
+    v-if="notice"
+    class="success"
+    role="status"
+  >
+    {{ notice }}
+  </p>
   <div class="publication-workspace">
     <aside class="panel application-catalog">
       <div class="search-field">
@@ -275,7 +298,7 @@ onMounted(load);
           v-model="query"
           placeholder="搜索应用"
           aria-label="搜索应用"
-        />
+        >
       </div>
       <p v-if="loading" class="empty">正在读取版本…</p>
       <p v-else-if="!filtered.length" class="empty">没有匹配的应用</p>
@@ -287,15 +310,11 @@ onMounted(load);
         :aria-pressed="item.appId === selectedId"
         @click="selectedId = item.appId"
       >
-        <span class="row-icon"><AdminIcon name="grid" :size="18" /></span
-        ><span
-          ><strong>{{
-            item.releases[0]?.release.manifest.name || item.appId
-          }}</strong
-          ><small>{{
-            item.kind === "system" ? "系统应用 · 不可卸载" : "用户应用 · 可卸载"
-          }}</small></span
-        >
+        <span class="row-icon"><AdminIcon name="grid" :size="18" /></span><span><strong>{{
+          item.releases[0]?.release.manifest.name || item.appId
+        }}</strong><small>{{
+          item.kind === "system" ? "系统应用 · 不可卸载" : "用户应用 · 可卸载"
+        }}</small></span>
       </button>
     </aside>
     <section v-if="current" class="panel release-panel">
@@ -303,25 +322,26 @@ onMounted(load);
         <div>
           <h2>
             {{
-              online?.release.manifest.name ||
-              current.releases[0]?.release.manifest.name
+              online?.release.manifest.name
+                || current.releases[0]?.release.manifest.name
             }}
           </h2>
           <span class="release-identity">{{ current.appId }}</span>
         </div>
         <div class="release-actions">
-          <button :disabled="busy" @click="showHistory">发布记录</button
-          ><button class="primary" :disabled="busy" @click="edit()">
+          <button :disabled="busy" @click="showHistory">发布记录</button><button
+            class="primary"
+            :disabled="busy"
+            @click="edit()"
+          >
             <AdminIcon name="plus" :size="15" />新增版本
           </button>
         </div>
       </header>
       <div class="live-release">
-        <span class="live-dot" /><span>当前线上</span
-        ><strong>{{
+        <span class="live-dot" /><span>当前线上</span><strong>{{
           online ? "v" + online.release.manifest.version : "尚未发布"
-        }}</strong
-        ><span class="live-time">{{
+        }}</strong><span class="live-time">{{
           online
             ? date(online.publishedAt)
             : "保存草稿并提交后，才会出现在用户市场"
@@ -334,8 +354,7 @@ onMounted(load);
           class="release-row"
         >
           <div class="release-version">
-            <strong>v{{ entry.release.manifest.version }}</strong
-            ><span class="publication-status" :class="entry.status">{{
+            <strong>v{{ entry.release.manifest.version }}</strong><span class="publication-status" :class="entry.status">{{
               statusNames[entry.status]
             }}</span>
           </div>
@@ -347,8 +366,7 @@ onMounted(load);
               entry.release.runtime.type === "web"
                 ? "独立 Web 应用"
                 : "内置页面 · 随宿主发版"
-            }}</span
-            ><span>{{ date(entry.createdAt) }}</span>
+            }}</span><span>{{ date(entry.createdAt) }}</span>
           </div>
           <p
             v-if="entry.status !== 'published'"
@@ -362,11 +380,10 @@ onMounted(load);
           </p>
           <div class="release-footer">
             <span
-              class="artifact-digest"
               v-if="entry.release.runtime.type === 'web'"
+              class="artifact-digest"
               :title="entry.release.runtime.integrity"
-              >{{ entry.release.runtime.integrity.slice(0, 23) }}…</span
-            ><span v-else class="artifact-digest">{{
+            >{{ entry.release.runtime.integrity.slice(0, 23) }}…</span><span v-else class="artifact-digest">{{
               entry.release.releaseId
             }}</span>
             <div>
@@ -374,15 +391,11 @@ onMounted(load);
                 v-if="entry.status === 'draft'"
                 :disabled="busy"
                 @click="edit(entry)"
-              >
-                编辑草稿</button
-              ><button
+              > 编辑草稿</button><button
                 v-if="entry.status === 'draft'"
                 :disabled="busy || !entry.readiness.ready"
                 @click="prepare(entry, 'submit')"
-              >
-                提交版本</button
-              ><button
+              > 提交版本</button><button
                 v-if="
                   entry.status === 'submitted' || entry.status === 'retired'
                 "
@@ -411,95 +424,99 @@ onMounted(load);
     :busy="busy"
     @close="editorOpen = false"
   >
-    <p v-if="dialogError" class="alert" role="alert">{{ dialogError }}</p>
-    <form id="release-form" class="dialog-form" @submit.prevent="submitDraft">
+    <p
+      v-if="dialogError"
+      class="alert"
+      role="alert"
+    >
+      {{ dialogError }}
+    </p>
+    <form
+      id="release-form"
+      class="dialog-form"
+      @submit.prevent="submitDraft"
+    >
       <fieldset :disabled="busy">
         <div class="form-grid">
-          <label
-            >应用标识<input
-              v-model="form.appId"
-              :disabled="!newApp"
-              maxlength="64"
-              pattern="[a-z][a-z0-9_\-]{0,63}"
-              required
-              placeholder="例如 notes"
-              @change="loadArtifacts" /></label
-          ><label
-            >版本号<input
-              v-model="form.version"
-              required
-              maxlength="48"
-              placeholder="1.0.0"
-            /><small>使用三段版本号，例如 1.0.0、1.1.0。</small></label
-          >
-        </div>
-        <label
-          >应用名称<input v-model="form.name" maxlength="80" required
-        /></label>
-        <label
-          >应用说明<textarea
-            v-model="form.description"
-            rows="2"
-            maxlength="400"
+          <label>应用标识<input
+            v-model="form.appId"
+            :disabled="!newApp"
+            maxlength="64"
+            pattern="[a-z][a-z0-9_\-]{0,63}"
             required
-          />
+            placeholder="例如 notes"
+            @change="loadArtifacts"
+          ></label><label>版本号<input
+            v-model="form.version"
+            required
+            maxlength="48"
+            placeholder="1.0.0"
+          ><small>使用三段版本号，例如 1.0.0、1.1.0。</small></label>
+        </div>
+        <label>应用名称<input
+          v-model="form.name"
+          maxlength="80"
+          required
+        ></label>
+        <label>应用说明<textarea
+          v-model="form.description"
+          rows="2"
+          maxlength="400"
+          required
+        />
         </label>
         <div class="form-grid">
-          <label
-            >应用类型<AdminSelect
-              v-model="form.kind"
-              label="应用类型"
-              :disabled="!newApp"
-              :options="[
-                {
-                  value: 'user',
-                  label: '用户应用',
-                  description: '用户可以安装与卸载',
-                },
-                {
-                  value: 'system',
-                  label: '系统应用',
-                  description: '预装、不可卸载，支持更新',
-                },
-              ]" /></label
-          ><label
-            >图标颜色<AdminSelect
-              v-model="form.color"
-              label="图标颜色"
-              :options="[
-                { value: 'blue', label: '蓝色' },
-                { value: 'green', label: '绿色' },
-                { value: 'violet', label: '紫色' },
-                { value: 'orange', label: '橙色' },
-                { value: 'rose', label: '玫瑰色' },
-                { value: 'amber', label: '琥珀色' },
-                { value: 'cyan', label: '青色' },
-                { value: 'teal', label: '青绿色' },
-              ]"
+          <label>应用类型<AdminSelect
+            v-model="form.kind"
+            label="应用类型"
+            :disabled="!newApp"
+            :options="[
+              {
+                value: 'user',
+                label: '用户应用',
+                description: '用户可以安装与卸载',
+              },
+              {
+                value: 'system',
+                label: '系统应用',
+                description: '预装、不可卸载，支持更新',
+              },
+            ]"
+          /></label><label>图标颜色<AdminSelect
+            v-model="form.color"
+            label="图标颜色"
+            :options="[
+              { value: 'blue', label: '蓝色' },
+              { value: 'green', label: '绿色' },
+              { value: 'violet', label: '紫色' },
+              { value: 'orange', label: '橙色' },
+              { value: 'rose', label: '玫瑰色' },
+              { value: 'amber', label: '琥珀色' },
+              { value: 'cyan', label: '青色' },
+              { value: 'teal', label: '青绿色' },
+            ]"
           /></label>
         </div>
-        <label
-          >更新说明<textarea
-            v-model="form.releaseNotes"
-            rows="3"
-            maxlength="4000"
-            placeholder="说明新增功能、修复内容和用户需要注意的变化"
-          />
+        <label>更新说明<textarea
+          v-model="form.releaseNotes"
+          rows="3"
+          maxlength="4000"
+          placeholder="说明新增功能、修复内容和用户需要注意的变化"
+        />
         </label>
         <div v-if="form.runtime === 'web'" class="artifact-picker">
           <div class="artifact-label">
-            <strong>构建产物</strong
-            ><label
+            <strong>构建产物</strong><label
               class="upload-build"
               :class="{ disabled: !canUpload || busy }"
-              ><AdminIcon name="plus" :size="14" />上传 dist 目录<input
-                type="file"
-                webkitdirectory
-                multiple
-                :disabled="!canUpload || busy"
-                aria-label="上传构建目录"
-                @change="upload"
-            /></label>
+            ><AdminIcon name="plus" :size="14" />上传 dist 目录<input
+              type="file"
+              webkitdirectory
+              multiple
+              :disabled="!canUpload || busy"
+              aria-label="上传构建目录"
+              @change="upload"
+            ></label>
           </div>
           <AdminSelect
             v-model="form.artifact"
@@ -508,10 +525,8 @@ onMounted(load);
             :disabled="!canUpload"
             placeholder="选择已上传的构建产物"
             empty-text="还没有构建产物，请上传 dist 目录"
-          /><small
-            >应用使用相对资源路径（Vite base: './'）和应用
-            SDK。上传不会自动上线。</small
-          ><small class="mono">产物服务：{{ artifactOrigin }}</small>
+          /><small>应用使用相对资源路径（Vite base: './'）和应用
+            SDK。上传不会自动上线。</small><small class="mono">产物服务：{{ artifactOrigin }}</small>
         </div>
         <p v-else class="shell-note">
           此应用当前随宿主构建。保存新版本草稿后，需要先部署对应版本的宿主和
@@ -519,17 +534,16 @@ onMounted(load);
         </p>
       </fieldset>
     </form>
-    <template #footer
-      ><button :disabled="busy" @click="editorOpen = false">取消</button
-      ><button
+    <template #footer>
+      <button :disabled="busy" @click="editorOpen = false">取消</button><button
         class="primary"
         form="release-form"
         type="submit"
         :disabled="busy || (form.runtime === 'web' && !form.artifact)"
       >
         {{ busy ? "正在保存…" : "保存草稿" }}
-      </button></template
-    >
+      </button>
+    </template>
   </AdminDialog>
   <AdminDialog
     :open="!!transition"
@@ -538,14 +552,18 @@ onMounted(load);
     compact
     @close="transition = null"
   >
-    <p v-if="dialogError" class="alert" role="alert">{{ dialogError }}</p>
-    <template v-if="transition"
-      ><p>
-        <strong
-          >{{ transition.entry.release.manifest.name }} · v{{
-            transition.entry.release.manifest.version
-          }}</strong
-        >
+    <p
+      v-if="dialogError"
+      class="alert"
+      role="alert"
+    >
+      {{ dialogError }}
+    </p>
+    <template v-if="transition">
+      <p>
+        <strong>{{ transition.entry.release.manifest.name }} · v{{
+          transition.entry.release.manifest.version
+        }}</strong>
       </p>
       <p class="muted">
         {{
@@ -556,17 +574,20 @@ onMounted(load);
       </p>
       <p
         v-if="
-          transition.action === 'publish' &&
-          transition.entry.status === 'retired'
+          transition.action === 'publish'
+            && transition.entry.status === 'retired'
         "
         class="alert"
       >
         你正在切换到历史版本，请确认其前后端仍能兼容。
-      </p></template
-    >
-    <template #footer
-      ><button :disabled="busy" @click="transition = null">取消</button
-      ><button class="primary" :disabled="busy" @click="execute">
+      </p>
+    </template>
+    <template #footer>
+      <button :disabled="busy" @click="transition = null">取消</button><button
+        class="primary"
+        :disabled="busy"
+        @click="execute"
+      >
         {{
           busy
             ? "正在处理…"
@@ -574,23 +595,24 @@ onMounted(load);
               ? "确认提交"
               : "确认发布"
         }}
-      </button></template
-    >
+      </button>
+    </template>
   </AdminDialog>
-  <AdminDialog :open="historyOpen" title="发布记录" @close="historyOpen = false"
-    ><p v-if="!events.length" class="muted">还没有后台发布操作。</p>
+  <AdminDialog
+    :open="historyOpen"
+    title="发布记录"
+    @close="historyOpen = false"
+  >
+    <p v-if="!events.length" class="muted">还没有后台发布操作。</p>
     <ol class="publication-events">
       <li v-for="event in events" :key="event.id">
-        <strong>{{ eventNames[event.action] || event.action }}</strong
-        ><time>{{ date(event.createdAt) }}</time
-        ><small
-          >{{ event.releaseId }} · 管理员
-          {{ event.administratorId.slice(0, 8) }}</small
-        >
+        <strong>{{ eventNames[event.action] || event.action }}</strong><time>{{ date(event.createdAt) }}</time><small>{{ event.releaseId }} · 管理员
+          {{ event.administratorId.slice(0, 8) }}</small>
       </li>
-    </ol></AdminDialog
-  >
+    </ol>
+  </AdminDialog>
 </template>
+
 <style scoped>
 .publication-workspace {
   display: grid;

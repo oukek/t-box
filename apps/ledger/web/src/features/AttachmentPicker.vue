@@ -1,104 +1,111 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { AppIcon } from "@t-box/ui-kit";
 import {
   LEDGER_ATTACHMENT_LIMIT,
   LEDGER_ATTACHMENT_MAX_BYTES,
-} from "@t-box/ledger-contracts";
-import { featureApi } from "./api";
-const ids = defineModel<string[]>({ default: () => [] });
+} from '@t-box/ledger-contracts'
+import { AppIcon } from '@t-box/ui-kit'
+import { ref, watch } from 'vue'
+import { featureApi } from './api'
+
 const props = defineProps<{
-  ledgerId: string;
-  disabled?: boolean;
-  limit?: number;
-}>();
-const emit = defineEmits<{ busy: [value: boolean] }>();
-const uploading = ref(false),
-  error = ref(""),
-  names = ref<Record<string, string>>({}),
-  progress = ref("");
+  ledgerId: string
+  disabled?: boolean
+  limit?: number
+}>()
+const emit = defineEmits<{ busy: [value: boolean] }>()
+const ids = defineModel<string[]>({ default: () => [] })
+const uploading = ref(false)
+const error = ref('')
+const names = ref<Record<string, string>>({})
+const progress = ref('')
 watch(
   ids,
   async (value) => {
-    for (const id of value)
+    for (const id of value) {
       if (!names.value[id]) {
         try {
           names.value[id] = (
             await featureApi(props.ledgerId).get(`/attachment-resources/${id}`)
-          ).name;
+          ).name
         } catch {
-          names.value[id] = "已选择附件";
+          names.value[id] = '已选择附件'
         }
       }
+    }
   },
   { immediate: true },
-);
+)
 async function upload(event: Event) {
-  const input = event.target as HTMLInputElement,
-    files = Array.from(input.files ?? []);
-  input.value = "";
-  if (uploading.value || props.disabled || !files.length) return;
-  error.value = "";
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (uploading.value || props.disabled || !files.length) {
+    return
+  }
+  error.value = ''
   if (
     ids.value.length + files.length >
     (props.limit ?? LEDGER_ATTACHMENT_LIMIT)
   ) {
-    error.value = "每笔最多 20 个附件，请减少选择数量";
-    return;
+    error.value = '每笔最多 20 个附件，请减少选择数量'
+    return
   }
   if (files.some((f) => !f.size || f.size > LEDGER_ATTACHMENT_MAX_BYTES)) {
-    error.value = "每个附件需为 1 字节至 10 MB";
-    return;
+    error.value = '每个附件需为 1 字节至 10 MB'
+    return
   }
-  uploading.value = true;
-  emit("busy", true);
+  uploading.value = true
+  emit('busy', true)
   try {
     for (const [index, file] of files.entries()) {
-      progress.value = `正在上传 ${index + 1}/${files.length} · ${file.name}`;
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      let raw = "";
-      for (let i = 0; i < bytes.length; i += 8192)
-        raw += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      progress.value = `正在上传 ${index + 1}/${files.length} · ${file.name}`
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      let raw = ''
+      for (let i = 0; i < bytes.length; i += 8192) {
+        raw += String.fromCharCode(...bytes.subarray(i, i + 8192))
+      }
       const resource = await featureApi(props.ledgerId).write(
-        "/attachment-resources",
+        '/attachment-resources',
         { name: file.name, base64: btoa(raw) },
-      );
-      names.value[resource.id] = resource.name;
-      ids.value = [...ids.value, resource.id];
+      )
+      names.value[resource.id] = resource.name
+      ids.value = [...ids.value, resource.id]
     }
   } catch (e) {
-    error.value = `${(e as Error).message}；已上传的附件保留，可继续添加。`;
+    error.value = `${(e as Error).message}；已上传的附件保留，可继续添加。`
   } finally {
-    uploading.value = false;
-    progress.value = "";
-    emit("busy", false);
+    uploading.value = false
+    progress.value = ''
+    emit('busy', false)
   }
 }
 </script>
+
 <template>
   <section class="record-attachments">
     <div class="attachment-heading">
-      <strong
-        >图片与文件 <small>{{ ids.length }}/{{ limit ?? 20 }}</small></strong
-      ><label
+      <strong>图片与文件 <small>{{ ids.length }}/{{ limit ?? 20 }}</small></strong><label
         class="attachment-upload"
         :class="{ disabled: disabled || uploading }"
-        ><AppIcon name="attach" :size="16" />添加<input
-          type="file"
-          multiple
-          :disabled="disabled || uploading"
-          @change="upload"
-          class="sr-only"
-      /></label>
+      ><AppIcon name="attach" :size="16" />添加<input
+        type="file"
+        multiple
+        :disabled="disabled || uploading"
+        class="sr-only"
+        @change="upload"
+      ></label>
     </div>
     <p class="feature-hint">
       支持多选图片、任意类型文件，每个最大 10 MB。原文件保存在我的资源。
     </p>
-    <div v-for="id in ids" :key="id" class="attachment-file">
+    <div
+      v-for="id in ids"
+      :key="id"
+      class="attachment-file"
+    >
       <AppIcon name="file" :size="18" /><span>{{
         names[id] ?? "已选择附件"
-      }}</span
-      ><button
+      }}</span><button
         type="button"
         aria-label="移除所选附件"
         :disabled="disabled || uploading"
@@ -107,10 +114,23 @@ async function upload(event: Event) {
         <AppIcon name="close" :size="16" />
       </button>
     </div>
-    <p v-if="progress" class="feature-hint" role="status">{{ progress }}</p>
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p
+      v-if="progress"
+      class="feature-hint"
+      role="status"
+    >
+      {{ progress }}
+    </p>
+    <p
+      v-if="error"
+      class="form-error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
   </section>
 </template>
+
 <style>
 .record-attachments {
   margin-top: 16px;

@@ -1,90 +1,95 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import type { ApplicationCapabilities, ApplicationToolEffect } from '@t-box/shared'
 import {
   APPLICATION_CONTRACT_VERSION,
-  type ApplicationCapabilities,
-  type ApplicationToolEffect,
-} from "@t-box/shared";
-import ApplicationHeader from "@t-box/ui-kit/ApplicationHeader.vue";
-import { AppIcon } from "@t-box/ui-kit";
-import { appCatalog } from "../../core/app-runtime/catalog";
-import { getApplication } from "../../core/applications";
-import { navigateTab } from "../../core/navigation";
-import { request } from "../../core/network";
-import { applicationModules } from "../../applications/registry";
+} from '@t-box/shared'
+import { AppIcon } from '@t-box/ui-kit'
+import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { applicationModules } from '../../applications/registry'
+import { appCatalog } from '../../core/app-runtime/catalog'
+import { getApplication } from '../../core/applications'
+import { navigateTab } from '../../core/navigation'
+import { request } from '../../core/network'
 
-const props = defineProps<{ appId: string }>();
-const data = ref<ApplicationCapabilities | null>(null),
-  loading = ref(true),
-  error = ref("");
-const tab = ref<"tools" | "skills" | "agents" | "interactions">("tools");
-const app = computed(() => getApplication(props.appId));
+const props = defineProps<{ appId: string }>()
+const data = ref<ApplicationCapabilities | null>(null)
+const loading = ref(true)
+const error = ref('')
+const tab = ref<'tools' | 'skills' | 'agents' | 'interactions'>('tools')
+const app = computed(() => getApplication(props.appId))
 const effects: Record<ApplicationToolEffect, string> = {
-  read: "读取数据",
-  write: "写入数据",
-  external: "外部服务",
-  ui: "界面操作",
-  configuration: "运行配置",
-};
+  read: '读取数据',
+  write: '写入数据',
+  external: '外部服务',
+  ui: '界面操作',
+  configuration: '运行配置',
+}
 const tabs = computed(
   () =>
     [
-      { id: "tools", title: "工具", count: data.value?.tools.length || 0 },
-      { id: "skills", title: "技能", count: data.value?.skills.length || 0 },
-      { id: "agents", title: "Agent", count: data.value?.agents.length || 0 },
+      { id: 'tools', title: '工具', count: data.value?.tools.length || 0 },
+      { id: 'skills', title: '技能', count: data.value?.skills.length || 0 },
+      { id: 'agents', title: 'Agent', count: data.value?.agents.length || 0 },
       {
-        id: "interactions",
-        title: "前端交互",
+        id: 'interactions',
+        title: '前端交互',
         count: data.value?.interactions.length || 0,
       },
     ] as const,
-);
+)
 const supported = (name: string) =>
-  appCatalog.entries.find(e=>e.release.appId===props.appId)?.release.clientTools.includes(name) || Object.hasOwn(
-    applicationModules.find((module) => module.manifest.id === props.appId)?.ai
-      ?.clientTools || {},
+  appCatalog.entries.find((e) => e.release.appId === props.appId)?.release.clientTools.includes(name) || Object.hasOwn(
+    applicationModules.find((module) => module.manifest.id === props.appId)?.ai?.clientTools || {},
     name,
-  );
+  )
 const toolTitle = (name: string) =>
-  data.value?.tools.find((tool) => tool.name === name)?.title || name;
+  data.value?.tools.find((tool) => tool.name === name)?.title || name
 const skillTitle = (id: string) =>
-  data.value?.skills.find((skill) => skill.id === id)?.title || id;
-let controller: AbortController | undefined;
+  data.value?.skills.find((skill) => skill.id === id)?.title || id
+let controller: AbortController | undefined
 async function load() {
-  controller?.abort();
-  const current = (controller = new AbortController());
-  loading.value = true;
-  error.value = "";
-  data.value = null;
+  controller?.abort()
+  const current = (controller = new AbortController())
+  loading.value = true
+  error.value = ''
+  data.value = null
   try {
     const result = await request<{ data: ApplicationCapabilities }>(
       `/applications/${encodeURIComponent(props.appId)}/capabilities`,
       { signal: current.signal },
-    );
-    if (current.signal.aborted) return;
+    )
+    if (current.signal.aborted) {
+      return
+    }
     if (
       result.data.contractVersion !== APPLICATION_CONTRACT_VERSION ||
       result.data.manifest.id !== props.appId
-    )
-      throw new Error("应用能力协议与当前版本不兼容，请更新应用后重试。");
-    data.value = result.data;
+    ) {
+      throw new Error('应用能力协议与当前版本不兼容，请更新应用后重试。')
+    }
+    data.value = result.data
   } catch (cause) {
-    if (!current.signal.aborted)
-      error.value = cause instanceof Error ? cause.message : "无法读取应用能力";
+    if (!current.signal.aborted) {
+      error.value = cause instanceof Error ? cause.message : '无法读取应用能力'
+    }
   } finally {
-    if (controller === current) loading.value = false;
+    if (controller === current) {
+      loading.value = false
+    }
   }
 }
 watch(
   () => props.appId,
   () => {
-    tab.value = "tools";
-    void load();
+    tab.value = 'tools'
+    void load()
   },
   { immediate: true },
-);
-onBeforeUnmount(() => controller?.abort());
+)
+onBeforeUnmount(() => controller?.abort())
 </script>
+
 <template>
   <section class="capabilities-page">
     <ApplicationHeader
@@ -93,8 +98,9 @@ onBeforeUnmount(() => controller?.abort());
       @back="navigateTab('applications')"
     />
     <div class="capabilities-intro">
-      <span class="capabilities-app-icon"
-        ><AppIcon :name="app?.icon || 'apps'" :size="25"
+      <span class="capabilities-app-icon"><AppIcon
+        :name="app?.icon || 'apps'"
+        :size="25"
       /></span>
       <div>
         <p>{{ app?.description }}</p>
@@ -102,10 +108,18 @@ onBeforeUnmount(() => controller?.abort());
       </div>
       <small v-if="data">v{{ data.manifest.version }}</small>
     </div>
-    <div v-if="loading" class="capabilities-state" role="status">
+    <div
+      v-if="loading"
+      class="capabilities-state"
+      role="status"
+    >
       正在读取应用能力…
     </div>
-    <div v-else-if="error" class="capabilities-state" role="alert">
+    <div
+      v-else-if="error"
+      class="capabilities-state"
+      role="alert"
+    >
       <p>{{ error }}</p>
       <button class="button button-secondary" @click="load">重新加载</button>
     </div>
@@ -146,12 +160,7 @@ onBeforeUnmount(() => controller?.abort());
           </header>
           <p>{{ tool.description }}</p>
           <div class="capability-policies">
-            <span>{{ effects[tool.effect] }}</span
-            ><span v-if="tool.resourceAuthorization"
-              ><AppIcon name="lock" :size="12" />资源权限校验</span
-            ><span v-if="tool.confirmation"
-              ><AppIcon name="check" :size="12" />需用户确认</span
-            ><span v-if="tool.idempotent">重复操作防护</span>
+            <span>{{ effects[tool.effect] }}</span><span v-if="tool.resourceAuthorization"><AppIcon name="lock" :size="12" />资源权限校验</span><span v-if="tool.confirmation"><AppIcon name="check" :size="12" />需用户确认</span><span v-if="tool.idempotent">重复操作防护</span>
           </div>
           <details class="capability-details">
             <summary>
@@ -222,8 +231,7 @@ onBeforeUnmount(() => controller?.abort());
           </header>
           <p>{{ interaction.description }}</p>
           <div class="capability-policies">
-            <span>前端执行</span><span>用户交互</span
-            ><span>非模型直接调用</span>
+            <span>前端执行</span><span>用户交互</span><span>非模型直接调用</span>
           </div>
           <details class="capability-details">
             <summary>
@@ -243,6 +251,7 @@ onBeforeUnmount(() => controller?.abort());
     </template>
   </section>
 </template>
+
 <style scoped>
 .capabilities-page {
   max-width: 860px;

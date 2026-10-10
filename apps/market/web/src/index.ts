@@ -1,1 +1,1 @@
-export { marketModule } from "./module";
+export { marketModule } from './module'

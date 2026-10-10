@@ -1,154 +1,168 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
-import { BottomSheet } from "@t-box/ui-kit";
-import { AppIcon } from "@t-box/ui-kit";
+import type { DateMode } from './calendar'
+import { AppIcon, BottomSheet } from '@t-box/ui-kit'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
   calendarCells,
   calendarDate,
   dateKey,
+  localDate,
   periodAvailable,
-  type DateMode,
-} from "./calendar";
-import { localDate } from "./calendar";
+} from './calendar'
+
 const props = withDefaults(
   defineProps<{
-    modelValue: string;
-    label: string;
-    mode?: DateMode;
-    min?: string;
-    max?: string;
-    clearable?: boolean;
-    disabled?: boolean;
-    compact?: boolean;
+    modelValue: string
+    label: string
+    mode?: DateMode
+    min?: string
+    max?: string
+    clearable?: boolean
+    disabled?: boolean
+    compact?: boolean
   }>(),
-  { mode: "date", min: "1900-01-01", max: "9999-12-31" },
-);
+  { mode: 'date', min: '1900-01-01', max: '9999-12-31' },
+)
 const emit = defineEmits<{
-  "update:modelValue": [value: string];
-  change: [value: string];
-}>();
-const open = ref(false),
-  draft = ref(""),
-  year = ref(2026),
-  month = ref(1),
-  view = ref<"date" | "month" | "year" | "quarter">("date"),
-  yearPage = ref(2020);
+  'update:modelValue': [value: string]
+  'change': [value: string]
+}>()
+const open = ref(false)
+const draft = ref('')
+const year = ref(2026)
+const month = ref(1)
+const view = ref<'date' | 'month' | 'year' | 'quarter'>('date')
+const yearPage = ref(2020)
 const display = computed(() => {
-  if (!props.modelValue) return "未设置";
-  const [y, m, d] = props.modelValue.split("-");
-  if (props.mode === "year") return `${y}年`;
-  if (props.mode === "quarter") return `${y}年 第${m?.slice(1)}季度`;
-  return `${y}年${Number(m)}月${props.mode === "date" ? `${Number(d)}日` : ""}`;
-});
-const cells = computed(() => calendarCells(year.value, month.value)),
-  years = computed(() =>
-    Array.from({ length: 12 }, (_, i) => yearPage.value + i),
-  );
-const minimumYear = computed(() => Number(props.min.slice(0, 4))),
-  maximumYear = computed(() => Number(props.max.slice(0, 4)));
+  if (!props.modelValue) {
+    return '未设置'
+  }
+  const [y, m, d] = props.modelValue.split('-')
+  if (props.mode === 'year') {
+    return `${y}年`
+  }
+  if (props.mode === 'quarter') {
+    return `${y}年 第${m?.slice(1)}季度`
+  }
+  return `${y}年${Number(m)}月${props.mode === 'date' ? `${Number(d)}日` : ''}`
+})
+const cells = computed(() => calendarCells(year.value, month.value))
+const years = computed(() =>
+  Array.from({ length: 12 }, (_, i) => yearPage.value + i),
+)
+const minimumYear = computed(() => Number(props.min.slice(0, 4)))
+const maximumYear = computed(() => Number(props.max.slice(0, 4)))
 const canConfirm = computed(
   () =>
     !!draft.value &&
     periodAvailable(draft.value, props.mode, props.min, props.max),
-);
+)
 function initial() {
-  const today = localDate(),
-    base = props.modelValue || today;
+  const today = localDate()
+  const base = props.modelValue || today
   year.value = Math.max(
     minimumYear.value,
     Math.min(
       maximumYear.value,
       Number(base.slice(0, 4)) || Number(today.slice(0, 4)),
     ),
-  );
+  )
   month.value =
-    props.mode === "quarter" && props.modelValue
+    props.mode === 'quarter' && props.modelValue
       ? (Number(base.slice(-1)) - 1) * 3 + 1
-      : Number(base.slice(5, 7)) || Number(today.slice(5, 7));
-  draft.value = props.modelValue || formatMode(today);
-  if (!periodAvailable(draft.value, props.mode, props.min, props.max))
-    draft.value = formatMode(today < props.min ? props.min : props.max);
-  year.value = Number(draft.value.slice(0, 4));
+      : Number(base.slice(5, 7)) || Number(today.slice(5, 7))
+  draft.value = props.modelValue || formatMode(today)
+  if (!periodAvailable(draft.value, props.mode, props.min, props.max)) {
+    draft.value = formatMode(today < props.min ? props.min : props.max)
+  }
+  year.value = Number(draft.value.slice(0, 4))
   month.value =
-    props.mode === "quarter"
+    props.mode === 'quarter'
       ? (Number(draft.value.slice(-1)) - 1) * 3 + 1
-      : Number(draft.value.slice(5, 7)) || month.value;
-  view.value = props.mode;
+      : Number(draft.value.slice(5, 7)) || month.value
+  view.value = props.mode
   yearPage.value = Math.max(
     minimumYear.value,
     Math.min(maximumYear.value - 11, year.value - 5),
-  );
+  )
 }
 function formatMode(date: string) {
-  return props.mode === "year"
+  return props.mode === 'year'
     ? date.slice(0, 4)
-    : props.mode === "month"
+    : props.mode === 'month'
       ? date.slice(0, 7)
-      : props.mode === "quarter"
+      : props.mode === 'quarter'
         ? `${date.slice(0, 4)}-Q${Math.ceil(Number(date.slice(5, 7)) / 3)}`
-        : date;
+        : date
 }
 watch(open, (value) => {
-  if (value) initial();
-});
+  if (value) {
+    initial()
+  }
+})
 function allowed(value: string, mode: DateMode) {
-  return periodAvailable(value, mode, props.min, props.max);
+  return periodAvailable(value, mode, props.min, props.max)
 }
 function move(delta: number) {
-  if (view.value === "year") {
-    yearPage.value += delta * 12;
-    return;
+  if (view.value === 'year') {
+    yearPage.value += delta * 12
+    return
   }
-  if (view.value !== "date") {
-    year.value += delta;
-    return;
+  if (view.value !== 'date') {
+    year.value += delta
+    return
   }
-  const date = calendarDate(year.value, month.value + delta);
-  year.value = date.getUTCFullYear();
-  month.value = date.getUTCMonth() + 1;
+  const date = calendarDate(year.value, month.value + delta)
+  year.value = date.getUTCFullYear()
+  month.value = date.getUTCMonth() + 1
 }
 const previousAllowed = computed(() =>
-  view.value === "year"
+  view.value === 'year'
     ? yearPage.value > minimumYear.value
-    : view.value === "date"
+    : view.value === 'date'
       ? allowed(
           dateKey(calendarDate(year.value, month.value - 1)).slice(0, 7),
-          "month",
+          'month',
         )
       : year.value > minimumYear.value,
-);
+)
 const nextAllowed = computed(() =>
-  view.value === "year"
+  view.value === 'year'
     ? yearPage.value + 11 < maximumYear.value
-    : view.value === "date"
+    : view.value === 'date'
       ? allowed(
           dateKey(calendarDate(year.value, month.value + 1)).slice(0, 7),
-          "month",
+          'month',
         )
       : year.value < maximumYear.value,
-);
+)
 function selectDay(value: string) {
-  draft.value = value;
-  year.value = Number(value.slice(0, 4));
-  month.value = Number(value.slice(5, 7));
+  draft.value = value
+  year.value = Number(value.slice(0, 4))
+  month.value = Number(value.slice(5, 7))
 }
 function selectMonth(value: number) {
-  month.value = value;
-  if (props.mode === "month")
-    draft.value = `${year.value}-${String(value).padStart(2, "0")}`;
-  else view.value = "date";
+  month.value = value
+  if (props.mode === 'month') {
+    draft.value = `${year.value}-${String(value).padStart(2, '0')}`
+  } else {
+    view.value = 'date'
+  }
 }
 function selectYear(value: number) {
-  year.value = value;
-  if (props.mode === "year") draft.value = String(value);
-  else view.value = props.mode === "quarter" ? "quarter" : "month";
+  year.value = value
+  if (props.mode === 'year') {
+    draft.value = String(value)
+  } else {
+    view.value = props.mode === 'quarter' ? 'quarter' : 'month'
+  }
 }
 function showYears() {
   yearPage.value = Math.max(
     minimumYear.value,
     Math.min(maximumYear.value - 11, year.value - 5),
-  );
-  view.value = "year";
+  )
+  view.value = 'year'
 }
 function chooseToday() {
   draft.value = formatMode(
@@ -157,45 +171,52 @@ function chooseToday() {
       : localDate() > props.max
         ? props.max
         : localDate(),
-  );
-  year.value = Number(draft.value.slice(0, 4));
+  )
+  year.value = Number(draft.value.slice(0, 4))
   month.value =
-    props.mode === "quarter"
+    props.mode === 'quarter'
       ? (Number(draft.value.slice(-1)) - 1) * 3 + 1
-      : Number(draft.value.slice(5, 7)) || 1;
-  view.value = props.mode;
+      : Number(draft.value.slice(5, 7)) || 1
+  view.value = props.mode
 }
 function confirm() {
-  if (!canConfirm.value) return;
-  emit("update:modelValue", draft.value);
-  emit("change", draft.value);
-  open.value = false;
+  if (!canConfirm.value) {
+    return
+  }
+  emit('update:modelValue', draft.value)
+  emit('change', draft.value)
+  open.value = false
 }
 function clear() {
-  emit("update:modelValue", "");
-  emit("change", "");
-  open.value = false;
+  emit('update:modelValue', '')
+  emit('change', '')
+  open.value = false
 }
 async function arrows(event: KeyboardEvent) {
   const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[
     event.key
-  ];
-  if (delta === undefined) return;
-  event.preventDefault();
-  const container = event.currentTarget as HTMLElement;
-  const base = (event.target as HTMLElement).dataset.date || draft.value;
+  ]
+  if (delta === undefined) {
+    return
+  }
+  event.preventDefault()
+  const container = event.currentTarget as HTMLElement
+  const base = (event.target as HTMLElement).dataset.date || draft.value
   const date = calendarDate(
-      Number(base.slice(0, 4)),
-      Number(base.slice(5, 7)),
-      Number(base.slice(8, 10)) + delta,
-    ),
-    key = dateKey(date);
-  if (!allowed(key, "date")) return;
-  selectDay(key);
-  await nextTick();
-  container.querySelector<HTMLButtonElement>(`[data-date="${key}"]`)?.focus();
+    Number(base.slice(0, 4)),
+    Number(base.slice(5, 7)),
+    Number(base.slice(8, 10)) + delta,
+  )
+  const key = dateKey(date)
+  if (!allowed(key, 'date')) {
+    return
+  }
+  selectDay(key)
+  await nextTick()
+  container.querySelector<HTMLButtonElement>(`[data-date="${key}"]`)?.focus()
 }
 </script>
+
 <template>
   <button
     type="button"
@@ -207,10 +228,13 @@ async function arrows(event: KeyboardEvent) {
     :disabled="disabled"
     @click="open = true"
   >
-    <span>{{ display }}</span
-    ><AppIcon name="calendar" :size="17" /></button
-  ><BottomSheet :open="open" :title="label" @close="open = false"
-    ><div class="calendar-nav">
+    <span>{{ display }}</span><AppIcon name="calendar" :size="17" />
+  </button><BottomSheet
+    :open="open"
+    :title="label"
+    @close="open = false"
+  >
+    <div class="calendar-nav">
       <button
         type="button"
         class="icon-button"
@@ -218,8 +242,8 @@ async function arrows(event: KeyboardEvent) {
         :disabled="!previousAllowed"
         @click="move(-1)"
       >
-        <AppIcon name="left" :size="20" /></button
-      ><button
+        <AppIcon name="left" :size="20" />
+      </button><button
         type="button"
         class="calendar-heading"
         :aria-label="view === 'date' ? '选择月份' : '选择年份'"
@@ -231,8 +255,8 @@ async function arrows(event: KeyboardEvent) {
             : view === "year"
               ? `${yearPage}—${yearPage + 11}年`
               : `${year}年`
-        }}<AppIcon name="down" :size="15" /></button
-      ><button
+        }}<AppIcon name="down" :size="15" />
+      </button><button
         type="button"
         class="icon-button"
         aria-label="下一页日期"
@@ -242,13 +266,12 @@ async function arrows(event: KeyboardEvent) {
         <AppIcon name="right" :size="20" />
       </button>
     </div>
-    <template v-if="view === 'date'"
-      ><div class="calendar-week" aria-hidden="true">
+    <template v-if="view === 'date'">
+      <div class="calendar-week" aria-hidden="true">
         <span
           v-for="day in ['日', '一', '二', '三', '四', '五', '六']"
           :key="day"
-          >{{ day }}</span
-        >
+        >{{ day }}</span>
       </div>
       <div
         class="calendar-days"
@@ -273,8 +296,8 @@ async function arrows(event: KeyboardEvent) {
         >
           {{ cell.day }}
         </button>
-      </div></template
-    >
+      </div>
+    </template>
     <div v-else-if="view === 'month'" class="calendar-months">
       <button
         v-for="m in 12"
@@ -316,15 +339,17 @@ async function arrows(event: KeyboardEvent) {
         :disabled="!allowed(`${year}-Q${q}`, 'quarter')"
         @click="draft = `${year}-Q${q}`"
       >
-        <strong>第{{ q }}季度</strong
-        ><small>{{ (q - 1) * 3 + 1 }}月—{{ q * 3 }}月</small>
+        <strong>第{{ q }}季度</strong><small>{{ (q - 1) * 3 + 1 }}月—{{ q * 3 }}月</small>
       </button>
     </div>
     <div class="calendar-extra">
-      <button type="button" class="text-button" @click="chooseToday">
-        {{ mode === "date" ? "今天" : "当前期间" }}</button
-      ><span>{{ draft }}</span
-      ><button
+      <button
+        type="button"
+        class="text-button"
+        @click="chooseToday"
+      >
+        {{ mode === "date" ? "今天" : "当前期间" }}
+      </button><span>{{ draft }}</span><button
         v-if="clearable"
         type="button"
         class="text-button"
@@ -333,24 +358,23 @@ async function arrows(event: KeyboardEvent) {
         清除日期
       </button>
     </div>
-    <template #footer
-      ><button
+    <template #footer>
+      <button
         type="button"
         class="button button-secondary"
         @click="open = false"
-      >
-        取消</button
-      ><button
+      > 取消</button><button
         type="button"
         class="button button-primary"
         :disabled="!canConfirm"
         @click="confirm"
       >
         确定
-      </button></template
-    ></BottomSheet
-  >
+      </button>
+    </template>
+  </BottomSheet>
 </template>
+
 <style scoped>
 .date-sheet-trigger {
   display: flex;

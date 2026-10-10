@@ -1,6 +1,7 @@
-import { bindRemoteTools, type ApplicationModule } from "@t-box/app-server-sdk";
-import { ApiError } from "@t-box/server-foundation/errors";
-import type { ApplicationPlatform } from "../service.js";
+import type { ApplicationModule } from '@t-box/app-server-sdk'
+import type { ApplicationPlatform } from '../service.js'
+import { bindRemoteTools } from '@t-box/app-server-sdk'
+import { ApiError } from '@t-box/server-foundation/errors'
 /** A remote service participates in exactly the same AI execution journal and installation checks as local code. */
 export function remoteApplicationModule(
   module: ApplicationModule,
@@ -9,7 +10,9 @@ export function remoteApplicationModule(
 ) {
   return bindRemoteTools(module, methods, {
     invoke: async (input, context) => {
-      if (!context.actor) throw new ApiError(401, "AUTH_REQUIRED", "请先登录");
+      if (!context.actor) {
+        throw new ApiError(401, 'AUTH_REQUIRED', '请先登录')
+      }
       return platform.invoke(
         context.actor.user.id,
         input.appId,
@@ -19,7 +22,7 @@ export function remoteApplicationModule(
         input.arguments,
         input.invocationId,
         context.signal,
-      );
+      )
     },
-  });
+  })
 }

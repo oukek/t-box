@@ -3,12 +3,12 @@
 源自参考项目 `app-plugins/capacitor-native-scanner`，适配 Capacitor 8、T Box Android namespace 和 iOS 15.4。
 
 ```ts
-import { NativeScanner } from '@t-box/capacitor-native-scanner';
+import { NativeScanner } from '@t-box/capacitor-native-scanner'
 
-const { supported } = await NativeScanner.isSupported();
+const { supported } = await NativeScanner.isSupported()
 if (supported) {
-  const result = await NativeScanner.scan({ formats: ['qr_code', 'ean_13'], torch: false });
-  console.log(result.text);
+  const result = await NativeScanner.scan({ formats: ['qr_code', 'ean_13'], torch: false })
+  console.log(result.text)
 }
 ```
 

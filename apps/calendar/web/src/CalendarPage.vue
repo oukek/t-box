@@ -1,232 +1,242 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
-import { dayjs, timeSnapshot } from "@t-box/time-contracts";
+import type { CalendarEvent, CalendarException, CalendarOccurrence } from '@t-box/calendar-contracts'
 import {
-  lunarLabel,
-  lunarEventLabel,
   calendarDayInfo,
-  calendarWeekStart,
-  calendarWeekRange,
-  calendarWeekdays,
   calendarKinds,
-  type CalendarEvent,
-  type CalendarOccurrence,
-  type CalendarException,
-} from "@t-box/calendar-contracts";
-import { calendarCells } from "@t-box/ui-kit/calendar";
-import DateSheetField from "@t-box/ui-kit/DateSheetField.vue";
-import { SheetSelect } from "@t-box/ui-kit";
-import { Modal } from "@t-box/ui-kit";
-import { AppIcon } from "@t-box/ui-kit";
-import ReminderSettings from "@t-box/device-reminders/ReminderSettings.vue";
-import { syncDeviceReminders } from "@t-box/device-reminders/deviceReminders";
-import { calendarApi } from "./api";
-import { holidayYears, loadHolidayYears } from "./holiday-cache";
-import CalendarBackup from "./CalendarBackup.vue";
-import CalendarEventEditor from "./CalendarEventEditor.vue";
-import "@t-box/ui-kit/temporal.css";
-import "./calendar.css";
-const props = defineProps<{
-  date?: string;
-  view?: string;
-  eventId?: string;
-  openRevision?: number;
-}>();
-const timezone =
-    Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
-  today = () => timeSnapshot(timezone).date;
-const selected = ref(today()),
-  view = ref("month"),
-  occurrences = ref<CalendarOccurrence[]>([]),
-  events = ref<CalendarEvent[]>([]),
-  loading = ref(false),
-  error = ref(""),
-  search = ref(""),
-  kind = ref(""),
-  truncated = ref(false),
-  editorOpen = ref(false),
-  editing = ref<CalendarEvent>(),
-  details = ref<CalendarOccurrence | null>(null),
-  detailEvent = ref<CalendarEvent | null>(null),
-  deleting = ref(false),
-  deleteOpen = ref(false),
-  mutationBusy = ref(false);
+  calendarWeekdays,
+  calendarWeekRange,
+  calendarWeekStart,
+  lunarEventLabel,
+  lunarLabel,
+} from '@t-box/calendar-contracts'
+import { syncDeviceReminders } from '@t-box/device-reminders/deviceReminders'
+import ReminderSettings from '@t-box/device-reminders/ReminderSettings.vue'
+import { dayjs, timeSnapshot } from '@t-box/time-contracts'
+import { AppIcon, Modal, SheetSelect } from '@t-box/ui-kit'
+import { calendarCells } from '@t-box/ui-kit/calendar'
+import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { calendarApi } from './api'
+import CalendarBackup from './CalendarBackup.vue'
+import CalendarEventEditor from './CalendarEventEditor.vue'
+import { holidayYears, loadHolidayYears } from './holiday-cache'
+import '@t-box/ui-kit/temporal.css'
+import './calendar.css'
 
-let loadVersion = 0,
-  searchTimer: ReturnType<typeof setTimeout> | undefined;
-const year = computed(() => Number(selected.value.slice(0, 4))),
-  month = computed(() => Number(selected.value.slice(5, 7))),
-  cells = computed(() =>
-    calendarCells(year.value, month.value).map((cell) => ({
-      ...cell,
-      info: calendarDayInfo(cell.key, holidayYears.value),
-      weekend: dayjs.utc(cell.key).isoWeekday() >= 6,
-    })),
-  );
+const props = defineProps<{
+  date?: string
+  view?: string
+  eventId?: string
+  openRevision?: number
+}>()
+const timezone =
+  Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'
+const today = () => timeSnapshot(timezone).date
+const selected = ref(today())
+const view = ref('month')
+const occurrences = ref<CalendarOccurrence[]>([])
+const events = ref<CalendarEvent[]>([])
+const loading = ref(false)
+const error = ref('')
+const search = ref('')
+const kind = ref('')
+const truncated = ref(false)
+const editorOpen = ref(false)
+const editing = ref<CalendarEvent>()
+const details = ref<CalendarOccurrence | null>(null)
+const detailEvent = ref<CalendarEvent | null>(null)
+const deleting = ref(false)
+const deleteOpen = ref(false)
+const mutationBusy = ref(false)
+
+let loadVersion = 0
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+const year = computed(() => Number(selected.value.slice(0, 4)))
+const month = computed(() => Number(selected.value.slice(5, 7)))
+const cells = computed(() =>
+  calendarCells(year.value, month.value).map((cell) => ({
+    ...cell,
+    info: calendarDayInfo(cell.key, holidayYears.value),
+    weekend: dayjs.utc(cell.key).isoWeekday() >= 6,
+  })),
+)
 const selectedInfo = computed(() =>
   calendarDayInfo(selected.value, holidayYears.value),
-);
-const holidayError = ref(false),
-  holidayLoading = ref(false);
-let holidayController: AbortController | undefined;
+)
+const holidayError = ref(false)
+const holidayLoading = ref(false)
+let holidayController: AbortController | undefined
 async function loadHolidays(refresh = false) {
-  holidayController?.abort();
-  const controller = (holidayController = new AbortController());
-  holidayLoading.value = true;
+  holidayController?.abort()
+  const controller = (holidayController = new AbortController())
+  holidayLoading.value = true
   const ok = await loadHolidayYears(
     [year.value - 1, year.value, year.value + 1],
     controller.signal,
     refresh,
-  );
+  )
   if (!controller.signal.aborted) {
-    holidayError.value = !ok;
-    holidayLoading.value = false;
+    holidayError.value = !ok
+    holidayLoading.value = false
   }
 }
 watch(
   year,
   () => {
-    void loadHolidays();
+    void loadHolidays()
   },
   { immediate: true },
-);
-const currentDate = computed(() => dayjs.utc(selected.value));
+)
+const currentDate = computed(() => dayjs.utc(selected.value))
 const range = computed(() =>
-  view.value === "anniversaries"
+  view.value === 'anniversaries'
     ? {
         from: today(),
-        to: dayjs.utc(today()).add(370, "day").format("YYYY-MM-DD"),
+        to: dayjs.utc(today()).add(370, 'day').format('YYYY-MM-DD'),
       }
-    : view.value === "agenda"
+    : view.value === 'agenda'
       ? calendarWeekRange(selected.value)
       : {
           from:
-            cells.value[0]!.key < "1900-01-01"
-              ? "1900-01-01"
+            cells.value[0]!.key < '1900-01-01'
+              ? '1900-01-01'
               : cells.value[0]!.key,
           to:
             cells.value[41]!.key.length !== 10 ||
-            cells.value[41]!.key > "9999-12-31"
-              ? "9999-12-31"
+            cells.value[41]!.key > '9999-12-31'
+              ? '9999-12-31'
               : cells.value[41]!.key,
         },
-);
+)
 const daily = computed(() =>
   occurrences.value.filter(
     (o) =>
       o.displayDate <= selected.value && o.displayEndDate >= selected.value,
   ),
-);
+)
 const upcoming = computed(() =>
   occurrences.value
-    .filter((o) => ["anniversary", "birthday"].includes(o.event.kind))
+    .filter((o) => ['anniversary', 'birthday'].includes(o.event.kind))
     .filter(
       (o, index, all) =>
         all.findIndex((other) => other.event.id === o.event.id) === index,
     ),
-);
+)
 const weeks = computed(() =>
   Array.from({ length: 7 }, (_, i) =>
     dayjs
       .utc(calendarWeekStart(selected.value))
-      .add(i, "day")
-      .format("YYYY-MM-DD"),
-  ),
-);
+      .add(i, 'day')
+      .format('YYYY-MM-DD')),
+)
 const countByDate = computed(() => {
-  const result = new Map<string, CalendarOccurrence[]>();
-  for (const cell of cells.value)
+  const result = new Map<string, CalendarOccurrence[]>()
+  for (const cell of cells.value) {
     result.set(
       cell.key,
       occurrences.value.filter(
         (o) => o.displayDate <= cell.key && o.displayEndDate >= cell.key,
       ),
-    );
-  return result;
-});
+    )
+  }
+  return result
+})
 const selectedLabel = computed(
   () =>
-    `${currentDate.value.month() + 1}月${currentDate.value.date()}日 · 星期${["一", "二", "三", "四", "五", "六", "日"][currentDate.value.isoWeekday() - 1]}`,
-);
+    `${currentDate.value.month() + 1}月${currentDate.value.date()}日 · 星期${['一', '二', '三', '四', '五', '六', '日'][currentDate.value.isoWeekday() - 1]}`,
+)
 const displayedEvent = computed(
   () => detailEvent.value ?? details.value?.event ?? null,
-);
-const singleStates = ref<CalendarException[]>([]);
-let detailVersion = 0;
+)
+const singleStates = ref<CalendarException[]>([])
+let detailVersion = 0
 watch(
   () => displayedEvent.value?.id,
   async (id) => {
-    const version = ++detailVersion;
-    singleStates.value = [];
-    if (!id) return;
+    const version = ++detailVersion
+    singleStates.value = []
+    if (!id) {
+      return
+    }
     try {
-      const response = await calendarApi.states(id);
-      if (version === detailVersion) singleStates.value = response.data;
+      const response = await calendarApi.states(id)
+      if (version === detailVersion) {
+        singleStates.value = response.data
+      }
     } catch (cause) {
-      if (version === detailVersion)
+      if (version === detailVersion) {
         error.value =
-          cause instanceof Error ? cause.message : "单次状态读取失败";
+          cause instanceof Error ? cause.message : '单次状态读取失败'
+      }
     }
   },
-);
+)
 async function restoreOccurrence(date: string) {
-  const event = displayedEvent.value;
-  if (!event) return;
-  mutationBusy.value = true;
+  const event = displayedEvent.value
+  if (!event) {
+    return
+  }
+  mutationBusy.value = true
   try {
-    await calendarApi.state(event, date, "normal");
-    detailEvent.value = (await calendarApi.get(event.id)).data;
-    singleStates.value = (await calendarApi.states(event.id)).data;
-    await load();
-    if (details.value)
+    await calendarApi.state(event, date, 'normal')
+    detailEvent.value = (await calendarApi.get(event.id)).data
+    singleStates.value = (await calendarApi.states(event.id)).data
+    await load()
+    if (details.value) {
       details.value =
         occurrences.value.find(
           (o) =>
             o.event.id === event.id &&
             o.occurrenceDate === details.value?.occurrenceDate,
-        ) ?? null;
-    void syncDeviceReminders(true);
+        ) ?? null
+    }
+    void syncDeviceReminders(true)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "恢复失败";
+    error.value = cause instanceof Error ? cause.message : '恢复失败'
   } finally {
-    mutationBusy.value = false;
+    mutationBusy.value = false
   }
 }
 function move(delta: number) {
   const d = currentDate.value.add(
     delta,
-    view.value === "agenda" ? "week" : "month",
-  );
-  if (d.year() >= 1900 && d.year() <= 9999)
-    selected.value = d.format("YYYY-MM-DD");
+    view.value === 'agenda' ? 'week' : 'month',
+  )
+  if (d.year() >= 1900 && d.year() <= 9999) {
+    selected.value = d.format('YYYY-MM-DD')
+  }
 }
 function timeLabel(o: CalendarOccurrence) {
-  if (o.event.allDay) return "全天";
-  return dayjs(o.startAt).tz(timezone).format("HH:mm");
+  if (o.event.allDay) {
+    return '全天'
+  }
+  return dayjs(o.startAt).tz(timezone).format('HH:mm')
 }
 function daysUntil(o: CalendarOccurrence) {
-  return dayjs.utc(o.displayDate).diff(dayjs.utc(today()), "day");
+  return dayjs.utc(o.displayDate).diff(dayjs.utc(today()), 'day')
 }
 function open(o: CalendarOccurrence) {
-  details.value = o;
-  detailEvent.value = null;
-  error.value = "";
+  details.value = o
+  detailEvent.value = null
+  error.value = ''
 }
 function newEvent() {
-  editing.value = undefined;
-  editorOpen.value = true;
+  editing.value = undefined
+  editorOpen.value = true
 }
 function edit() {
-  if (!displayedEvent.value) return;
-  editing.value = displayedEvent.value;
-  detailEvent.value = null;
-  details.value = null;
-  editorOpen.value = true;
+  if (!displayedEvent.value) {
+    return
+  }
+  editing.value = displayedEvent.value
+  detailEvent.value = null
+  details.value = null
+  editorOpen.value = true
 }
 async function load() {
-  const ticket = ++loadVersion;
-  loading.value = true;
-  error.value = "";
+  const ticket = ++loadVersion
+  loading.value = true
+  error.value = ''
   try {
     const [result, list] = await Promise.all([
       calendarApi.occurrences(
@@ -237,95 +247,107 @@ async function load() {
         kind.value,
       ),
       calendarApi.events(search.value),
-    ]);
-    if (ticket !== loadVersion) return;
-    occurrences.value = result.data.occurrences;
-    events.value = list.data;
-    truncated.value = result.data.truncated;
+    ])
+    if (ticket !== loadVersion) {
+      return
+    }
+    occurrences.value = result.data.occurrences
+    events.value = list.data
+    truncated.value = result.data.truncated
   } catch (cause) {
-    if (ticket === loadVersion)
-      error.value = cause instanceof Error ? cause.message : "日历读取失败";
+    if (ticket === loadVersion) {
+      error.value = cause instanceof Error ? cause.message : '日历读取失败'
+    }
   } finally {
-    if (ticket === loadVersion) loading.value = false;
+    if (ticket === loadVersion) {
+      loading.value = false
+    }
   }
 }
 watch(
   () => [selected.value, view.value, kind.value],
   () => {
-    void load();
+    void load()
   },
-);
+)
 watch(search, () => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(load, 300);
-});
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(load, 300)
+})
 watch(
   () => [props.date, props.view, props.eventId, props.openRevision],
   async () => {
-    selected.value = props.date ?? today();
-    view.value = props.view ?? "month";
-    await load();
+    selected.value = props.date ?? today()
+    view.value = props.view ?? 'month'
+    await load()
     if (props.eventId) {
       try {
-        detailEvent.value = (await calendarApi.get(props.eventId)).data;
+        detailEvent.value = (await calendarApi.get(props.eventId)).data
         details.value =
-          occurrences.value.find((o) => o.event.id === props.eventId) ?? null;
+          occurrences.value.find((o) => o.event.id === props.eventId) ?? null
       } catch (cause) {
-        error.value = cause instanceof Error ? cause.message : "读取事件失败";
+        error.value = cause instanceof Error ? cause.message : '读取事件失败'
       }
     }
   },
   { immediate: true },
-);
+)
 onBeforeUnmount(() => {
-  holidayController?.abort();
-  loadVersion++;
-  clearTimeout(searchTimer);
-});
+  holidayController?.abort()
+  loadVersion++
+  clearTimeout(searchTimer)
+})
 async function saved(event: CalendarEvent) {
-  editorOpen.value = false;
-  if (["birthday", "anniversary"].includes(event.kind)) {
-    view.value = "anniversaries";
-    selected.value = today();
-  } else selected.value = event.start.slice(0, 10);
-  await load();
+  editorOpen.value = false
+  if (['birthday', 'anniversary'].includes(event.kind)) {
+    view.value = 'anniversaries'
+    selected.value = today()
+  } else {
+    selected.value = event.start.slice(0, 10)
+  }
+  await load()
 }
-async function setState(state: "completed" | "normal" | "skipped") {
-  if (!details.value) return;
-  mutationBusy.value = true;
+async function setState(state: 'completed' | 'normal' | 'skipped') {
+  if (!details.value) {
+    return
+  }
+  mutationBusy.value = true
   try {
     await calendarApi.state(
       displayedEvent.value ?? details.value.event,
       details.value.occurrenceDate,
       state,
-    );
-    details.value = null;
-    detailEvent.value = null;
-    await load();
-    void syncDeviceReminders(true);
+    )
+    details.value = null
+    detailEvent.value = null
+    await load()
+    void syncDeviceReminders(true)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "修改失败";
+    error.value = cause instanceof Error ? cause.message : '修改失败'
   } finally {
-    mutationBusy.value = false;
+    mutationBusy.value = false
   }
 }
 async function remove() {
-  if (!displayedEvent.value) return;
-  deleting.value = true;
+  if (!displayedEvent.value) {
+    return
+  }
+  deleting.value = true
   try {
-    await calendarApi.remove(displayedEvent.value);
-    deleteOpen.value = false;
-    details.value = null;
-    detailEvent.value = null;
-    await load();
-    void syncDeviceReminders(true);
+    await calendarApi.remove(displayedEvent.value)
+    deleteOpen.value = false
+    details.value = null
+    detailEvent.value = null
+    await load()
+    void syncDeviceReminders(true)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "删除失败";
+    error.value = cause instanceof Error ? cause.message : '删除失败'
   } finally {
-    deleting.value = false;
+    deleting.value = false
   }
 }
 </script>
+
 <template>
   <section class="temporal-page calendar-page">
     <div class="temporal-toolbar">
@@ -348,12 +370,11 @@ async function remove() {
       </button>
     </div>
     <div class="calendar-tools">
-      <label class="calendar-search"
-        ><AppIcon name="search" :size="16" /><input
-          v-model="search"
-          aria-label="搜索日历事件"
-          placeholder="搜索标题、地点、备注" /></label
-      ><SheetSelect
+      <label class="calendar-search"><AppIcon name="search" :size="16" /><input
+        v-model="search"
+        aria-label="搜索日历事件"
+        placeholder="搜索标题、地点、备注"
+      ></label><SheetSelect
         v-model="kind"
         :options="[{ value: '', label: '全部类型' }, ...calendarKinds]"
         label="筛选事件类型"
@@ -369,8 +390,18 @@ async function remove() {
         <AppIcon name="refresh" :size="18" />
       </button>
     </div>
-    <p v-if="error" class="temporal-error" role="alert">{{ error }}</p>
-    <p v-if="holidayError" class="temporal-note" role="status">
+    <p
+      v-if="error"
+      class="temporal-error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-if="holidayError"
+      class="temporal-note"
+      role="status"
+    >
       节假日更新失败；已缓存的安排仍可查看。请稍后刷新。
     </p>
     <p v-if="truncated" class="temporal-note">
@@ -378,15 +409,23 @@ async function remove() {
     </p>
     <div v-if="view !== 'anniversaries'" class="calendar-period">
       <div>
-        <button class="icon-button" aria-label="上一个期间" @click="move(-1)">
-          <AppIcon name="left" :size="20" /></button
-        ><DateSheetField
+        <button
+          class="icon-button"
+          aria-label="上一个期间"
+          @click="move(-1)"
+        >
+          <AppIcon name="left" :size="20" />
+        </button><DateSheetField
           :model-value="selected.slice(0, 7)"
           mode="month"
           label="选择日历月份"
           compact
           @update:model-value="selected = `${$event}-01`"
-        /><button class="icon-button" aria-label="下一个期间" @click="move(1)">
+        /><button
+          class="icon-button"
+          aria-label="下一个期间"
+          @click="move(1)"
+        >
           <AppIcon name="right" :size="20" />
         </button>
       </div>
@@ -401,7 +440,11 @@ async function remove() {
             day.label
           }}</span>
         </div>
-        <div class="calendar-grid" role="group" aria-label="月历日期">
+        <div
+          class="calendar-grid"
+          role="group"
+          aria-label="月历日期"
+        >
           <button
             v-for="cell in cells"
             :key="cell.key"
@@ -437,29 +480,23 @@ async function remove() {
               class="calendar-day-mark"
               :class="cell.info.arrangement.status"
               aria-hidden="true"
-              >{{ cell.info.arrangement.status === "rest" ? "休" : "班" }}</span
-            >
-            <strong>{{ cell.day }}</strong
-            ><small
+            >{{ cell.info.arrangement.status === "rest" ? "休" : "班" }}</span>
+            <strong>{{ cell.day }}</strong><small
               :class="`label-${cell.info.labelKind}`"
               :title="
-                cell.info.festivals.join('、') ||
-                cell.info.solarTerm ||
-                cell.info.lunar?.label
+                cell.info.festivals.join('、')
+                  || cell.info.solarTerm
+                  || cell.info.lunar?.label
               "
-              >{{ cell.info.label }}</small
-            ><span class="calendar-dots"
-              ><i
-                v-for="o in countByDate.get(cell.key)?.slice(0, 3)"
-                :key="`${o.event.id}:${o.occurrenceDate}`"
-                :class="`color-${o.event.color}`"
+            >{{ cell.info.label }}</small><span class="calendar-dots"><i
+              v-for="o in countByDate.get(cell.key)?.slice(0, 3)"
+              :key="`${o.event.id}:${o.occurrenceDate}`"
+              :class="`color-${o.event.color}`"
             /></span>
           </button>
         </div>
         <div class="calendar-legend">
-          <span><i class="rest">休</i>放假</span
-          ><span><i class="work">班</i>调休上班</span
-          ><span class="calendar-legend-note">{{
+          <span><i class="rest">休</i>放假</span><span><i class="work">班</i>调休上班</span><span class="calendar-legend-note">{{
             selectedInfo.scheduleKnown
               ? "中国大陆放假调休安排"
               : holidayLoading
@@ -479,17 +516,14 @@ async function remove() {
         >
           <template v-if="selectedInfo.lunar">
             <div class="calendar-lunar-heading">
-              <strong>农历{{ selectedInfo.lunar.label }}</strong
-              ><span
-                >{{ selectedInfo.lunar.yearName
-                }}{{ selectedInfo.lunar.zodiac }}年</span
-              >
+              <strong>农历{{ selectedInfo.lunar.label }}</strong><span>{{ selectedInfo.lunar.yearName
+              }}{{ selectedInfo.lunar.zodiac }}年</span>
             </div>
             <div
               v-if="
-                selectedInfo.festivals.length ||
-                selectedInfo.solarTerm ||
-                selectedInfo.arrangement
+                selectedInfo.festivals.length
+                  || selectedInfo.solarTerm
+                  || selectedInfo.arrangement
               "
               class="calendar-almanac-tags"
             >
@@ -497,33 +531,28 @@ async function remove() {
                 v-for="festival in selectedInfo.festivals"
                 :key="festival"
                 class="festival"
-                >{{ festival }}</span
-              >
+              >{{ festival }}</span>
               <span v-if="selectedInfo.solarTerm" class="term">{{
                 selectedInfo.solarTerm
               }}</span>
               <span
                 v-if="selectedInfo.arrangement"
                 :class="selectedInfo.arrangement.status"
-                >{{
-                  selectedInfo.festivals.includes(selectedInfo.arrangement.name)
-                    ? ""
-                    : `${selectedInfo.arrangement.name} · `
-                }}
+              >{{
+                 selectedInfo.festivals.includes(selectedInfo.arrangement.name)
+                   ? ""
+                   : `${selectedInfo.arrangement.name} · `
+               }}
                 {{
                   selectedInfo.arrangement.status === "rest"
                     ? "放假"
                     : "调休上班"
-                }}</span
-              >
+                }}</span>
             </div>
             <p v-if="selectedInfo.nextSolarTerm" class="calendar-next-term">
-              下个节气 <strong>{{ selectedInfo.nextSolarTerm.name }}</strong
-              ><span
-                >{{
-                  selectedInfo.nextSolarTerm.date.slice(5).replace("-", "月")
-                }}日 · {{ selectedInfo.nextSolarTerm.daysAway }}天后</span
-              >
+              下个节气 <strong>{{ selectedInfo.nextSolarTerm.name }}</strong><span>{{
+                selectedInfo.nextSolarTerm.date.slice(5).replace("-", "月")
+              }}日 · {{ selectedInfo.nextSolarTerm.daysAway }}天后</span>
             </p>
           </template>
           <p v-else class="calendar-almanac-note">农历信息支持 1900–2100 年</p>
@@ -546,13 +575,10 @@ async function remove() {
         >
           <span class="calendar-occurrence-time">{{ timeLabel(o) }}</span>
           <div>
-            <strong>{{ o.event.title }}</strong
-            ><small
-              >{{
-                o.event.location ||
-                calendarKinds.find((k) => k.value === o.event.kind)?.label
-              }}{{ o.completed ? " · 已完成" : "" }}</small
-            >
+            <strong>{{ o.event.title }}</strong><small>{{
+              o.event.location
+                || calendarKinds.find((k) => k.value === o.event.kind)?.label
+            }}{{ o.completed ? " · 已完成" : "" }}</small>
           </div>
           <AppIcon name="right" :size="15" />
         </button>
@@ -593,8 +619,7 @@ async function remove() {
         >
           <span class="calendar-occurrence-time">{{ timeLabel(o) }}</span>
           <div>
-            <strong>{{ o.event.title }}</strong
-            ><small>{{
+            <strong>{{ o.event.title }}</strong><small>{{
               o.event.location || o.event.description || "未填写备注"
             }}</small>
           </div>
@@ -613,22 +638,16 @@ async function remove() {
         @click="open(o)"
       >
         <div>
-          <span
-            >{{ o.event.kind === "birthday" ? "生日" : "纪念日"
-            }}{{ o.event.lunar ? " · 农历" : "" }}</span
-          ><strong>{{ o.event.title }}</strong
-          ><small
-            >{{ o.occurrenceDate
-            }}{{
-              o.anniversaryYears
-                ? ` · ${o.anniversaryYears}${o.event.kind === "birthday" ? "周岁" : "周年"}`
-                : ""
-            }}</small
-          >
+          <span>{{ o.event.kind === "birthday" ? "生日" : "纪念日"
+          }}{{ o.event.lunar ? " · 农历" : "" }}</span><strong>{{ o.event.title }}</strong><small>{{ o.occurrenceDate
+          }}{{
+            o.anniversaryYears
+              ? ` · ${o.anniversaryYears}${o.event.kind === "birthday" ? "周岁" : "周年"}`
+              : ""
+          }}</small>
         </div>
         <p>
-          <strong>{{ daysUntil(o) === 0 ? "今天" : daysUntil(o) }}</strong
-          ><span v-if="daysUntil(o) !== 0">天后</span>
+          <strong>{{ daysUntil(o) === 0 ? "今天" : daysUntil(o) }}</strong><span v-if="daysUntil(o) !== 0">天后</span>
         </p>
       </button>
       <p v-if="!upcoming.length && !loading" class="temporal-empty">
@@ -645,11 +664,8 @@ async function remove() {
           details = occurrences.find((o) => o.event.id === event.id) ?? null;
         "
       >
-        <strong>{{ event.title }}</strong
-        ><small
-          >{{ event.lunar ? lunarEventLabel(event.lunar) : event.start }} ·
-          {{ event.recurrence.frequency === "none" ? "单次" : "重复" }}</small
-        >
+        <strong>{{ event.title }}</strong><small>{{ event.lunar ? lunarEventLabel(event.lunar) : event.start }} ·
+          {{ event.recurrence.frequency === "none" ? "单次" : "重复" }}</small>
       </button>
     </section>
     <ReminderSettings />
@@ -669,19 +685,22 @@ async function remove() {
         details = null;
         detailEvent = null;
       "
-      ><template v-if="displayedEvent"
-        ><span class="temporal-badge">{{
+    >
+      <template v-if="displayedEvent">
+        <span class="temporal-badge">{{
           calendarKinds.find((k) => k.value === displayedEvent?.kind)?.label
         }}</span>
-        <h3 class="calendar-detail-title">{{ displayedEvent.title }}</h3>
+        <h3 class="calendar-detail-title">
+          {{ displayedEvent.title }}
+        </h3>
         <dl class="temporal-detail">
           <div v-if="displayedEvent.lunar">
             <dt>农历日期</dt>
             <dd>
               {{ lunarEventLabel(displayedEvent.lunar)
               }}<template v-if="details">
-                · 本次{{ lunarLabel(details.occurrenceDate) }}</template
-              >
+                · 本次{{ lunarLabel(details.occurrenceDate) }}
+              </template>
             </dd>
           </div>
           <div>
@@ -713,24 +732,23 @@ async function remove() {
               }}
               <template
                 v-if="
-                  displayedEvent.lunar &&
-                  ['monthly', 'yearly'].includes(
-                    displayedEvent.recurrence.frequency,
-                  )
+                  displayedEvent.lunar
+                    && ['monthly', 'yearly'].includes(
+                      displayedEvent.recurrence.frequency,
+                    )
                 "
-                >（农历{{
-                  displayedEvent.recurrence.monthPolicy === "last_day"
-                    ? "，小月用最后一天"
-                    : "，缺失日期跳过"
-                }}{{
-                  displayedEvent.lunar.leapMonth &&
-                  displayedEvent.recurrence.frequency === "yearly"
-                    ? displayedEvent.lunar.leapPolicy === "regular"
-                      ? "，无闰月用普通月"
-                      : "，无闰月跳过"
-                    : ""
-                }}）</template
-              >
+              >（农历{{
+                displayedEvent.recurrence.monthPolicy === "last_day"
+                  ? "，小月用最后一天"
+                  : "，缺失日期跳过"
+              }}{{
+                displayedEvent.lunar.leapMonth
+                  && displayedEvent.recurrence.frequency === "yearly"
+                  ? displayedEvent.lunar.leapPolicy === "regular"
+                    ? "，无闰月用普通月"
+                    : "，无闰月跳过"
+                  : ""
+              }}）</template>
             </dd>
           </div>
           <div v-if="displayedEvent.description">
@@ -743,22 +761,28 @@ async function remove() {
               {{
                 displayedEvent.reminders.length
                   ? displayedEvent.reminders
-                      .map((n) => (n === 0 ? "开始时" : `提前 ${n} 分钟`))
-                      .join("、")
+                    .map((n) => (n === 0 ? "开始时" : `提前 ${n} 分钟`))
+                    .join("、")
                   : "不提醒"
               }}
             </dd>
           </div>
         </dl>
-        <p v-if="error" class="temporal-error" role="alert">{{ error }}</p>
+        <p
+          v-if="error"
+          class="temporal-error"
+          role="alert"
+        >
+          {{ error }}
+        </p>
         <div v-if="details" class="calendar-occurrence-actions">
           <button
             class="temporal-text-button"
             :disabled="mutationBusy"
             @click="setState(details.completed ? 'normal' : 'completed')"
           >
-            {{ details.completed ? "恢复未完成" : "完成这一次" }}</button
-          ><button
+            {{ details.completed ? "恢复未完成" : "完成这一次" }}
+          </button><button
             v-if="displayedEvent.recurrence.frequency !== 'none'"
             class="temporal-text-button"
             :disabled="mutationBusy"
@@ -776,10 +800,8 @@ async function remove() {
             :key="state.date"
             class="temporal-inline"
           >
-            <span
-              >{{ state.date }} ·
-              {{ state.state === "skipped" ? "已跳过" : "已完成" }}</span
-            ><button
+            <span>{{ state.date }} ·
+              {{ state.state === "skipped" ? "已跳过" : "已完成" }}</span><button
               class="temporal-text-button"
               :disabled="mutationBusy"
               @click="restoreOccurrence(state.date)"
@@ -793,41 +815,44 @@ async function remove() {
             class="button button-secondary"
             :disabled="mutationBusy"
             @click="edit"
-          >
-            编辑整个事件</button
-          ><button
+          > 编辑整个事件</button><button
             class="button button-danger"
             :disabled="mutationBusy"
             @click="deleteOpen = true"
           >
             删除
           </button>
-        </div></template
-      ></Modal
-    ><Modal
+        </div>
+      </template>
+    </Modal><Modal
       :open="deleteOpen"
       title="删除整个事件"
       :busy="deleting"
       @close="deleteOpen = false"
-      ><p class="temporal-note">
+    >
+      <p class="temporal-note">
         删除“{{ displayedEvent?.title }}”及全部重复日程？此操作不能撤销。
       </p>
-      <p v-if="error" class="temporal-error" role="alert">{{ error }}</p>
+      <p
+        v-if="error"
+        class="temporal-error"
+        role="alert"
+      >
+        {{ error }}
+      </p>
       <div class="temporal-actions">
         <button
           class="button button-secondary"
           :disabled="deleting"
           @click="deleteOpen = false"
-        >
-          取消</button
-        ><button
+        > 取消</button><button
           class="button button-danger"
           :disabled="deleting"
           @click="remove"
         >
           确认删除
         </button>
-      </div></Modal
-    >
+      </div>
+    </Modal>
   </section>
 </template>

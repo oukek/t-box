@@ -1,48 +1,52 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import type { AdminPaymentOrder, PaymentCapabilities } from "@t-box/shared";
-import { request, save, errorMessage } from "../core/api";
-import WechatSettings from "./WechatSettings.vue";
-import AdminDialog from "../components/AdminDialog.vue";
-const orders = ref<AdminPaymentOrder[]>([]),
-  enabled = ref(false),
-  loading = ref(true),
-  busy = ref(false),
-  error = ref("");
-const settingsOpen = ref(false);
-const selected = ref<AdminPaymentOrder | null>(null);
+import type { AdminPaymentOrder, PaymentCapabilities } from '@t-box/shared'
+import { onMounted, ref } from 'vue'
+import AdminDialog from '../components/AdminDialog.vue'
+import { errorMessage, request, save } from '../core/api'
+import WechatSettings from './WechatSettings.vue'
+
+const orders = ref<AdminPaymentOrder[]>([])
+const enabled = ref(false)
+const loading = ref(true)
+const busy = ref(false)
+const error = ref('')
+const settingsOpen = ref(false)
+const selected = ref<AdminPaymentOrder | null>(null)
 async function load() {
-  loading.value = true;
-  error.value = "";
+  loading.value = true
+  error.value = ''
   try {
     const [items, caps] = await Promise.all([
-      request<AdminPaymentOrder[]>("/payments/orders"),
-      request<PaymentCapabilities>("/payments/capabilities"),
-    ]);
-    orders.value = items;
-    enabled.value = caps.enabled;
+      request<AdminPaymentOrder[]>('/payments/orders'),
+      request<PaymentCapabilities>('/payments/capabilities'),
+    ])
+    orders.value = items
+    enabled.value = caps.enabled
   } catch (e) {
-    error.value = errorMessage(e);
+    error.value = errorMessage(e)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 async function reconcile() {
-  if (!selected.value) return;
-  busy.value = true;
-  error.value = "";
+  if (!selected.value) {
+    return
+  }
+  busy.value = true
+  error.value = ''
   try {
-    await save(`/payments/orders/${selected.value.id}/reconcile`, {});
-    selected.value = null;
-    await load();
+    await save(`/payments/orders/${selected.value.id}/reconcile`, {})
+    selected.value = null
+    await load()
   } catch (e) {
-    error.value = errorMessage(e);
+    error.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
-onMounted(load);
+onMounted(load)
 </script>
+
 <template>
   <header class="page-heading">
     <div>
@@ -51,11 +55,16 @@ onMounted(load);
       <p>充值订单与余额入账由服务端确认。</p>
     </div>
     <div class="actions">
-      <button @click="settingsOpen = true">微信支付配置</button
-      ><button :disabled="loading" @click="load">刷新</button>
+      <button @click="settingsOpen = true">微信支付配置</button><button :disabled="loading" @click="load">刷新</button>
     </div>
   </header>
-  <p v-if="error" class="alert" role="alert">{{ error }}</p>
+  <p
+    v-if="error"
+    class="alert"
+    role="alert"
+  >
+    {{ error }}
+  </p>
   <p v-if="!loading && !enabled" class="alert">
     在线充值未开放，请在“微信支付配置”中填写商户信息并启用对应支付方式。
   </p>
@@ -79,14 +88,17 @@ onMounted(load);
         </thead>
         <tbody>
           <tr v-for="o in orders" :key="o.id">
-            <td class="mono">{{ o.id }}</td>
+            <td class="mono">
+              {{ o.id }}
+            </td>
             <td>
               {{ o.amount
-              }}<span v-if="Number(o.bonusAmount) > 0" class="cell-secondary"
-                >赠 ¥{{ Number(o.bonusAmount) }} · 到账 ¥{{
-                  Number(o.creditedAmount)
-                }}</span
-              >
+              }}<span
+                v-if="Number(o.bonusAmount) > 0"
+                class="cell-secondary"
+              >赠 ¥{{ Number(o.bonusAmount) }} · 到账 ¥{{
+                Number(o.creditedAmount)
+              }}</span>
             </td>
             <td>
               <span class="badge" :class="{ disabled: o.status !== 'paid' }">{{
@@ -130,14 +142,18 @@ onMounted(load);
     :busy="busy"
     compact
     @close="selected = null"
-    ><p>
+  >
+    <p>
       查询支付渠道的真实结果。仅核对成功支付、金额一致的订单，重复核对不会重复入账。
     </p>
-    <template #footer
-      ><button :disabled="busy" @click="selected = null">取消</button
-      ><button class="primary" :disabled="busy" @click="reconcile">
+    <template #footer>
+      <button :disabled="busy" @click="selected = null">取消</button><button
+        class="primary"
+        :disabled="busy"
+        @click="reconcile"
+      >
         {{ busy ? "正在核对…" : "开始核对" }}
-      </button></template
-    ></AdminDialog
-  >
+      </button>
+    </template>
+  </AdminDialog>
 </template>

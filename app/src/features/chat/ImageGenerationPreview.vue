@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
-import type { ToolOutputPreview, ToolStatus } from "@t-box/shared";
-import { AppIcon } from "@t-box/ui-kit";
+import type { ToolOutputPreview, ToolStatus } from '@t-box/shared'
+import { AppIcon } from '@t-box/ui-kit'
+import { computed, onMounted } from 'vue'
+
 const props = defineProps<{
-  preview: Readonly<ToolOutputPreview>;
-  status: ToolStatus;
-  active: boolean;
-}>();
-const emit = defineEmits<{ rendered: [] }>();
-const generating = computed(() => props.active && props.status === "running");
+  preview: Readonly<ToolOutputPreview>
+  status: ToolStatus
+  active: boolean
+}>()
+const emit = defineEmits<{ rendered: [] }>()
+const generating = computed(() => props.active && props.status === 'running')
 const ratio = computed(() =>
   props.preview.width > 0 && props.preview.height > 0
     ? `${props.preview.width} / ${props.preview.height}`
-    : "1 / 1",
-);
-onMounted(() => emit("rendered"));
+    : '1 / 1',
+)
+onMounted(() => emit('rendered'))
 </script>
+
 <template>
   <div
     class="image-generation-preview"
@@ -25,19 +27,26 @@ onMounted(() => emit("rendered"));
     :aria-busy="generating"
     :aria-label="generating ? preview.label : '图片处理已中断'"
   >
-    <div class="image-wash" aria-hidden="true"></div>
+    <div class="image-wash" aria-hidden="true" />
     <div class="image-frame" aria-hidden="true">
       <AppIcon name="image" :size="34" />
     </div>
     <div class="image-generation-caption">
-      <span v-if="generating" class="preview-dots" aria-hidden="true"
-        ><i></i><i></i><i></i
-      ></span>
-      <AppIcon v-else name="warning" :size="14" />
+      <span
+        v-if="generating"
+        class="preview-dots"
+        aria-hidden="true"
+      ><i /><i /><i /></span>
+      <AppIcon
+        v-else
+        name="warning"
+        :size="14"
+      />
       <span>{{ generating ? `${preview.label}…` : "图片处理已中断" }}</span>
     </div>
   </div>
 </template>
+
 <style scoped>
 .image-generation-preview {
   position: relative;
@@ -58,16 +67,7 @@ onMounted(() => emit("rendered"));
   inset: -55%;
   z-index: -1;
   opacity: 0.45;
-  background: conic-gradient(
-    from 20deg,
-    #edf4ee,
-    #cce7da,
-    #e4ede1,
-    #dce9f2,
-    #f1f5ec,
-    #cce7da,
-    #edf4ee
-  );
+  background: conic-gradient(from 20deg, #edf4ee, #cce7da, #e4ede1, #dce9f2, #f1f5ec, #cce7da, #edf4ee);
   filter: blur(26px);
 }
 .generating .image-wash {

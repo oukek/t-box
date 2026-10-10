@@ -1,41 +1,46 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from "vue";
-import type { AiFeeSchedule } from "@t-box/shared";
-import ApplicationHeader from "@t-box/ui-kit/ApplicationHeader.vue";
-import { AppIcon } from "@t-box/ui-kit";
+import type { AiFeeSchedule } from '@t-box/shared'
+import { AppIcon } from '@t-box/ui-kit'
+import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   backFromApplication,
   navigation,
   tabLabel,
-} from "../../core/navigation";
-import { request } from "../../core/network";
-import { displayMoney as fee } from "./format";
-import "./recharge.css";
-const schedule = ref<AiFeeSchedule | null>(null),
-  loading = ref(true),
-  error = ref("");
-let controller: AbortController | undefined;
+} from '../../core/navigation'
+import { request } from '../../core/network'
+import { displayMoney as fee } from './format'
+import './recharge.css'
+
+const schedule = ref<AiFeeSchedule | null>(null)
+const loading = ref(true)
+const error = ref('')
+let controller: AbortController | undefined
 async function load() {
-  controller?.abort();
-  controller = new AbortController();
-  const signal = controller.signal;
-  loading.value = true;
-  error.value = "";
+  controller?.abort()
+  controller = new AbortController()
+  const signal = controller.signal
+  loading.value = true
+  error.value = ''
   try {
-    const result = await request<{ data: AiFeeSchedule }>("/wallet/pricing", {
+    const result = await request<{ data: AiFeeSchedule }>('/wallet/pricing', {
       signal,
-    });
-    schedule.value = result.data;
+    })
+    schedule.value = result.data
   } catch (cause) {
-    if (!signal.aborted)
-      error.value = cause instanceof Error ? cause.message : "读取价格失败";
+    if (!signal.aborted) {
+      error.value = cause instanceof Error ? cause.message : '读取价格失败'
+    }
   } finally {
-    if (!signal.aborted) loading.value = false;
+    if (!signal.aborted) {
+      loading.value = false
+    }
   }
 }
-onMounted(load);
-onBeforeUnmount(() => controller?.abort());
+onMounted(load)
+onBeforeUnmount(() => controller?.abort())
 </script>
+
 <template>
   <section class="billing-detail-page">
     <ApplicationHeader
@@ -43,20 +48,25 @@ onBeforeUnmount(() => controller?.abort());
       :back-label="tabLabel(navigation.backTo)"
       @back="backFromApplication"
     >
-      <template #actions
-        ><button
+      <template #actions>
+        <button
           class="wallet-refresh"
           aria-label="刷新费用说明"
           :disabled="loading"
           @click="load"
         >
-          <AppIcon name="refresh" :size="19" /></button
-      ></template>
+          <AppIcon name="refresh" :size="19" />
+        </button>
+      </template>
     </ApplicationHeader>
     <p class="billing-page-intro">
       按实际使用结算，每笔费用都可在余额记录中查看。
     </p>
-    <p v-if="error" class="wallet-error" role="alert">
+    <p
+      v-if="error"
+      class="wallet-error"
+      role="alert"
+    >
       {{ error }}
       <button class="billing-text-button" @click="load">重新加载</button>
     </p>
@@ -72,8 +82,7 @@ onBeforeUnmount(() => controller?.abort());
             <dd>
               ¥{{ fee(schedule.conversation.inputPrice)
               }}<small>
-                / {{ schedule.tokenUnit.toLocaleString() }} token</small
-              >
+                / {{ schedule.tokenUnit.toLocaleString() }} token</small>
             </dd>
           </div>
           <div>
@@ -81,8 +90,7 @@ onBeforeUnmount(() => controller?.abort());
             <dd>
               ¥{{ fee(schedule.conversation.outputPrice)
               }}<small>
-                / {{ schedule.tokenUnit.toLocaleString() }} token</small
-              >
+                / {{ schedule.tokenUnit.toLocaleString() }} token</small>
             </dd>
           </div>
         </dl>
@@ -90,9 +98,7 @@ onBeforeUnmount(() => controller?.abort());
       </article>
       <article class="billing-price-card">
         <h2>
-          <AppIcon name="image" :size="20" />图片生成与编辑<span
-            >按成功图片计费</span
-          >
+          <AppIcon name="image" :size="20" />图片生成与编辑<span>按成功图片计费</span>
         </h2>
         <dl v-if="schedule.image">
           <div>

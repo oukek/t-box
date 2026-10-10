@@ -1,56 +1,72 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, watch } from "vue";
-import { Capacitor } from "@capacitor/core";
-import { identity } from "@t-box/app-shell-sdk";
-import { openApplication } from "@t-box/app-shell-sdk";
+import { Capacitor } from '@capacitor/core'
+import { identity, openApplication } from '@t-box/app-shell-sdk'
+import { AppIcon } from '@t-box/ui-kit'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
 import {
   checkDueReminders,
-  syncDeviceReminders,
   dueReminder,
-} from "./deviceReminders";
-import { AppIcon } from "@t-box/ui-kit";
-let unmounted = false;
-let ticker: ReturnType<typeof setInterval> | undefined,
-  poll: ReturnType<typeof setInterval> | undefined,
-  listener: { remove: () => Promise<void> } | undefined;
+  syncDeviceReminders,
+} from './deviceReminders'
+
+let unmounted = false
+let ticker: ReturnType<typeof setInterval> | undefined
+let poll: ReturnType<typeof setInterval> | undefined
+let listener: { remove: () => Promise<void> } | undefined
 const refresh = () => {
-  if (identity.user) void syncDeviceReminders();
-};
-watch(() => identity.user?.id, refresh, { immediate: true });
+  if (identity.user) {
+    void syncDeviceReminders()
+  }
+}
+watch(() => identity.user?.id, refresh, { immediate: true })
 function foreground() {
-  if (document.visibilityState === "visible") refresh();
+  if (document.visibilityState === 'visible') {
+    refresh()
+  }
 }
 onMounted(async () => {
-  ticker = setInterval(checkDueReminders, 1000);
+  ticker = setInterval(checkDueReminders, 1000)
   poll = setInterval(() => {
-    if (document.visibilityState === "visible") refresh();
-  }, 15000);
-  document.addEventListener("visibilitychange", foreground);
+    if (document.visibilityState === 'visible') {
+      refresh()
+    }
+  }, 15000)
+  document.addEventListener('visibilitychange', foreground)
   if (Capacitor.isNativePlatform()) {
-    const api = (await import("@capacitor/local-notifications"))
-      .LocalNotifications;
-    if (unmounted) return;
+    const api = (await import('@capacitor/local-notifications'))
+      .LocalNotifications
+    if (unmounted) {
+      return
+    }
     listener = await api.addListener(
-      "localNotificationActionPerformed",
+      'localNotificationActionPerformed',
       (event) => {
-        const extra = event.notification.extra;
-        if (extra?.owner === identity.user?.id && extra.destination)
-          void openApplication(extra.destination);
+        const extra = event.notification.extra
+        if (extra?.owner === identity.user?.id && extra.destination) {
+          void openApplication(extra.destination)
+        }
       },
-    );
-    if (unmounted) await listener.remove();
+    )
+    if (unmounted) {
+      await listener.remove()
+    }
   }
-});
+})
 onBeforeUnmount(() => {
-  unmounted = true;
-  clearInterval(ticker);
-  clearInterval(poll);
-  document.removeEventListener("visibilitychange", foreground);
-  void listener?.remove();
-});
+  unmounted = true
+  clearInterval(ticker)
+  clearInterval(poll)
+  document.removeEventListener('visibilitychange', foreground)
+  void listener?.remove()
+})
 </script>
+
 <template>
-  <aside v-if="dueReminder" class="device-reminder-banner" role="status">
+  <aside
+    v-if="dueReminder"
+    class="device-reminder-banner"
+    role="status"
+  >
     <AppIcon name="calendar" :size="22" /><button
       class="device-reminder-open"
       @click="
@@ -58,9 +74,8 @@ onBeforeUnmount(() => {
         dueReminder = null;
       "
     >
-      <strong>{{ dueReminder.title }}</strong
-      ><span>{{ dueReminder.body }}</span></button
-    ><button
+      <strong>{{ dueReminder.title }}</strong><span>{{ dueReminder.body }}</span>
+    </button><button
       class="icon-button"
       aria-label="关闭提醒"
       @click="dueReminder = null"
@@ -69,6 +84,7 @@ onBeforeUnmount(() => {
     </button>
   </aside>
 </template>
+
 <style scoped>
 .device-reminder-banner {
   position: fixed;

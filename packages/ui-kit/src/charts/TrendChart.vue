@@ -1,45 +1,48 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import type { TrendPoint } from "./data";
-import { formatMoney } from "../decimal";
+import type { TrendPoint } from './data'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { formatMoney } from '../decimal'
+
 const props = withDefaults(
-    defineProps<{
-      points: readonly TrendPoint[];
-      incomeLabel?: string;
-      expenseLabel?: string;
-    }>(),
-    { incomeLabel: "收入", expenseLabel: "支出" },
-  ),
-  emit = defineEmits<{ select: [start: string, end: string] }>();
-const container = ref<HTMLElement>(),
-  width = ref(600),
-  selection = ref("");
-let observer: ResizeObserver | undefined;
+  defineProps<{
+    points: readonly TrendPoint[]
+    incomeLabel?: string
+    expenseLabel?: string
+  }>(),
+  { incomeLabel: '收入', expenseLabel: '支出' },
+)
+const emit = defineEmits<{ select: [start: string, end: string] }>()
+const container = ref<HTMLElement>()
+const width = ref(600)
+const selection = ref('')
+let observer: ResizeObserver | undefined
 onMounted(() => {
   observer = new ResizeObserver(
     (entries) =>
       (width.value = Math.max(240, entries[0]?.contentRect.width || 600)),
-  );
-  if (container.value) observer.observe(container.value);
-});
-onBeforeUnmount(() => observer?.disconnect());
+  )
+  if (container.value) {
+    observer.observe(container.value)
+  }
+})
+onBeforeUnmount(() => observer?.disconnect())
 const limits = computed(() => {
   const values = props.points.flatMap((row) => [
     Number(row.income),
     Number(row.expense),
-  ]);
-  return { max: Math.max(1, ...values), min: Math.min(0, ...values) };
-});
+  ])
+  return { max: Math.max(1, ...values), min: Math.min(0, ...values) }
+})
 const y = (amount: number) =>
   20 +
-  ((limits.value.max - amount) / (limits.value.max - limits.value.min)) * 145;
-const baseline = computed(() => y(0));
+  ((limits.value.max - amount) / (limits.value.max - limits.value.min)) * 145
+const baseline = computed(() => y(0))
 const slotWidth = computed(
   () => (width.value - 52) / Math.max(1, props.points.length),
-);
+)
 const barWidth = computed(() =>
   Math.max(1, Math.min(14, slotWidth.value * 0.3)),
-);
+)
 const labelStep = computed(() =>
   Math.max(
     1,
@@ -47,34 +50,33 @@ const labelStep = computed(() =>
       props.points.length / Math.max(2, Math.floor((width.value - 52) / 55)),
     ),
   ),
-);
+)
 const active = computed(() =>
   props.points.find((row) => row.start === selection.value),
-);
+)
 const nonempty = computed(() =>
   props.points.some((row) => Number(row.income) || Number(row.expense)),
-);
+)
 function height(amount: string) {
-  return Math.abs(y(Number(amount)) - baseline.value);
+  return Math.abs(y(Number(amount)) - baseline.value)
 }
 function choose(point: TrendPoint) {
-  selection.value = point.start;
-  emit("select", point.start, point.end);
+  selection.value = point.start
+  emit('select', point.start, point.end)
 }
 function axis(value: number) {
   return value >= 10000
     ? `${Number((value / 10000).toFixed(1))}万`
     : value >= 1000
       ? `${Number((value / 1000).toFixed(1))}千`
-      : String(Number(value.toFixed(2)));
+      : String(Number(value.toFixed(2)))
 }
 </script>
+
 <template>
   <div ref="container" class="trend-visual">
     <div class="chart-legend">
-      <span><i class="income-key"></i>{{ incomeLabel }}</span
-      ><span><i class="expense-key"></i>{{ expenseLabel }}</span
-      ><small>单位：元</small>
+      <span><i class="income-key" />{{ incomeLabel }}</span><span><i class="expense-key" />{{ expenseLabel }}</span><small>单位：元</small>
     </div>
     <svg
       :viewBox="`0 0 ${width} 215`"
@@ -144,10 +146,10 @@ function axis(value: number) {
         />
         <text
           v-if="
-            index % labelStep === 0 ||
-            (index === points.length - 1 &&
-              points.length > 1 &&
-              index % labelStep > labelStep / 2)
+            index % labelStep === 0
+              || (index === points.length - 1
+                && points.length > 1
+                && index % labelStep > labelStep / 2)
           "
           :x="42 + index * slotWidth + slotWidth / 2"
           y="191"
@@ -159,20 +161,21 @@ function axis(value: number) {
       </g>
     </svg>
     <p v-if="!nonempty" class="chart-empty">本期暂无记录，日期仍可选择。</p>
-    <div v-if="active" class="chart-selection" aria-live="polite">
-      <span
-        >{{ active.start
-        }}{{ active.end !== active.start ? " — " + active.end : "" }}</span
-      ><strong
-        >{{ incomeLabel }} {{ formatMoney(active.income) }}<br />{{
-          expenseLabel
-        }}
-        {{ formatMoney(active.expense) }}</strong
-      >
+    <div
+      v-if="active"
+      class="chart-selection"
+      aria-live="polite"
+    >
+      <span>{{ active.start
+      }}{{ active.end !== active.start ? " — " + active.end : "" }}</span><strong>{{ incomeLabel }} {{ formatMoney(active.income) }}<br>{{
+        expenseLabel
+      }}
+        {{ formatMoney(active.expense) }}</strong>
     </div>
     <p v-else class="chart-hint">点击柱状图，查看对应期间的明细。</p>
   </div>
 </template>
+
 <style scoped>
 .trend-visual {
   min-width: 0;

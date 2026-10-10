@@ -1,1 +1,1 @@
-export { profileManifest } from "@t-box/settings-contracts";
+export { profileManifest } from '@t-box/settings-contracts'

@@ -1,10 +1,10 @@
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import { readFileSync } from "node:fs";
+import { readFileSync } from 'node:fs'
+import vue from '@vitejs/plugin-vue'
+import { defineConfig } from 'vite'
 
 const { version } = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
-);
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+)
 
 export default defineConfig({
   plugins: [vue()],
@@ -12,21 +12,21 @@ export default defineConfig({
   server: {
     fs: {
       deny: [
-        "**/.env",
-        "**/.env.*",
-        "**/*.{crt,pem}",
-        "**/.git/**",
-        "**/.secrets/**",
+        '**/.env',
+        '**/.env.*',
+        '**/*.{crt,pem}',
+        '**/.git/**',
+        '**/.secrets/**',
       ],
     },
-    host: "0.0.0.0",
+    host: '0.0.0.0',
     port: 5173,
     strictPort: true,
-    proxy: { "/api": { target: "http://127.0.0.1:3000", ws: true } },
+    proxy: { '/api': { target: 'http://127.0.0.1:3000', ws: true } },
   },
   build: {
-    outDir: "dist",
+    outDir: 'dist',
     emptyOutDir: true,
-    target: "es2022",
+    target: 'es2022',
   },
-});
+})

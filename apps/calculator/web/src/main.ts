@@ -1,37 +1,40 @@
-import { createApp, h } from "vue";
-import { connectAppClient } from "@t-box/app-web-sdk";
-import { parseCalculatorParams } from "@t-box/calculator-contracts";
-import CalculatorPage from "./CalculatorPage.vue";
-import { runtime, bindHistory } from "./runtime";
-import "./base.css";
-const node = document.getElementById("app")!;
-node.textContent = "正在连接计算器…";
+import { connectAppClient } from '@t-box/app-web-sdk'
+import { parseCalculatorParams } from '@t-box/calculator-contracts'
+import { createApp, h } from 'vue'
+import CalculatorPage from './CalculatorPage.vue'
+import { bindHistory, runtime } from './runtime'
+import './base.css'
+
+const node = document.getElementById('app')!
+node.textContent = '正在连接计算器…'
 connectAppClient({
   calculator_fill_expression(value) {
-    const params = parseCalculatorParams(value);
-    if (!params.expression) throw new Error("请输入表达式");
-    runtime.kind = params.kind || "scientific";
-    runtime.expression = params.expression;
-    runtime.revision++;
-    return { filled: true };
+    const params = parseCalculatorParams(value)
+    if (!params.expression) {
+      throw new Error('请输入表达式')
+    }
+    runtime.kind = params.kind || 'scientific'
+    runtime.expression = params.expression
+    runtime.revision++
+    return { filled: true }
   },
 })
   .then(async (connection) => {
-    runtime.subject = connection.context.subject;
+    runtime.subject = connection.context.subject
     bindHistory((records) =>
-      connection.client.storage.set("calculator.history.v1", records),
-    );
+      connection.client.storage.set('calculator.history.v1', records),
+    )
     try {
       runtime.initialHistory = await connection.client.storage.get(
-        "calculator.history.v1",
-      );
+        'calculator.history.v1',
+      )
     } catch {
       /* Local backup remains usable. */
     }
-    const params = parseCalculatorParams(connection.context.params);
-    runtime.kind = params.kind || "scientific";
-    runtime.expression = params.expression || "";
-    node.textContent = "";
+    const params = parseCalculatorParams(connection.context.params)
+    runtime.kind = params.kind || 'scientific'
+    runtime.expression = params.expression || ''
+    node.textContent = ''
     createApp({
       render: () =>
         h(CalculatorPage, {
@@ -39,12 +42,12 @@ connectAppClient({
           expression: runtime.expression || undefined,
           openRevision: runtime.revision,
         }),
-    }).mount(node);
-    connection.ready();
-    window.addEventListener("pagehide", () => connection.client.dispose(), {
+    }).mount(node)
+    connection.ready()
+    window.addEventListener('pagehide', () => connection.client.dispose(), {
       once: true,
-    });
+    })
   })
   .catch((e) => {
-    node.textContent = e instanceof Error ? e.message : "计算器连接失败";
-  });
+    node.textContent = e instanceof Error ? e.message : '计算器连接失败'
+  })

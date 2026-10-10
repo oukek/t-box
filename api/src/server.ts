@@ -1,42 +1,42 @@
-import { PaymentConfiguration } from "./payments/configuration.js";
-import { WechatGateway } from "./payments/wechat.js";
-import { PlatformService } from "./platform/service.js";
-import { createApp } from "./app.js";
-import { getConfig } from "./config.js";
-import { createDatabase } from "./database.js";
-import { createCategoryRepository } from "@t-box/ledger-server/categories/repository";
-import { createBillRepository } from "@t-box/ledger-server/repository";
-import { AdminStore } from "./admin/store.js";
-import { ConfigurationService } from "./admin/service.js";
-import { createVault, loadEncryptionKey } from "./admin/crypto.js";
-import { DatabaseChatProvider } from "./admin/runtime.js";
-import { ConfigurationCache } from "./configuration/cache.js";
+import { createCategoryRepository } from '@t-box/ledger-server/categories/repository'
+import { createBillRepository } from '@t-box/ledger-server/repository'
+import { createVault, loadEncryptionKey } from './admin/crypto.js'
+import { DatabaseChatProvider } from './admin/runtime.js'
+import { ConfigurationService } from './admin/service.js'
+import { AdminStore } from './admin/store.js'
+import { createApp } from './app.js'
+import { getConfig } from './config.js'
+import { ConfigurationCache } from './configuration/cache.js'
+import { createDatabase } from './database.js'
+import { PaymentConfiguration } from './payments/configuration.js'
+import { WechatGateway } from './payments/wechat.js'
+import { PlatformService } from './platform/service.js'
 
-const config = getConfig();
-const database = await createDatabase(config);
-const vault = createVault(loadEncryptionKey());
+const config = getConfig()
+const database = await createDatabase(config)
+const vault = createVault(loadEncryptionKey())
 const configurationCache = new ConfigurationCache(
   database.redis,
   `t-box:${config.mysql.database}`,
-);
+)
 const paymentConfiguration = new PaymentConfiguration(
   database.source,
   vault,
   configurationCache,
-);
-const gateway = new WechatGateway(paymentConfiguration);
+)
+const gateway = new WechatGateway(paymentConfiguration)
 const administration = new ConfigurationService(
   new AdminStore(database.source),
   vault,
   configurationCache,
-);
+)
 const platform = new PlatformService(
   database.source,
   administration,
   gateway,
   paymentConfiguration,
   gateway.authorization,
-);
+)
 const app = createApp({
   administration,
   platform,
@@ -48,46 +48,48 @@ const app = createApp({
   corsOrigins: config.corsOrigins,
   chatProvider: new DatabaseChatProvider(administration, platform.billing),
   logger: {
-    level: "info",
+    level: 'info',
     redact: [
-      "req.headers.authorization",
-      "req.headers.cookie",
-      "password",
-      "accountPassword",
-      "currentPassword",
-      "newPassword",
-      "authToken",
-      "*.password",
-      "MYSQL_PASSWORD",
-      "REDIS_PASSWORD",
-      "OPENAI_API_KEY",
-      "token",
-      "*.token",
+      'req.headers.authorization',
+      'req.headers.cookie',
+      'password',
+      'accountPassword',
+      'currentPassword',
+      'newPassword',
+      'authToken',
+      '*.password',
+      'MYSQL_PASSWORD',
+      'REDIS_PASSWORD',
+      'OPENAI_API_KEY',
+      'token',
+      '*.token',
     ],
   },
-});
+})
 
-let closing = false;
+let closing = false
 async function shutdown() {
-  if (closing) return;
-  closing = true;
+  if (closing) {
+    return
+  }
+  closing = true
   try {
-    await app.close();
+    await app.close()
   } catch {
-    process.exitCode = 1;
+    process.exitCode = 1
   }
 }
 
-process.once("SIGINT", shutdown);
-process.once("SIGTERM", shutdown);
+process.once('SIGINT', shutdown)
+process.once('SIGTERM', shutdown)
 
 try {
-  await app.listen({ host: config.host, port: config.port });
+  await app.listen({ host: config.host, port: config.port })
 } catch (error) {
   app.log.error(
-    { code: (error as NodeJS.ErrnoException).code ?? "START_FAILED" },
-    "API startup failed",
-  );
-  await shutdown();
-  process.exitCode = 1;
+    { code: (error as NodeJS.ErrnoException).code ?? 'START_FAILED' },
+    'API startup failed',
+  )
+  await shutdown()
+  process.exitCode = 1
 }

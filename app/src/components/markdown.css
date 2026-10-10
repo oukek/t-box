@@ -58,7 +58,7 @@
 .markdown-preview li > ol {
   margin: 0.2em 0;
 }
-.markdown-preview input[type="checkbox"] {
+.markdown-preview input[type='checkbox'] {
   width: 13px;
   height: 13px;
   margin: 0 5px 0 0;

@@ -1,12 +1,8 @@
 {
   "name": "@t-box/server-foundation",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "dependencies": {
-    "typeorm": "1.1.1",
-    "@t-box/dayjs": "workspace:*"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -22,8 +18,12 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
+  "dependencies": {
+    "@t-box/dayjs": "workspace:*",
+    "typeorm": "1.1.1"
+  },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "@types/node": "^24.10.0"
+    "@types/node": "^24.10.0",
+    "typescript": "~5.9.3"
   }
 }

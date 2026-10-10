@@ -1,4 +1,5 @@
-import type { MigrationInterface, QueryRunner } from "typeorm";
+import type { MigrationInterface, QueryRunner } from 'typeorm'
+
 export class ApplicationPlatform1791244818000 implements MigrationInterface {
   async up(db: QueryRunner) {
     await db.query(`CREATE TABLE IF NOT EXISTS application_releases (
@@ -6,7 +7,7 @@ export class ApplicationPlatform1791244818000 implements MigrationInterface {
       definition JSON NOT NULL, definition_hash CHAR(64) NOT NULL,
       published TINYINT NOT NULL DEFAULT 1, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       INDEX application_catalog(app_id,published)
-    ) ENGINE=InnoDB`);
+    ) ENGINE=InnoDB`)
     await db.query(`CREATE TABLE IF NOT EXISTS application_installations (
       user_id CHAR(36) NOT NULL, app_id VARCHAR(64) NOT NULL,
       release_id VARCHAR(80) NOT NULL, target_release_id VARCHAR(80) NULL,
@@ -15,7 +16,7 @@ export class ApplicationPlatform1791244818000 implements MigrationInterface {
       updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY(user_id,app_id),
       CONSTRAINT app_install_user_fk FOREIGN KEY(user_id) REFERENCES app_users(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB`);
+    ) ENGINE=InnoDB`)
     await db.query(`CREATE TABLE IF NOT EXISTS application_lifecycle_operations (
       id CHAR(36) PRIMARY KEY, user_id CHAR(36) NOT NULL, app_id VARCHAR(64) NOT NULL,
       request_key VARCHAR(80) NOT NULL, request_hash CHAR(64) NOT NULL,
@@ -30,9 +31,10 @@ export class ApplicationPlatform1791244818000 implements MigrationInterface {
       UNIQUE KEY app_operation_request(user_id,app_id,request_key),
       INDEX app_operation_queue(status,next_attempt_at,lease_until),
       CONSTRAINT app_operation_user_fk FOREIGN KEY(user_id) REFERENCES app_users(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB`);
+    ) ENGINE=InnoDB`)
   }
+
   async down() {
-    throw new Error("Application installation rollback requires a backup");
+    throw new Error('Application installation rollback requires a backup')
   }
 }

@@ -1,8 +1,8 @@
 {
   "name": "@t-box/calculator-server",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,12 +15,12 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
   "dependencies": {
-    "@t-box/calculator-contracts": "workspace:*",
-    "@t-box/app-server-sdk": "workspace:*",
     "@t-box/app-contracts": "workspace:*",
-    "fastify": "^5.6.2",
+    "@t-box/app-server-sdk": "workspace:*",
+    "@t-box/calculator-contracts": "workspace:*",
+    "@t-box/server-foundation": "workspace:*",
     "@t-box/shared": "workspace:*",
-    "@t-box/server-foundation": "workspace:*"
+    "fastify": "^5.6.2"
   },
   "devDependencies": {
     "typescript": "~5.9.3"

@@ -1,1 +1,1 @@
-export { timeModule } from "./module";
+export { timeModule } from './module'

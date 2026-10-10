@@ -11,9 +11,7 @@
 }
 .os-desktop {
   --icon-size: var(--desktop-icon-pc, 76px);
-  min-height: calc(
-    100dvh - var(--navigation-space) - env(safe-area-inset-bottom)
-  );
+  min-height: calc(100dvh - var(--navigation-space) - env(safe-area-inset-bottom));
   max-width: 1120px;
   margin: 0 auto;
   padding: 28px 48px 36px;
@@ -80,7 +78,7 @@
   font:
     400 56px/1.15 -apple-system,
     BlinkMacSystemFont,
-    "Segoe UI",
+    'Segoe UI',
     sans-serif;
   letter-spacing: -2.8px;
   font-variant-numeric: tabular-nums;
@@ -311,10 +309,7 @@
   .os-desktop {
     --icon-size: var(--desktop-icon-mobile, 50px);
     padding: 18px 18px 30px;
-    min-height: calc(
-      100dvh - var(--navigation-space) - env(safe-area-inset-bottom) -
-        env(safe-area-inset-top)
-    );
+    min-height: calc(100dvh - var(--navigation-space) - env(safe-area-inset-bottom) - env(safe-area-inset-top));
   }
   .desktop-statusbar {
     height: 32px;

@@ -1,22 +1,23 @@
-import { EntitySchema } from "typeorm";
-import type { TimerState } from "@t-box/time-contracts";
+import type { TimerState } from '@t-box/time-contracts'
+import { EntitySchema } from 'typeorm'
+
 export interface StoredTimer {
-  id: string;
-  userId: string;
-  data: TimerState;
-  revision: number;
-  deleted: boolean;
-  createdAt: Date;
+  id: string
+  userId: string
+  data: TimerState
+  revision: number
+  deleted: boolean
+  createdAt: Date
 }
 export const TimerEntity = new EntitySchema<StoredTimer>({
-  name: "AppTimer",
-  tableName: "app_timers",
+  name: 'AppTimer',
+  tableName: 'app_timers',
   columns: {
-    id: { type: "char", length: 36, primary: true },
-    userId: { type: "char", length: 36, name: "user_id" },
-    data: { type: "json" },
+    id: { type: 'char', length: 36, primary: true },
+    userId: { type: 'char', length: 36, name: 'user_id' },
+    data: { type: 'json' },
     revision: { type: Number },
     deleted: { type: Boolean },
-    createdAt: { type: "datetime", precision: 3, name: "created_at" },
+    createdAt: { type: 'datetime', precision: 3, name: 'created_at' },
   },
-});
+})

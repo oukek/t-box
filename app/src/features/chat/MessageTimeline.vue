@@ -1,77 +1,83 @@
 <script setup lang="ts">
-import { computed, ref, watch, type DeepReadonly } from "vue";
-import type { ChatMessage } from "@t-box/shared";
-import { AppIcon } from "@t-box/ui-kit";
-import StreamText from "./StreamText.vue";
-import GenerationStatus from "./GenerationStatus.vue";
-import ImageGenerationPreview from "./ImageGenerationPreview.vue";
-import { MarkdownPreview } from "../../components/markdown-preview";
-import { isVisibleConversationTool } from "./toolPresentation";
+import type { ChatMessage } from '@t-box/shared'
+import type { DeepReadonly } from 'vue'
+import { AppIcon } from '@t-box/ui-kit'
+import { computed, ref, watch } from 'vue'
+import { MarkdownPreview } from '../../components/markdown-preview'
+import GenerationStatus from './GenerationStatus.vue'
+import ImageGenerationPreview from './ImageGenerationPreview.vue'
+import StreamText from './StreamText.vue'
+import { isVisibleConversationTool } from './toolPresentation'
+
 const props = defineProps<{
-  message: DeepReadonly<ChatMessage>;
-  active: boolean;
-  waiting?: boolean;
-}>();
-const emit = defineEmits<{ rendered: [] }>();
-const expanded = ref(true);
+  message: DeepReadonly<ChatMessage>
+  active: boolean
+  waiting?: boolean
+}>()
+const emit = defineEmits<{ rendered: [] }>()
+const expanded = ref(true)
 const items = computed(() =>
   [...(props.message.timeline || [])]
     .filter(
-      (item) => item.kind !== "tool" || isVisibleConversationTool(item.tool),
+      (item) => item.kind !== 'tool' || isVisibleConversationTool(item.tool),
     )
     .sort((a, b) => a.sequence - b.sequence),
-);
+)
 const answerIndex = computed(() =>
-  items.value.findIndex((x) => x.kind === "answer"),
-);
+  items.value.findIndex((x) => x.kind === 'answer'),
+)
 // Fold only the prefix before the final answer; later interruptions retain their chronological position.
 const process = computed(() =>
   answerIndex.value < 0 ? items.value : items.value.slice(0, answerIndex.value),
-);
+)
 const tail = computed(() =>
   answerIndex.value < 0 ? [] : items.value.slice(answerIndex.value),
-);
+)
 const completed = computed(
   () =>
     !props.active &&
     answerIndex.value >= 0 &&
-    tail.value[0]?.kind === "answer" &&
-    tail.value[0].status === "completed" &&
-    !["paused", "failed", "cancelled"].includes(props.message.outcome || ""),
-);
+    tail.value[0]?.kind === 'answer' &&
+    tail.value[0].status === 'completed' &&
+    !['paused', 'failed', 'cancelled'].includes(props.message.outcome || ''),
+)
 watch(
   completed,
   (done) => {
-    expanded.value = !done;
+    expanded.value = !done
   },
   { immediate: true },
-);
+)
 const labels = {
-  reasoning: "思考摘要",
-  analysis: "分析",
-  answer: "回复",
-  notice: "提示",
-};
+  reasoning: '思考摘要',
+  analysis: '分析',
+  answer: '回复',
+  notice: '提示',
+}
 const statusLabels = {
-  running: "执行中",
-  waiting_client: "等待确认",
-  completed: "已完成",
-  failed: "未完成",
-};
+  running: '执行中',
+  waiting_client: '等待确认',
+  completed: '已完成',
+  failed: '未完成',
+}
 const visible = computed(() =>
   expanded.value ? [...process.value, ...tail.value] : tail.value,
-);
+)
 const progressLabel = computed(() => {
-  const last = items.value.at(-1);
-  if (last?.kind === "tool" && last.tool.status === "running")
-    return `正在${last.tool.title}…`;
-  if (last?.kind === "analysis" && last.status === "streaming")
-    return "正在分析…";
-  if (last?.kind === "answer" && last.status === "streaming")
-    return "正在生成回答…";
-  return "生成中…";
-});
+  const last = items.value.at(-1)
+  if (last?.kind === 'tool' && last.tool.status === 'running') {
+    return `正在${last.tool.title}…`
+  }
+  if (last?.kind === 'analysis' && last.status === 'streaming') {
+    return '正在分析…'
+  }
+  if (last?.kind === 'answer' && last.status === 'streaming') {
+    return '正在生成回答…'
+  }
+  return '生成中…'
+})
 </script>
+
 <template>
   <div class="message-timeline">
     <button
@@ -94,8 +100,8 @@ const progressLabel = computed(() => {
       <li
         v-for="item in visible"
         :key="item.id"
+        class="timeline-entry"
         :class="[
-          'timeline-entry',
           item.kind,
           {
             'is-streaming':
@@ -105,19 +111,21 @@ const progressLabel = computed(() => {
         :data-sequence="item.sequence"
       >
         <template v-if="item.kind === 'tool'">
-          <span class="timeline-marker" aria-hidden="true"
-            ><AppIcon
-              v-if="item.tool.status === 'completed'"
-              name="check"
-              :size="12" /><AppIcon
-              v-else-if="item.tool.status === 'failed'"
-              name="warning"
-              :size="12" /><span v-else class="spinner small"></span
-          ></span>
+          <span
+            class="timeline-marker"
+            aria-hidden="true"
+          ><AppIcon
+            v-if="item.tool.status === 'completed'"
+            name="check"
+            :size="12"
+          /><AppIcon
+            v-else-if="item.tool.status === 'failed'"
+            name="warning"
+            :size="12"
+          /><span v-else class="spinner small" /></span>
           <div class="timeline-detail">
             <div class="timeline-heading">
-              <span>使用工具</span><strong>{{ item.tool.title }}</strong
-              ><small>{{ statusLabels[item.tool.status] }}</small>
+              <span>使用工具</span><strong>{{ item.tool.title }}</strong><small>{{ statusLabels[item.tool.status] }}</small>
             </div>
             <MarkdownPreview
               v-if="item.tool.summary"
@@ -128,12 +136,11 @@ const progressLabel = computed(() => {
             <span
               v-if="item.agentTitle && item.agentId !== 'assistant'"
               class="timeline-agent"
-              >{{ item.agentTitle }}</span
-            >
+            >{{ item.agentTitle }}</span>
             <ImageGenerationPreview
               v-if="
-                item.tool.preview?.kind === 'image' &&
-                item.tool.status !== 'completed'
+                item.tool.preview?.kind === 'image'
+                  && item.tool.status !== 'completed'
               "
               :preview="item.tool.preview"
               :status="item.tool.status"
@@ -147,17 +154,15 @@ const progressLabel = computed(() => {
             v-if="item.kind !== 'answer'"
             class="timeline-marker text-marker"
             aria-hidden="true"
-            ><AppIcon
-              :name="item.kind === 'notice' ? 'warning' : 'sparkle'"
-              :size="12"
+          ><AppIcon
+            :name="item.kind === 'notice' ? 'warning' : 'sparkle'"
+            :size="12"
           /></span>
           <div class="timeline-detail">
             <div v-if="item.kind !== 'answer'" class="timeline-heading">
-              <span>{{ item.label || labels[item.kind] }}</span
-              ><small v-if="item.agentTitle && item.agentId !== 'assistant'">{{
+              <span>{{ item.label || labels[item.kind] }}</span><small v-if="item.agentTitle && item.agentId !== 'assistant'">{{
                 item.agentTitle
-              }}</small
-              ><small v-if="item.status === 'interrupted'">已中断</small>
+              }}</small><small v-if="item.status === 'interrupted'">已中断</small>
             </div>
             <div class="timeline-text">
               <StreamText
@@ -178,6 +183,7 @@ const progressLabel = computed(() => {
     />
   </div>
 </template>
+
 <style scoped>
 .message-timeline {
   min-width: 0;
@@ -223,7 +229,7 @@ const progressLabel = computed(() => {
   min-width: 0;
 }
 .timeline-entry:not(.answer):not(:last-child)::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 20px;
   bottom: 2px;

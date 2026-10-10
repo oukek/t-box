@@ -1,39 +1,42 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { BottomSheet } from "@t-box/ui-kit";
-import { AppIcon } from "@t-box/ui-kit";
+import { AppIcon, BottomSheet } from '@t-box/ui-kit'
+import { computed, ref, watch } from 'vue'
+
 const props = defineProps<{
-    modelValue: string;
-    label: string;
-    disabled?: boolean;
-  }>(),
-  emit = defineEmits<{ "update:modelValue": [value: string] }>();
-const open = ref(false),
-  hour = ref("09"),
-  minute = ref("00");
+  modelValue: string
+  label: string
+  disabled?: boolean
+}>()
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const open = ref(false)
+const hour = ref('09')
+const minute = ref('00')
 watch(open, (value) => {
   if (value) {
-    const parts = props.modelValue.split(":");
-    hour.value = parts[0] || "09";
-    minute.value = parts[1] || "00";
+    const parts = props.modelValue.split(':')
+    hour.value = parts[0] || '09'
+    minute.value = parts[1] || '00'
   }
-});
+})
 const valid = computed(
   () =>
     /^\d{1,2}$/.test(hour.value) &&
     Number(hour.value) < 24 &&
     /^\d{1,2}$/.test(minute.value) &&
     Number(minute.value) < 60,
-);
+)
 function confirm() {
-  if (!valid.value) return;
+  if (!valid.value) {
+    return
+  }
   emit(
-    "update:modelValue",
-    `${hour.value.padStart(2, "0")}:${minute.value.padStart(2, "0")}`,
-  );
-  open.value = false;
+    'update:modelValue',
+    `${hour.value.padStart(2, '0')}:${minute.value.padStart(2, '0')}`,
+  )
+  open.value = false
 }
 </script>
+
 <template>
   <button
     type="button"
@@ -44,26 +47,26 @@ function confirm() {
     :aria-expanded="open"
     @click="open = true"
   >
-    <span>{{ modelValue }}</span
-    ><AppIcon name="clock" :size="17" /></button
-  ><BottomSheet :open="open" :title="label" @close="open = false"
-    ><div class="temporal-time-draft">
-      <label
-        >小时<input
-          v-model="hour"
-          aria-label="小时"
-          inputmode="numeric"
-          maxlength="2"
-          @keydown.enter="confirm" /></label
-      ><span>:</span
-      ><label
-        >分钟<input
-          v-model="minute"
-          aria-label="分钟"
-          inputmode="numeric"
-          maxlength="2"
-          @keydown.enter="confirm"
-      /></label>
+    <span>{{ modelValue }}</span><AppIcon name="clock" :size="17" />
+  </button><BottomSheet
+    :open="open"
+    :title="label"
+    @close="open = false"
+  >
+    <div class="temporal-time-draft">
+      <label>小时<input
+        v-model="hour"
+        aria-label="小时"
+        inputmode="numeric"
+        maxlength="2"
+        @keydown.enter="confirm"
+      ></label><span>:</span><label>分钟<input
+        v-model="minute"
+        aria-label="分钟"
+        inputmode="numeric"
+        maxlength="2"
+        @keydown.enter="confirm"
+      ></label>
     </div>
     <div class="temporal-time-presets">
       <button
@@ -74,19 +77,18 @@ function confirm() {
         {{ value }}
       </button>
     </div>
-    <template #footer
-      ><button class="button button-secondary" @click="open = false">
-        取消</button
-      ><button
+    <template #footer>
+      <button class="button button-secondary" @click="open = false"> 取消</button><button
         class="button button-primary"
         :disabled="!valid"
         @click="confirm"
       >
         确定
-      </button></template
-    ></BottomSheet
-  >
+      </button>
+    </template>
+  </BottomSheet>
 </template>
+
 <style scoped>
 .temporal-time-trigger {
   display: flex;

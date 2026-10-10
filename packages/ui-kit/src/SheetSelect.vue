@@ -1,47 +1,51 @@
 <script setup lang="ts" generic="T extends string | number | boolean">
-import { computed, ref } from "vue";
-import BottomSheet from "./BottomSheet.vue";
-import AppIcon from "./AppIcon.vue";
+import { computed, ref } from 'vue'
+import AppIcon from './AppIcon.vue'
+import BottomSheet from './BottomSheet.vue'
+
 const props = defineProps<{
-  modelValue: T;
+  modelValue: T
   options: readonly {
-    value: T;
-    label: string;
-    description?: string;
-    disabled?: boolean;
-  }[];
-  label: string;
-  disabled?: boolean;
-  placeholder?: string;
-}>();
-const emit = defineEmits<{ "update:modelValue": [value: T] }>();
-const open = ref(false);
+    value: T
+    label: string
+    description?: string
+    disabled?: boolean
+  }[]
+  label: string
+  disabled?: boolean
+  placeholder?: string
+}>()
+const emit = defineEmits<{ 'update:modelValue': [value: T] }>()
+const open = ref(false)
 const selected = computed(() =>
   props.options.find((option) => option.value === props.modelValue),
-);
+)
 function choose(value: T) {
-  emit("update:modelValue", value);
-  open.value = false;
+  emit('update:modelValue', value)
+  open.value = false
 }
 function move(event: KeyboardEvent) {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-  event.preventDefault();
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    return
+  }
+  event.preventDefault()
   const options = [
     ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(
-      "button:not(:disabled)",
+      'button:not(:disabled)',
     ),
-  ];
-  const index = options.indexOf(document.activeElement as HTMLButtonElement);
+  ]
+  const index = options.indexOf(document.activeElement as HTMLButtonElement)
   const next =
-    event.key === "Home"
+    event.key === 'Home'
       ? 0
-      : event.key === "End"
+      : event.key === 'End'
         ? options.length - 1
-        : (index + (event.key === "ArrowDown" ? 1 : -1) + options.length) %
-          options.length;
-  options[next]?.focus();
+        : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) %
+          options.length
+  options[next]?.focus()
 }
 </script>
+
 <template>
   <button
     type="button"
@@ -52,10 +56,13 @@ function move(event: KeyboardEvent) {
     :disabled="disabled"
     @click="open = true"
   >
-    <span>{{ selected?.label || placeholder || "请选择" }}</span
-    ><AppIcon name="down" :size="16" /></button
-  ><BottomSheet :open="open" :title="label" @close="open = false"
-    ><div
+    <span>{{ selected?.label || placeholder || "请选择" }}</span><AppIcon name="down" :size="16" />
+  </button><BottomSheet
+    :open="open"
+    :title="label"
+    @close="open = false"
+  >
+    <div
       class="sheet-options"
       role="listbox"
       :aria-label="label"
@@ -70,15 +77,18 @@ function move(event: KeyboardEvent) {
         :disabled="option.disabled"
         @click="choose(option.value)"
       >
-        <span
-          ><strong>{{ option.label }}</strong
-          ><small v-if="option.description">{{
-            option.description
-          }}</small></span
-        ><AppIcon v-if="option.value === modelValue" name="check" :size="20" />
-      </button></div
-  ></BottomSheet>
+        <span><strong>{{ option.label }}</strong><small v-if="option.description">{{
+          option.description
+        }}</small></span><AppIcon
+          v-if="option.value === modelValue"
+          name="check"
+          :size="20"
+        />
+      </button>
+    </div>
+  </BottomSheet>
 </template>
+
 <style scoped>
 .sheet-select-trigger {
   display: flex;
@@ -128,7 +138,7 @@ function move(event: KeyboardEvent) {
   color: var(--ink);
   min-height: 58px;
 }
-.sheet-options button[aria-selected="true"] {
+.sheet-options button[aria-selected='true'] {
   background: #edf5f2;
   border-color: #e0ede6;
   color: var(--accent);

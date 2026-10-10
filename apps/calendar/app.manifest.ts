@@ -1,1 +1,1 @@
-export { calendarManifest } from "@t-box/calendar-contracts";
+export { calendarManifest } from '@t-box/calendar-contracts'

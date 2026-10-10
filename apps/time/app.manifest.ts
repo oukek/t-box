@@ -1,1 +1,1 @@
-export { timeManifest } from "@t-box/time-contracts";
+export { timeManifest } from '@t-box/time-contracts'

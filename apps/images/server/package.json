@@ -1,16 +1,8 @@
 {
   "name": "@t-box/images-server",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "dependencies": {
-    "typeorm": "1.1.1",
-    "fastify": "^5.6.2",
-    "@t-box/shared": "workspace:*",
-    "@t-box/app-contracts": "workspace:*",
-    "@t-box/app-server-sdk": "workspace:*",
-    "@t-box/server-foundation": "workspace:*"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -26,8 +18,16 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-server-sdk": "workspace:*",
+    "@t-box/server-foundation": "workspace:*",
+    "@t-box/shared": "workspace:*",
+    "fastify": "^5.6.2",
+    "typeorm": "1.1.1"
+  },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "@types/node": "^24.10.0"
+    "@types/node": "^24.10.0",
+    "typescript": "~5.9.3"
   }
 }

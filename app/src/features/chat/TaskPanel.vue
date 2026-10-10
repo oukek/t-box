@@ -1,131 +1,166 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import type { TaskSummary, TaskToolRecord } from "@t-box/shared";
-import { SidePanel } from "@t-box/ui-kit";
-import { Modal } from "@t-box/ui-kit";
-import { AppIcon } from "@t-box/ui-kit";
-import { navigateTab } from "../../core/navigation";
-import { request } from "../../core/network";
-import { authorizeResources } from "../../applications/registry";
+import type { TaskSummary, TaskToolRecord } from '@t-box/shared'
+import { AppIcon, Modal, SidePanel } from '@t-box/ui-kit'
+import { ref, watch } from 'vue'
+import { authorizeResources } from '../../applications/registry'
+import { navigateTab } from '../../core/navigation'
+import { request } from '../../core/network'
 import {
-  chatState,
   chatBusy,
-  resumeTask,
+  chatState,
   endTask,
   openConversation,
-} from "./chatStore";
-const props = defineProps<{ open: boolean }>(),
-  emit = defineEmits<{ close: [] }>();
-const items = ref<TaskSummary[]>([]),
-  tools = ref<(TaskToolRecord & { title?: string })[]>([]),
-  selected = ref<string>("");
-const loading = ref(false),
-  error = ref(""),
-  confirmEnd = ref(false);
+  resumeTask,
+} from './chatStore'
+
+const props = defineProps<{ open: boolean }>()
+const emit = defineEmits<{ close: [] }>()
+const items = ref<TaskSummary[]>([])
+const tools = ref<(TaskToolRecord & { title?: string })[]>([])
+const selected = ref<string>('')
+const loading = ref(false)
+const error = ref('')
+const confirmEnd = ref(false)
 const labels = {
-  queued: "等待继续",
-  running: "正在处理",
-  waiting_client: "等待你处理",
-  paused: "已暂停",
-  needs_review: "需要核对",
-  completed: "已完成",
-  cancelled: "已结束",
-};
+  queued: '等待继续',
+  running: '正在处理',
+  waiting_client: '等待你处理',
+  paused: '已暂停',
+  needs_review: '需要核对',
+  completed: '已完成',
+  cancelled: '已结束',
+}
 const date = (value: string) =>
-  new Date(value).toLocaleString("zh-CN", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-let revision = 0;
-let detailRevision = 0;
+  new Date(value).toLocaleString('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+let revision = 0
+let detailRevision = 0
 watch(
   () => props.open,
   async (open) => {
-    const rev = ++revision;
-    if (!open) return;
-    loading.value = true;
-    error.value = "";
-    selected.value = "";
-    tools.value = [];
+    const rev = ++revision
+    if (!open) {
+      return
+    }
+    loading.value = true
+    error.value = ''
+    selected.value = ''
+    tools.value = []
     try {
-      const result = await request<{ data: TaskSummary[] }>("/tasks");
-      if (rev === revision) items.value = result.data;
+      const result = await request<{ data: TaskSummary[] }>('/tasks')
+      if (rev === revision) {
+        items.value = result.data
+      }
     } catch (cause) {
-      if (rev === revision)
-        error.value = cause instanceof Error ? cause.message : "读取任务失败";
+      if (rev === revision) {
+        error.value = cause instanceof Error ? cause.message : '读取任务失败'
+      }
     } finally {
-      if (rev === revision) loading.value = false;
+      if (rev === revision) {
+        loading.value = false
+      }
     }
   },
-);
+)
 async function details(task: TaskSummary) {
-  selected.value = task.id;
-  tools.value = [];
-  error.value = "";
-  loading.value = true;
-  const rev = revision;
-  const detailRev = ++detailRevision;
+  selected.value = task.id
+  tools.value = []
+  error.value = ''
+  loading.value = true
+  const rev = revision
+  const detailRev = ++detailRevision
   try {
-    if (task.unavailable) throw new Error("此任务涉及的应用资源已不可访问");
+    if (task.unavailable) {
+      throw new Error('此任务涉及的应用资源已不可访问')
+    }
     if (
-      !(await authorizeResources(task.protectedResources || [], "查看任务记录"))
-    )
-      return;
+      !(await authorizeResources(task.protectedResources || [], '查看任务记录'))
+    ) {
+      return
+    }
     const result = await request<{ data: { tools: TaskToolRecord[] } }>(
       `/tasks/${task.id}`,
-    );
+    )
     if (
       rev === revision &&
       detailRev === detailRevision &&
       selected.value === task.id
-    )
-      tools.value = result.data.tools;
+    ) {
+      tools.value = result.data.tools
+    }
   } catch (cause) {
-    if (rev === revision && detailRev === detailRevision)
-      error.value = cause instanceof Error ? cause.message : "读取记录失败";
+    if (rev === revision && detailRev === detailRevision) {
+      error.value = cause instanceof Error ? cause.message : '读取记录失败'
+    }
   } finally {
-    if (rev === revision && detailRev === detailRevision) loading.value = false;
+    if (rev === revision && detailRev === detailRevision) {
+      loading.value = false
+    }
   }
 }
 async function resume() {
-  error.value = "";
+  error.value = ''
   try {
-    const refs = chatState.messages.flatMap((m) => m.resourceRefs || []);
-    if (!(await authorizeResources(refs, "继续任务"))) return;
-    if (resumeTask()) emit("close");
+    const refs = chatState.messages.flatMap((m) => m.resourceRefs || [])
+    if (!(await authorizeResources(refs, '继续任务'))) {
+      return
+    }
+    if (resumeTask()) {
+      emit('close')
+    }
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "任务暂不能继续";
+    error.value = cause instanceof Error ? cause.message : '任务暂不能继续'
   }
 }
 async function showConversation(task: TaskSummary) {
   try {
-    if (task.unavailable) throw new Error("此任务涉及的应用资源已不可访问");
+    if (task.unavailable) {
+      throw new Error('此任务涉及的应用资源已不可访问')
+    }
     if (
-      !(await authorizeResources(task.protectedResources || [], "打开任务会话"))
-    )
-      return;
+      !(await authorizeResources(task.protectedResources || [], '打开任务会话'))
+    ) {
+      return
+    }
     if (openConversation(task.conversationId)) {
-      navigateTab("home");
-      emit("close");
+      navigateTab('home')
+      emit('close')
     }
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "打开任务会话失败";
+    error.value = cause instanceof Error ? cause.message : '打开任务会话失败'
   }
 }
 function stop() {
   if (endTask()) {
-    confirmEnd.value = false;
-    emit("close");
+    confirmEnd.value = false
+    emit('close')
   }
 }
 </script>
+
 <template>
-  <SidePanel :open="open" title="任务记录" @close="emit('close')">
+  <SidePanel
+    :open="open"
+    title="任务记录"
+    @close="emit('close')"
+  >
     <p class="panel-caption">查看处理进度和已完成的操作。</p>
-    <p v-if="error" class="task-error" role="alert">{{ error }}</p>
-    <p v-if="loading" class="panel-caption" role="status">正在读取…</p>
+    <p
+      v-if="error"
+      class="task-error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-if="loading"
+      class="panel-caption"
+      role="status"
+    >正在读取…</p>
     <p v-else-if="!items.length" class="panel-caption">
       还没有任务，发送消息后会保留处理记录。
     </p>
@@ -146,21 +181,17 @@ function stop() {
             "
             :size="18"
           />
-          <span
-            ><strong>{{ task.title || "对话任务" }}</strong
-            ><small
-              >{{ task.agentTitle || "助手" }} ·
-              {{ date(task.updatedAt) }}</small
-            ></span
-          ><small class="task-status">{{ labels[task.status] }}</small>
+          <span><strong>{{ task.title || "对话任务" }}</strong><small>{{ task.agentTitle || "助手" }} ·
+            {{ date(task.updatedAt) }}</small></span><small class="task-status">{{ labels[task.status] }}</small>
           <AppIcon name="right" :size="14" />
         </button>
         <div v-if="selected === task.id" class="task-detail">
-          <p v-if="task.reason">{{ task.reason }}</p>
+          <p v-if="task.reason">
+            {{ task.reason }}
+          </p>
           <ol v-if="tools.length" class="task-tools">
             <li v-for="tool in tools" :key="tool.callId">
-              <span>{{ tool.title || tool.name }}</span
-              ><small>{{
+              <span>{{ tool.title || tool.name }}</span><small>{{
                 tool.status === "completed"
                   ? tool.result?.ok
                     ? "已完成"
@@ -183,13 +214,13 @@ function stop() {
       </li>
     </ol>
     <template
-      #footer
       v-if="
-        chatState.task &&
-        ['queued', 'paused', 'waiting_client', 'needs_review'].includes(
-          chatState.task.status,
-        )
+        chatState.task
+          && ['queued', 'paused', 'waiting_client', 'needs_review'].includes(
+            chatState.task.status,
+          )
       "
+      #footer
     >
       <p class="panel-caption">
         {{
@@ -223,17 +254,20 @@ function stop() {
       </div>
     </template>
   </SidePanel>
-  <Modal :open="confirmEnd" title="结束此任务？" @close="confirmEnd = false">
+  <Modal
+    :open="confirmEnd"
+    title="结束此任务？"
+    @close="confirmEnd = false"
+  >
     <p class="panel-caption">
       已完成的操作会保留，尚未执行的步骤将停止。请确认已核对操作结果。
     </p>
     <div class="task-actions">
-      <button class="button button-secondary" @click="confirmEnd = false">
-        返回</button
-      ><button class="button button-primary" @click="stop">确认结束</button>
+      <button class="button button-secondary" @click="confirmEnd = false"> 返回</button><button class="button button-primary" @click="stop">确认结束</button>
     </div>
   </Modal>
 </template>
+
 <style scoped>
 .panel-caption {
   margin: 0 0 16px;

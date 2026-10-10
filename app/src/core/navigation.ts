@@ -1,158 +1,166 @@
-import { nextTick, reactive, readonly } from "vue";
-import type { OpenAppArguments } from "@t-box/shared";
-import { applicationModules } from "../applications/registry";
-import { parseOpenAppArguments } from "./applications";
+import type { OpenAppArguments } from '@t-box/shared'
+import { nextTick, reactive, readonly } from 'vue'
+import { applicationModules } from '../applications/registry'
+import { parseOpenAppArguments } from './applications'
 
 export const primaryTabs = [
-  { id: "home", label: "AI", icon: "sparkle", hash: "#/" },
-  { id: "applications", label: "OS", icon: "apps", hash: "#/applications" },
-] as const;
-type Tab = (typeof primaryTabs)[number]["id"];
+  { id: 'home', label: 'AI', icon: 'sparkle', hash: '#/' },
+  { id: 'applications', label: 'OS', icon: 'apps', hash: '#/applications' },
+] as const
+type Tab = (typeof primaryTabs)[number]['id']
 type Screen =
-  | Tab
-  | "application"
-  | "capabilities"
-  | "resources"
-  | "account"
-  | "wallet"
-  | "recharge"
-  | "pricing";
-type BackTarget = Tab | "profile" | "wallet";
+  | Tab |
+  'application' |
+  'capabilities' |
+  'resources' |
+  'account' |
+  'wallet' |
+  'recharge' |
+  'pricing'
+type BackTarget = Tab | 'profile' | 'wallet'
 export const tabLabel = (id: BackTarget) =>
-  id === "profile"
-    ? "设置"
-    : id === "wallet"
-      ? "余额"
-      : primaryTabs.find((tab) => tab.id === id)!.label;
+  id === 'profile'
+    ? '设置'
+    : id === 'wallet'
+      ? '余额'
+      : primaryTabs.find((tab) => tab.id === id)!.label
 const state = reactive<{
-  screen: Screen;
-  application: OpenAppArguments | null;
-  capabilityAppId: string | null;
-  revision: number;
-  backTo: BackTarget;
+  screen: Screen
+  application: OpenAppArguments | null
+  capabilityAppId: string | null
+  revision: number
+  backTo: BackTarget
 }>({
-  screen: "home",
+  screen: 'home',
   application: null,
   capabilityAppId: null,
   revision: 0,
-  backTo: "home",
-});
-export const navigation = readonly(state);
-let started = false;
+  backTo: 'home',
+})
+export const navigation = readonly(state)
+let started = false
 
 function readHash() {
-  const [path, query] = window.location.hash.replace(/^#/, "").split("?");
-  const tab = primaryTabs.find((tab) => tab.hash === `#${path || "/"}`);
+  const [path, query] = window.location.hash.replace(/^#/, '').split('?')
+  const tab = primaryTabs.find((tab) => tab.hash === `#${path || '/'}`)
   if (tab) {
-    state.screen = tab.id;
-    state.backTo = tab.id;
-    return;
+    state.screen = tab.id
+    state.backTo = tab.id
+    return
   }
-  if (path === "/profile") {
-    state.application = { appId: "profile", params: {} };
-    state.screen = "application";
-    state.backTo = "applications";
-    state.revision++;
-    return;
+  if (path === '/profile') {
+    state.application = { appId: 'profile', params: {} }
+    state.screen = 'application'
+    state.backTo = 'applications'
+    state.revision++
+    return
   }
   // Legacy account URLs (including payment callbacks) remain valid after moving AI pages.
   const detail = /^\/(?:ai|profile)\/(wallet|recharge|pricing|resources)$/.exec(
-    path || "",
-  );
+    path || '',
+  )
   if (detail) {
-    const params = new URLSearchParams(query);
+    const params = new URLSearchParams(query)
     state.screen =
-      detail[1] === "wallet" && params.has("paymentOrder")
-        ? "recharge"
-        : (detail[1] as "wallet" | "recharge" | "pricing" | "resources");
+      detail[1] === 'wallet' && params.has('paymentOrder')
+        ? 'recharge'
+        : (detail[1] as 'wallet' | 'recharge' | 'pricing' | 'resources')
     state.backTo =
-      state.screen === "recharge" ||
-      (state.screen === "pricing" && params.get("from") === "wallet")
-        ? "wallet"
-        : "home";
-    return;
+      state.screen === 'recharge' ||
+      (state.screen === 'pricing' && params.get('from') === 'wallet')
+        ? 'wallet'
+        : 'home'
+    return
   }
-  if (path === "/profile/settings") {
-    state.screen = "account";
-    state.backTo = "profile";
-    return;
+  if (path === '/profile/settings') {
+    state.screen = 'account'
+    state.backTo = 'profile'
+    return
   }
-  if (path?.startsWith("/applications/")) {
-    const match = /^\/applications\/([^/]+)\/capabilities$/.exec(path);
+  if (path?.startsWith('/applications/')) {
+    const match = /^\/applications\/([^/]+)\/capabilities$/.exec(path)
     if (
       match &&
       applicationModules.some(
         (module) => module.manifest.id === match[1] && module.ai,
       )
     ) {
-      state.capabilityAppId = match[1]!;
-      state.screen = "capabilities";
-      state.backTo = "applications";
-      return;
+      state.capabilityAppId = match[1]!
+      state.screen = 'capabilities'
+      state.backTo = 'applications'
+      return
     }
     try {
-      const params = new URLSearchParams(query);
+      const params = new URLSearchParams(query)
       const args = parseOpenAppArguments({
-        appId: path.slice("/applications/".length),
+        appId: path.slice('/applications/'.length),
         params: Object.fromEntries(params),
-      });
-      state.application = args;
-      state.screen = "application";
-      state.backTo = "applications";
-      state.revision++;
-      return;
+      })
+      state.application = args
+      state.screen = 'application'
+      state.backTo = 'applications'
+      state.revision++
+      return
     } catch {
       /* Invalid application hashes fall back to the home screen. */
     }
   }
-  state.screen = "home";
+  state.screen = 'home'
 }
 
 export function startNavigation() {
-  if (started) return;
-  started = true;
-  readHash();
-  window.addEventListener("hashchange", readHash);
+  if (started) {
+    return
+  }
+  started = true
+  readHash()
+  window.addEventListener('hashchange', readHash)
 }
 
 export function navigateTab(screen: Tab) {
-  state.screen = screen;
-  state.backTo = screen;
-  const hash = primaryTabs.find((tab) => tab.id === screen)!.hash;
-  if (location.hash !== hash) history.pushState(null, "", hash);
-  window.scrollTo({ top: 0 });
+  state.screen = screen
+  state.backTo = screen
+  const hash = primaryTabs.find((tab) => tab.id === screen)!.hash
+  if (location.hash !== hash) {
+    history.pushState(null, '', hash)
+  }
+  window.scrollTo({ top: 0 })
 }
 
 export async function openApplication(value: unknown) {
-  const args = parseOpenAppArguments(value);
+  const args = parseOpenAppArguments(value)
   await applicationModules
     .find((module) => module.manifest.id === args.appId)
-    ?.prepare?.();
-  if (state.screen !== "application")
+    ?.prepare?.()
+  if (state.screen !== 'application') {
     state.backTo =
-      state.screen === "capabilities"
-        ? "applications"
-        : state.screen === "account"
-          ? "profile"
-          : ["resources", "wallet", "recharge", "pricing"].includes(
-                state.screen,
-              )
-            ? "home"
-            : (state.screen as Tab);
-  if (args.appId === "profile") state.backTo = "applications";
-  state.application = args;
-  state.screen = "application";
-  state.revision++;
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(args.params || {}))
-    params.set(key, value);
-  const query = params.size ? `?${params}` : "";
-  history.pushState(null, "", `#/applications/${args.appId}${query}`);
-  window.scrollTo({ top: 0 });
-  await nextTick();
+      state.screen === 'capabilities'
+        ? 'applications'
+        : state.screen === 'account'
+          ? 'profile'
+          : ['resources', 'wallet', 'recharge', 'pricing'].includes(
+              state.screen,
+            )
+              ? 'home'
+              : (state.screen as Tab)
+  }
+  if (args.appId === 'profile') {
+    state.backTo = 'applications'
+  }
+  state.application = args
+  state.screen = 'application'
+  state.revision++
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(args.params || {})) {
+    params.set(key, value)
+  }
+  const query = params.size ? `?${params}` : ''
+  history.pushState(null, '', `#/applications/${args.appId}${query}`)
+  window.scrollTo({ top: 0 })
+  await nextTick()
   // The root has rendered the registered feature before reporting tool success.
-  await nextTick();
-  return args;
+  await nextTick()
+  return args
 }
 
 export function openApplicationCapabilities(appId: string) {
@@ -160,62 +168,67 @@ export function openApplicationCapabilities(appId: string) {
     !applicationModules.some(
       (module) => module.manifest.id === appId && module.ai,
     )
-  )
-    throw new Error("此应用没有提供 AI 能力");
-  state.capabilityAppId = appId;
-  state.screen = "capabilities";
-  state.backTo = "applications";
-  history.pushState(null, "", `#/applications/${appId}/capabilities`);
-  window.scrollTo({ top: 0 });
+  ) {
+    throw new Error('此应用没有提供 AI 能力')
+  }
+  state.capabilityAppId = appId
+  state.screen = 'capabilities'
+  state.backTo = 'applications'
+  history.pushState(null, '', `#/applications/${appId}/capabilities`)
+  window.scrollTo({ top: 0 })
 }
 
 export function backFromApplication() {
-  if (state.backTo === "profile") void openProfile();
-  else if (state.backTo === "wallet") openWallet();
-  else navigateTab(state.backTo);
+  if (state.backTo === 'profile') {
+    void openProfile()
+  } else if (state.backTo === 'wallet') {
+    openWallet()
+  } else {
+    navigateTab(state.backTo)
+  }
 }
 export function openProfile() {
-  return openApplication({ appId: "profile" });
+  return openApplication({ appId: 'profile' })
 }
 export function openResources() {
-  state.screen = "resources";
-  state.backTo = "home";
-  history.pushState(null, "", "#/ai/resources");
-  window.scrollTo({ top: 0 });
+  state.screen = 'resources'
+  state.backTo = 'home'
+  history.pushState(null, '', '#/ai/resources')
+  window.scrollTo({ top: 0 })
 }
 
 export function openAccountSettings() {
-  state.screen = "account";
-  state.backTo = "profile";
-  history.pushState(null, "", "#/profile/settings");
-  window.scrollTo({ top: 0 });
+  state.screen = 'account'
+  state.backTo = 'profile'
+  history.pushState(null, '', '#/profile/settings')
+  window.scrollTo({ top: 0 })
 }
 
 export function openWallet() {
-  state.screen = "wallet";
-  state.backTo = "home";
-  history.pushState(null, "", "#/ai/wallet");
-  window.scrollTo({ top: 0 });
+  state.screen = 'wallet'
+  state.backTo = 'home'
+  history.pushState(null, '', '#/ai/wallet')
+  window.scrollTo({ top: 0 })
 }
 
 export function openRecharge(orderId?: string) {
-  state.screen = "recharge";
-  state.backTo = "wallet";
+  state.screen = 'recharge'
+  state.backTo = 'wallet'
   history.pushState(
     null,
-    "",
-    `#/ai/recharge${orderId ? `?paymentOrder=${encodeURIComponent(orderId)}` : ""}`,
-  );
-  window.scrollTo({ top: 0 });
+    '',
+    `#/ai/recharge${orderId ? `?paymentOrder=${encodeURIComponent(orderId)}` : ''}`,
+  )
+  window.scrollTo({ top: 0 })
 }
 export function openPricing() {
-  const fromWallet = state.screen === "wallet";
-  state.screen = "pricing";
-  state.backTo = fromWallet ? "wallet" : "home";
+  const fromWallet = state.screen === 'wallet'
+  state.screen = 'pricing'
+  state.backTo = fromWallet ? 'wallet' : 'home'
   history.pushState(
     null,
-    "",
-    `#/ai/pricing${fromWallet ? "?from=wallet" : ""}`,
-  );
-  window.scrollTo({ top: 0 });
+    '',
+    `#/ai/pricing${fromWallet ? '?from=wallet' : ''}`,
+  )
+  window.scrollTo({ top: 0 })
 }

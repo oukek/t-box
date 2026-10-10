@@ -1,30 +1,30 @@
-import { watchEffect } from "vue";
+import { configureShellServices, updateShellState } from '@t-box/app-shell-sdk'
+import { watchEffect } from 'vue'
+import {
+  appCatalog,
+  changeInstallation,
+  refreshCatalog,
+} from '../core/app-runtime/catalog'
 import {
   createHostTransport,
   trustedApplicationRequest,
-} from "../core/app-runtime/sdkHost";
-import { configureShellServices, updateShellState } from "@t-box/app-shell-sdk";
-import { identity, setSession } from "../core/session";
-import { request } from "../core/network";
-import { applicationMutation } from "../core/applicationMutation";
-import { createRequestId } from "../core/identifiers";
+} from '../core/app-runtime/sdkHost'
+import { appInfo } from '../core/appInfo'
+import { applicationMutation } from '../core/applicationMutation'
+import { presentApplication } from '../core/applications'
+import { createRequestId } from '../core/identifiers'
 import {
-  navigation,
-  openApplication,
   backFromApplication,
-  tabLabel,
+  navigation,
   openAccountSettings,
+  openApplication,
   openProfile,
-} from "../core/navigation";
-import { preferences, setPreference } from "../core/preferences";
-import { appInfo } from "../core/appInfo";
-import {
-  appCatalog,
-  refreshCatalog,
-  changeInstallation,
-} from "../core/app-runtime/catalog";
-import { presentApplication } from "../core/applications";
-import { logout, updateNickname } from "../features/identity/identityApi";
+  tabLabel,
+} from '../core/navigation'
+import { request } from '../core/network'
+import { preferences, setPreference } from '../core/preferences'
+import { identity, setSession } from '../core/session'
+import { logout, updateNickname } from '../features/identity/identityApi'
 
 export function initializeApplicationShell() {
   configureShellServices({
@@ -49,13 +49,13 @@ export function initializeApplicationShell() {
     presentApplication,
     invalidateSession: () => setSession(null),
     async changePassword(currentPassword, newPassword) {
-      await request("/auth/password", {
-        method: "PATCH",
+      await request('/auth/password', {
+        method: 'PATCH',
         body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      setSession(null);
+      })
+      setSession(null)
     },
-  });
+  })
   watchEffect(
     () => {
       updateShellState({
@@ -68,8 +68,8 @@ export function initializeApplicationShell() {
         preferences,
         appInfo,
         appCatalog: { ...appCatalog },
-      });
+      })
     },
-    { flush: "sync" },
-  );
+    { flush: 'sync' },
+  )
 }

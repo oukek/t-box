@@ -1,7 +1,5 @@
 :root {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   color: #203447;
   background: #f4f6f8;
   font-synthesis: none;
@@ -13,7 +11,7 @@
   --accent: #137b72;
   --focus-border: #378c80;
   --expense: #a9573d;
-  --number-font: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --number-font: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 }
 
 * {
@@ -50,7 +48,7 @@ a {
   outline-offset: 2px;
 }
 /* Text controls keep their existing border width; keyboard actions retain an outline. */
-:is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):focus {
+:is(input, select, textarea):not([type='checkbox']):not([type='radio']):focus {
   outline: none;
   border-color: var(--focus-border);
 }

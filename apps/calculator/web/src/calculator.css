@@ -51,7 +51,7 @@
   color: #60726b;
   font-size: 12px;
 }
-.calc-navigation button[aria-current="page"] {
+.calc-navigation button[aria-current='page'] {
   background: var(--calc-soft);
   color: var(--calc-accent);
   font-weight: 600;
@@ -130,7 +130,7 @@
   font-size: 10px;
   padding: 5px 8px;
 }
-.calc-angle button[aria-pressed="true"] {
+.calc-angle button[aria-pressed='true'] {
   color: var(--calc-accent);
   background: var(--calc-soft);
   font-weight: 600;

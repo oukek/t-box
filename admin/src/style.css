@@ -1,7 +1,5 @@
 :root {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: #202939;
   background: #f5f7fb;
   font-synthesis: none;
@@ -106,7 +104,7 @@ a {
   align-items: center;
   gap: 10px;
   font:
-    700 16px "Avenir Next",
+    700 16px 'Avenir Next',
     -apple-system,
     sans-serif;
   letter-spacing: 1.2px;
@@ -177,7 +175,7 @@ a {
   font-weight: 600;
 }
 .sidebar nav button.active::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   height: 18px;
@@ -192,7 +190,7 @@ a {
   font-size: 11px;
 }
 .sidebar-note-title {
-  font-family: "Avenir Next", sans-serif;
+  font-family: 'Avenir Next', sans-serif;
   color: #5f6d84;
   font-weight: 600;
 }
@@ -238,7 +236,7 @@ a {
   background: var(--accent-soft);
   color: var(--accent);
   font:
-    600 12px "Avenir Next",
+    600 12px 'Avenir Next',
     sans-serif;
   flex-shrink: 0;
 }
@@ -259,7 +257,7 @@ a {
   margin-bottom: 25px;
 }
 .page-heading h1 {
-  font-family: "Avenir Next", "PingFang SC", sans-serif;
+  font-family: 'Avenir Next', 'PingFang SC', sans-serif;
   font-size: 23px;
   line-height: 1.4;
   letter-spacing: -0.3px;
@@ -414,7 +412,7 @@ strong {
   padding: 3px 7px;
 }
 .badge::before {
-  content: "";
+  content: '';
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -531,7 +529,7 @@ strong {
 .runtime-model {
   font:
     11px ui-monospace,
-    "PingFang SC",
+    'PingFang SC',
     monospace;
   color: #8792a5;
   margin: 9px 0 18px;
@@ -634,7 +632,7 @@ input {
 input::placeholder {
   color: #a0a8b6;
 }
-input:not([type="checkbox"]):focus {
+input:not([type='checkbox']):focus {
   outline: none;
   border-color: var(--focus-border);
 }
@@ -852,7 +850,7 @@ small {
   font-size: 10px;
   margin-top: 3px;
 }
-.select-options button[aria-selected="true"] {
+.select-options button[aria-selected='true'] {
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -897,7 +895,7 @@ small {
   min-height: 100vh;
 }
 .login-intro h1 {
-  font-family: "Avenir Next", "PingFang SC", sans-serif;
+  font-family: 'Avenir Next', 'PingFang SC', sans-serif;
   font-size: clamp(30px, 3.3vw, 48px);
   line-height: 1.55;
   font-weight: 600;

@@ -10,23 +10,23 @@
 ## 独立应用入口
 
 ```ts
-import { connectAppClient } from "@t-box/app-web-sdk";
+import { connectAppClient } from '@t-box/app-web-sdk'
 
 const { client, context, ready } = await connectAppClient({
   // 名称必须与已发布版本的 clientTools 完全一致。这里注册前端工具，不注册 AI 业务。
   calculator_fill_expression: async (args) => fillExpression(args),
-});
+})
 
-const session = await client.auth.ensureSignedIn();
-const history = await client.storage.get("calculator.history.v1");
-const result = await client.api.invoke("calculate", input, {
+const session = await client.auth.ensureSignedIn()
+const history = await client.storage.get('calculator.history.v1')
+const result = await client.api.invoke('calculate', input, {
   idempotencyKey: operationId,
   signal: abortController.signal,
-});
+})
 
 // 完成页面初始化后通知宿主，前端工具此时才可被调用。
-ready();
-window.addEventListener("pagehide", () => client.dispose(), { once: true });
+ready()
+window.addEventListener('pagehide', () => client.dispose(), { once: true })
 ```
 
 `context` 是此安装的运行绑定：应用 ID、版本 ID、安装代次、应用范围用户标识、运行平台、导航参数、权限和能力列表。它不包含登录 token、真实账号 ID、模型凭证或原生插件对象。
@@ -34,11 +34,12 @@ window.addEventListener("pagehide", () => client.dispose(), { once: true });
 ## 内置应用入口
 
 ```ts
-import { createShellApplication } from "@t-box/app-shell-sdk";
-export const application = createShellApplication("calendar");
+import { createShellApplication } from '@t-box/app-shell-sdk'
 
-const session = await application.client.auth.getSession();
-await application.client.storage.set("view", "month");
+export const application = createShellApplication('calendar')
+
+const session = await application.client.auth.getSession()
+await application.client.storage.set('view', 'month')
 ```
 
 内置模块通过同一个 `AppClient` 使用公共能力。`createShellApplication` 延迟连接宿主；宿主初始化前可以安全导入应用。应用更新、卸载导致旧客户端关闭后，再读取 `application.client` 会获得新的客户端。
@@ -85,13 +86,13 @@ await application.client.storage.set("view", "month");
 
 ```ts
 const stop = await application.client.events.subscribe(
-  "books",
+  'books',
   { ledgerId },
   (event) => refreshLedger(event),
   { onError: (error) => showConnectionState(error.code) },
-);
+)
 // 组件卸载、资源变化时停止旧订阅。
-stop();
+stop()
 ```
 
 独立 Web 应用还必须获得 `events.${channel}` 权限；仅声明通道不足以授权。现有通道使用平台的 WebSocket 认证协议，独立远程后端的推送协议尚未接入此注册机制。

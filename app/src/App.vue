@@ -1,61 +1,61 @@
 <script setup lang="ts">
+import AccountSettingsPage from '@t-box/settings-web/pages/AccountSettingsPage.vue'
+import { AppIcon } from '@t-box/ui-kit'
+import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { applicationModules } from './applications/registry'
+import { closeApplicationRuntimes } from './core/app-runtime/bridge'
 import {
-  refreshCatalog,
   appCatalog,
   isInstalled,
-} from "./core/app-runtime/catalog";
-import { closeApplicationRuntimes } from "./core/app-runtime/bridge";
-import { identity } from "./core/session";
-import { restoreSession } from "./features/identity/identityApi";
-import AccountSettingsPage from "@t-box/settings-web/pages/AccountSettingsPage.vue";
-import { recoverNativeCheckout } from "./features/billing/pendingCheckout";
-import RechargePage from "./features/billing/RechargePage.vue";
-import PricingPage from "./features/billing/PricingPage.vue";
-import WalletPage from "./features/billing/WalletPage.vue";
-import ResourcesPage from "./features/resources/ResourcesPage.vue";
-import LoginPage from "./features/identity/LoginPage.vue";
-import { computed, watch, onBeforeUnmount, onMounted } from "vue";
-import { AppIcon } from "@t-box/ui-kit";
-import ChatPage from "./features/chat/ChatPage.vue";
-import ApplicationsPage from "./features/applications/ApplicationsPage.vue";
-import ApplicationCapabilitiesPage from "./features/applications/ApplicationCapabilitiesPage.vue";
-import { getApplication } from "./core/applications";
-import { applicationModules } from "./applications/registry";
-import ApplicationHeader from "@t-box/ui-kit/ApplicationHeader.vue";
+  refreshCatalog,
+} from './core/app-runtime/catalog'
+import { getApplication } from './core/applications'
 import {
-  navigation,
-  startNavigation,
-  navigateTab,
   backFromApplication,
-  primaryTabs,
-  tabLabel,
+  navigateTab,
+  navigation,
   openApplication,
-} from "./core/navigation";
-import { startChat, stopChat } from "./features/chat/chatStore";
-import { observeViewport } from "./core/viewport";
+  primaryTabs,
+  startNavigation,
+  tabLabel,
+} from './core/navigation'
+import { identity } from './core/session'
+import { observeViewport } from './core/viewport'
+import ApplicationCapabilitiesPage from './features/applications/ApplicationCapabilitiesPage.vue'
+import ApplicationsPage from './features/applications/ApplicationsPage.vue'
+import { recoverNativeCheckout } from './features/billing/pendingCheckout'
+import PricingPage from './features/billing/PricingPage.vue'
+import RechargePage from './features/billing/RechargePage.vue'
+import WalletPage from './features/billing/WalletPage.vue'
+import ChatPage from './features/chat/ChatPage.vue'
+import { startChat, stopChat } from './features/chat/chatStore'
+import { restoreSession } from './features/identity/identityApi'
+import LoginPage from './features/identity/LoginPage.vue'
+import ResourcesPage from './features/resources/ResourcesPage.vue'
 
 const currentApplication = computed(() =>
   navigation.application
     ? getApplication(navigation.application.appId)
     : undefined,
-);
+)
 const showPrimaryNavigation = computed(() =>
-  ["home", "applications"].includes(navigation.screen),
-);
+  ['home', 'applications'].includes(navigation.screen),
+)
 const currentView = computed(() =>
   navigation.application
     ? applicationModules.find(
         (module) => module.manifest.id === navigation.application!.appId,
       )
     : null,
-);
+)
 function hostCompatible(appId: string, version: string) {
-  const entry = appCatalog.entries.find((e) => e.release.appId === appId);
+  const entry = appCatalog.entries.find((e) => e.release.appId === appId)
   return (
-    entry?.release.runtime.type !== "shell" ||
+    entry?.release.runtime.type !== 'shell' ||
     !entry.installation?.version ||
     entry.installation.version === version
-  );
+  )
 }
 const currentCompatible = computed(
   () =>
@@ -64,37 +64,41 @@ const currentCompatible = computed(
       currentView.value.manifest.id,
       currentView.value.manifest.version,
     ),
-);
-let stopViewport: (() => void) | undefined;
+)
+let stopViewport: (() => void) | undefined
 function focusWorkspace() {
-  document.getElementById("workspace")?.focus();
+  document.getElementById('workspace')?.focus()
 }
 watch(
   () => identity.user?.id,
   (id) => {
-    stopChat();
-    closeApplicationRuntimes();
-    void refreshCatalog();
+    stopChat()
+    closeApplicationRuntimes()
+    void refreshCatalog()
     if (id) {
-      startChat();
-      void recoverNativeCheckout();
+      startChat()
+      void recoverNativeCheckout()
     }
   },
   { immediate: true },
-);
+)
 onMounted(() => {
-  startNavigation();
-  void restoreSession();
-  stopViewport = observeViewport();
-});
+  startNavigation()
+  void restoreSession()
+  stopViewport = observeViewport()
+})
 onBeforeUnmount(() => {
-  stopChat();
-  stopViewport?.();
-});
+  stopChat()
+  stopViewport?.()
+})
 </script>
 
 <template>
-  <div v-if="!identity.ready" class="identity-page" role="status">
+  <div
+    v-if="!identity.ready"
+    class="identity-page"
+    role="status"
+  >
     <p>{{ identity.error || "正在恢复账号…" }}</p>
     <button
       v-if="identity.error"
@@ -110,9 +114,11 @@ onBeforeUnmount(() => {
     class="super-app"
     :class="{ 'super-app--detail': !showPrimaryNavigation }"
   >
-    <a class="skip-link" href="#workspace" @click.prevent="focusWorkspace"
-      >跳到主要内容</a
-    >
+    <a
+      class="skip-link"
+      href="#workspace"
+      @click.prevent="focusWorkspace"
+    >跳到主要内容</a>
     <main
       id="workspace"
       class="workspace-plane"
@@ -142,11 +148,11 @@ onBeforeUnmount(() => {
       <AccountSettingsPage v-if="navigation.screen === 'account'" />
       <section
         v-if="
-          navigation.screen === 'application' &&
-          currentApplication &&
-          currentView &&
-          isInstalled(currentApplication.id) &&
-          currentCompatible
+          navigation.screen === 'application'
+            && currentApplication
+            && currentView
+            && isInstalled(currentApplication.id)
+            && currentCompatible
         "
         class="application-workspace"
       >
@@ -206,8 +212,8 @@ onBeforeUnmount(() => {
           :key="tab.id"
           :class="{
             active:
-              (navigation.screen === 'home' ? 'home' : 'applications') ===
-              tab.id,
+              (navigation.screen === 'home' ? 'home' : 'applications')
+              === tab.id,
           }"
           :aria-current="
             (navigation.screen === 'home' ? 'home' : 'applications') === tab.id
@@ -222,16 +228,17 @@ onBeforeUnmount(() => {
     </nav>
     <template v-for="module in applicationModules" :key="module.manifest.id">
       <component
-        v-if="
-          module.host &&
-          isInstalled(module.manifest.id) &&
-          hostCompatible(module.manifest.id, module.manifest.version)
-        "
         :is="module.host"
+        v-if="
+          module.host
+            && isInstalled(module.manifest.id)
+            && hostCompatible(module.manifest.id, module.manifest.version)
+        "
       />
     </template>
   </div>
 </template>
+
 <style scoped>
 .application-unavailable {
   margin: auto;

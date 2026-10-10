@@ -1,38 +1,40 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
-import type { Resource } from "@t-box/shared";
-import { AppIcon } from "@t-box/ui-kit";
-import ResourceImage from "./ResourceImage.vue";
-import { downloadResource } from "../features/resources/resourcesApi";
-const props = defineProps<{ resource: Resource | null }>();
-const emit = defineEmits<{ close: [] }>();
-const dialog = ref<HTMLDialogElement>();
-const canvas = ref<HTMLDivElement>();
-const viewport = reactive({ width: 0, height: 0 });
-const natural = ref({ width: 0, height: 0 });
-const scale = ref(1),
-  downloading = ref(false),
-  error = ref("");
-let observer: ResizeObserver | undefined;
-let disposed = false;
-let previous: HTMLElement | null = null,
-  previousOverflow: string | undefined;
+import type { Resource } from '@t-box/shared'
+import { AppIcon } from '@t-box/ui-kit'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { downloadResource } from '../features/resources/resourcesApi'
+import ResourceImage from './ResourceImage.vue'
+
+const props = defineProps<{ resource: Resource | null }>()
+const emit = defineEmits<{ close: [] }>()
+const dialog = ref<HTMLDialogElement>()
+const canvas = ref<HTMLDivElement>()
+const viewport = reactive({ width: 0, height: 0 })
+const natural = ref({ width: 0, height: 0 })
+const scale = ref(1)
+const downloading = ref(false)
+const error = ref('')
+let observer: ResizeObserver | undefined
+let disposed = false
+let previous: HTMLElement | null = null
+let previousOverflow: string | undefined
 let drag:
-  { id: number; x: number; y: number; left: number; top: number } | undefined;
-let pinchDistance = 0;
+  { id: number, x: number, y: number, left: number, top: number } | undefined
+let pinchDistance = 0
 const fitted = computed(() => {
-  if (!natural.value.width || !natural.value.height)
-    return { width: 0, height: 0 };
+  if (!natural.value.width || !natural.value.height) {
+    return { width: 0, height: 0 }
+  }
   const ratio = Math.min(
     1,
     Math.max(1, viewport.width - 24) / natural.value.width,
     Math.max(1, viewport.height - 24) / natural.value.height,
-  );
+  )
   return {
     width: natural.value.width * ratio,
     height: natural.value.height * ratio,
-  };
-});
+  }
+})
 const imageStyle = computed(() =>
   fitted.value.width
     ? {
@@ -40,137 +42,160 @@ const imageStyle = computed(() =>
         height: `${fitted.value.height * scale.value}px`,
       }
     : {},
-);
+)
 const stageStyle = computed(() => ({
   width: `${Math.max(viewport.width, fitted.value.width * scale.value + 24)}px`,
   height: `${Math.max(viewport.height, fitted.value.height * scale.value + 24)}px`,
-}));
+}))
 function center() {
-  if (!canvas.value) return;
+  if (!canvas.value) {
+    return
+  }
   canvas.value.scrollLeft =
-    (canvas.value.scrollWidth - canvas.value.clientWidth) / 2;
+    (canvas.value.scrollWidth - canvas.value.clientWidth) / 2
   canvas.value.scrollTop =
-    (canvas.value.scrollHeight - canvas.value.clientHeight) / 2;
+    (canvas.value.scrollHeight - canvas.value.clientHeight) / 2
 }
 async function zoom(value: number) {
-  if (!natural.value.width) return;
-  scale.value = Math.min(5, Math.max(1, value));
-  await nextTick();
-  center();
+  if (!natural.value.width) {
+    return
+  }
+  scale.value = Math.min(5, Math.max(1, value))
+  await nextTick()
+  center()
 }
 function restore() {
-  observer?.disconnect();
-  observer = undefined;
-  drag = undefined;
-  pinchDistance = 0;
+  observer?.disconnect()
+  observer = undefined
+  drag = undefined
+  pinchDistance = 0
   if (previousOverflow !== undefined) {
-    document.body.style.overflow = previousOverflow;
-    previousOverflow = undefined;
+    document.body.style.overflow = previousOverflow
+    previousOverflow = undefined
   }
-  if (previous?.isConnected) previous.focus({ preventScroll: true });
-  previous = null;
+  if (previous?.isConnected) {
+    previous.focus({ preventScroll: true })
+  }
+  previous = null
 }
 watch(
   () => props.resource?.id,
   async (id) => {
-    scale.value = 1;
-    natural.value = { width: 0, height: 0 };
-    error.value = "";
-    await nextTick();
-    if (disposed || id !== props.resource?.id) return;
+    scale.value = 1
+    natural.value = { width: 0, height: 0 }
+    error.value = ''
+    await nextTick()
+    if (disposed || id !== props.resource?.id) {
+      return
+    }
     if (!id) {
-      dialog.value?.close();
-      restore();
-      return;
+      dialog.value?.close()
+      restore()
+      return
     }
     if (!dialog.value?.open) {
       previous =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
-          : null;
-      previousOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      dialog.value?.showModal();
+          : null
+      previousOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      dialog.value?.showModal()
     }
-    observer?.disconnect();
+    observer?.disconnect()
     observer = new ResizeObserver(() => {
-      if (!canvas.value) return;
-      viewport.width = canvas.value.clientWidth;
-      viewport.height = canvas.value.clientHeight;
-      void nextTick(center);
-    });
-    if (canvas.value) observer.observe(canvas.value);
+      if (!canvas.value) {
+        return
+      }
+      viewport.width = canvas.value.clientWidth
+      viewport.height = canvas.value.clientHeight
+      void nextTick(center)
+    })
+    if (canvas.value) {
+      observer.observe(canvas.value)
+    }
   },
   { immediate: true },
-);
+)
 onBeforeUnmount(() => {
-  disposed = true;
-  dialog.value?.close();
-  restore();
-});
+  disposed = true
+  dialog.value?.close()
+  restore()
+})
 function startDrag(event: PointerEvent) {
   if (
-    event.pointerType !== "mouse" ||
+    event.pointerType !== 'mouse' ||
     event.button !== 0 ||
     scale.value <= 1 ||
     !canvas.value
-  )
-    return;
-  event.preventDefault();
-  canvas.value.setPointerCapture(event.pointerId);
+  ) {
+    return
+  }
+  event.preventDefault()
+  canvas.value.setPointerCapture(event.pointerId)
   drag = {
     id: event.pointerId,
     x: event.clientX,
     y: event.clientY,
     left: canvas.value.scrollLeft,
     top: canvas.value.scrollTop,
-  };
+  }
 }
 function moveDrag(event: PointerEvent) {
-  if (!drag || drag.id !== event.pointerId || !canvas.value) return;
-  canvas.value.scrollLeft = drag.left - (event.clientX - drag.x);
-  canvas.value.scrollTop = drag.top - (event.clientY - drag.y);
+  if (!drag || drag.id !== event.pointerId || !canvas.value) {
+    return
+  }
+  canvas.value.scrollLeft = drag.left - (event.clientX - drag.x)
+  canvas.value.scrollTop = drag.top - (event.clientY - drag.y)
 }
 function endDrag() {
-  drag = undefined;
+  drag = undefined
 }
 const distance = (event: TouchEvent) =>
   Math.hypot(
     event.touches[0]!.clientX - event.touches[1]!.clientX,
     event.touches[0]!.clientY - event.touches[1]!.clientY,
-  );
+  )
 function startPinch(event: TouchEvent) {
-  pinchDistance = event.touches.length === 2 ? distance(event) : 0;
+  pinchDistance = event.touches.length === 2 ? distance(event) : 0
 }
 function movePinch(event: TouchEvent) {
-  if (event.touches.length !== 2 || !pinchDistance) return;
-  event.preventDefault();
-  const next = distance(event);
+  if (event.touches.length !== 2 || !pinchDistance) {
+    return
+  }
+  event.preventDefault()
+  const next = distance(event)
   if (next > 0) {
-    void zoom((scale.value * next) / pinchDistance);
-    pinchDistance = next;
+    void zoom((scale.value * next) / pinchDistance)
+    pinchDistance = next
   }
 }
 function wheel(event: WheelEvent) {
-  if (!event.ctrlKey && !event.metaKey) return;
-  event.preventDefault();
-  void zoom(scale.value * Math.exp(-event.deltaY * 0.01));
+  if (!event.ctrlKey && !event.metaKey) {
+    return
+  }
+  event.preventDefault()
+  void zoom(scale.value * Math.exp(-event.deltaY * 0.01))
 }
 async function download() {
-  const resource = props.resource;
-  if (!resource || downloading.value) return;
-  downloading.value = true;
-  error.value = "";
+  const resource = props.resource
+  if (!resource || downloading.value) {
+    return
+  }
+  downloading.value = true
+  error.value = ''
   try {
-    await downloadResource(resource);
+    await downloadResource(resource)
   } catch (cause) {
-    if (props.resource?.id === resource.id)
-      error.value = cause instanceof Error ? cause.message : "下载失败";
+    if (props.resource?.id === resource.id) {
+      error.value = cause instanceof Error ? cause.message : '下载失败'
+    }
   } finally {
-    downloading.value = false;
+    downloading.value = false
   }
 }
 </script>
+
 <template>
   <dialog
     ref="dialog"
@@ -230,7 +255,13 @@ async function download() {
           />
         </div>
       </div>
-      <p v-if="error" class="viewer-error" role="alert">{{ error }}</p>
+      <p
+        v-if="error"
+        class="viewer-error"
+        role="alert"
+      >
+        {{ error }}
+      </p>
       <footer class="viewer-controls" aria-label="图片缩放">
         <button
           type="button"
@@ -261,6 +292,7 @@ async function download() {
     </template>
   </dialog>
 </template>
+
 <style scoped>
 .image-viewer {
   position: fixed;

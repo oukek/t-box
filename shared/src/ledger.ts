@@ -1,2 +1,2 @@
-export * from "./identity.js";
-export * from "@t-box/ledger-contracts";
+export * from './identity.js'
+export * from '@t-box/ledger-contracts'

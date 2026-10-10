@@ -22,7 +22,7 @@ t-box/
 
 ## 本地启动
 
-使用 Node.js 24+、pnpm 11.18.0。MySQL 与 Redis 使用本机已有服务。
+使用 Node.js 24.15+、pnpm 11.18.0。MySQL 与 Redis 使用本机已有服务。
 
 ```bash
 pnpm install
@@ -89,6 +89,12 @@ pnpm dev
 对话历史、工具回执与请求去重记录保存于 MySQL；连接和运行任务保存在 API 进程内存。API 重启或连接过期后，已登录用户按历史会话 ID 自动恢复；尚未发送消息的空对话自动建立新连接。开发热更新会重新初始化连接。前端断线后后端继续执行；需要前端操作时暂停，重新打开所属对话后自动恢复交互。服务重启或模型错误暂停的任务需主动继续，断线前的消息不会自动重发；已经写入的账单仍然保留。受保护历史恢复时仍需有效的账本权限与密码授权。
 
 ## H5 / PC 构建
+
+所有 workspace 共用根目录 `eslint.config.mjs`：TypeScript / JavaScript 使用单引号、无行尾分号、两空格缩进，每条声明只定义一个变量，分支使用展开的大括号。Vue 模板、CSS / HTML 和配置文件也通过同一入口检查；Swift / Java 等原生源码由对应原生工具链处理。无分号风格仍保留避免自动分号插入歧义所需的行首分号。
+
+在根目录运行 `pnpm lint` 检查整个项目，`pnpm lint:fix` 自动修复，`pnpm check` 同时检查应用边界和类型，`pnpm test:unit` 运行 API、前端、SDK 和原生脚本测试。可以用 `pnpm exec eslint apps/ledger --fix` 仅整理某个子应用。测试继续使用 `node:test`，ESLint 不修改 pnpm 安装策略。VS Code 的项目设置提供 ESLint 保存修复，CSS / HTML 的 Prettier 格式化由 ESLint 统一调用。
+
+提交与拉取请求的质量检查由 `.github/workflows/quality.yml` 执行。需要本地 MySQL 的集成测试按下列已有命令单独运行。
 
 ```bash
 pnpm run pack        # 前端 → app/dist

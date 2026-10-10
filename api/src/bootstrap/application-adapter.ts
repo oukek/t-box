@@ -1,20 +1,20 @@
 import type {
-  ApplicationModule as SdkModule,
-  ApplicationToolContext,
-} from "../application-sdk/contracts.js";
-import type {
   ApplicationModule,
   ToolContext,
   ToolRegistration,
-} from "../agent/contracts.js";
+} from '../agent/contracts.js'
+import type {
+  ApplicationToolContext,
+  ApplicationModule as SdkModule,
+} from '../application-sdk/contracts.js'
 
 /** Explicit boundary: applications never receive registry, journal, provider history or transport tokens. */
 export function applicationContext(
   context: ToolContext,
   appId?: string,
 ): ApplicationToolContext {
-  const pin = appId ? context.modulePins?.[appId] : undefined;
-  const [releaseId, generation] = pin?.installation.split(":") || [];
+  const pin = appId ? context.modulePins?.[appId] : undefined
+  const [releaseId, generation] = pin?.installation.split(':') || []
   return Object.freeze({
     callId: context.callId,
     ...(appId && releaseId && Number.isSafeInteger(Number(generation))
@@ -41,11 +41,11 @@ export function applicationContext(
       })),
       task: context.session.task ? { id: context.session.task.id } : undefined,
     }),
-  });
+  })
 }
 
 export function adaptApplication(module: SdkModule): ApplicationModule {
-  const tools: Record<string, ToolRegistration> = {};
+  const tools: Record<string, ToolRegistration> = {}
   for (const [name, tool] of Object.entries(module.tools)) {
     tools[name] = {
       ...tool,
@@ -91,7 +91,7 @@ export function adaptApplication(module: SdkModule): ApplicationModule {
               ),
           }
         : {}),
-    };
+    }
   }
   return {
     ...module,
@@ -118,5 +118,5 @@ export function adaptApplication(module: SdkModule): ApplicationModule {
           },
         }
       : {}),
-  };
+  }
 }

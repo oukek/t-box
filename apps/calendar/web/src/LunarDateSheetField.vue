@@ -1,54 +1,60 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { BottomSheet, AppIcon } from "@t-box/ui-kit";
+import type { CalendarLunarDate } from '@t-box/calendar-contracts'
 import {
-  lunarMonths,
   lunarDays,
-  lunarToSolar,
   lunarEventLabel,
-  type CalendarLunarDate,
-} from "@t-box/calendar-contracts";
-const props = defineProps<{ modelValue: CalendarLunarDate; label: string }>();
-const emit = defineEmits<{ "update:modelValue": [value: CalendarLunarDate] }>();
-const open = ref(false),
-  year = ref(2000),
-  month = ref(1),
-  day = ref(1),
-  error = ref("");
+  lunarMonths,
+  lunarToSolar,
+} from '@t-box/calendar-contracts'
+import { AppIcon, BottomSheet } from '@t-box/ui-kit'
+import { computed, ref, watch } from 'vue'
+
+const props = defineProps<{ modelValue: CalendarLunarDate, label: string }>()
+const emit = defineEmits<{ 'update:modelValue': [value: CalendarLunarDate] }>()
+const open = ref(false)
+const year = ref(2000)
+const month = ref(1)
+const day = ref(1)
+const error = ref('')
 watch(open, (value) => {
-  if (!value) return;
-  year.value = props.modelValue.year;
+  if (!value) {
+    return
+  }
+  year.value = props.modelValue.year
   month.value = props.modelValue.leapMonth
     ? -props.modelValue.month
-    : props.modelValue.month;
-  day.value = props.modelValue.day;
-  error.value = "";
-});
+    : props.modelValue.month
+  day.value = props.modelValue.day
+  error.value = ''
+})
 const validYear = computed(
   () =>
     Number.isInteger(year.value) && year.value >= 1900 && year.value <= 2100,
-);
-const months = computed(() => (validYear.value ? lunarMonths(year.value) : []));
+)
+const months = computed(() => (validYear.value ? lunarMonths(year.value) : []))
 watch(months, (values) => {
-  if (!values.length) return;
-  if (!values.some((m) => m.value === month.value))
-    month.value = Math.abs(month.value);
+  if (!values.length) {
+    return
+  }
+  if (!values.some((m) => m.value === month.value)) {
+    month.value = Math.abs(month.value)
+  }
   day.value = Math.min(
     day.value,
     values.find((m) => m.value === month.value)!.days,
-  );
-});
+  )
+})
 const days = computed(() =>
   months.value.some((m) => m.value === month.value)
     ? lunarDays(year.value, month.value)
     : [],
-);
+)
 function selectMonth(value: number) {
-  month.value = value;
+  month.value = value
   day.value = Math.min(
     day.value,
     months.value.find((m) => m.value === value)!.days,
-  );
+  )
 }
 const value = computed<CalendarLunarDate>(() => ({
   ...props.modelValue,
@@ -56,24 +62,25 @@ const value = computed<CalendarLunarDate>(() => ({
   month: Math.abs(month.value),
   leapMonth: month.value < 0,
   day: day.value,
-}));
+}))
 const solar = computed(() => {
   try {
-    return lunarToSolar(value.value);
+    return lunarToSolar(value.value)
   } catch {
-    return "";
+    return ''
   }
-});
+})
 function confirm() {
   try {
-    lunarToSolar(value.value);
-    emit("update:modelValue", value.value);
-    open.value = false;
+    lunarToSolar(value.value)
+    emit('update:modelValue', value.value)
+    open.value = false
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "请选择有效农历日期";
+    error.value = cause instanceof Error ? cause.message : '请选择有效农历日期'
   }
 }
 </script>
+
 <template>
   <button
     type="button"
@@ -83,10 +90,13 @@ function confirm() {
     :aria-expanded="open"
     @click="open = true"
   >
-    <span>{{ lunarEventLabel(modelValue).replace("农历 ", "") }}</span
-    ><AppIcon name="calendar" :size="16" />
+    <span>{{ lunarEventLabel(modelValue).replace("农历 ", "") }}</span><AppIcon name="calendar" :size="16" />
   </button>
-  <BottomSheet :open="open" title="选择农历日期" @close="open = false">
+  <BottomSheet
+    :open="open"
+    title="选择农历日期"
+    @close="open = false"
+  >
     <div class="lunar-year">
       <button
         type="button"
@@ -96,15 +106,14 @@ function confirm() {
       >
         <AppIcon name="left" :size="18" />
       </button>
-      <label
-        >农历年份<input
-          v-model.number="year"
-          type="number"
-          inputmode="numeric"
-          min="1900"
-          max="2100"
-          aria-label="农历年份"
-      /></label>
+      <label>农历年份<input
+        v-model.number="year"
+        type="number"
+        inputmode="numeric"
+        min="1900"
+        max="2100"
+        aria-label="农历年份"
+      ></label>
       <button
         type="button"
         aria-label="下一农历年"
@@ -115,7 +124,11 @@ function confirm() {
       </button>
     </div>
     <p v-if="!validYear" class="temporal-error">请输入 1900 至 2100 年。</p>
-    <div class="lunar-months" role="group" aria-label="农历月份">
+    <div
+      class="lunar-months"
+      role="group"
+      aria-label="农历月份"
+    >
       <button
         v-for="m in months"
         :key="m.value"
@@ -126,7 +139,11 @@ function confirm() {
         {{ m.label }}
       </button>
     </div>
-    <div class="lunar-days" role="group" aria-label="农历日期">
+    <div
+      class="lunar-days"
+      role="group"
+      aria-label="农历日期"
+    >
       <button
         v-for="d in days"
         :key="d.value"
@@ -141,15 +158,19 @@ function confirm() {
       {{ solar ? `对应公历 ${solar}` : "所选日期超出支持范围" }} ·
       每个农历年会显示实际闰月和天数。
     </p>
-    <p v-if="error" class="temporal-error" role="alert">{{ error }}</p>
+    <p
+      v-if="error"
+      class="temporal-error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
     <div class="temporal-actions">
       <button
         type="button"
         class="button button-secondary"
         @click="open = false"
-      >
-        取消</button
-      ><button
+      > 取消</button><button
         type="button"
         class="button button-primary"
         :disabled="!solar"
@@ -160,6 +181,7 @@ function confirm() {
     </div>
   </BottomSheet>
 </template>
+
 <style scoped>
 .lunar-date-trigger {
   display: flex;
@@ -243,7 +265,7 @@ function confirm() {
   font: inherit;
   font-size: 12px;
 }
-button[aria-pressed="true"] {
+button[aria-pressed='true'] {
   background: #e6f2ed;
   border-color: #a7cbbd;
   color: var(--accent);

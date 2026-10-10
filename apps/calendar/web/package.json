@@ -1,18 +1,8 @@
 {
   "name": "@t-box/calendar-web",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "dependencies": {
-    "vue": "3.5.43",
-    "@t-box/app-shell-sdk": "workspace:*",
-    "@t-box/ui-kit": "workspace:*",
-    "@t-box/shared": "workspace:*",
-    "@t-box/calendar-contracts": "workspace:*",
-    "@t-box/device-reminders": "workspace:*",
-    "@t-box/app-contracts": "workspace:*",
-    "@t-box/time-contracts": "workspace:*"
-  },
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
@@ -21,6 +11,16 @@
   },
   "scripts": {
     "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-shell-sdk": "workspace:*",
+    "@t-box/calendar-contracts": "workspace:*",
+    "@t-box/device-reminders": "workspace:*",
+    "@t-box/shared": "workspace:*",
+    "@t-box/time-contracts": "workspace:*",
+    "@t-box/ui-kit": "workspace:*",
+    "vue": "3.5.43"
   },
   "devDependencies": {
     "typescript": "~5.9.3",

@@ -1,76 +1,86 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
-import { identity } from "@t-box/app-shell-sdk";
+import type { StopwatchState } from './stopwatch'
+import { identity } from '@t-box/app-shell-sdk'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  durationLabel,
   parseStopwatch,
   stopwatchElapsed,
-  durationLabel,
-  type StopwatchState,
-} from "./stopwatch";
-const now = ref(Date.now()),
-  stopwatch = ref<StopwatchState>({ elapsed: 0, startedAt: null, laps: [] });
-let preferenceOwner = "";
+} from './stopwatch'
+
+const now = ref(Date.now())
+const stopwatch = ref<StopwatchState>({ elapsed: 0, startedAt: null, laps: [] })
+let preferenceOwner = ''
 watch(
   () => identity.user?.id,
   (id) => {
-    preferenceOwner = id ?? "";
-    stopwatch.value = { elapsed: 0, startedAt: null, laps: [] };
+    preferenceOwner = id ?? ''
+    stopwatch.value = { elapsed: 0, startedAt: null, laps: [] }
     if (id) {
       try {
         stopwatch.value = parseStopwatch(
           JSON.parse(
-            localStorage.getItem(`tbox.time:${id}:stopwatch`) || "null",
+            localStorage.getItem(`tbox.time:${id}:stopwatch`) || 'null',
           ),
-        );
+        )
       } catch {}
     }
   },
-  { immediate: true, flush: "sync" },
-);
-const elapsed = computed(() => stopwatchElapsed(stopwatch.value, now.value));
-let ticker: ReturnType<typeof setInterval> | undefined;
+  { immediate: true, flush: 'sync' },
+)
+const elapsed = computed(() => stopwatchElapsed(stopwatch.value, now.value))
+let ticker: ReturnType<typeof setInterval> | undefined
 function persistStopwatch() {
-  if (!preferenceOwner || preferenceOwner !== identity.user?.id) return;
+  if (!preferenceOwner || preferenceOwner !== identity.user?.id) {
+    return
+  }
   try {
     localStorage.setItem(
       `tbox.time:${preferenceOwner}:stopwatch`,
       JSON.stringify(stopwatch.value),
-    );
+    )
   } catch {}
 }
 function toggleStopwatch() {
-  if (!preferenceOwner || preferenceOwner !== identity.user?.id) return;
-  now.value = Date.now();
-  if (stopwatch.value.startedAt === null) stopwatch.value.startedAt = now.value;
-  else {
-    stopwatch.value.elapsed = elapsed.value;
-    stopwatch.value.startedAt = null;
+  if (!preferenceOwner || preferenceOwner !== identity.user?.id) {
+    return
   }
-  persistStopwatch();
+  now.value = Date.now()
+  if (stopwatch.value.startedAt === null) {
+    stopwatch.value.startedAt = now.value
+  } else {
+    stopwatch.value.elapsed = elapsed.value
+    stopwatch.value.startedAt = null
+  }
+  persistStopwatch()
 }
 function lap() {
-  if (stopwatch.value.startedAt === null || stopwatch.value.laps.length >= 200)
-    return;
-  stopwatch.value.laps.push(stopwatchElapsed(stopwatch.value, Date.now()));
-  persistStopwatch();
+  if (stopwatch.value.startedAt === null || stopwatch.value.laps.length >= 200) {
+    return
+  }
+  stopwatch.value.laps.push(stopwatchElapsed(stopwatch.value, Date.now()))
+  persistStopwatch()
 }
 function resetStopwatch() {
-  stopwatch.value = { elapsed: 0, startedAt: null, laps: [] };
-  persistStopwatch();
+  stopwatch.value = { elapsed: 0, startedAt: null, laps: [] }
+  persistStopwatch()
 }
 onMounted(() => {
-  ticker = setInterval(() => (now.value = Date.now()), 40);
-});
+  ticker = setInterval(() => (now.value = Date.now()), 40)
+})
 onBeforeUnmount(() => {
-  clearInterval(ticker);
-  persistStopwatch();
-});
+  clearInterval(ticker)
+  persistStopwatch()
+})
 </script>
+
 <template>
   <div>
     <div class="time-stopwatch">
       <span>秒表</span>
-      <p class="time-stopwatch-digits">{{ durationLabel(elapsed, true) }}</p>
+      <p class="time-stopwatch-digits">
+        {{ durationLabel(elapsed, true) }}
+      </p>
       <div class="time-stopwatch-actions">
         <button
           class="button button-secondary"
@@ -78,13 +88,11 @@ onBeforeUnmount(() => {
             stopwatch.startedAt === null || stopwatch.laps.length >= 200
           "
           @click="lap"
-        >
-          分段</button
-        ><button class="button button-primary" @click="toggleStopwatch">
+        > 分段</button><button class="button button-primary" @click="toggleStopwatch">
           {{
             stopwatch.startedAt === null ? (elapsed ? "继续" : "开始") : "暂停"
-          }}</button
-        ><button
+          }}
+        </button><button
           class="button button-secondary"
           :disabled="stopwatch.startedAt !== null || !elapsed"
           @click="resetStopwatch"
@@ -102,14 +110,12 @@ onBeforeUnmount(() => {
       <div v-for="(value, index) in [...stopwatch.laps].reverse()" :key="index">
         <strong>{{
           String(stopwatch.laps.length - index).padStart(2, "0")
-        }}</strong
-        ><span>{{
+        }}</strong><span>{{
           durationLabel(
             value - (stopwatch.laps[stopwatch.laps.length - index - 2] || 0),
             true,
           )
-        }}</span
-        ><span>{{ durationLabel(value, true) }}</span>
+        }}</span><span>{{ durationLabel(value, true) }}</span>
       </div>
     </div>
   </div>

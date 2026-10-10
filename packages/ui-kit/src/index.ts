@@ -1,5 +1,5 @@
-export { default as SheetSelect } from "./SheetSelect.vue";
-export { default as SidePanel } from "./SidePanel.vue";
-export { default as Modal } from "./Modal.vue";
-export { default as AppIcon } from "./AppIcon.vue";
-export { default as BottomSheet } from "./BottomSheet.vue";
+export { default as AppIcon } from './AppIcon.vue'
+export { default as BottomSheet } from './BottomSheet.vue'
+export { default as Modal } from './Modal.vue'
+export { default as SheetSelect } from './SheetSelect.vue'
+export { default as SidePanel } from './SidePanel.vue'

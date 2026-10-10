@@ -1,5 +1,6 @@
-import type { MigrationInterface, QueryRunner } from "typeorm";
-export const LEGACY_LEDGER_ID = "00000000-0000-4000-8000-000000000001";
+import type { MigrationInterface, QueryRunner } from 'typeorm'
+
+export const LEGACY_LEDGER_ID = '00000000-0000-4000-8000-000000000001'
 export class SharedLedgers1791244800000 implements MigrationInterface {
   async up(db: QueryRunner) {
     const tables = [
@@ -90,97 +91,104 @@ export class SharedLedgers1791244800000 implements MigrationInterface {
         type ENUM('income','expense') NOT NULL,amount DECIMAL(20,2) NOT NULL DEFAULT 0,record_count BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY(ledger_id,stat_date,category_id),FOREIGN KEY(ledger_id) REFERENCES ledgers(id),FOREIGN KEY(category_id) REFERENCES bill_categories(id)
       ) ENGINE=InnoDB`,
-    ];
+    ]
     // DDL in MySQL commits independently. Existence checks make a failed migration resumable.
-    for (const sql of tables)
+    for (const sql of tables) {
       await db.query(
-        sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS "),
-      );
+        sql.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '),
+      )
+    }
     await db.query(
-      "INSERT IGNORE INTO ledgers(id,name,template) VALUES(?, '原有账本', 'combined')",
+      'INSERT IGNORE INTO ledgers(id,name,template) VALUES(?, \'原有账本\', \'combined\')',
       [LEGACY_LEDGER_ID],
-    );
+    )
     const column = async (table: string, name: string, definition: string) => {
       const found = await db.query(
-        "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?",
+        'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',
         [table, name],
-      );
-      if (!found.length)
-        await db.query(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
-    };
+      )
+      if (!found.length) {
+        await db.query(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`)
+      }
+    }
     await column(
-      "bill_categories",
-      "ledger_id",
+      'bill_categories',
+      'ledger_id',
       `CHAR(36) NOT NULL DEFAULT '${LEGACY_LEDGER_ID}'`,
-    );
-    await column("bill_categories", "sort_order", "INT NOT NULL DEFAULT 0");
+    )
+    await column('bill_categories', 'sort_order', 'INT NOT NULL DEFAULT 0')
     await column(
-      "bills",
-      "ledger_id",
+      'bills',
+      'ledger_id',
       `CHAR(36) NOT NULL DEFAULT '${LEGACY_LEDGER_ID}'`,
-    );
-    await column("bills", "created_by", "CHAR(36) NULL");
-    await column("bills", "deleted_at", "DATETIME(3) NULL");
+    )
+    await column('bills', 'created_by', 'CHAR(36) NULL')
+    await column('bills', 'deleted_at', 'DATETIME(3) NULL')
     const constraint = async (table: string, name: string, sql: string) => {
       const found = await db.query(
-        "SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME=? AND CONSTRAINT_NAME=?",
+        'SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME=? AND CONSTRAINT_NAME=?',
         [table, name],
-      );
-      if (!found.length) await db.query(`ALTER TABLE ${table} ADD ${sql}`);
-    };
+      )
+      if (!found.length) {
+        await db.query(`ALTER TABLE ${table} ADD ${sql}`)
+      }
+    }
     const old = await db.query(
-      "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bill_categories' AND INDEX_NAME='uq_category_type_label'",
-    );
-    if (old.length)
+      'SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\'bill_categories\' AND INDEX_NAME=\'uq_category_type_label\'',
+    )
+    if (old.length) {
       await db.query(
-        "ALTER TABLE bill_categories DROP INDEX uq_category_type_label",
-      );
+        'ALTER TABLE bill_categories DROP INDEX uq_category_type_label',
+      )
+    }
     await constraint(
-      "bill_categories",
-      "uq_book_category_label",
-      "CONSTRAINT uq_book_category_label UNIQUE(ledger_id,type,label)",
-    );
+      'bill_categories',
+      'uq_book_category_label',
+      'CONSTRAINT uq_book_category_label UNIQUE(ledger_id,type,label)',
+    )
     await constraint(
-      "bill_categories",
-      "uq_book_category_id_type",
-      "CONSTRAINT uq_book_category_id_type UNIQUE(ledger_id,id,type)",
-    );
+      'bill_categories',
+      'uq_book_category_id_type',
+      'CONSTRAINT uq_book_category_id_type UNIQUE(ledger_id,id,type)',
+    )
     await constraint(
-      "bill_categories",
-      "fk_category_book",
-      "CONSTRAINT fk_category_book FOREIGN KEY(ledger_id) REFERENCES ledgers(id)",
-    );
+      'bill_categories',
+      'fk_category_book',
+      'CONSTRAINT fk_category_book FOREIGN KEY(ledger_id) REFERENCES ledgers(id)',
+    )
     await constraint(
-      "bills",
-      "fk_bill_book_category",
-      "CONSTRAINT fk_bill_book_category FOREIGN KEY(ledger_id,category,type) REFERENCES bill_categories(ledger_id,id,type)",
-    );
+      'bills',
+      'fk_bill_book_category',
+      'CONSTRAINT fk_bill_book_category FOREIGN KEY(ledger_id,category,type) REFERENCES bill_categories(ledger_id,id,type)',
+    )
     await constraint(
-      "bills",
-      "fk_bill_author",
-      "CONSTRAINT fk_bill_author FOREIGN KEY(created_by) REFERENCES app_users(id)",
-    );
+      'bills',
+      'fk_bill_author',
+      'CONSTRAINT fk_bill_author FOREIGN KEY(created_by) REFERENCES app_users(id)',
+    )
     const index = await db.query(
-      "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bills' AND INDEX_NAME='idx_bills_book_date'",
-    );
-    if (!index.length)
+      'SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\'bills\' AND INDEX_NAME=\'idx_bills_book_date\'',
+    )
+    if (!index.length) {
       await db.query(
-        "ALTER TABLE bills ADD INDEX idx_bills_book_date(ledger_id,bill_date,deleted_at)",
-      );
+        'ALTER TABLE bills ADD INDEX idx_bills_book_date(ledger_id,bill_date,deleted_at)',
+      )
+    }
     // Exactly-once import: use the existing bill ID for its initial event.
     await db.query(`INSERT IGNORE INTO ledger_events(id,ledger_id,subject_id,kind,event_date,income,expense,cash_in,cash_out,record_count,category_id,bill_type,note)
       SELECT id,ledger_id,id,type,bill_date,IF(type='income',amount,0),IF(type='expense',amount,0),
-      IF(type='income',amount,0),IF(type='expense',amount,0),1,category,type,note FROM bills WHERE deleted_at IS NULL`);
-    await db.query("DELETE FROM ledger_daily_categories");
-    await db.query("DELETE FROM ledger_daily_stats");
+      IF(type='income',amount,0),IF(type='expense',amount,0),1,category,type,note FROM bills WHERE deleted_at IS NULL`)
+    await db.query('DELETE FROM ledger_daily_categories')
+    await db.query('DELETE FROM ledger_daily_stats')
     await db.query(`INSERT INTO ledger_daily_stats SELECT ledger_id,event_date,SUM(income),SUM(expense),SUM(cash_in),SUM(cash_out),SUM(receivable_delta),SUM(payable_delta),SUM(record_count)
-      FROM ledger_events GROUP BY ledger_id,event_date`);
+      FROM ledger_events GROUP BY ledger_id,event_date`)
     await db.query(`INSERT INTO ledger_daily_categories SELECT ledger_id,event_date,category_id,bill_type,SUM(income+expense),SUM(record_count)
-      FROM ledger_events WHERE category_id IS NOT NULL GROUP BY ledger_id,event_date,category_id,bill_type`);
+      FROM ledger_events WHERE category_id IS NOT NULL GROUP BY ledger_id,event_date,category_id,bill_type`)
   }
+
   async down(): Promise<void> {
     throw new Error(
-      "Shared ledger data must be restored from an explicit backup; automatic destructive rollback is disabled.",
-    );
+      'Shared ledger data must be restored from an explicit backup; automatic destructive rollback is disabled.',
+    )
   }
 }

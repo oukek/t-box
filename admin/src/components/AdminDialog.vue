@@ -1,36 +1,42 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
-import AdminIcon from "./AdminIcon.vue";
-import { lockScroll } from "../core/overlay";
+import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
+import { lockScroll } from '../core/overlay'
+import AdminIcon from './AdminIcon.vue'
+
 const props = withDefaults(
   defineProps<{
-    open: boolean;
-    title: string;
-    description?: string;
-    busy?: boolean;
-    compact?: boolean;
+    open: boolean
+    title: string
+    description?: string
+    busy?: boolean
+    compact?: boolean
   }>(),
   { busy: false },
-);
-const emit = defineEmits<{ close: [] }>();
-const dialog = ref<HTMLDialogElement>();
-const titleId = useId(),
-  descriptionId = useId();
-let release: (() => void) | undefined;
-let opener: HTMLElement | null = null;
+)
+const emit = defineEmits<{ close: [] }>()
+const dialog = ref<HTMLDialogElement>()
+const titleId = useId()
+const descriptionId = useId()
+let release: (() => void) | undefined
+let opener: HTMLElement | null = null
 function requestClose() {
-  if (!props.busy) emit("close");
+  if (!props.busy) {
+    emit('close')
+  }
 }
 function backdrop(event: MouseEvent) {
-  if (event.target !== dialog.value) return;
-  const bounds = dialog.value!.getBoundingClientRect();
+  if (event.target !== dialog.value) {
+    return
+  }
+  const bounds = dialog.value!.getBoundingClientRect()
   if (
     event.clientX < bounds.left ||
     event.clientX > bounds.right ||
     event.clientY < bounds.top ||
     event.clientY > bounds.bottom
-  )
-    requestClose();
+  ) {
+    requestClose()
+  }
 }
 watch(
   () => props.open,
@@ -39,33 +45,40 @@ watch(
       opener =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
-          : null;
-      await nextTick();
-      if (!props.open || !dialog.value) return;
+          : null
+      await nextTick()
+      if (!props.open || !dialog.value) {
+        return
+      }
       if (!dialog.value.open) {
-        dialog.value.showModal();
-        release = lockScroll();
+        dialog.value.showModal()
+        release = lockScroll()
         const initial =
           dialog.value.querySelector<HTMLElement>(
             '.dialog-body input:not([aria-hidden]):not(:disabled), .dialog-body textarea:not(:disabled), .dialog-body [role="combobox"]:not(:disabled)',
-          ) || dialog.value.querySelector<HTMLElement>(".dialog-footer button");
-        initial?.focus();
+          ) || dialog.value.querySelector<HTMLElement>('.dialog-footer button')
+        initial?.focus()
       }
     } else {
-      dialog.value?.close();
-      release?.();
-      release = undefined;
-      if (opener?.isConnected) opener.focus();
+      dialog.value?.close()
+      release?.()
+      release = undefined
+      if (opener?.isConnected) {
+        opener.focus()
+      }
     }
   },
   { immediate: true },
-);
+)
 onBeforeUnmount(() => {
-  dialog.value?.close();
-  release?.();
-  if (opener?.isConnected) opener.focus();
-});
+  dialog.value?.close()
+  release?.()
+  if (opener?.isConnected) {
+    opener.focus()
+  }
+})
 </script>
+
 <template>
   <dialog
     ref="dialog"
@@ -78,8 +91,12 @@ onBeforeUnmount(() => {
   >
     <header class="dialog-heading">
       <div>
-        <h2 :id="titleId">{{ title }}</h2>
-        <p v-if="description" :id="descriptionId">{{ description }}</p>
+        <h2 :id="titleId">
+          {{ title }}
+        </h2>
+        <p v-if="description" :id="descriptionId">
+          {{ description }}
+        </p>
       </div>
       <button
         type="button"
@@ -91,7 +108,9 @@ onBeforeUnmount(() => {
         <AdminIcon name="close" />
       </button>
     </header>
-    <div v-if="open" class="dialog-body"><slot /></div>
+    <div v-if="open" class="dialog-body">
+      <slot />
+    </div>
     <footer v-if="open && $slots.footer" class="dialog-footer">
       <slot name="footer" />
     </footer>

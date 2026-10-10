@@ -7,8 +7,7 @@
   flex-shrink: 0;
   background: #fff;
   border-right: 1px solid var(--line);
-  padding: max(37px, env(safe-area-inset-top)) 20px
-    max(29px, env(safe-area-inset-bottom));
+  padding: max(37px, env(safe-area-inset-top)) 20px max(29px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -93,8 +92,7 @@
 .main-content {
   width: min(calc(100% - 216px), 1520px);
   margin-left: 216px;
-  padding: max(46px, env(safe-area-inset-top)) 48px
-    max(24px, env(safe-area-inset-bottom));
+  padding: max(46px, env(safe-area-inset-top)) 48px max(24px, env(safe-area-inset-bottom));
 }
 .page-header {
   display: flex;
@@ -920,8 +918,7 @@ h1 {
     height: auto;
     border-right: 0;
     border-bottom: 1px solid #e7ecef;
-    padding: calc(15px + env(safe-area-inset-top))
-      max(22px, env(safe-area-inset-right)) 15px
+    padding: calc(15px + env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) 15px
       max(22px, env(safe-area-inset-left));
     flex-direction: row;
     justify-content: space-between;
@@ -969,8 +966,7 @@ h1 {
   .main-content {
     margin: 0;
     width: 100%;
-    padding: 29px max(22px, env(safe-area-inset-right))
-      calc(28px + env(safe-area-inset-bottom))
+    padding: 29px max(22px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom))
       max(22px, env(safe-area-inset-left));
   }
   .page-header {
@@ -1152,9 +1148,7 @@ h1 {
     letter-spacing: 0.8px;
   }
   .dialog {
-    max-height: calc(
-      100dvh - max(32px, env(safe-area-inset-top)) - env(safe-area-inset-bottom)
-    );
+    max-height: calc(100dvh - max(32px, env(safe-area-inset-top)) - env(safe-area-inset-bottom));
   }
   .dialog-content {
     padding: 24px;

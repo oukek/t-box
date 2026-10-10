@@ -1,8 +1,8 @@
 {
   "name": "@t-box/app-server-sdk",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -19,9 +19,9 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
   "dependencies": {
-    "@t-box/shared": "workspace:*",
     "@t-box/app-contracts": "workspace:*",
-    "@t-box/server-foundation": "workspace:*"
+    "@t-box/server-foundation": "workspace:*",
+    "@t-box/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~5.9.3"

@@ -1,158 +1,166 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
-import { createRequestId } from "@t-box/app-shell-sdk";
-import { Modal, AppIcon } from "@t-box/ui-kit";
-import type { BillCategory } from "@t-box/ledger-contracts";
-import { featureApi, useFeatureAction } from "../features/api";
-import { defaultCategoryIcons } from "./defaultIcons";
-import { categoryThumbnail } from "./image";
-import CategoryIcon from "./CategoryIcon.vue";
+import type { BillCategory } from '@t-box/ledger-contracts'
+import { createRequestId } from '@t-box/app-shell-sdk'
+import { AppIcon, Modal } from '@t-box/ui-kit'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { featureApi, useFeatureAction } from '../features/api'
+import CategoryIcon from './CategoryIcon.vue'
+import { defaultCategoryIcons } from './defaultIcons'
+import { categoryThumbnail } from './image'
+
 const props = defineProps<{
-  open: boolean;
-  ledgerId: string;
-  type: "income" | "expense";
-  category?: BillCategory;
-}>();
+  open: boolean
+  ledgerId: string
+  type: 'income' | 'expense'
+  category?: BillCategory
+}>()
 const emit = defineEmits<{
-  close: [];
-  saved: [category: BillCategory];
-  busy: [value: boolean];
-}>();
-const action = useFeatureAction(),
-  uploading = ref(false),
-  saving = ref(false),
-  preview = ref(""),
-  nameInput = ref<HTMLInputElement>();
+  close: []
+  saved: [category: BillCategory]
+  busy: [value: boolean]
+}>()
+const action = useFeatureAction()
+const uploading = ref(false)
+const saving = ref(false)
+const preview = ref('')
+const nameInput = ref<HTMLInputElement>()
 const form = reactive({
-  label: "",
-  icon: "other",
+  label: '',
+  icon: 'other',
   iconId: null as string | null,
   sortOrder: 100,
   active: true,
   pinned: false,
-});
-let uploadKey = createRequestId();
-const viewportStyle = ref<Record<string, string>>({});
+})
+let uploadKey = createRequestId()
+const viewportStyle = ref<Record<string, string>>({})
 function updateViewport() {
-  const v = window.visualViewport;
-  const height = v?.height ?? window.innerHeight;
+  const v = window.visualViewport
+  const height = v?.height ?? window.innerHeight
   viewportStyle.value = {
-    "--category-height": `${height}px`,
-    "--category-center": `${(v?.offsetTop ?? 0) + height / 2}px`,
-  };
+    '--category-height': `${height}px`,
+    '--category-center': `${(v?.offsetTop ?? 0) + height / 2}px`,
+  }
 }
 function stopViewport() {
-  window.visualViewport?.removeEventListener("resize", updateViewport);
-  window.visualViewport?.removeEventListener("scroll", updateViewport);
-  window.removeEventListener("resize", updateViewport);
+  window.visualViewport?.removeEventListener('resize', updateViewport)
+  window.visualViewport?.removeEventListener('scroll', updateViewport)
+  window.removeEventListener('resize', updateViewport)
 }
-onBeforeUnmount(stopViewport);
+onBeforeUnmount(stopViewport)
 const busy = computed(
   () => uploading.value || saving.value || action.busy.value,
-);
-watch(busy, (value) => emit("busy", value));
+)
+watch(busy, (value) => emit('busy', value))
 watch(
   () => props.open,
   (open) => {
-    stopViewport();
-    if (!open) return;
-    updateViewport();
-    window.visualViewport?.addEventListener("resize", updateViewport);
-    window.visualViewport?.addEventListener("scroll", updateViewport);
-    window.addEventListener("resize", updateViewport);
-    const c = props.category;
+    stopViewport()
+    if (!open) {
+      return
+    }
+    updateViewport()
+    window.visualViewport?.addEventListener('resize', updateViewport)
+    window.visualViewport?.addEventListener('scroll', updateViewport)
+    window.addEventListener('resize', updateViewport)
+    const c = props.category
     Object.assign(form, {
-      label: c?.label ?? "",
-      icon: c?.icon ?? "other",
+      label: c?.label ?? '',
+      icon: c?.icon ?? 'other',
       iconId: c?.iconId ?? null,
       sortOrder: c?.sortOrder ?? 100,
       active: c?.active ?? true,
       pinned: c?.pinned ?? false,
-    });
-    preview.value = "";
-    uploadKey = createRequestId();
-    action.error.value = "";
+    })
+    preview.value = ''
+    uploadKey = createRequestId()
+    action.error.value = ''
   },
   { immediate: true },
-);
+)
 async function focus() {
-  await nextTick();
-  nameInput.value?.focus();
+  await nextTick()
+  nameInput.value?.focus()
 }
 function choose(icon: string) {
-  form.icon = icon;
-  form.iconId = null;
-  preview.value = "";
+  form.icon = icon
+  form.iconId = null
+  preview.value = ''
 }
 async function upload(event: Event) {
-  const input = event.target as HTMLInputElement,
-    file = input.files?.[0];
-  input.value = "";
-  if (!file || busy.value) return;
-  uploading.value = true;
-  action.error.value = "";
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || busy.value) {
+    return
+  }
+  uploading.value = true
+  action.error.value = ''
   try {
-    const image = await categoryThumbnail(file);
-    form.iconId = null;
-    preview.value = image;
-    uploadKey = createRequestId();
+    const image = await categoryThumbnail(file)
+    form.iconId = null
+    preview.value = image
+    uploadKey = createRequestId()
   } catch (e) {
-    action.error.value = e instanceof Error ? e.message : "图片上传失败";
+    action.error.value = e instanceof Error ? e.message : '图片上传失败'
   } finally {
-    uploading.value = false;
+    uploading.value = false
   }
 }
 async function save() {
-  if (busy.value || props.category?.isDefault) return;
-  const label = form.label.trim();
-  if (!label) {
-    action.error.value = "请填写分类名称";
-    return;
+  if (busy.value || props.category?.isDefault) {
+    return
   }
-  saving.value = true;
-  action.error.value = "";
+  const label = form.label.trim()
+  if (!label) {
+    action.error.value = '请填写分类名称'
+    return
+  }
+  saving.value = true
+  action.error.value = ''
   try {
     if (preview.value && !form.iconId) {
       const { id } = await featureApi(props.ledgerId).write<{ id: string }>(
-        "/category-icons",
-        { base64: preview.value.split(",")[1] },
-        "POST",
+        '/category-icons',
+        { base64: preview.value.split(',')[1] },
+        'POST',
         uploadKey,
-      );
-      form.iconId = id;
+      )
+      form.iconId = id
     }
     const body = props.category
       ? { ...form, label }
-      : { type: props.type, label, icon: form.icon, iconId: form.iconId };
+      : { type: props.type, label, icon: form.icon, iconId: form.iconId }
     const result = await action.run(
-      `category:${props.category?.id ?? "new"}`,
+      `category:${props.category?.id ?? 'new'}`,
       body,
       (key) =>
         featureApi(props.ledgerId).write(
-          props.category ? `/categories/${props.category.id}` : "/categories",
+          props.category ? `/categories/${props.category.id}` : '/categories',
           body,
-          props.category ? "PATCH" : "POST",
+          props.category ? 'PATCH' : 'POST',
           key,
         ),
-    );
+    )
     if (result) {
-      emit("saved", {
+      emit('saved', {
         ...props.category,
         ...form,
         id: result.id,
         type: props.category?.type ?? props.type,
         label,
         isDefault: false,
-      });
-      emit("close");
+      })
+      emit('close')
     }
   } catch (e) {
-    action.error.value = e instanceof Error ? e.message : "分类保存失败";
+    action.error.value = e instanceof Error ? e.message : '分类保存失败'
   } finally {
-    saving.value = false;
+    saving.value = false
   }
 }
 </script>
+
 <template>
   <Modal
     class="category-dialog"
@@ -167,29 +175,26 @@ async function save() {
   >
     <form class="category-form" @submit.prevent="save">
       <fieldset :disabled="busy">
-        <label class="form-field"
-          ><span class="field-label">分类名称</span
-          ><input
-            ref="nameInput"
-            v-model="form.label"
-            maxlength="40"
-            required
-            placeholder="例如：宠物、兼职"
-        /></label>
+        <label class="form-field"><span class="field-label">分类名称</span><input
+          ref="nameInput"
+          v-model="form.label"
+          maxlength="40"
+          required
+          placeholder="例如：宠物、兼职"
+        ></label>
         <div class="icon-heading">
-          <span class="field-label">分类图标</span
-          ><span class="chosen-icon"
-            ><img
-              v-if="preview"
-              :src="preview"
-              alt="所选图片"
-              width="28"
-              height="28" /><CategoryIcon
-              v-else
-              :ledger-id="ledgerId"
-              :icon="form.icon"
-              :icon-id="form.iconId"
-              :size="28"
+          <span class="field-label">分类图标</span><span class="chosen-icon"><img
+            v-if="preview"
+            :src="preview"
+            alt="所选图片"
+            width="28"
+            height="28"
+          ><CategoryIcon
+            v-else
+            :ledger-id="ledgerId"
+            :icon="form.icon"
+            :icon-id="form.iconId"
+            :size="28"
           /></span>
         </div>
         <div
@@ -213,41 +218,37 @@ async function save() {
             }}</span>
           </button>
         </div>
-        <label class="upload-icon"
-          ><AppIcon name="image" :size="17" /><span>{{
-            uploading
-              ? "正在处理图片…"
-              : form.iconId || preview
-                ? "更换上传图片"
-                : "上传图片作为图标"
-          }}</span
-          ><input
-            class="sr-only"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            aria-label="上传分类图标"
-            @change="upload"
-        /></label>
+        <label class="upload-icon"><AppIcon name="image" :size="17" /><span>{{
+          uploading
+            ? "正在处理图片…"
+            : form.iconId || preview
+              ? "更换上传图片"
+              : "上传图片作为图标"
+        }}</span><input
+          class="sr-only"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          aria-label="上传分类图标"
+          @change="upload"
+        ></label>
         <p class="icon-hint">PNG、JPEG、WebP，最大 10 MB，自动压缩为图标。</p>
         <div v-if="category" class="category-options">
-          <label class="form-field"
-            ><span class="field-label">排序（越小越靠前）</span
-            ><input
-              v-model.number="form.sortOrder"
-              type="number"
-              min="0"
-              max="100000"
-              required
-          /></label>
+          <label class="form-field"><span class="field-label">排序（越小越靠前）</span><input
+            v-model.number="form.sortOrder"
+            type="number"
+            min="0"
+            max="100000"
+            required
+          ></label>
           <div class="category-checks">
-            <label
-              ><input v-model="form.active" type="checkbox" />启用分类</label
-            ><label
-              ><input v-model="form.pinned" type="checkbox" />置顶分类</label
-            >
+            <label><input v-model="form.active" type="checkbox">启用分类</label><label><input v-model="form.pinned" type="checkbox">置顶分类</label>
           </div>
         </div>
-        <p v-if="action.error.value" class="form-error" role="alert">
+        <p
+          v-if="action.error.value"
+          class="form-error"
+          role="alert"
+        >
           {{ action.error.value }}
         </p>
       </fieldset>
@@ -257,15 +258,14 @@ async function save() {
           type="button"
           :disabled="busy"
           @click="emit('close')"
-        >
-          取消</button
-        ><button class="button button-primary" :disabled="busy">
+        > 取消</button><button class="button button-primary" :disabled="busy">
           {{ busy ? "正在处理…" : category ? "保存修改" : "创建分类" }}
         </button>
       </footer>
     </form>
   </Modal>
 </template>
+
 <style scoped>
 .category-dialog {
   width: min(420px, calc(100% - 28px));

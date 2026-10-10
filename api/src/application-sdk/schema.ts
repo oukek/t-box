@@ -1,1 +1,1 @@
-export * from "@t-box/app-server-sdk/schema";
+export * from '@t-box/app-server-sdk/schema'

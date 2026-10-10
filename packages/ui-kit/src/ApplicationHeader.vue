@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { AppIcon } from "@t-box/ui-kit";
+import { AppIcon } from '@t-box/ui-kit'
 
 defineProps<{
-  title: string;
-  backLabel: string;
-  description?: string;
-  stackActionsOnMobile?: boolean;
-}>();
-defineEmits<{ back: [] }>();
+  title: string
+  backLabel: string
+  description?: string
+  stackActionsOnMobile?: boolean
+}>()
+defineEmits<{ back: [] }>()
 </script>
 
 <template>
@@ -22,7 +22,9 @@ defineEmits<{ back: [] }>();
     </button>
     <div class="application-page-title">
       <h1>{{ title }}</h1>
-      <p v-if="description">{{ description }}</p>
+      <p v-if="description">
+        {{ description }}
+      </p>
     </div>
     <div
       v-if="$slots.actions"

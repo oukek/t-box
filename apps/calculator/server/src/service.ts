@@ -1,15 +1,17 @@
+import type { CalculationResult } from '@t-box/calculator-contracts'
+import { ApplicationError } from '@t-box/app-server-sdk'
 import {
   calculate,
   CalculationError,
-  type CalculationResult,
-} from "@t-box/calculator-contracts";
-import { ApplicationError } from "@t-box/app-server-sdk";
+} from '@t-box/calculator-contracts'
+
 export function runCalculation(input: unknown): CalculationResult {
   try {
-    return calculate(input);
+    return calculate(input)
   } catch (error) {
-    if (error instanceof CalculationError)
-      throw new ApplicationError("INVALID_CALCULATION", error.message);
-    throw error;
+    if (error instanceof CalculationError) {
+      throw new ApplicationError('INVALID_CALCULATION', error.message)
+    }
+    throw error
   }
 }

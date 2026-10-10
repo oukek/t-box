@@ -1,4 +1,5 @@
-import type { MigrationInterface, QueryRunner } from "typeorm";
+import type { MigrationInterface, QueryRunner } from 'typeorm'
+
 export class DurableTasks1791244804000 implements MigrationInterface {
   async up(db: QueryRunner) {
     await db.query(`CREATE TABLE IF NOT EXISTS agent_tasks (
@@ -11,7 +12,7 @@ export class DurableTasks1791244804000 implements MigrationInterface {
       updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       UNIQUE KEY task_request (conversation_id, request_id),
       KEY task_user (user_id, updated_at), KEY task_recovery (status, lease_until)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`)
     await db.query(`CREATE TABLE IF NOT EXISTS agent_task_tools (
       task_id CHAR(36) NOT NULL, call_id VARCHAR(100) NOT NULL, name VARCHAR(64) NOT NULL,
       agent_id VARCHAR(64) NOT NULL, fingerprint CHAR(64) NOT NULL,
@@ -19,9 +20,10 @@ export class DurableTasks1791244804000 implements MigrationInterface {
       updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (task_id, call_id),
       CONSTRAINT task_tools_parent FOREIGN KEY (task_id) REFERENCES agent_tasks(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`)
   }
+
   async down(): Promise<void> {
-    throw new Error("Durable tasks require an explicit backup before rollback");
+    throw new Error('Durable tasks require an explicit backup before rollback')
   }
 }

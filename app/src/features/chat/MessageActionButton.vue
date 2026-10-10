@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { AppIcon } from "@t-box/ui-kit";
+import { AppIcon } from '@t-box/ui-kit'
+
 defineProps<{
-  icon: string;
-  label: string;
-  title?: string;
-  disabled?: boolean;
-}>();
-defineEmits<{ click: [] }>();
+  icon: string
+  label: string
+  title?: string
+  disabled?: boolean
+}>()
+defineEmits<{ click: [] }>()
 </script>
+
 <template>
   <button
     class="message-action-button"
@@ -20,6 +22,7 @@ defineEmits<{ click: [] }>();
     <AppIcon :name="icon" :size="15" />
   </button>
 </template>
+
 <style scoped>
 .message-action-button {
   flex: 0 0 28px;

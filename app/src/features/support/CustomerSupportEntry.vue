@@ -1,62 +1,71 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
-import type { CustomerSupportConfiguration } from "@t-box/shared";
-import { Modal } from "@t-box/ui-kit";
-import { AppIcon } from "@t-box/ui-kit";
-import { request } from "../../core/network";
-import { isNativeIos } from "../../core/platform";
+import type { CustomerSupportConfiguration } from '@t-box/shared'
+import { AppIcon, Modal } from '@t-box/ui-kit'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { request } from '../../core/network'
+import { isNativeIos } from '../../core/platform'
 
-const props = defineProps<{ active: boolean }>();
-const ios = isNativeIos();
+const props = defineProps<{ active: boolean }>()
+const ios = isNativeIos()
 const configuration = ref<CustomerSupportConfiguration>({
   enabled: false,
-  qrCodeUrl: "",
-});
-const open = ref(false),
-  loading = ref(false),
-  error = ref("");
-const imageLoaded = ref(false),
-  imageFailed = ref(false),
-  imageVersion = ref(0);
-let controller: AbortController | undefined;
+  qrCodeUrl: '',
+})
+const open = ref(false)
+const loading = ref(false)
+const error = ref('')
+const imageLoaded = ref(false)
+const imageFailed = ref(false)
+const imageVersion = ref(0)
+let controller: AbortController | undefined
 
 async function load() {
-  if (!ios) return;
-  controller?.abort();
-  const current = (controller = new AbortController());
-  loading.value = true;
-  error.value = "";
+  if (!ios) {
+    return
+  }
+  controller?.abort()
+  const current = (controller = new AbortController())
+  loading.value = true
+  error.value = ''
   try {
     const result = await request<{ data: CustomerSupportConfiguration }>(
-      "/support",
+      '/support',
       { signal: current.signal },
-    );
-    if (current.signal.aborted) return;
-    configuration.value = result.data;
-    imageLoaded.value = false;
-    imageFailed.value = false;
-    imageVersion.value++;
+    )
+    if (current.signal.aborted) {
+      return
+    }
+    configuration.value = result.data
+    imageLoaded.value = false
+    imageFailed.value = false
+    imageVersion.value++
   } catch (cause) {
-    if (!current.signal.aborted)
+    if (!current.signal.aborted) {
       error.value =
-        cause instanceof Error ? cause.message : "暂时无法读取客服信息";
+        cause instanceof Error ? cause.message : '暂时无法读取客服信息'
+    }
   } finally {
-    if (controller === current) loading.value = false;
+    if (controller === current) {
+      loading.value = false
+    }
   }
 }
 function contact() {
-  open.value = true;
-  void load();
+  open.value = true
+  void load()
 }
 watch(
   () => props.active,
   (active) => {
-    if (active) void load();
-    else open.value = false;
+    if (active) {
+      void load()
+    } else {
+      open.value = false
+    }
   },
   { immediate: true },
-);
-onBeforeUnmount(() => controller?.abort());
+)
+onBeforeUnmount(() => controller?.abort())
 </script>
 
 <template>
@@ -69,27 +78,40 @@ onBeforeUnmount(() => controller?.abort());
   >
     <AppIcon name="support" :size="17" /><span>联系客服</span>
   </button>
-  <Modal :open="ios && open" title="联系客服" @close="open = false">
+  <Modal
+    :open="ios && open"
+    title="联系客服"
+    @close="open = false"
+  >
     <div class="support-contact">
       <div class="support-contact-heading">
-        <span class="support-contact-icon"
-          ><AppIcon name="support" :size="22"
+        <span class="support-contact-icon"><AppIcon
+          name="support"
+          :size="22"
         /></span>
         <h3>微信客服</h3>
         <p>使用咨询与问题反馈</p>
       </div>
-      <p v-if="loading" class="support-message" role="status">
+      <p
+        v-if="loading"
+        class="support-message"
+        role="status"
+      >
         正在读取客服信息…
       </p>
-      <div v-else-if="error" class="support-message" role="alert">
+      <div
+        v-else-if="error"
+        class="support-message"
+        role="alert"
+      >
         <p>{{ error }}</p>
         <button type="button" @click="load">重新加载</button>
       </div>
       <template v-else-if="configuration.enabled && configuration.qrCodeUrl">
         <div class="support-qr-frame">
           <img
-            :key="imageVersion"
             v-show="!imageFailed"
+            :key="imageVersion"
             :src="configuration.qrCodeUrl"
             alt="微信客服二维码"
             width="224"
@@ -97,7 +119,7 @@ onBeforeUnmount(() => controller?.abort());
             referrerpolicy="no-referrer"
             @load="imageLoaded = true"
             @error="imageFailed = true"
-          />
+          >
           <p
             v-if="!imageLoaded && !imageFailed"
             class="support-message"
@@ -105,7 +127,11 @@ onBeforeUnmount(() => controller?.abort());
           >
             二维码加载中…
           </p>
-          <div v-if="imageFailed" class="support-message" role="alert">
+          <div
+            v-if="imageFailed"
+            class="support-message"
+            role="alert"
+          >
             <p>二维码暂时无法加载</p>
             <button type="button" @click="load">重新加载</button>
           </div>
@@ -114,7 +140,11 @@ onBeforeUnmount(() => controller?.abort());
           保存二维码或截图后，在微信中识别
         </p>
       </template>
-      <p v-else class="support-message" role="status">客服暂未开放</p>
+      <p
+        v-else
+        class="support-message"
+        role="status"
+      >客服暂未开放</p>
     </div>
   </Modal>
 </template>

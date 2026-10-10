@@ -1,20 +1,22 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { categorySlices } from "./data";
-import { formatMoney } from "../decimal";
+import { computed } from 'vue'
+import { formatMoney } from '../decimal'
+import { categorySlices } from './data'
+
 const props = defineProps<{
-  rows: readonly { label: string; amount: string; count: number }[];
-  label: string;
-}>();
+  rows: readonly { label: string, amount: string, count: number }[]
+  label: string
+}>()
 const slices = computed(() => {
-  let offset = 0;
+  let offset = 0
   return categorySlices(props.rows).map((row) => {
-    const result = { ...row, offset };
-    offset += row.percentage;
-    return result;
-  });
-});
+    const result = { ...row, offset }
+    offset += row.percentage
+    return result
+  })
+})
 </script>
+
 <template>
   <div v-if="slices.length" class="category-visual">
     <svg
@@ -52,23 +54,28 @@ const slices = computed(() => {
           </title>
         </circle>
       </g>
-      <text x="90" y="82" text-anchor="middle" class="donut-share">
+      <text
+        x="90"
+        y="82"
+        text-anchor="middle"
+        class="donut-share"
+      >
         {{ Number(slices[0]!.percentage.toFixed(1)) }}
         <tspan class="donut-percent">%</tspan>
       </text>
-      <text x="90" y="108" text-anchor="middle" class="donut-caption">
+      <text
+        x="90"
+        y="108"
+        text-anchor="middle"
+        class="donut-caption"
+      >
         最大分类
       </text>
     </svg>
     <ul class="donut-legend">
       <li v-for="row in slices" :key="row.label">
-        <i :style="{ background: row.color }"></i
-        ><span
-          >{{ row.label
-          }}<small
-            >{{ row.count }} 笔 · {{ row.percentage.toFixed(1) }}%</small
-          ></span
-        ><strong>{{ formatMoney(row.amount) }}</strong>
+        <i :style="{ background: row.color }" /><span>{{ row.label
+        }}<small>{{ row.count }} 笔 · {{ row.percentage.toFixed(1) }}%</small></span><strong>{{ formatMoney(row.amount) }}</strong>
       </li>
     </ul>
   </div>
@@ -82,13 +89,19 @@ const slices = computed(() => {
         stroke="#eff4f2"
         stroke-width="18"
       />
-      <text x="90" y="98" text-anchor="middle" class="donut-caption">
+      <text
+        x="90"
+        y="98"
+        text-anchor="middle"
+        class="donut-caption"
+      >
         暂无数据
       </text>
     </svg>
     <p>本期还没有{{ label }}记录。</p>
   </div>
 </template>
+
 <style scoped>
 .category-visual {
   display: grid;

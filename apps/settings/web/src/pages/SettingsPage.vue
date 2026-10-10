@@ -1,48 +1,43 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { AppIcon, Modal } from "@t-box/ui-kit";
-import ApplicationHeader from "@t-box/ui-kit/ApplicationHeader.vue";
-import { appInfo } from "@t-box/app-shell-sdk";
-import { identity } from "@t-box/app-shell-sdk";
-import { preferences, setPreference } from "@t-box/app-shell-sdk";
-import { iconSizeOptions } from "@t-box/app-contracts";
-import {
-  openAccountSettings,
-  backFromApplication,
-  navigation,
-  tabLabel,
-} from "@t-box/app-shell-sdk";
-const aboutOpen = ref(false);
-const avatar = computed(() => [...(identity.user?.nickname || "我")][0]);
+import { iconSizeOptions } from '@t-box/app-contracts'
+import { appInfo, backFromApplication, identity, navigation, openAccountSettings, preferences, setPreference, tabLabel } from '@t-box/app-shell-sdk'
+import { AppIcon, Modal } from '@t-box/ui-kit'
+import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
+import { computed, ref } from 'vue'
+
+const aboutOpen = ref(false)
+const avatar = computed(() => [...(identity.user?.nickname || '我')][0])
 function sizeKeydown(event: KeyboardEvent) {
   const keys = [
-    "ArrowLeft",
-    "ArrowRight",
-    "ArrowUp",
-    "ArrowDown",
-    "Home",
-    "End",
-  ];
-  if (!keys.includes(event.key)) return;
-  event.preventDefault();
+    'ArrowLeft',
+    'ArrowRight',
+    'ArrowUp',
+    'ArrowDown',
+    'Home',
+    'End',
+  ]
+  if (!keys.includes(event.key)) {
+    return
+  }
+  event.preventDefault()
   const current = iconSizeOptions.findIndex(
     (option) => option.value === preferences.iconSize,
-  );
+  )
   const index =
-    event.key === "Home"
+    event.key === 'Home'
       ? 0
-      : event.key === "End"
+      : event.key === 'End'
         ? iconSizeOptions.length - 1
         : (current +
-            (["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1) +
-            iconSizeOptions.length) %
-          iconSizeOptions.length;
-  setPreference("iconSize", iconSizeOptions[index]!.value);
-  (event.currentTarget as HTMLElement)
-    .querySelectorAll<HTMLButtonElement>("button")
-    [index]?.focus();
+          (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) +
+          iconSizeOptions.length) %
+          iconSizeOptions.length
+  setPreference('iconSize', iconSizeOptions[index]!.value)
+  const buttons = (event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')
+  buttons[index]?.focus()
 }
 </script>
+
 <template>
   <section class="profile-page" aria-label="设置">
     <ApplicationHeader
@@ -91,7 +86,7 @@ function sizeKeydown(event: KeyboardEvent) {
               }"
               aria-hidden="true"
             >
-              <i v-for="index in option.columns * 2" :key="index"></i>
+              <i v-for="index in option.columns * 2" :key="index" />
             </span>
             <strong>{{ option.label }}</strong>
             <small>每行 {{ option.columns }} 个</small>
@@ -104,8 +99,9 @@ function sizeKeydown(event: KeyboardEvent) {
       <h2>关于</h2>
       <div class="profile-menu">
         <button class="profile-action" @click="aboutOpen = true">
-          <span class="profile-action-icon"
-            ><AppIcon name="info" :size="20"
+          <span class="profile-action-icon"><AppIcon
+            name="info"
+            :size="20"
           /></span>
           <span>关于 {{ appInfo.name }}<small>应用信息与版本</small></span>
           <span class="profile-version">v{{ appInfo.version }}</span>
@@ -119,8 +115,9 @@ function sizeKeydown(event: KeyboardEvent) {
       @close="aboutOpen = false"
     >
       <div class="profile-about">
-        <span class="profile-about-icon"
-          ><AppIcon name="apps" :size="26"
+        <span class="profile-about-icon"><AppIcon
+          name="apps"
+          :size="26"
         /></span>
         <h3>{{ appInfo.name }}</h3>
         <p>{{ appInfo.description }}</p>

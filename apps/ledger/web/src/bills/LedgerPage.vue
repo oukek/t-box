@@ -1,27 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { featureApi, useFeatureAction } from "../features/api";
-import type { LedgerAccount } from "@t-box/ledger-contracts";
-import AttachmentPicker from "../features/AttachmentPicker.vue";
-import BillDetailSheet from "../features/BillDetailSheet.vue";
-import LedgerFormSheet from "../features/LedgerFormSheet.vue";
-import type { FormValues, LedgerFormField } from "../features/form";
-import { SheetSelect } from "@t-box/ui-kit";
-import { identity } from "@t-box/app-shell-sdk";
-import DateSheetField from "@t-box/ui-kit/DateSheetField.vue";
-import { AppIcon, BottomSheet } from "@t-box/ui-kit";
-import { useLedger } from "./useLedger";
-import CategoryDialog from "../categories/CategoryDialog.vue";
-import CategoryIcon from "../categories/CategoryIcon.vue";
-import CategoryPicker from "./CategoryPicker.vue";
+import type { LedgerAccount } from '@t-box/ledger-contracts'
+import type { FormValues, LedgerFormField } from '../features/form'
+import { identity } from '@t-box/app-shell-sdk'
+import { AppIcon, BottomSheet, SheetSelect } from '@t-box/ui-kit'
+import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import CategoryDialog from '../categories/CategoryDialog.vue'
+import CategoryIcon from '../categories/CategoryIcon.vue'
+import { featureApi, useFeatureAction } from '../features/api'
+import AttachmentPicker from '../features/AttachmentPicker.vue'
+import BillDetailSheet from '../features/BillDetailSheet.vue'
+import LedgerFormSheet from '../features/LedgerFormSheet.vue'
+import CategoryPicker from './CategoryPicker.vue'
+import { useLedger } from './useLedger'
+
 const props = defineProps<{
-  ledgerId: string;
-  canWrite: boolean;
-  canManage: boolean;
-  month?: string;
-  billId?: string;
-  openRevision?: number;
-}>();
+  ledgerId: string
+  canWrite: boolean
+  canManage: boolean
+  month?: string
+  billId?: string
+  openRevision?: number
+}>()
 const {
   month,
   extraFilters,
@@ -71,43 +71,43 @@ const {
   restoreFocus,
   formatDate,
   formatMoney,
-} = useLedger(props);
-const api = featureApi(props.ledgerId),
-  featureAction = useFeatureAction(),
-  uploadingAttachments = ref(false),
-  detailId = ref<string | null>(null),
-  accounts = ref<LedgerAccount[]>([]),
-  members = ref<any[]>([]),
-  filterOpen = ref(false),
-  filterForm = ref<FormValues>({}),
-  multi = ref(false),
-  selectedIds = ref<string[]>([]),
-  recategorizeOpen = ref(false),
-  recategorizeForm = ref<FormValues>({ categoryId: "" });
+} = useLedger(props)
+const api = featureApi(props.ledgerId)
+const featureAction = useFeatureAction()
+const uploadingAttachments = ref(false)
+const detailId = ref<string | null>(null)
+const accounts = ref<LedgerAccount[]>([])
+const members = ref<any[]>([])
+const filterOpen = ref(false)
+const filterForm = ref<FormValues>({})
+const multi = ref(false)
+const selectedIds = ref<string[]>([])
+const recategorizeOpen = ref(false)
+const recategorizeForm = ref<FormValues>({ categoryId: '' })
 const filterFields = computed<LedgerFormField[]>(() => [
   {
-    key: "categoryId",
-    label: "分类",
-    kind: "select",
+    key: 'categoryId',
+    label: '分类',
+    kind: 'select',
     options: [
-      { value: "", label: "全部分类" },
+      { value: '', label: '全部分类' },
       ...allCategories.value.map((c) => ({ value: c.id, label: c.label })),
     ],
   },
   {
-    key: "memberId",
-    label: "记录人",
-    kind: "select",
+    key: 'memberId',
+    label: '记录人',
+    kind: 'select',
     options: [
-      { value: "", label: "全部成员" },
+      { value: '', label: '全部成员' },
       ...members.value.map((m) => ({ value: m.userId, label: m.nickname })),
     ],
   },
-  { key: "minAmount", label: "最低金额（选填）", kind: "money" },
-  { key: "maxAmount", label: "最高金额（选填）", kind: "money" },
-  { key: "start", label: "开始日期（选填）", kind: "date", clearable: true },
-  { key: "end", label: "结束日期（选填）", kind: "date", clearable: true },
-]);
+  { key: 'minAmount', label: '最低金额（选填）', kind: 'money' },
+  { key: 'maxAmount', label: '最高金额（选填）', kind: 'money' },
+  { key: 'start', label: '开始日期（选填）', kind: 'date', clearable: true },
+  { key: 'end', label: '结束日期（选填）', kind: 'date', clearable: true },
+])
 const selectedTypes = computed(
   () =>
     new Set(
@@ -115,12 +115,12 @@ const selectedTypes = computed(
         .filter((b) => selectedIds.value.includes(b.id))
         .map((b) => b.type),
     ),
-);
+)
 const recategorizeFields = computed<LedgerFormField[]>(() => [
   {
-    key: "categoryId",
-    label: "新的分类",
-    kind: "select",
+    key: 'categoryId',
+    label: '新的分类',
+    kind: 'select',
     options: allCategories.value
       .filter(
         (c) =>
@@ -130,54 +130,53 @@ const recategorizeFields = computed<LedgerFormField[]>(() => [
       )
       .map((c) => ({ value: c.id, label: c.label })),
   },
-]);
+])
 function filters() {
-  filterForm.value = { ...extraFilters };
-  filterOpen.value = true;
-  featureAction.error.value = "";
+  filterForm.value = { ...extraFilters }
+  filterOpen.value = true
+  featureAction.error.value = ''
 }
 function applyFilters() {
-  const v = filterForm.value;
+  const v = filterForm.value
   if (Boolean(v.start) !== Boolean(v.end)) {
-    featureAction.error.value = "请同时选择开始日期和结束日期";
-    return;
+    featureAction.error.value = '请同时选择开始日期和结束日期'
+    return
   }
-  Object.assign(extraFilters, v);
-  page.value = 1;
-  filterOpen.value = false;
+  Object.assign(extraFilters, v)
+  page.value = 1
+  filterOpen.value = false
 }
 async function changeCategories() {
   const body = {
     billIds: selectedIds.value,
     categoryId: recategorizeForm.value.categoryId,
-  };
-  const r = await featureAction.run("recategorize", body, (k) =>
-    api.write("/bills/recategorize", body, "POST", k),
-  );
+  }
+  const r = await featureAction.run('recategorize', body, (k) =>
+    api.write('/bills/recategorize', body, 'POST', k))
   if (r) {
-    recategorizeOpen.value = false;
-    multi.value = false;
-    selectedIds.value = [];
-    await loadBills();
+    recategorizeOpen.value = false
+    multi.value = false
+    selectedIds.value = []
+    await loadBills()
   }
 }
-async function copyBill(bill: import("@t-box/ledger-contracts").Bill) {
-  detailId.value = null;
-  await openCopy(bill);
+async function copyBill(bill: import('@t-box/ledger-contracts').Bill) {
+  detailId.value = null
+  await openCopy(bill)
 }
 watch(bills, () => {
-  selectedIds.value = [];
-});
+  selectedIds.value = []
+})
 onMounted(async () => {
   try {
     [accounts.value, members.value] = await Promise.all([
-      api.get("/accounts"),
-      api.get("/members"),
-    ]);
+      api.get('/accounts'),
+      api.get('/members'),
+    ])
   } catch {
     /* The main list displays access errors; optional pickers remain empty. */
   }
-});
+})
 </script>
 
 <template>
@@ -213,12 +212,12 @@ onMounted(async () => {
             </button>
           </div>
           <button
+            v-if="canWrite"
             :ref="
               (el) => {
                 createButton = el as HTMLButtonElement | undefined;
               }
             "
-            v-if="canWrite"
             class="button button-primary add-button"
             @click="openEditor()"
           >
@@ -228,35 +227,26 @@ onMounted(async () => {
         <div class="summary-grid" :aria-busy="loading">
           <div class="summary-cell expense-summary">
             <div class="summary-label">
-              <span class="summary-indicator expense"
-                ><AppIcon name="arrowUp" :size="15" /></span
-              >本月净支出
+              <span class="summary-indicator expense"><AppIcon name="arrowUp" :size="15" /></span>本月净支出
             </div>
             <p class="summary-value">
-              <span class="currency">¥</span
-              >{{ loading || error ? "—" : formatMoney(summary.expense) }}
+              <span class="currency">¥</span>{{ loading || error ? "—" : formatMoney(summary.expense) }}
             </p>
           </div>
           <div class="summary-cell">
             <div class="summary-label">
-              <span class="summary-indicator income"
-                ><AppIcon name="arrowDown" :size="15" /></span
-              >本月收入
+              <span class="summary-indicator income"><AppIcon name="arrowDown" :size="15" /></span>本月收入
             </div>
             <p class="summary-value">
-              <span class="currency">¥</span
-              >{{ loading || error ? "—" : formatMoney(summary.income) }}
+              <span class="currency">¥</span>{{ loading || error ? "—" : formatMoney(summary.income) }}
             </p>
           </div>
           <div class="summary-cell balance-summary">
             <div class="summary-label">本月结余</div>
             <p class="summary-value">
-              <span class="currency">¥</span
-              >{{ loading || error ? "—" : formatMoney(summary.balance) }}
+              <span class="currency">¥</span>{{ loading || error ? "—" : formatMoney(summary.balance) }}
             </p>
-            <span class="summary-detail"
-              >{{ loading || error ? "—" : summary.count }} 笔记录</span
-            >
+            <span class="summary-detail">{{ loading || error ? "—" : summary.count }} 笔记录</span>
           </div>
         </div>
       </section>
@@ -272,16 +262,15 @@ onMounted(async () => {
             <span class="section-note">人民币 · CNY</span>
           </div>
           <div class="feature-actions">
-            <button @click="filters">筛选</button
-            ><button
+            <button @click="filters">筛选</button><button
               v-if="canWrite"
               @click="
                 multi = !multi;
                 selectedIds = [];
               "
             >
-              {{ multi ? "退出多选" : "多选" }}</button
-            ><button
+              {{ multi ? "退出多选" : "多选" }}
+            </button><button
               v-if="multi && selectedIds.length"
               @click="
                 recategorizeOpen = true;
@@ -322,23 +311,31 @@ onMounted(async () => {
                 收入
               </button>
             </div>
-            <label class="search-field"
-              ><AppIcon name="search" :size="18" /><input
-                v-model="search"
-                type="search"
-                maxlength="100"
-                placeholder="搜索备注"
-                aria-label="搜索账单备注"
-            /></label>
+            <label class="search-field"><AppIcon name="search" :size="18" /><input
+              v-model="search"
+              type="search"
+              maxlength="100"
+              placeholder="搜索备注"
+              aria-label="搜索账单备注"
+            ></label>
           </div>
 
-          <div v-if="loading" class="state-panel loading-state" role="status">
-            <span class="spinner"></span>
+          <div
+            v-if="loading"
+            class="state-panel loading-state"
+            role="status"
+          >
+            <span class="spinner" />
             <p>正在读取账单…</p>
           </div>
-          <div v-else-if="error" class="state-panel error-state" role="alert">
-            <span class="state-icon"
-              ><AppIcon name="warning" :size="28"
+          <div
+            v-else-if="error"
+            class="state-panel error-state"
+            role="alert"
+          >
+            <span class="state-icon"><AppIcon
+              name="warning"
+              :size="28"
             /></span>
             <h3>账单暂时无法加载</h3>
             <p>{{ error }}</p>
@@ -347,8 +344,9 @@ onMounted(async () => {
             </button>
           </div>
           <div v-else-if="bills.length === 0" class="state-panel empty-state">
-            <span class="empty-ledger"
-              ><AppIcon name="ledger" :size="26"
+            <span class="empty-ledger"><AppIcon
+              name="ledger"
+              :size="26"
             /></span>
             <h3>
               {{ hasFilters ? "没有符合条件的记录" : "暂无账单" }}
@@ -364,9 +362,7 @@ onMounted(async () => {
               v-if="hasFilters"
               class="button button-secondary"
               @click="resetFilters"
-            >
-              清除筛选</button
-            ><button
+            > 清除筛选</button><button
               v-else-if="canWrite"
               class="button button-secondary"
               @click="openEditor()"
@@ -382,8 +378,7 @@ onMounted(async () => {
               :aria-label="formatDate(group.date)"
             >
               <div class="date-divider">
-                <time :datetime="group.date">{{ formatDate(group.date) }}</time
-                ><span>{{ group.bills.length }} 笔</span>
+                <time :datetime="group.date">{{ formatDate(group.date) }}</time><span>{{ group.bills.length }} 笔</span>
               </div>
               <article
                 v-for="bill in group.bills"
@@ -397,13 +392,15 @@ onMounted(async () => {
                   type="checkbox"
                   :value="bill.id"
                   :aria-label="`选择 ${bill.date} ${bill.amount} 元账单`"
-                />
-                <span class="category-icon" :class="bill.type"
-                  ><CategoryIcon
-                    :ledger-id="ledgerId"
-                    :icon="categoryInfo(bill.category)?.icon"
-                    :icon-id="categoryInfo(bill.category)?.iconId"
-                    :size="21"
+                >
+                <span
+                  class="category-icon"
+                  :class="bill.type"
+                ><CategoryIcon
+                  :ledger-id="ledgerId"
+                  :icon="categoryInfo(bill.category)?.icon"
+                  :icon-id="categoryInfo(bill.category)?.iconId"
+                  :size="21"
                 /></span>
                 <button
                   type="button"
@@ -414,22 +411,21 @@ onMounted(async () => {
                   <h3>{{ categoryLabel(bill.category) }}</h3>
                   <p :class="{ 'muted-note': !bill.note }">
                     {{
-                      bill.note ||
-                      (bill.type === "income" ? "收入记录" : "日常支出")
+                      bill.note
+                        || (bill.type === "income" ? "收入记录" : "日常支出")
                     }}
                   </p>
                 </button>
                 <div class="bill-amount" :class="bill.type">
                   <span class="sr-only">{{
                     bill.type === "income" ? "收入" : "支出"
-                  }}</span
-                  >{{ bill.type === "income" ? "+" : "−"
+                  }}</span>{{ bill.type === "income" ? "+" : "−"
                   }}{{ formatMoney(bill.amount) }}
                 </div>
                 <div
                   v-if="
-                    canWrite &&
-                    (canManage || bill.createdBy === identity.user?.id)
+                    canWrite
+                      && (canManage || bill.createdBy === identity.user?.id)
                   "
                   class="bill-actions"
                 >
@@ -441,8 +437,8 @@ onMounted(async () => {
                     title="编辑账单"
                     @click="openEditor(bill)"
                   >
-                    <AppIcon name="edit" :size="17" /></button
-                  ><button
+                    <AppIcon name="edit" :size="17" />
+                  </button><button
                     class="icon-button delete-action"
                     :aria-label="`删除 ${bill.date} ${categoryLabel(
                       bill.category,
@@ -456,11 +452,8 @@ onMounted(async () => {
               </article>
             </section>
             <footer class="pagination">
-              <span
-                >共 {{ total }} 笔<span class="pagination-page">
-                  · {{ page }} / {{ pageCount }} 页</span
-                ></span
-              >
+              <span>共 {{ total }} 笔<span class="pagination-page">
+                · {{ page }} / {{ pageCount }} 页</span></span>
               <div>
                 <button
                   class="icon-button"
@@ -468,8 +461,8 @@ onMounted(async () => {
                   :disabled="page <= 1"
                   @click="page--"
                 >
-                  <AppIcon name="left" :size="18" /></button
-                ><button
+                  <AppIcon name="left" :size="18" />
+                </button><button
                   class="icon-button"
                   aria-label="下一页"
                   :disabled="page >= pageCount"
@@ -498,8 +491,7 @@ onMounted(async () => {
               负净额分类已计入净支出；分布仅按正净额计算。
             </p>
             <div class="distribution-total">
-              <span>支出总额</span
-              ><strong>¥ {{ formatMoney(summary.expense) }}</strong>
+              <span>支出总额</span><strong>¥ {{ formatMoney(summary.expense) }}</strong>
             </div>
             <ol class="distribution-list">
               <li
@@ -507,14 +499,9 @@ onMounted(async () => {
                 :key="category.category"
               >
                 <div class="distribution-label">
-                  <span
-                    ><span class="category-index">{{
-                      String(index + 1).padStart(2, "0")
-                    }}</span
-                    >{{ categoryLabel(category.category) }}</span
-                  ><strong
-                    >{{ Math.round(category.percent) }}<small>%</small></strong
-                  >
+                  <span><span class="category-index">{{
+                    String(index + 1).padStart(2, "0")
+                  }}</span>{{ categoryLabel(category.category) }}</span><strong>{{ Math.round(category.percent) }}<small>%</small></strong>
                 </div>
                 <div class="category-bar">
                   <span
@@ -522,7 +509,7 @@ onMounted(async () => {
                       width: `${category.percent}%`,
                       opacity: Math.max(0.35, 1 - index * 0.11),
                     }"
-                  ></span>
+                  />
                 </div>
                 <div class="category-total">
                   ¥ {{ formatMoney(category.amount) }}
@@ -565,44 +552,35 @@ onMounted(async () => {
       >
         <legend class="sr-only">账单详情</legend>
         <div class="form-type-control">
-          <label :class="{ selected: draft.type === 'expense' }"
-            ><input
-              v-model="draft.type"
-              type="radio"
-              value="expense"
-              name="billType"
-            /><AppIcon name="arrowUp" :size="17" />支出</label
-          ><label :class="{ selected: draft.type === 'income' }"
-            ><input
-              v-model="draft.type"
-              type="radio"
-              value="income"
-              name="billType"
-            /><AppIcon name="arrowDown" :size="17" />收入</label
-          >
+          <label :class="{ selected: draft.type === 'expense' }"><input
+            v-model="draft.type"
+            type="radio"
+            value="expense"
+            name="billType"
+          ><AppIcon name="arrowUp" :size="17" />支出</label><label :class="{ selected: draft.type === 'income' }"><input
+            v-model="draft.type"
+            type="radio"
+            value="income"
+            name="billType"
+          ><AppIcon name="arrowDown" :size="17" />收入</label>
         </div>
-        <label class="amount-field"
-          ><span class="field-label"
-            >金额 <span class="required-mark">*</span></span
-          ><span class="amount-input-wrap"
-            ><span>¥</span
-            ><input
-              :ref="
-                (el) => {
-                  amountInput = el as HTMLInputElement | undefined;
-                }
-              "
-              v-model="draft.amount"
-              name="amount"
-              type="text"
-              inputmode="decimal"
-              autocomplete="off"
-              placeholder="0.00"
-              maxlength="12"
-              required
-              aria-label="金额"
-              :aria-describedby="formError ? 'form-error' : undefined" /></span
-        ></label>
+        <label class="amount-field"><span class="field-label">金额 <span class="required-mark">*</span></span><span class="amount-input-wrap"><span>¥</span><input
+          :ref="
+            (el) => {
+              amountInput = el as HTMLInputElement | undefined;
+            }
+          "
+          v-model="draft.amount"
+          name="amount"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="0.00"
+          maxlength="12"
+          required
+          aria-label="金额"
+          :aria-describedby="formError ? 'form-error' : undefined"
+        ></span></label>
         <fieldset class="category-field">
           <legend class="field-label">
             分类 <span class="required-mark">*</span>
@@ -627,17 +605,13 @@ onMounted(async () => {
           </button>
         </fieldset>
 
-        <label class="form-field"
-          ><span class="field-label"
-            >日期 <span class="required-mark">*</span></span
-          ><DateSheetField
-            v-model="draft.date"
-            label="选择账单日期"
-            :disabled="saving"
+        <label class="form-field"><span class="field-label">日期 <span class="required-mark">*</span></span><DateSheetField
+          v-model="draft.date"
+          label="选择账单日期"
+          :disabled="saving"
         /></label>
         <div class="form-field">
-          <span class="field-label">资金账户</span
-          ><SheetSelect
+          <span class="field-label">资金账户</span><SheetSelect
             :model-value="draft.accountId ?? ''"
             :options="[
               { value: '', label: '不指定账户' },
@@ -649,16 +623,13 @@ onMounted(async () => {
             @update:model-value="draft.accountId = $event || null"
           />
         </div>
-        <label class="form-field"
-          ><span class="field-label"
-            >备注 <span class="optional-label">选填</span></span
-          ><input
-            v-model="draft.note"
-            type="text"
-            name="note"
-            maxlength="200"
-            placeholder="这笔收支，想记点什么？"
-        /></label>
+        <label class="form-field"><span class="field-label">备注 <span class="optional-label">选填</span></span><input
+          v-model="draft.note"
+          type="text"
+          name="note"
+          maxlength="200"
+          placeholder="这笔收支，想记点什么？"
+        ></label>
         <AttachmentPicker
           v-if="editorOpen"
           :model-value="draft.attachmentResourceIds ?? []"
@@ -668,7 +639,12 @@ onMounted(async () => {
           @busy="uploadingAttachments = $event"
         />
       </fieldset>
-      <p v-if="formError" id="form-error" class="form-error" role="alert">
+      <p
+        v-if="formError"
+        id="form-error"
+        class="form-error"
+        role="alert"
+      >
         {{ formError }}
       </p>
     </form>
@@ -678,16 +654,17 @@ onMounted(async () => {
         class="button button-secondary"
         :disabled="saving || categorySaving || uploadingAttachments"
         @click="closeEditor"
-      >
-        取消</button
-      ><button
+      > 取消</button><button
         class="button button-primary"
         :disabled="saving || categorySaving || uploadingAttachments"
         type="submit"
         form="ledger-bill-form"
       >
-        <span v-if="saving" class="spinner small"></span
-        ><AppIcon v-else name="check" :size="18" />{{
+        <span v-if="saving" class="spinner small" /><AppIcon
+          v-else
+          name="check"
+          :size="18"
+        />{{
           saving ? "正在保存…" : "保存账单"
         }}
       </button>
@@ -749,13 +726,21 @@ onMounted(async () => {
     <div class="dialog-content">
       <span class="delete-symbol"><AppIcon name="trash" :size="24" /></span>
       <h2 id="delete-title">删除这笔账单？</h2>
-      <p v-if="deletingBill" id="delete-description" class="delete-description">
+      <p
+        v-if="deletingBill"
+        id="delete-description"
+        class="delete-description"
+      >
         {{ deletingBill.date }} 的{{ categoryLabel(deletingBill.category)
         }}{{ deletingBill.type === "income" ? "收入" : "支出" }} ¥
         {{ formatMoney(deletingBill.amount) }}
         将被删除，删除后移入回收站，可恢复。
       </p>
-      <p v-if="deleteError" class="form-error" role="alert">
+      <p
+        v-if="deleteError"
+        class="form-error"
+        role="alert"
+      >
         {{ deleteError }}
       </p>
       <div class="dialog-footer">
@@ -764,9 +749,7 @@ onMounted(async () => {
           autofocus
           :disabled="deleting"
           @click="closeDelete"
-        >
-          保留账单</button
-        ><button
+        > 保留账单</button><button
           class="button button-danger"
           :disabled="deleting"
           @click="removeBill"
@@ -777,11 +760,15 @@ onMounted(async () => {
     </div>
   </dialog>
 
-  <div class="toast-region" role="status" aria-live="polite">
-    <Transition name="toast"
-      ><div v-if="toast" class="toast-message">
+  <div
+    class="toast-region"
+    role="status"
+    aria-live="polite"
+  >
+    <Transition name="toast">
+      <div v-if="toast" class="toast-message">
         <AppIcon name="check" :size="18" />{{ toast }}
-      </div></Transition
-    >
+      </div>
+    </Transition>
   </div>
 </template>

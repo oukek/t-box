@@ -1,15 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "rootDir": "src",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
-    "skipLibCheck": true,
+    "noUncheckedIndexedAccess": true,
     "declaration": true,
-    "rootDir": "src",
     "outDir": "dist",
-    "lib": ["ES2022", "DOM"],
-    "noUncheckedIndexedAccess": true
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts"]
 }

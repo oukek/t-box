@@ -32,7 +32,7 @@
   font-size: 12px;
   white-space: nowrap;
 }
-.temporal-tabs button[aria-pressed="true"] {
+.temporal-tabs button[aria-pressed='true'] {
   background: #fff;
   color: #286c5e;
   box-shadow: 0 2px 5px #243f3210;
@@ -115,7 +115,7 @@
   gap: 14px;
   align-items: start;
 }
-.temporal-editor input:not([type="checkbox"]),
+.temporal-editor input:not([type='checkbox']),
 .temporal-editor textarea,
 .temporal-inline > input {
   width: 100%;
@@ -172,7 +172,7 @@
   font-size: 12px;
   color: #8a9c93;
 }
-.temporal-weekdays button[aria-pressed="true"] {
+.temporal-weekdays button[aria-pressed='true'] {
   color: #34796b;
   background: #eaf5ef;
   border-color: #a8c9b6;

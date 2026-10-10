@@ -1,4 +1,21 @@
-import { settingNumber } from "../configuration/defaults.js";
+import type { ChatServerEvent, ToolResult } from '@t-box/shared'
+import type { RunCheckpoint } from '../agent/checkpoint.js'
+import type { Actor, AgentRuntimeOptions } from '../agent/contracts.js'
+import type { AgentRunInput } from '../agent/runner.js'
+import type { ChatSession, SessionRepository } from './session.js'
+import { ApiError } from '@t-box/server-foundation/errors'
+import {
+  CHAT_LIMITS,
+} from '@t-box/shared'
+import { ResourceAuthorizationRequired } from '../agent/access.js'
+import { restoreCheckpoint } from '../agent/checkpoint.js'
+import { rebuildConversationHistory } from '../agent/history.js'
+import { runConversation } from '../agent/runner.js'
+import { object, parseDate, parseIdentifier } from '../agent/schema.js'
+import { authorizedSnapshot } from '../agent/snapshot.js'
+import { handleTaskCommand } from '../agent/task-commands.js'
+import { settingNumber } from '../configuration/defaults.js'
+import { retryPair } from './answer-retry.js'
 import {
   checkMessageRevision,
   deleteMessagePair,
@@ -6,162 +23,161 @@ import {
   messagePair,
   refreshMessageState,
   retireSuspendedTask,
-} from "./message-commands.js";
-import { rebuildConversationHistory } from "../agent/history.js";
-import { retryPair } from "./answer-retry.js";
-import { randomUUID } from "node:crypto";
-import {
-  CHAT_LIMITS,
-  type ChatServerEvent,
-  type ToolResult,
-} from "@t-box/shared";
-import { ApiError } from "@t-box/server-foundation/errors";
-import { ResourceAuthorizationRequired } from "../agent/access.js";
+} from './message-commands.js'
 import {
   MemorySessionRepository,
   snapshot,
-  type ChatSession,
-  type SessionRepository,
-} from "./session.js";
-import type { Actor, AgentRuntimeOptions } from "../agent/contracts.js";
-import { object, parseDate, parseIdentifier } from "../agent/schema.js";
-import { runConversation, type AgentRunInput } from "../agent/runner.js";
-import { authorizedSnapshot } from "../agent/snapshot.js";
-import { handleTaskCommand } from "../agent/task-commands.js";
-import { restoreCheckpoint, type RunCheckpoint } from "../agent/checkpoint.js";
-export type ChatServiceOptions = AgentRuntimeOptions;
+} from './session.js'
+
+export type ChatServiceOptions = AgentRuntimeOptions
 const fail = (code: string, message: string): never => {
-  throw new ApiError(400, code, message);
-};
+  throw new ApiError(400, code, message)
+}
 function id(value: unknown): string {
-  if (typeof value !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(value))
-    fail("INVALID_EVENT", "请求标识格式不正确");
-  return value as string;
+  if (typeof value !== 'string' || !/^[\w-]{1,100}$/.test(value)) {
+    fail('INVALID_EVENT', '请求标识格式不正确')
+  }
+  return value as string
 }
 function toolResult(value: unknown): ToolResult {
-  const result = object(value, ["ok", "data", "error"]);
-  if (result.ok === true) return { ok: true, data: result.data };
-  if (result.ok !== false) fail("INVALID_TOOL_RESULT", "工具回执格式不正确");
-  const error = object(result.error, ["code", "message"]);
+  const result = object(value, ['ok', 'data', 'error'])
+  if (result.ok === true) {
+    return { ok: true, data: result.data }
+  }
+  if (result.ok !== false) {
+    fail('INVALID_TOOL_RESULT', '工具回执格式不正确')
+  }
+  const error = object(result.error, ['code', 'message'])
   if (
-    typeof error.code !== "string" ||
+    typeof error.code !== 'string' ||
     error.code.length > 80 ||
-    typeof error.message !== "string" ||
+    typeof error.message !== 'string' ||
     error.message.length > 200
   ) {
-    fail("INVALID_TOOL_RESULT", "工具错误回执格式不正确");
+    fail('INVALID_TOOL_RESULT', '工具错误回执格式不正确')
   }
   return {
     ok: false,
     error: { code: error.code as string, message: error.message as string },
-  };
+  }
 }
 
 export class ChatService {
-  readonly sessions: SessionRepository;
+  readonly sessions: SessionRepository
   get access() {
-    return this.options.registry.access;
+    return this.options.registry.access
   }
+
   get registry() {
-    return this.options.registry;
+    return this.options.registry
   }
-  private readonly jobs = new Set<Promise<void>>();
+
+  private readonly jobs = new Set<Promise<void>>()
   constructor(private readonly options: ChatServiceOptions) {
-    this.sessions = options.sessions ?? new MemorySessionRepository();
+    this.sessions = options.sessions ?? new MemorySessionRepository()
   }
 
   private startRun(input: AgentRunInput) {
-    const job = runConversation(this.options, this.sessions, input);
-    this.jobs.add(job);
-    void job.finally(() => this.jobs.delete(job));
+    const job = runConversation(this.options, this.sessions, input)
+    this.jobs.add(job)
+    void job.finally(() => this.jobs.delete(job))
   }
 
   connect(send: (event: ChatServerEvent) => void) {
-    const owner = Symbol("chat socket");
-    let session: ChatSession | undefined;
-    let closed = false;
-    let ready = false;
-    let opening = false;
-    let principal: Actor | undefined;
+    const owner = Symbol('chat socket')
+    let session: ChatSession | undefined
+    let closed = false
+    let ready = false
+    let opening = false
+    let principal: Actor | undefined
     const receive = async (input: unknown) => {
-      if (closed) return;
-      let requestId: string | undefined;
+      if (closed) {
+        return
+      }
+      let requestId: string | undefined
       try {
-        if (!input || typeof input !== "object" || Array.isArray(input))
-          fail("INVALID_EVENT", "消息必须为 JSON 对象");
+        if (!input || typeof input !== 'object' || Array.isArray(input)) {
+          fail('INVALID_EVENT', '消息必须为 JSON 对象')
+        }
         const event = this.options.registry.decodeEvent(
           input as Record<string, unknown>,
-        );
-        if (event.type === "ping") {
-          object(event, ["type"]);
-          if (session) this.sessions.touch(session);
+        )
+        if (event.type === 'ping') {
+          object(event, ['type'])
+          if (session) {
+            this.sessions.touch(session)
+          }
           if (
             principal &&
             session?.conversationId &&
-            session.task?.status === "running" &&
+            session.task?.status === 'running' &&
             !session.active &&
             this.options.host?.tasks
           ) {
             session.task = await this.options.host.tasks.current(
               principal,
               session.conversationId,
-            );
+            )
             send({
-              type: "session.snapshot",
+              type: 'session.snapshot',
               snapshot: await authorizedSnapshot(
                 this.options,
                 session,
                 this.options.provider.mode,
                 principal,
               ),
-            });
+            })
           }
-          send({ type: "pong" });
-          return;
+          send({ type: 'pong' })
+          return
         }
-        if (event.type === "session.open") {
+        if (event.type === 'session.open') {
           object(event, [
-            "type",
-            "sessionId",
-            "token",
-            "authToken",
-            "conversationId",
-            "clientCapabilities",
-          ]);
-          if (session || opening)
-            fail("SESSION_ALREADY_OPEN", "此连接已绑定会话或正在建立会话");
-          opening = true;
+            'type',
+            'sessionId',
+            'token',
+            'authToken',
+            'conversationId',
+            'clientCapabilities',
+          ])
+          if (session || opening) {
+            fail('SESSION_ALREADY_OPEN', '此连接已绑定会话或正在建立会话')
+          }
+          opening = true
           try {
-            const capabilities = event.clientCapabilities;
+            const capabilities = event.clientCapabilities
             if (
               capabilities !== undefined &&
               (!Array.isArray(capabilities) ||
                 capabilities.length > 128 ||
                 capabilities.some(
                   (name) =>
-                    typeof name !== "string" ||
-                    !/^[a-zA-Z0-9_-]{1,64}$/.test(name),
+                    typeof name !== 'string' ||
+                    !/^[\w-]{1,64}$/.test(name),
                 ) ||
                 new Set(capabilities).size !== capabilities.length)
-            )
-              fail("INVALID_EVENT", "客户端能力列表无效");
-            if (this.options.host)
+            ) {
+              fail('INVALID_EVENT', '客户端能力列表无效')
+            }
+            if (this.options.host) {
               principal = await this.options.host.identity.authenticate(
-                typeof event.authToken === "string" ? event.authToken : "",
-              );
+                typeof event.authToken === 'string' ? event.authToken : '',
+              )
+            }
             const restoring =
-              event.sessionId !== undefined || event.token !== undefined;
+              event.sessionId !== undefined || event.token !== undefined
             if (
               restoring &&
-              (typeof event.sessionId !== "string" ||
-                typeof event.token !== "string" ||
+              (typeof event.sessionId !== 'string' ||
+                typeof event.token !== 'string' ||
                 event.token.length > 128)
-            )
-              fail("SESSION_INVALID", "恢复会话需要有效的会话 ID 和凭据");
+            ) {
+              fail('SESSION_INVALID', '恢复会话需要有效的会话 ID 和凭据')
+            }
             const conversationId =
               event.conversationId === undefined
                 ? undefined
-                : parseIdentifier(event.conversationId);
+                : parseIdentifier(event.conversationId)
             const live =
               conversationId && principal
                 ? [...this.sessions.all()].find(
@@ -169,32 +185,36 @@ export class ChatService {
                       s.conversationId === conversationId &&
                       s.userId === principal!.user.id,
                   )
-                : undefined;
-            let candidate: ChatSession;
-            let restored = restoring;
+                : undefined
+            let candidate: ChatSession
+            let restored = restoring
             if (restoring) {
               try {
                 candidate = this.sessions.restore(
                   event.sessionId as string,
                   event.token as string,
-                );
+                )
               } catch (error) {
                 if (
                   !(error instanceof ApiError) ||
-                  error.code !== "SESSION_EXPIRED" ||
+                  error.code !== 'SESSION_EXPIRED' ||
                   !principal ||
                   (conversationId && !this.options.host?.conversations)
-                )
-                  throw error;
+                ) {
+                  throw error
+                }
                 // Login authentication is required above. Expired transport credentials
                 // do not authorize history: archives still enforce ownership/access below.
                 // A blank conversation has no archive yet and can safely get a fresh transport.
-                candidate = live ?? this.sessions.create();
-                restored = Boolean(conversationId);
+                candidate = live ?? this.sessions.create()
+                restored = Boolean(conversationId)
               }
-            } else candidate = live ?? this.sessions.create();
-            if (candidate.owner)
-              fail("SESSION_IN_USE", "此会话正在另一个连接中使用");
+            } else {
+              candidate = live ?? this.sessions.create()
+            }
+            if (candidate.owner) {
+              fail('SESSION_IN_USE', '此会话正在另一个连接中使用')
+            }
             if (
               conversationId &&
               principal &&
@@ -204,8 +224,9 @@ export class ChatService {
                 if (
                   candidate.conversationId &&
                   candidate.conversationId !== conversationId
-                )
-                  fail("SESSION_INVALID", "会话记录与恢复参数不一致");
+                ) {
+                  fail('SESSION_INVALID', '会话记录与恢复参数不一致')
+                }
                 if (
                   !candidate.active &&
                   !candidate.finishing &&
@@ -216,124 +237,150 @@ export class ChatService {
                       principal,
                       conversationId,
                       candidate,
-                    );
+                    )
                   } catch (error) {
                     // Admission is durable before the first archive write. Recover even if
                     // that archive write failed; task ownership and resource grants still apply.
                     if (
                       !(error instanceof ApiError) ||
-                      error.code !== "CONVERSATION_NOT_FOUND" ||
+                      error.code !== 'CONVERSATION_NOT_FOUND' ||
                       !this.options.host.tasks
-                    )
-                      throw error;
+                    ) {
+                      throw error
+                    }
                     const task = await this.options.host.tasks.current(
                       principal,
                       conversationId,
-                    );
-                    if (!task) throw error;
+                    )
+                    if (!task) {
+                      throw error
+                    }
                     const saved = await this.options.host.tasks.get(
                       principal,
                       task.id,
-                    );
-                    const cp = saved.checkpoint as RunCheckpoint;
-                    if (cp.version !== 1) throw error;
+                    )
+                    const cp = saved.checkpoint as RunCheckpoint
+                    if (cp.version !== 1) {
+                      throw error
+                    }
                     await this.options.registry.access.history(
                       principal,
                       cp.session.messages,
-                    );
-                    restoreCheckpoint(candidate, cp);
-                    candidate.userId = principal.user.id;
-                    candidate.conversationId = conversationId;
-                    await this.options.host.conversations.save(candidate);
+                    )
+                    restoreCheckpoint(candidate, cp)
+                    candidate.userId = principal.user.id
+                    candidate.conversationId = conversationId
+                    await this.options.host.conversations.save(candidate)
                   }
                 } else if (candidate.archived) {
                   const saved = (await this.options.host.conversations.load(
                     principal,
                     conversationId,
-                  )) as { title?: string };
-                  candidate.title = saved?.title;
+                  )) as { title?: string }
+                  candidate.title = saved?.title
                 }
-                if (candidate.conversationId !== conversationId)
-                  fail("SESSION_INVALID", "会话记录与恢复参数不一致");
+                if (candidate.conversationId !== conversationId) {
+                  fail('SESSION_INVALID', '会话记录与恢复参数不一致')
+                }
               } catch (error) {
-                if (!candidate.conversationId)
-                  this.sessions.remove?.(candidate.id);
-                throw error;
+                if (!candidate.conversationId) {
+                  this.sessions.remove?.(candidate.id)
+                }
+                throw error
               }
             }
             if (
               principal &&
               candidate.userId &&
               candidate.userId !== principal.user.id
-            )
-              fail("SESSION_INVALID", "会话不属于当前用户");
-            if (principal) candidate.userId = principal.user.id;
-            this.options.registry.migrateSession(candidate);
+            ) {
+              fail('SESSION_INVALID', '会话不属于当前用户')
+            }
+            if (principal) {
+              candidate.userId = principal.user.id
+            }
+            this.options.registry.migrateSession(candidate)
             if (candidate.rebuildHistory) {
               candidate.history = rebuildConversationHistory(
                 candidate,
                 this.options.registry,
                 this.options.host?.attachments,
-              );
-              candidate.contextState = {};
-              delete candidate.rebuildHistory;
+              )
+              candidate.contextState = {}
+              delete candidate.rebuildHistory
             }
-            if (principal)
+            if (principal) {
               await this.options.registry.access.history(
                 principal,
                 candidate.messages,
-              );
-            if (candidate.owner)
-              fail("SESSION_IN_USE", "此会话正在另一个连接中使用");
-            if (closed) {
-              if (!candidate.owner && !candidate.active && !candidate.finishing)
-                this.sessions.remove?.(candidate.id);
-              return;
+              )
             }
-            session = candidate;
-            session.owner = owner;
-            session.clientCapabilities = capabilities as string[] | undefined;
+            if (candidate.owner) {
+              fail('SESSION_IN_USE', '此会话正在另一个连接中使用')
+            }
+            if (closed) {
+              if (!candidate.owner && !candidate.active && !candidate.finishing) {
+                this.sessions.remove?.(candidate.id)
+              }
+              return
+            }
+            session = candidate
+            session.owner = owner
+            session.clientCapabilities = capabilities as string[] | undefined
             session.send = (event) => {
-              if (!closed && ready && session?.owner === owner) send(event);
-            };
-            if (this.options.provider.forRun)
-              session.mode = (await this.options.provider.forRun()).mode;
-            if (closed) return;
-            if (principal && session.conversationId && this.options.host?.tasks)
+              if (!closed && ready && session?.owner === owner) {
+                send(event)
+              }
+            }
+            if (this.options.provider.forRun) {
+              session.mode = (await this.options.provider.forRun()).mode
+            }
+            if (closed) {
+              return
+            }
+            if (principal && session.conversationId && this.options.host?.tasks) {
               session.task = await this.options.host.tasks.current(
                 principal,
                 session.conversationId,
-              );
-            if (closed || session.owner !== owner) return;
+              )
+            }
+            if (closed || session.owner !== owner) {
+              return
+            }
             const configuration = this.options.configuration
               ? await this.options.configuration.snapshot()
-              : undefined;
-            if (closed || session.owner !== owner) return;
-            ready = true;
+              : undefined
+            if (closed || session.owner !== owner) {
+              return
+            }
+            ready = true
             send({
-              type: "session.ready",
+              type: 'session.ready',
               token: session.token,
               restored,
               snapshot: snapshot(session, this.options.provider.mode),
-            });
-            if (configuration) send({
-              type: "runtime.configuration",
-              maxMessageLength: settingNumber(
-                configuration,
-                "ai.input.maxLength",
-                CHAT_LIMITS.maxMessageLength,
-              ),
-            });
-            return;
+            })
+            if (configuration) {
+              send({
+                type: 'runtime.configuration',
+                maxMessageLength: settingNumber(
+                  configuration,
+                  'ai.input.maxLength',
+                  CHAT_LIMITS.maxMessageLength,
+                ),
+              })
+            }
+            return
           } finally {
-            opening = false;
+            opening = false
           }
         }
-        if (!ready || !session || session.owner !== owner)
-          fail("SESSION_REQUIRED", "请先建立会话");
-        let current = session!;
-        this.sessions.touch(current);
-        if (event.type === "task.cancel" || event.type === "task.resume") {
+        if (!ready || !session || session.owner !== owner) {
+          fail('SESSION_REQUIRED', '请先建立会话')
+        }
+        let current = session!
+        this.sessions.touch(current)
+        if (event.type === 'task.cancel' || event.type === 'task.resume') {
           await handleTaskCommand(
             this.options,
             current,
@@ -341,16 +388,17 @@ export class ChatService {
             event,
             () => !closed && current.owner === owner,
             (input) => this.startRun(input),
-          );
-          return;
+          )
+          return
         }
-        if (event.type === "message.delete") {
-          object(event, ["type", "requestId", "messageId", "expectedRevision"]);
-          requestId = id(event.requestId);
-          const messageId = id(event.messageId);
-          if (current.active || current.finishing)
-            fail("RUN_IN_PROGRESS", "请等待生成结束后再删除");
-          current.finishing = true;
+        if (event.type === 'message.delete') {
+          object(event, ['type', 'requestId', 'messageId', 'expectedRevision'])
+          requestId = id(event.requestId)
+          const messageId = id(event.messageId)
+          if (current.active || current.finishing) {
+            fail('RUN_IN_PROGRESS', '请等待生成结束后再删除')
+          }
+          current.finishing = true
           try {
             const messageIds = await deleteMessagePair(
               this.options,
@@ -361,9 +409,9 @@ export class ChatService {
                 messageId,
                 expectedRevision: event.expectedRevision,
               },
-            );
+            )
             send({
-              type: "message.deleted",
+              type: 'message.deleted',
               requestId,
               messageIds,
               snapshot: await authorizedSnapshot(
@@ -372,63 +420,71 @@ export class ChatService {
                 this.options.provider.mode,
                 principal,
               ),
-            });
+            })
           } finally {
-            current.finishing = false;
+            current.finishing = false
           }
-          return;
+          return
         }
-        if (event.type === "message.retry") {
-          object(event, ["type", "requestId", "messageId", "expectedRevision"]);
-          requestId = id(event.requestId);
-          const messageId = id(event.messageId);
-          if (current.active || current.finishing)
-            fail("RUN_IN_PROGRESS", "请等待生成结束后再重试");
-          current.finishing = true;
-          let retryInput: AgentRunInput | undefined;
+        if (event.type === 'message.retry') {
+          object(event, ['type', 'requestId', 'messageId', 'expectedRevision'])
+          requestId = id(event.requestId)
+          const messageId = id(event.messageId)
+          if (current.active || current.finishing) {
+            fail('RUN_IN_PROGRESS', '请等待生成结束后再重试')
+          }
+          current.finishing = true
+          let retryInput: AgentRunInput | undefined
           try {
-            await refreshMessageState(this.options, current, principal);
-            if (closed || current.owner !== owner) return;
-            const duplicate = current.requests.get(requestId);
-            if (duplicate) {
-              if (duplicate.retryMessageId !== messageId)
-                fail("REQUEST_ID_CONFLICT", "同一请求 ID 不可用于不同重试");
-              send({
-                type: "session.snapshot",
-                snapshot: snapshot(current, this.options.provider.mode),
-              });
-              return;
+            await refreshMessageState(this.options, current, principal)
+            if (closed || current.owner !== owner) {
+              return
             }
-            checkMessageRevision(current, event.expectedRevision);
-            const pair = retryPair(current, messageId);
+            const duplicate = current.requests.get(requestId)
+            if (duplicate) {
+              if (duplicate.retryMessageId !== messageId) {
+                fail('REQUEST_ID_CONFLICT', '同一请求 ID 不可用于不同重试')
+              }
+              send({
+                type: 'session.snapshot',
+                snapshot: snapshot(current, this.options.provider.mode),
+              })
+              return
+            }
+            checkMessageRevision(current, event.expectedRevision)
+            const pair = retryPair(current, messageId)
             const provider = this.options.provider.forRun
               ? await this.options.provider.forRun()
-              : this.options.provider;
-            if (provider.mode === "unconfigured")
+              : this.options.provider
+            if (provider.mode === 'unconfigured') {
               throw new ApiError(
                 503,
-                "AI_NOT_CONFIGURED",
-                "尚未接入 AI，请先在后台配置并启用普通会话模型。",
-              );
-            if (current.requests.size >= 1000)
-              fail("SESSION_LIMIT", "当前会话已达长度上限，请新建对话");
-            await retireSuspendedTask(this.options, current, principal);
-            if (closed || current.owner !== owner) return;
+                'AI_NOT_CONFIGURED',
+                '尚未接入 AI，请先在后台配置并启用普通会话模型。',
+              )
+            }
+            if (current.requests.size >= 1000) {
+              fail('SESSION_LIMIT', '当前会话已达长度上限，请新建对话')
+            }
+            await retireSuspendedTask(this.options, current, principal)
+            if (closed || current.owner !== owner) {
+              return
+            }
             const bindings = this.options.registry.access.references(
               pair.messages,
-            );
-            const originalDate = new Date(pair.user.createdAt);
+            )
+            const originalDate = new Date(pair.user.createdAt)
             const localDate = parseDate(
               pair.user.localDate ||
-                (Number.isNaN(originalDate.getTime())
-                  ? new Date()
-                  : originalDate
-                )
-                  .toISOString()
-                  .slice(0, 10),
-            );
-            const applicationIds = pair.user.applicationIds || [];
-            const attachments = pair.user.attachments || [];
+              (Number.isNaN(originalDate.getTime())
+                ? new Date()
+                : originalDate
+              )
+                .toISOString()
+                .slice(0, 10),
+            )
+            const applicationIds = pair.user.applicationIds || []
+            const attachments = pair.user.attachments || []
             current.requests.set(requestId, {
               text: pair.user.content,
               localDate,
@@ -436,7 +492,7 @@ export class ChatService {
               attachmentIds: attachments.map((r) => r.id),
               applicationIds,
               retryMessageId: messageId,
-            });
+            })
             retryInput = {
               session: current,
               requestId,
@@ -448,138 +504,154 @@ export class ChatService {
               provider,
               applicationIds,
               retry: { assistantId: messageId },
-            };
+            }
           } finally {
-            current.finishing = false;
+            current.finishing = false
           }
-          if (retryInput) this.startRun(retryInput);
-          return;
+          if (retryInput) {
+            this.startRun(retryInput)
+          }
+          return
         }
-        if (event.type === "message.send" || event.type === "message.resend") {
+        if (event.type === 'message.send' || event.type === 'message.resend') {
           object(event, [
-            "type",
-            "requestId",
-            "text",
-            "localDate",
-            "scopeBindings",
-            "attachmentIds",
-            "applicationIds",
-            ...(event.type === "message.resend"
-              ? ["sourceMessageId", "expectedRevision"]
+            'type',
+            'requestId',
+            'text',
+            'localDate',
+            'scopeBindings',
+            'attachmentIds',
+            'applicationIds',
+            ...(event.type === 'message.resend'
+              ? ['sourceMessageId', 'expectedRevision']
               : []),
-          ]);
-          requestId = id(event.requestId);
+          ])
+          requestId = id(event.requestId)
           const sourceMessageId =
-            event.type === "message.resend"
+            event.type === 'message.resend'
               ? id(event.sourceMessageId)
-              : undefined;
+              : undefined
           const maxLength = settingNumber(
             this.options.configuration
               ? await this.options.configuration.snapshot()
               : undefined,
-            "ai.input.maxLength",
+            'ai.input.maxLength',
             CHAT_LIMITS.maxMessageLength,
-          );
+          )
           if (
-            typeof event.text !== "string" ||
+            typeof event.text !== 'string' ||
             !event.text.trim() ||
             event.text.length > maxLength
-          )
-            fail("INVALID_EVENT", `消息长度应为 1–${maxLength} 字`);
-          const localDate = parseDate(event.localDate);
-          const text = (event.text as string).trim();
+          ) {
+            fail('INVALID_EVENT', `消息长度应为 1–${maxLength} 字`)
+          }
+          const localDate = parseDate(event.localDate)
+          const text = (event.text as string).trim()
           const applicationIds = this.options.registry.parseApplications(
             event.applicationIds,
-          );
+          )
           const bindings = this.options.registry.access.parse(
             event.scopeBindings,
-          );
-          if (principal)
-            for (const ref of bindings)
+          )
+          if (principal) {
+            for (const ref of bindings) {
               await this.options.registry.access.inspect(
                 principal,
                 ref,
-                "read",
-                "选择应用资源",
-              );
-          if (principal)
+                'read',
+                '选择应用资源',
+              )
+            }
+          }
+          if (principal) {
             await this.options.host!.identity.authenticateHash(
               principal.sessionHash,
-            );
+            )
+          }
           const attachments =
             principal && this.options.host?.attachments
               ? await this.options.host.attachments.attachments(
                   principal,
                   event.attachmentIds,
                 )
-              : [];
-          const attachmentIds = attachments.map((r) => r.id);
+              : []
+          const attachmentIds = attachments.map((r) => r.id)
           if (current.conversationId && this.options.host?.conversations) {
             const exists = await this.options.host.conversations.exists(
               principal!,
               current.conversationId,
-            );
-            if (!exists)
-              fail("CONVERSATION_NOT_FOUND", "会话已删除，请新建会话");
+            )
+            if (!exists) {
+              fail('CONVERSATION_NOT_FOUND', '会话已删除，请新建会话')
+            }
           }
           const provider = this.options.provider.forRun
             ? await this.options.provider.forRun()
-            : this.options.provider;
-          if (closed || current.owner !== owner) return;
-          current.mode = provider.mode;
-          const duplicate = current.requests.get(requestId);
+            : this.options.provider
+          if (closed || current.owner !== owner) {
+            return
+          }
+          current.mode = provider.mode
+          const duplicate = current.requests.get(requestId)
           if (duplicate) {
-            if (principal)
+            if (principal) {
               await this.options.registry.access.history(
                 principal,
                 current.messages,
-              );
+              )
+            }
             // Recheck after asynchronous access checks: two receives must not start the same run.
-            if (closed || current.owner !== owner) return;
+            if (closed || current.owner !== owner) {
+              return
+            }
             if (
               duplicate.retryMessageId ||
               duplicate.sourceMessageId !== sourceMessageId ||
               duplicate.text !== text ||
               duplicate.localDate !== localDate ||
               JSON.stringify(duplicate.scopeBindings || []) !==
-                JSON.stringify(bindings) ||
+              JSON.stringify(bindings) ||
               JSON.stringify(duplicate.attachmentIds || []) !==
-                JSON.stringify(attachmentIds) ||
+              JSON.stringify(attachmentIds) ||
               JSON.stringify(duplicate.applicationIds || []) !==
-                JSON.stringify(applicationIds)
-            )
-              fail("REQUEST_ID_CONFLICT", "同一请求 ID 不可用于不同消息");
+              JSON.stringify(applicationIds)
+            ) {
+              fail('REQUEST_ID_CONFLICT', '同一请求 ID 不可用于不同消息')
+            }
             send({
-              type: "session.snapshot",
+              type: 'session.snapshot',
               snapshot: snapshot(current, this.options.provider.mode),
-            });
-            return;
+            })
+            return
           }
-          if (provider.mode === "unconfigured") {
+          if (provider.mode === 'unconfigured') {
             send({
-              type: "session.snapshot",
+              type: 'session.snapshot',
               snapshot: snapshot(current, provider.mode),
-            });
+            })
             throw new ApiError(
               503,
-              "AI_NOT_CONFIGURED",
-              "尚未接入 AI，请先在后台配置并启用普通会话模型。",
-            );
+              'AI_NOT_CONFIGURED',
+              '尚未接入 AI，请先在后台配置并启用普通会话模型。',
+            )
           }
-          if (current.active || current.finishing)
-            fail("RUN_IN_PROGRESS", "当前任务尚未结束，请等待或停止");
-          const locked = current;
-          locked.finishing = true;
-          let branch: ChatSession | undefined;
+          if (current.active || current.finishing) {
+            fail('RUN_IN_PROGRESS', '当前任务尚未结束，请等待或停止')
+          }
+          const locked = current
+          locked.finishing = true
+          let branch: ChatSession | undefined
           try {
             await refreshMessageState(
               this.options,
               current,
               principal,
               !!sourceMessageId,
-            );
-            if (closed || current.owner !== owner) return;
-            const savedRequest = current.requests.get(requestId);
+            )
+            if (closed || current.owner !== owner) {
+              return
+            }
+            const savedRequest = current.requests.get(requestId)
             if (savedRequest) {
               if (
                 savedRequest.retryMessageId ||
@@ -587,55 +659,61 @@ export class ChatService {
                 savedRequest.text !== text ||
                 savedRequest.localDate !== localDate ||
                 JSON.stringify(savedRequest.scopeBindings || []) !==
-                  JSON.stringify(bindings) ||
+                JSON.stringify(bindings) ||
                 JSON.stringify(savedRequest.attachmentIds || []) !==
-                  JSON.stringify(attachmentIds) ||
+                JSON.stringify(attachmentIds) ||
                 JSON.stringify(savedRequest.applicationIds || []) !==
-                  JSON.stringify(applicationIds)
-              )
-                fail("REQUEST_ID_CONFLICT", "同一请求 ID 不可用于不同消息");
+                JSON.stringify(applicationIds)
+              ) {
+                fail('REQUEST_ID_CONFLICT', '同一请求 ID 不可用于不同消息')
+              }
               send({
-                type: "session.snapshot",
+                type: 'session.snapshot',
                 snapshot: snapshot(current, provider.mode),
-              });
-              return;
+              })
+              return
             }
             if (sourceMessageId) {
-              checkMessageRevision(current, event.expectedRevision);
-              const pair = messagePair(current.messages, sourceMessageId);
-              if (pair.messages[0]!.id !== sourceMessageId)
-                fail("MESSAGE_ROLE_INVALID", "只能修改用户发送的问题");
+              checkMessageRevision(current, event.expectedRevision)
+              const pair = messagePair(current.messages, sourceMessageId)
+              if (pair.messages[0]!.id !== sourceMessageId) {
+                fail('MESSAGE_ROLE_INVALID', '只能修改用户发送的问题')
+              }
             }
-            await retireSuspendedTask(this.options, current, principal);
-            if (closed || current.owner !== owner) return;
-            if (sourceMessageId)
+            await retireSuspendedTask(this.options, current, principal)
+            if (closed || current.owner !== owner) {
+              return
+            }
+            if (sourceMessageId) {
               branch = forkMessageConversation(
                 this.options,
                 current,
                 this.sessions,
                 sourceMessageId,
-              );
+              )
+            }
           } finally {
-            locked.finishing = false;
+            locked.finishing = false
           }
           if (branch) {
-            current.owner = undefined;
-            current.send = undefined;
-            session = current = branch;
-            current.owner = owner;
-            current.send = send;
+            current.owner = undefined
+            current.send = undefined
+            session = current = branch
+            current.owner = owner
+            current.send = send
             send({
-              type: "session.ready",
+              type: 'session.ready',
               token: current.token,
               snapshot: snapshot(current, provider.mode),
               restored: false,
-            });
+            })
           }
-          if (current.requests.size >= 1000)
+          if (current.requests.size >= 1000) {
             fail(
-              "SESSION_LIMIT",
-              "当前会话已达长度上限，请新建对话；已完成的操作会保留",
-            );
+              'SESSION_LIMIT',
+              '当前会话已达长度上限，请新建对话；已完成的操作会保留',
+            )
+          }
           current.requests.set(requestId, {
             text,
             localDate,
@@ -643,8 +721,8 @@ export class ChatService {
             attachmentIds,
             applicationIds,
             sourceMessageId,
-          });
-          current.scopeBindings = bindings;
+          })
+          current.scopeBindings = bindings
           // runConversation() establishes the lock synchronously before its first await.
           this.startRun({
             session: current,
@@ -656,19 +734,20 @@ export class ChatService {
             attachments,
             provider,
             applicationIds,
-          });
-          return;
+          })
+          return
         }
-        if (event.type === "run.cancel") {
-          object(event, ["type", "runId"]);
-          if (!current.active || event.runId !== current.active.view.id)
-            fail("RUN_NOT_FOUND", "任务已结束或不存在");
-          current.active!.abort.abort("CANCELLED");
-          return;
+        if (event.type === 'run.cancel') {
+          object(event, ['type', 'runId'])
+          if (!current.active || event.runId !== current.active.view.id) {
+            fail('RUN_NOT_FOUND', '任务已结束或不存在')
+          }
+          current.active!.abort.abort('CANCELLED')
+          return
         }
-        if (event.type === "tool.result") {
-          object(event, ["type", "runId", "callId", "result"]);
-          const run = current.active;
+        if (event.type === 'tool.result') {
+          object(event, ['type', 'runId', 'callId', 'result'])
+          const run = current.active
           if (
             !run ||
             run.abort.signal.aborted ||
@@ -677,44 +756,45 @@ export class ChatService {
             run.pending?.owner !== owner
           ) {
             fail(
-              "INVALID_TOOL_RESULT",
-              "回执不属于此连接的待执行工具，或已经过期",
-            );
+              'INVALID_TOOL_RESULT',
+              '回执不属于此连接的待执行工具，或已经过期',
+            )
           }
-          run!.pending!.settle(toolResult(event.result));
-          return;
+          run!.pending!.settle(toolResult(event.result))
+          return
         }
-        fail("INVALID_EVENT", "未知的消息类型");
+        fail('INVALID_EVENT', '未知的消息类型')
       } catch (error) {
         send({
-          type: "error",
-          code: error instanceof ApiError ? error.code : "INVALID_EVENT",
-          message: error instanceof ApiError ? error.message : "消息格式不正确",
+          type: 'error',
+          code: error instanceof ApiError ? error.code : 'INVALID_EVENT',
+          message: error instanceof ApiError ? error.message : '消息格式不正确',
           ...(requestId ? { requestId } : {}),
           ...(error instanceof ResourceAuthorizationRequired
             ? { resourceRefs: [error.resource] }
             : {}),
-        });
+        })
       }
-    };
+    }
     return {
       receive,
       close() {
-        closed = true;
+        closed = true
         if (session?.owner === owner) {
-          session.owner = undefined;
-          session.send = undefined;
+          session.owner = undefined
+          session.send = undefined
           // A socket is a subscriber. Only an outstanding UI request needs to pause execution.
-          session.active?.pending?.disconnect();
+          session.active?.pending?.disconnect()
         }
       },
-    };
+    }
   }
 
   async close() {
-    for (const session of this.sessions.all())
-      session.active?.abort.abort("DISCONNECTED");
-    await Promise.allSettled(this.jobs);
-    this.sessions.clear();
+    for (const session of this.sessions.all()) {
+      session.active?.abort.abort('DISCONNECTED')
+    }
+    await Promise.allSettled(this.jobs)
+    this.sessions.clear()
   }
 }

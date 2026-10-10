@@ -1,1 +1,1 @@
-export { marketManifest } from "@t-box/market-contracts";
+export { marketManifest } from '@t-box/market-contracts'

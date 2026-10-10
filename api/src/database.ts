@@ -1,10 +1,10 @@
-import { createDataSource } from "./db/data-source.js";
-import { createClient } from "redis";
-import type { getConfig } from "./config.js";
-import type { DependencyHealth } from "./app.js";
+import type { DependencyHealth } from './app.js'
+import type { getConfig } from './config.js'
+import { createClient } from 'redis'
+import { createDataSource } from './db/data-source.js'
 
 export async function createDatabase(config: ReturnType<typeof getConfig>) {
-  const source = await createDataSource(config.mysql).initialize();
+  const source = await createDataSource(config.mysql).initialize()
   const redis = config.redis
     ? createClient({
         ...config.redis,
@@ -15,36 +15,38 @@ export async function createDatabase(config: ReturnType<typeof getConfig>) {
             Math.min(500 * (retries + 1), 30_000),
         },
       })
-    : undefined;
+    : undefined
 
   // Redis is optional: it reconnects in the background and never blocks bill writes.
-  redis?.on("error", () => {
+  redis?.on('error', () => {
     /* Exposed by /health without printing connection credentials. */
-  });
-  void redis?.connect().catch(() => {});
+  })
+  void redis?.connect().catch(() => {})
 
   return {
     source,
     redis,
     async health(): Promise<DependencyHealth> {
       const [mysqlResult, redisResult] = await Promise.allSettled([
-        source.query("SELECT 1"),
+        source.query('SELECT 1'),
         redis?.isReady
           ? redis.ping()
-          : Promise.reject(new Error("Redis unavailable")),
-      ]);
+          : Promise.reject(new Error('Redis unavailable')),
+      ])
       return {
-        mysql: mysqlResult.status === "fulfilled" ? "up" : "down",
+        mysql: mysqlResult.status === 'fulfilled' ? 'up' : 'down',
         redis: !redis
-          ? "disabled"
-          : redisResult.status === "fulfilled"
-            ? "up"
-            : "down",
-      };
+          ? 'disabled'
+          : redisResult.status === 'fulfilled'
+            ? 'up'
+            : 'down',
+      }
     },
     async close() {
-      if (redis?.isOpen) redis.destroy();
-      await source.destroy();
+      if (redis?.isOpen) {
+        redis.destroy()
+      }
+      await source.destroy()
     },
-  };
+  }
 }

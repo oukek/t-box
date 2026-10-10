@@ -1,5 +1,6 @@
-import { randomUUID } from "node:crypto";
-import type { EntityManager } from "typeorm";
+import type { EntityManager } from 'typeorm'
+import { randomUUID } from 'node:crypto'
+
 export async function audit(
   db: EntityManager,
   ledgerId: string,
@@ -9,7 +10,7 @@ export async function audit(
   details: unknown = {},
 ) {
   await db.query(
-    "INSERT INTO ledger_audit(id,ledger_id,user_id,action,subject_id,details) VALUES(?,?,?,?,?,?)",
+    'INSERT INTO ledger_audit(id,ledger_id,user_id,action,subject_id,details) VALUES(?,?,?,?,?,?)',
     [
       randomUUID(),
       ledgerId,
@@ -18,5 +19,5 @@ export async function audit(
       subjectId,
       JSON.stringify(details),
     ],
-  );
+  )
 }

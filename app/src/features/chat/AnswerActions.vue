@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import MessageActionButton from "./MessageActionButton.vue";
-import MessageCopyButton from "./MessageCopyButton.vue";
+import MessageActionButton from './MessageActionButton.vue'
+import MessageCopyButton from './MessageCopyButton.vue'
+
 defineProps<{
-  text: string;
-  retryDisabled: boolean;
-  copyingDisabled: boolean;
-}>();
-const emit = defineEmits<{ retry: [] }>();
+  text: string
+  retryDisabled: boolean
+  copyingDisabled: boolean
+}>()
+const emit = defineEmits<{ retry: [] }>()
 </script>
+
 <template>
   <div class="answer-actions" aria-label="回答操作">
     <MessageCopyButton
@@ -24,6 +26,7 @@ const emit = defineEmits<{ retry: [] }>();
     />
   </div>
 </template>
+
 <style scoped>
 .answer-actions {
   display: flex;

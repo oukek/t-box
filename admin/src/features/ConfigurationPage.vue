@@ -1,75 +1,78 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
 import type {
-  ConfigurationView,
+  ConfigurationHistory,
   ConfigurationItem,
   ConfigurationValue,
-  ConfigurationHistory,
-} from "@t-box/shared";
-import { request, save, errorMessage } from "../core/api";
-import AdminDialog from "../components/AdminDialog.vue";
-import AdminSelect from "../components/AdminSelect.vue";
-const view = ref<ConfigurationView>();
-const error = ref(""),
-  dialogError = ref(""),
-  busy = ref(false),
-  query = ref(""),
-  selected = ref<ConfigurationItem>(),
-  value = ref<ConfigurationValue>(""),
-  note = ref(""),
-  history = ref<ConfigurationHistory[]>([]),
-  historyOpen = ref(false);
+  ConfigurationView,
+} from '@t-box/shared'
+import { computed, onMounted, ref } from 'vue'
+import AdminDialog from '../components/AdminDialog.vue'
+import AdminSelect from '../components/AdminSelect.vue'
+import { errorMessage, request, save } from '../core/api'
+
+const view = ref<ConfigurationView>()
+const error = ref('')
+const dialogError = ref('')
+const busy = ref(false)
+const query = ref('')
+const selected = ref<ConfigurationItem>()
+const value = ref<ConfigurationValue>('')
+const note = ref('')
+const history = ref<ConfigurationHistory[]>([])
+const historyOpen = ref(false)
 const textValue = computed({
   get: () => String(value.value),
   set: (v: string) => {
-    value.value = v;
+    value.value = v
   },
-});
+})
 const numberValue = computed({
   get: () => Number(value.value),
   set: (v: number) => {
-    value.value = v;
+    value.value = v
   },
-});
+})
 const booleanValue = computed({
   get: () => Boolean(value.value),
   set: (v: boolean) => {
-    value.value = v;
+    value.value = v
   },
-});
+})
 const groups = computed(() => [
   ...new Set(view.value?.items.filter(matches).map((i) => i.group)),
-]);
+])
 function matches(item: ConfigurationItem) {
   return `${item.group} ${item.title} ${item.key} ${item.description}`
     .toLowerCase()
-    .includes(query.value.toLowerCase());
+    .includes(query.value.toLowerCase())
 }
 function items(group: string) {
-  return view.value?.items.filter((i) => i.group === group && matches(i)) || [];
+  return view.value?.items.filter((i) => i.group === group && matches(i)) || []
 }
 async function load() {
-  busy.value = true;
-  error.value = "";
+  busy.value = true
+  error.value = ''
   try {
-    view.value = await request<ConfigurationView>("/configuration");
+    view.value = await request<ConfigurationView>('/configuration')
   } catch (e) {
-    error.value = errorMessage(e);
+    error.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 function edit(item: ConfigurationItem) {
-  selected.value = item;
-  value.value = item.value;
-  note.value = "";
-  dialogError.value = "";
-  historyOpen.value = false;
+  selected.value = item
+  value.value = item.value
+  note.value = ''
+  dialogError.value = ''
+  historyOpen.value = false
 }
 async function submit(restoreRevision?: number) {
-  if (!selected.value || !view.value) return;
-  busy.value = true;
-  dialogError.value = "";
+  if (!selected.value || !view.value) {
+    return
+  }
+  busy.value = true
+  dialogError.value = ''
   try {
     view.value = await save<ConfigurationView>(
       `/configuration/${encodeURIComponent(selected.value.key)}`,
@@ -80,32 +83,33 @@ async function submit(restoreRevision?: number) {
           : { restoreRevision }),
         note: note.value,
       },
-      "PATCH",
-    );
-    selected.value = undefined;
-    historyOpen.value = false;
+      'PATCH',
+    )
+    selected.value = undefined
+    historyOpen.value = false
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 async function showHistory(item: ConfigurationItem) {
-  edit(item);
-  busy.value = true;
+  edit(item)
+  busy.value = true
   try {
     history.value = await request<ConfigurationHistory[]>(
       `/configuration/${encodeURIComponent(item.key)}/history`,
-    );
-    historyOpen.value = true;
+    )
+    historyOpen.value = true
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
-onMounted(load);
+onMounted(load)
 </script>
+
 <template>
   <header class="page-heading">
     <div>
@@ -115,7 +119,13 @@ onMounted(load);
     </div>
     <button :disabled="busy" @click="load">刷新</button>
   </header>
-  <p v-if="error" class="alert" role="alert">{{ error }}</p>
+  <p
+    v-if="error"
+    class="alert"
+    role="alert"
+  >
+    {{ error }}
+  </p>
   <section class="panel configuration-intro">
     <div>
       <span class="badge">版本 {{ view?.revision || "—" }}</span>
@@ -133,7 +143,7 @@ onMounted(load);
       type="search"
       aria-label="搜索配置"
       placeholder="搜索配置名称或键名"
-    />
+    >
   </section>
   <section
     v-for="group in groups"
@@ -141,7 +151,11 @@ onMounted(load);
     class="panel configuration-group"
   >
     <h2>{{ group }}</h2>
-    <div v-for="item in items(group)" :key="item.key" class="configuration-row">
+    <div
+      v-for="item in items(group)"
+      :key="item.key"
+      class="configuration-row"
+    >
       <div class="configuration-copy">
         <h3>{{ item.title }}</h3>
         <code>{{ item.key }}</code>
@@ -152,8 +166,7 @@ onMounted(load);
         }}</small>
       </div>
       <div class="configuration-actions">
-        <button :disabled="busy" @click="edit(item)">编辑</button
-        ><button :disabled="busy" @click="showHistory(item)">历史</button>
+        <button :disabled="busy" @click="edit(item)">编辑</button><button :disabled="busy" @click="showHistory(item)">历史</button>
       </div>
     </div>
   </section>
@@ -167,14 +180,19 @@ onMounted(load);
       historyOpen = false;
     "
   >
-    <p v-if="dialogError" class="alert" role="alert">{{ dialogError }}</p>
+    <p
+      v-if="dialogError"
+      class="alert"
+      role="alert"
+    >
+      {{ dialogError }}
+    </p>
     <template v-if="selected">
       <div v-if="historyOpen" class="configuration-history">
         <article v-for="entry in history" :key="entry.revision">
           <strong>{{
             entry.revision === 0 ? "平台默认值" : `版本 ${entry.revision}`
-          }}</strong
-          ><small>{{ new Date(entry.createdAt).toLocaleString() }}</small>
+          }}</strong><small>{{ new Date(entry.createdAt).toLocaleString() }}</small>
           <pre>{{ entry.value }}</pre>
           <p>{{ entry.note }}</p>
           <button :disabled="busy" @click="submit(entry.revision)">
@@ -182,67 +200,67 @@ onMounted(load);
           </button>
         </article>
       </div>
-      <form v-else id="configuration-form" @submit.prevent="submit()">
+      <form
+        v-else
+        id="configuration-form"
+        @submit.prevent="submit()"
+      >
         <fieldset :disabled="busy">
-          <p class="muted">{{ selected.description }}</p>
-          <label v-if="selected.type === 'text'"
-            >内容<textarea
-              v-model="textValue"
-              rows="12"
-              :maxlength="selected.maxLength"
-              required
-            /></label
-          ><label v-else-if="selected.type === 'number'"
-            >数值<input
-              v-model.number="numberValue"
-              type="number"
-              :min="selected.min"
-              :max="selected.max"
-              :step="selected.step || 1"
-              required /></label
-          ><label v-else-if="selected.type === 'select'"
-            >选项<AdminSelect
-              v-model="textValue"
-              :label="selected.title"
-              :options="
-                (selected.options || []).map((v) => ({ value: v, label: v }))
-              " /></label
-          ><label v-else class="check"
-            ><input v-model="booleanValue" type="checkbox" />启用</label
-          ><label
-            >变更说明<input
-              v-model="note"
-              maxlength="500"
-              placeholder="可选，用于审计"
-          /></label>
-          <p class="muted">默认值：{{ selected.defaultValue }}</p>
+          <p class="muted">
+            {{ selected.description }}
+          </p>
+          <label v-if="selected.type === 'text'">内容<textarea
+            v-model="textValue"
+            rows="12"
+            :maxlength="selected.maxLength"
+            required
+          /></label><label v-else-if="selected.type === 'number'">数值<input
+            v-model.number="numberValue"
+            type="number"
+            :min="selected.min"
+            :max="selected.max"
+            :step="selected.step || 1"
+            required
+          ></label><label v-else-if="selected.type === 'select'">选项<AdminSelect
+            v-model="textValue"
+            :label="selected.title"
+            :options="
+              (selected.options || []).map((v) => ({ value: v, label: v }))
+            "
+          /></label><label
+            v-else
+            class="check"
+          ><input v-model="booleanValue" type="checkbox">启用</label><label>变更说明<input
+            v-model="note"
+            maxlength="500"
+            placeholder="可选，用于审计"
+          ></label>
+          <p class="muted">默认值：{{ selected.defaultValue }}
+          </p>
         </fieldset>
       </form>
     </template>
-    <template #footer
-      ><button
+    <template #footer>
+      <button
         :disabled="busy"
         @click="
           selected = undefined;
           historyOpen = false;
         "
-      >
-        关闭</button
-      ><template v-if="selected && !historyOpen"
-        ><button :disabled="busy" @click="value = selected.defaultValue">
-          填入默认值</button
-        ><button
+      > 关闭</button><template v-if="selected && !historyOpen">
+        <button :disabled="busy" @click="value = selected.defaultValue"> 填入默认值</button><button
           class="primary"
           form="configuration-form"
           type="submit"
           :disabled="busy"
         >
           发布新版本
-        </button></template
-      ></template
-    >
+        </button>
+      </template>
+    </template>
   </AdminDialog>
 </template>
+
 <style scoped>
 .configuration-intro {
   padding: 20px;

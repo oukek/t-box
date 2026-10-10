@@ -1,5 +1,5 @@
-import { registerPlugin } from "@capacitor/core";
+import { registerPlugin } from '@capacitor/core'
 
-export const NativeScanner = registerPlugin("NativeScanner", {
-  web: () => import("./web.js").then((module) => new module.NativeScannerWeb()),
-});
+export const NativeScanner = registerPlugin('NativeScanner', {
+  web: () => import('./web.js').then((module) => new module.NativeScannerWeb()),
+})

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { AppIcon } from "@t-box/ui-kit";
-defineProps<{ appId: string; icon: string; day?: number }>();
+import { AppIcon } from '@t-box/ui-kit'
+
+defineProps<{ appId: string, icon: string, day?: number }>()
 </script>
+
 <template>
   <span
     class="launcher-icon"
@@ -10,25 +12,41 @@ defineProps<{ appId: string; icon: string; day?: number }>();
   >
     <template v-if="appId === 'calculator'">
       <span class="calculator-screen">π + e</span>
-      <span class="calculator-keys"
-        ><i></i><i></i><i></i><i></i><i></i><i></i
-      ></span>
+      <span class="calculator-keys"><i /><i /><i /><i /><i /><i /></span>
     </template>
     <template v-else-if="appId === 'calendar'">
-      <span class="calendar-icon-top">日历</span
-      ><span class="calendar-icon-day">{{ day }}</span>
+      <span class="calendar-icon-top">日历</span><span class="calendar-icon-day">{{ day }}</span>
     </template>
-    <svg v-else-if="appId === 'time'" viewBox="0 0 64 64" fill="none">
-      <circle cx="32" cy="32" r="22" stroke="currentColor" stroke-width="3" />
+    <svg
+      v-else-if="appId === 'time'"
+      viewBox="0 0 64 64"
+      fill="none"
+    >
+      <circle
+        cx="32"
+        cy="32"
+        r="22"
+        stroke="currentColor"
+        stroke-width="3"
+      />
       <path
         d="M32 17v16l11 7"
         stroke="currentColor"
         stroke-width="3.5"
         stroke-linecap="round"
       />
-      <circle cx="32" cy="32" r="3" fill="currentColor" />
+      <circle
+        cx="32"
+        cy="32"
+        r="3"
+        fill="currentColor"
+      />
     </svg>
-    <svg v-else-if="appId === 'ledger'" viewBox="0 0 64 64" fill="none">
+    <svg
+      v-else-if="appId === 'ledger'"
+      viewBox="0 0 64 64"
+      fill="none"
+    >
       <rect
         x="15"
         y="12"
@@ -38,7 +56,11 @@ defineProps<{ appId: string; icon: string; day?: number }>();
         fill="white"
         fill-opacity=".95"
       />
-      <path d="M23 12v41" stroke="#b9ece3" stroke-width="2" />
+      <path
+        d="M23 12v41"
+        stroke="#b9ece3"
+        stroke-width="2"
+      />
       <path
         d="M32 24h9M32 32h9M32 40h6"
         stroke="#21897e"
@@ -58,9 +80,14 @@ defineProps<{ appId: string; icon: string; day?: number }>();
       name="settings"
       :size="36"
     />
-    <AppIcon v-else :name="icon" :size="32" />
+    <AppIcon
+      v-else
+      :name="icon"
+      :size="32"
+    />
   </span>
 </template>
+
 <style scoped>
 .launcher-icon {
   width: var(--icon-size, 68px);
@@ -87,8 +114,7 @@ defineProps<{ appId: string; icon: string; day?: number }>();
 }
 .launcher-icon--calculator {
   background: linear-gradient(155deg, #566174, #2d3748);
-  padding: calc(var(--icon-size, 68px) * 0.14)
-    calc(var(--icon-size, 68px) * 0.17);
+  padding: calc(var(--icon-size, 68px) * 0.14) calc(var(--icon-size, 68px) * 0.17);
   flex-direction: column;
   gap: calc(var(--icon-size, 68px) * 0.07);
 }

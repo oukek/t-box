@@ -1,1 +1,1 @@
-export { ledgerModule } from "./module";
+export { ledgerModule } from './module'

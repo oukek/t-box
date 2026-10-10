@@ -1,28 +1,30 @@
 <script setup lang="ts">
-import { BottomSheet, SheetSelect } from "@t-box/ui-kit";
-import DateSheetField from "@t-box/ui-kit/DateSheetField.vue";
-import type { LedgerFormField, FormValues } from "./form";
-import { ref } from "vue";
-import AttachmentPicker from "./AttachmentPicker.vue";
-const values = defineModel<FormValues>({ required: true });
-const attachmentResourceIds = defineModel<string[]>("attachmentResourceIds", {
-  default: () => [],
-});
-const uploading = ref(false);
+import type { FormValues, LedgerFormField } from './form'
+import { BottomSheet, SheetSelect } from '@t-box/ui-kit'
+import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
+import { ref } from 'vue'
+import AttachmentPicker from './AttachmentPicker.vue'
+
 defineProps<{
-  open: boolean;
-  title: string;
-  fields: LedgerFormField[];
-  busy?: boolean;
-  error?: string;
-  submitLabel?: string;
-  description?: string;
-  ledgerId?: string;
-  attachments?: boolean;
-}>();
-const emit = defineEmits<{ close: []; submit: [] }>();
-const formId = `ledger-feature-form-${Math.random().toString(36).slice(2)}`;
+  open: boolean
+  title: string
+  fields: LedgerFormField[]
+  busy?: boolean
+  error?: string
+  submitLabel?: string
+  description?: string
+  ledgerId?: string
+  attachments?: boolean
+}>()
+const emit = defineEmits<{ close: [], submit: [] }>()
+const values = defineModel<FormValues>({ required: true })
+const attachmentResourceIds = defineModel<string[]>('attachmentResourceIds', {
+  default: () => [],
+})
+const uploading = ref(false)
+const formId = `ledger-feature-form-${Math.random().toString(36).slice(2)}`
 </script>
+
 <template>
   <BottomSheet
     :open="open"
@@ -31,20 +33,30 @@ const formId = `ledger-feature-form-${Math.random().toString(36).slice(2)}`;
     full-height
     compact
     @close="!uploading && emit('close')"
-    ><p v-if="description" class="feature-hint">{{ description }}</p>
+  >
+    <p v-if="description" class="feature-hint">
+      {{ description }}
+    </p>
     <form :id="formId" @submit.prevent="!uploading && emit('submit')">
       <fieldset class="form-fields" :disabled="busy">
-        <legend class="sr-only">{{ title }}</legend>
-        <template v-for="field in fields" :key="field.key"
-          ><label v-if="field.kind === 'checkbox'" class="feature-check"
-            ><input v-model="values[field.key]" type="checkbox" />{{
-              field.label
-            }}</label
-          >
+        <legend class="sr-only">
+          {{ title }}
+        </legend>
+        <template
+          v-for="field in fields"
+          :key="field.key"
+        >
+          <label
+            v-if="field.kind === 'checkbox'"
+            class="feature-check"
+          ><input v-model="values[field.key]" type="checkbox">{{
+            field.label
+          }}</label>
           <div v-else class="form-field">
-            <label :for="`${formId}-${field.key}`" class="field-label"
-              >{{ field.label }}{{ field.required ? " *" : "" }}</label
-            ><SheetSelect
+            <label
+              :for="`${formId}-${field.key}`"
+              class="field-label"
+            >{{ field.label }}{{ field.required ? " *" : "" }}</label><SheetSelect
               v-if="field.kind === 'select'"
               :model-value="values[field.key] ?? ''"
               :options="field.options ?? []"
@@ -63,12 +75,12 @@ const formId = `ledger-feature-form-${Math.random().toString(36).slice(2)}`;
               v-else-if="field.kind === 'textarea'"
               :id="`${formId}-${field.key}`"
               :value="String(values[field.key] ?? '')"
-              @input="
-                values[field.key] = ($event.target as HTMLTextAreaElement).value
-              "
               :maxlength="field.max ?? 200"
               :required="field.required"
               rows="3"
+              @input="
+                values[field.key] = ($event.target as HTMLTextAreaElement).value
+              "
             /><input
               v-else
               :id="`${formId}-${field.key}`"
@@ -77,11 +89,11 @@ const formId = `ledger-feature-form-${Math.random().toString(36).slice(2)}`;
               :inputmode="field.kind === 'money' ? 'decimal' : undefined"
               :maxlength="field.max ?? 200"
               :required="field.required"
-            /><small v-if="field.hint" class="feature-hint">{{
+            ><small v-if="field.hint" class="feature-hint">{{
               field.hint
             }}</small>
-          </div></template
-        >
+          </div>
+        </template>
       </fieldset>
       <AttachmentPicker
         v-if="attachments && ledgerId && open"
@@ -90,17 +102,21 @@ const formId = `ledger-feature-form-${Math.random().toString(36).slice(2)}`;
         :disabled="busy"
         @busy="uploading = $event"
       />
-      <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+      <p
+        v-if="error"
+        class="form-error"
+        role="alert"
+      >
+        {{ error }}
+      </p>
     </form>
-    <template #footer
-      ><button
+    <template #footer>
+      <button
         type="button"
         class="button button-secondary"
         :disabled="busy || uploading"
         @click="emit('close')"
-      >
-        取消</button
-      ><button
+      > 取消</button><button
         class="button button-primary"
         :form="formId"
         type="submit"
@@ -113,7 +129,7 @@ const formId = `ledger-feature-form-${Math.random().toString(36).slice(2)}`;
               ? "正在处理…"
               : (submitLabel ?? "保存")
         }}
-      </button></template
-    ></BottomSheet
-  >
+      </button>
+    </template>
+  </BottomSheet>
 </template>

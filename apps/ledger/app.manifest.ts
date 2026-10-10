@@ -1,1 +1,1 @@
-export { ledgerManifest } from "@t-box/ledger-contracts";
+export { ledgerManifest } from '@t-box/ledger-contracts'

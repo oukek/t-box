@@ -1,29 +1,31 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from "vue";
-import { copyText } from "../../core/clipboard";
-import MessageActionButton from "./MessageActionButton.vue";
+import { onBeforeUnmount, ref } from 'vue'
+import { copyText } from '../../core/clipboard'
+import MessageActionButton from './MessageActionButton.vue'
+
 const props = defineProps<{
-  text: string;
-  label: string;
-  disabled?: boolean;
-  feedbackAlign?: "start" | "end";
-}>();
-const feedback = ref("");
-let timer: ReturnType<typeof setTimeout> | undefined;
+  text: string
+  label: string
+  disabled?: boolean
+  feedbackAlign?: 'start' | 'end'
+}>()
+const feedback = ref('')
+let timer: ReturnType<typeof setTimeout> | undefined
 async function copy() {
   try {
-    await copyText(props.text);
-    feedback.value = "已复制";
+    await copyText(props.text)
+    feedback.value = '已复制'
   } catch {
-    feedback.value = "复制失败，请手动选择复制";
+    feedback.value = '复制失败，请手动选择复制'
   }
-  clearTimeout(timer);
+  clearTimeout(timer)
   timer = setTimeout(() => {
-    feedback.value = "";
-  }, 2200);
+    feedback.value = ''
+  }, 2200)
 }
-onBeforeUnmount(() => clearTimeout(timer));
+onBeforeUnmount(() => clearTimeout(timer))
 </script>
+
 <template>
   <div class="message-copy-control">
     <MessageActionButton
@@ -41,10 +43,10 @@ onBeforeUnmount(() => clearTimeout(timer));
           ? 'sr-only'
           : ['copy-error', { 'align-end': feedbackAlign === 'end' }]
       "
-      >{{ feedback }}</span
-    >
+    >{{ feedback }}</span>
   </div>
 </template>
+
 <style scoped>
 .message-copy-control {
   position: relative;

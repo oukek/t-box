@@ -1,161 +1,181 @@
-import { watch } from "vue";
-import {
-  AppSdkError,
-  type AppTransport,
-  type RequestOptions,
-} from "@t-box/app-sdk";
-import { APP_SDK_VERSION } from "@t-box/app-contracts";
 import type {
   ApplicationBridgeEvent,
   ApplicationContext,
   ApplicationSession,
   HostMethod,
-} from "@t-box/app-contracts";
-import { applicationModules } from "../../applications/registry";
-import { identity } from "../session";
-import { request, chatWebSocketUrl } from "../network";
-import { applicationMutation } from "../applicationMutation";
+} from '@t-box/app-contracts'
+import type { AppTransport, RequestOptions } from '@t-box/app-sdk'
+import { APP_SDK_VERSION } from '@t-box/app-contracts'
 import {
+  AppSdkError,
+} from '@t-box/app-sdk'
+import { watch } from 'vue'
+import { applicationModules } from '../../applications/registry'
+import { applicationMutation } from '../applicationMutation'
+import {
+  backFromApplication,
   navigation,
   openApplication,
-  backFromApplication,
-} from "../navigation";
-import { appCatalog } from "./catalog";
-import { validateApplicationRestPath } from "./trustedPath";
+} from '../navigation'
+import { chatWebSocketUrl, request } from '../network'
+import { identity } from '../session'
+import { appCatalog } from './catalog'
+import { validateApplicationRestPath } from './trustedPath'
 
 interface HostOptions {
-  appId: string;
-  trusted?: boolean;
-  expected?: Pick<ApplicationContext, "releaseId" | "generation" | "subject">;
-  params?: Record<string, string>;
+  appId: string
+  trusted?: boolean
+  expected?: Pick<ApplicationContext, 'releaseId' | 'generation' | 'subject'>
+  params?: Record<string, string>
 }
 const platform = () =>
   window.Capacitor?.isNativePlatform?.()
-    ? window.Capacitor.getPlatform?.() || "web"
-    : "web";
+    ? window.Capacitor.getPlatform?.() || 'web'
+    : 'web'
 const object = (value: unknown): Record<string, unknown> => {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new AppSdkError("INVALID_ARGUMENTS", "应用参数无效", 400);
-  return value as Record<string, unknown>;
-};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppSdkError('INVALID_ARGUMENTS', '应用参数无效', 400)
+  }
+  return value as Record<string, unknown>
+}
 /** One app-bound host service shared by shell and MessageChannel adapters. */
 export function createHostTransport(options: HostOptions): AppTransport {
   const module = applicationModules.find(
     (m) => m.manifest.id === options.appId,
-  );
-  if (options.trusted && !module)
-    throw new AppSdkError("APP_NOT_REGISTERED", "应用未注册");
-  let closed = false,
-    epoch = 0,
-    bound: ApplicationContext | undefined;
-  const listeners = new Set<(event: ApplicationBridgeEvent) => void>();
-  const subscriptions = new Map<string, () => void>();
-  const cancelledSubscriptions = new Set<string>();
+  )
+  if (options.trusted && !module) {
+    throw new AppSdkError('APP_NOT_REGISTERED', '应用未注册')
+  }
+  let closed = false
+  let epoch = 0
+  let bound: ApplicationContext | undefined
+  const listeners = new Set<(event: ApplicationBridgeEvent) => void>()
+  const subscriptions = new Map<string, () => void>()
+  const cancelledSubscriptions = new Set<string>()
   const emit = (event: ApplicationBridgeEvent) => {
-    for (const listener of listeners) listener(event);
-  };
+    for (const listener of listeners) {
+      listener(event)
+    }
+  }
   const session = (): ApplicationSession => ({
     status: !identity.ready
-      ? "restoring"
+      ? 'restoring'
       : identity.user
-        ? "signed_in"
-        : "signed_out",
+        ? 'signed_in'
+        : 'signed_out',
     subject: identity.user ? (bound?.subject ?? null) : null,
-    ...(identity.user && bound?.permissions.includes("profile.read")
+    ...(identity.user && bound?.permissions.includes('profile.read')
       ? { profile: { nickname: identity.user.nickname } }
       : {}),
-  });
+  })
   const stopSubscriptions = () => {
-    for (const stop of subscriptions.values()) stop();
-    subscriptions.clear();
-    cancelledSubscriptions.clear();
-  };
+    for (const stop of subscriptions.values()) {
+      stop()
+    }
+    subscriptions.clear()
+    cancelledSubscriptions.clear()
+  }
   const close = (reason?: AppSdkError) => {
-    if (closed) return;
-    if (reason)
+    if (closed) {
+      return
+    }
+    if (reason) {
       emit({
-        type: "event",
-        name: "runtime.closed",
+        type: 'event',
+        name: 'runtime.closed',
         data: {
           code: reason.code,
           message: reason.message,
           status: reason.status,
         },
-      });
-    closed = true;
-    epoch++;
-    stopSubscriptions();
-    stopIdentity();
-    stopCatalog();
-    listeners.clear();
-  };
+      })
+    }
+    closed = true
+    epoch++
+    stopSubscriptions()
+    // eslint-disable-next-line ts/no-use-before-define -- Watchers call close only after registration completes.
+    stopIdentity()
+    // eslint-disable-next-line ts/no-use-before-define -- Keep watcher registration and teardown order unchanged.
+    stopCatalog()
+    listeners.clear()
+  }
   const stopIdentity = watch(
     () => [identity.token, identity.ready, identity.user?.id],
     () => {
-      const started = ++epoch;
-      bound = undefined;
-      stopSubscriptions();
+      const started = ++epoch
+      bound = undefined
+      stopSubscriptions()
       emit({
-        type: "event",
-        name: "auth.changed",
+        type: 'event',
+        name: 'auth.changed',
         data: identity.user
-          ? { status: "restoring", subject: null }
+          ? { status: 'restoring', subject: null }
           : session(),
-      });
-      if (!options.trusted)
+      })
+      if (!options.trusted) {
         close(
-          new AppSdkError("SESSION_CHANGED", "登录状态已改变，请重新打开应用"),
-        );
-      else if (identity.user)
+          new AppSdkError('SESSION_CHANGED', '登录状态已改变，请重新打开应用'),
+        )
+      } else if (identity.user) {
         void binding()
           .then(() => {
-            if (!closed && started === epoch)
-              emit({ type: "event", name: "auth.changed", data: session() });
+            if (!closed && started === epoch) {
+              emit({ type: 'event', name: 'auth.changed', data: session() })
+            }
           })
-          .catch(() => {});
+          .catch(() => {})
+      }
     },
-    { flush: "post" },
-  );
+    { flush: 'post' },
+  )
   const stopCatalog = watch(
     () => appCatalog.revision,
     () => {
-      if (!bound || closed) return;
+      if (!bound || closed) {
+        return
+      }
       const installation = appCatalog.entries.find(
         (e) => e.release.appId === options.appId,
-      )?.installation;
+      )?.installation
       if (
         !installation ||
-        installation.status !== "active" ||
+        installation.status !== 'active' ||
         installation.releaseId !== bound.releaseId ||
         installation.generation !== bound.generation
-      )
+      ) {
         close(
           new AppSdkError(
-            "APP_RUNTIME_EXPIRED",
-            "应用安装状态已改变，请重新打开",
+            'APP_RUNTIME_EXPIRED',
+            '应用安装状态已改变，请重新打开',
             409,
           ),
-        );
+        )
+      }
     },
-    { flush: "sync" },
-  );
+    { flush: 'sync' },
+  )
   function assertEpoch(expectedEpoch: number) {
-    if (closed) throw new AppSdkError("APP_CLOSED", "应用已关闭");
-    if (expectedEpoch !== epoch)
-      throw new AppSdkError("SESSION_CHANGED", "登录状态已改变，请重新操作");
+    if (closed) {
+      throw new AppSdkError('APP_CLOSED', '应用已关闭')
+    }
+    if (expectedEpoch !== epoch) {
+      throw new AppSdkError('SESSION_CHANGED', '登录状态已改变，请重新操作')
+    }
   }
   async function binding(signal?: AbortSignal): Promise<ApplicationContext> {
-    const started = epoch;
-    assertEpoch(started);
-    if (!identity.user) throw new AppSdkError("AUTH_REQUIRED", "请先登录", 401);
+    const started = epoch
+    assertEpoch(started)
+    if (!identity.user) {
+      throw new AppSdkError('AUTH_REQUIRED', '请先登录', 401)
+    }
     const context = (
       await request<{ data: ApplicationContext }>(
         `/applications/${encodeURIComponent(options.appId)}/context?platform=${platform()}`,
         { signal },
       )
-    ).data;
-    assertEpoch(started);
-    const expected = options.expected ?? bound;
+    ).data
+    assertEpoch(started)
+    const expected = options.expected ?? bound
     if (
       expected &&
       (context.releaseId !== expected.releaseId ||
@@ -164,27 +184,28 @@ export function createHostTransport(options: HostOptions): AppTransport {
     ) {
       close(
         new AppSdkError(
-          "APP_RUNTIME_EXPIRED",
-          "应用版本或安装状态已改变，请重新打开",
+          'APP_RUNTIME_EXPIRED',
+          '应用版本或安装状态已改变，请重新打开',
           409,
         ),
-      );
+      )
       throw new AppSdkError(
-        "APP_RUNTIME_EXPIRED",
-        "应用版本或安装状态已改变",
+        'APP_RUNTIME_EXPIRED',
+        '应用版本或安装状态已改变',
         409,
-      );
+      )
     }
     if (
       context.sdkVersion !== APP_SDK_VERSION ||
       context.appId !== options.appId
-    )
-      throw new AppSdkError("PROTOCOL_MISMATCH", "应用 SDK 协议不兼容");
-    const storage = options.trusted && module?.sdk?.storage;
+    ) {
+      throw new AppSdkError('PROTOCOL_MISMATCH', '应用 SDK 协议不兼容')
+    }
+    const storage = options.trusted && module?.sdk?.storage
     const events = Object.keys(module?.sdk?.events ?? {}).filter(
       (channel) =>
         options.trusted || context.permissions.includes(`events.${channel}`),
-    );
+    )
     bound = {
       ...context,
       params: { ...(options.params ?? {}) },
@@ -193,48 +214,52 @@ export function createHostTransport(options: HostOptions): AppTransport {
           ...context.capabilities,
           ...(storage
             ? [
-                "storage.get" as const,
-                "storage.set" as const,
-                "storage.remove" as const,
+                'storage.get' as const,
+                'storage.set' as const,
+                'storage.remove' as const,
               ]
             : []),
           ...(events.length
-            ? ["events.subscribe" as const, "events.unsubscribe" as const]
+            ? ['events.subscribe' as const, 'events.unsubscribe' as const]
             : []),
         ]),
       ],
-    };
-    return bound;
+    }
+    return bound
   }
   async function subscribe(
     context: ApplicationContext,
     args: Record<string, unknown>,
   ) {
-    const id = args.subscriptionId;
+    const id = args.subscriptionId
     if (
-      typeof id !== "string" ||
-      !/^[a-zA-Z0-9_-]{1,80}$/.test(id) ||
+      typeof id !== 'string' ||
+      !/^[\w-]{1,80}$/.test(id) ||
       subscriptions.has(id) ||
       subscriptions.size >= 32
-    )
-      throw new AppSdkError("INVALID_SUBSCRIPTION", "事件订阅无效或过多");
-    if (cancelledSubscriptions.delete(id)) return { subscribed: false };
-    const channel = typeof args.channel === "string" ? args.channel : "";
-    const registered = module?.sdk?.events?.[channel];
+    ) {
+      throw new AppSdkError('INVALID_SUBSCRIPTION', '事件订阅无效或过多')
+    }
+    if (cancelledSubscriptions.delete(id)) {
+      return { subscribed: false }
+    }
+    const channel = typeof args.channel === 'string' ? args.channel : ''
+    const registered = module?.sdk?.events?.[channel]
     if (
       !registered ||
       (!options.trusted && !context.permissions.includes(`events.${channel}`))
-    )
-      throw new AppSdkError("PERMISSION_DENIED", "应用未授权此事件通道", 403);
-    const payload = registered.subscribe(args.arguments);
-    const started = epoch;
-    let stopped = false,
-      socket: WebSocket | undefined,
-      timer: ReturnType<typeof setTimeout> | undefined;
+    ) {
+      throw new AppSdkError('PERMISSION_DENIED', '应用未授权此事件通道', 403)
+    }
+    const payload = registered.subscribe(args.arguments)
+    const started = epoch
+    let stopped = false
+    let socket: WebSocket | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
     const fail = (error: unknown) =>
       emit({
-        type: "event",
-        name: "app.event.error",
+        type: 'event',
+        name: 'app.event.error',
         data: {
           subscriptionId: id,
           error: {
@@ -243,90 +268,106 @@ export function createHostTransport(options: HostOptions): AppTransport {
             status: AppSdkError.from(error).status,
           },
         },
-      });
+      })
     const stop = () => {
-      stopped = true;
-      clearTimeout(timer);
-      socket?.close();
-    };
-    subscriptions.set(id, stop);
+      stopped = true
+      clearTimeout(timer)
+      socket?.close()
+    }
+    subscriptions.set(id, stop)
     const connect = async () => {
-      if (stopped || closed) return;
+      if (stopped || closed) {
+        return
+      }
       try {
-        assertEpoch(started);
-        await binding();
-        if (stopped || closed) return;
-        const token = identity.token;
-        socket = new WebSocket(chatWebSocketUrl(registered.path));
-        const active = socket;
+        assertEpoch(started)
+        await binding()
+        if (stopped || closed) {
+          return
+        }
+        const token = identity.token
+        socket = new WebSocket(chatWebSocketUrl(registered.path))
+        const active = socket
         active.onopen = () => {
           if (stopped || started !== epoch || token !== identity.token) {
-            active.close();
-            return;
+            active.close()
+            return
           }
-          active.send(JSON.stringify({ type: "authenticate", token }));
-        };
+          active.send(JSON.stringify({ type: 'authenticate', token }))
+        }
         active.onmessage = (event) => {
-          if (stopped || closed || started !== epoch) return;
+          if (stopped || closed || started !== epoch) {
+            return
+          }
           try {
-            const value = JSON.parse(event.data);
-            if (value.type === "ready") active.send(JSON.stringify(payload));
-            else if (value.type === "error")
+            const value = JSON.parse(event.data)
+            if (value.type === 'ready') {
+              active.send(JSON.stringify(payload))
+            } else if (value.type === 'error') {
               fail(
                 new AppSdkError(
-                  value.code || "EVENT_FAILED",
-                  "应用事件订阅失败",
+                  value.code || 'EVENT_FAILED',
+                  '应用事件订阅失败',
                 ),
-              );
-            else
+              )
+            } else {
               emit({
-                type: "event",
-                name: "app.event",
+                type: 'event',
+                name: 'app.event',
                 data: { subscriptionId: id, value },
-              });
+              })
+            }
           } catch (error) {
-            fail(error);
+            fail(error)
           }
-        };
+        }
         active.onclose = (event) => {
-          if (stopped || closed || started !== epoch) return;
+          if (stopped || closed || started !== epoch) {
+            return
+          }
           if (event.code === 1008) {
             fail(
               new AppSdkError(
-                "EVENT_AUTH_FAILED",
-                "事件连接授权失效，请重新打开应用",
+                'EVENT_AUTH_FAILED',
+                '事件连接授权失效，请重新打开应用',
               ),
-            );
-            stop();
-            subscriptions.delete(id);
-          } else timer = setTimeout(() => void connect(), 3000);
-        };
+            )
+            stop()
+            subscriptions.delete(id)
+          } else {
+            timer = setTimeout(() => void connect(), 3000)
+          }
+        }
       } catch (error) {
-        if (stopped || closed) return;
-        fail(error);
-        const code = AppSdkError.from(error).code;
+        if (stopped || closed) {
+          return
+        }
+        fail(error)
+        const code = AppSdkError.from(error).code
         if (
           [
-            "AUTH_REQUIRED",
-            "APP_NOT_INSTALLED",
-            "APP_RUNTIME_EXPIRED",
-            "SESSION_CHANGED",
+            'AUTH_REQUIRED',
+            'APP_NOT_INSTALLED',
+            'APP_RUNTIME_EXPIRED',
+            'SESSION_CHANGED',
           ].includes(code)
         ) {
-          stop();
-          subscriptions.delete(id);
-        } else timer = setTimeout(() => void connect(), 3000);
+          stop()
+          subscriptions.delete(id)
+        } else {
+          timer = setTimeout(() => void connect(), 3000)
+        }
       }
-    };
-    void connect();
-    return { subscribed: true };
+    }
+    void connect()
+    return { subscribed: true }
   }
   return {
     listen(listener) {
-      listeners.add(listener);
+      listeners.add(listener)
       return () => {
-        listeners.delete(listener);
-      };
+        listeners.delete(listener)
+      }
     },
     close: () => close(),
     async call<T>(
@@ -334,35 +375,42 @@ export function createHostTransport(options: HostOptions): AppTransport {
       args: unknown,
       callOptions: RequestOptions = {},
     ): Promise<T> {
-      const started = epoch;
-      assertEpoch(started);
-      const timeoutMs = callOptions.timeoutMs ?? 15000;
-      if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000)
-        throw new AppSdkError("INVALID_TIMEOUT", "请求超时时间无效");
-      if (method === "auth.session" && !identity.user) return session() as T;
-      const context = await binding(callOptions.signal);
-      if (!context.capabilities.includes(method))
+      const started = epoch
+      assertEpoch(started)
+      const timeoutMs = callOptions.timeoutMs ?? 15000
+      if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000) {
+        throw new AppSdkError('INVALID_TIMEOUT', '请求超时时间无效')
+      }
+      if (method === 'auth.session' && !identity.user) {
+        return session() as T
+      }
+      const context = await binding(callOptions.signal)
+      if (!context.capabilities.includes(method)) {
         throw new AppSdkError(
-          "CAPABILITY_UNAVAILABLE",
-          "此应用没有该宿主能力",
+          'CAPABILITY_UNAVAILABLE',
+          '此应用没有该宿主能力',
           403,
-        );
-      const a = object(args);
-      let value: unknown;
-      if (method === "runtime.context") value = context;
-      else if (method === "auth.session") value = session();
-      else if (method === "api.invoke") {
-        if (typeof a.method !== "string")
-          throw new AppSdkError("INVALID_ARGUMENTS", "应用方法无效");
+        )
+      }
+      const a = object(args)
+      let value: unknown
+      if (method === 'runtime.context') {
+        value = context
+      } else if (method === 'auth.session') {
+        value = session()
+      } else if (method === 'api.invoke') {
+        if (typeof a.method !== 'string') {
+          throw new AppSdkError('INVALID_ARGUMENTS', '应用方法无效')
+        }
         value = (
           await request<{ data: unknown }>(
             `/applications/${encodeURIComponent(options.appId)}/invoke`,
             {
-              method: "POST",
+              method: 'POST',
               signal: callOptions.signal,
               timeoutMs,
               headers: {
-                "Idempotency-Key":
+                'Idempotency-Key':
                   callOptions.idempotencyKey || crypto.randomUUID(),
               },
               body: JSON.stringify({
@@ -373,52 +421,58 @@ export function createHostTransport(options: HostOptions): AppTransport {
               }),
             },
           )
-        ).data;
-      } else if (method.startsWith("storage.")) {
-        if (typeof a.key !== "string" || !/^[a-zA-Z0-9_.-]{1,80}$/.test(a.key))
-          throw new AppSdkError("INVALID_STORAGE_KEY", "应用存储键无效");
-        const key = `tbox.app.${options.appId}.${context.subject}.${a.key}`;
-        if (method === "storage.get")
-          value = JSON.parse(localStorage.getItem(key) || "null");
-        else if (method === "storage.remove") localStorage.removeItem(key);
-        else {
-          const serialized = JSON.stringify(a.value);
-          if (serialized === undefined || serialized.length > 64000)
-            throw new AppSdkError(
-              "INVALID_STORAGE_VALUE",
-              "存储内容无效或过大",
-            );
-          localStorage.setItem(key, serialized);
+        ).data
+      } else if (method.startsWith('storage.')) {
+        if (typeof a.key !== 'string' || !/^[\w.-]{1,80}$/.test(a.key)) {
+          throw new AppSdkError('INVALID_STORAGE_KEY', '应用存储键无效')
         }
-      } else if (method === "events.subscribe")
-        value = await subscribe(context, a);
-      else if (method === "events.unsubscribe") {
-        const id = String(a.subscriptionId);
-        subscriptions.get(id)?.();
-        subscriptions.delete(id);
-        if (cancelledSubscriptions.size >= 128)
+        const key = `tbox.app.${options.appId}.${context.subject}.${a.key}`
+        if (method === 'storage.get') {
+          value = JSON.parse(localStorage.getItem(key) || 'null')
+        } else if (method === 'storage.remove') {
+          localStorage.removeItem(key)
+        } else {
+          const serialized = JSON.stringify(a.value)
+          if (serialized === undefined || serialized.length > 64000) {
+            throw new AppSdkError(
+              'INVALID_STORAGE_VALUE',
+              '存储内容无效或过大',
+            )
+          }
+          localStorage.setItem(key, serialized)
+        }
+      } else if (method === 'events.subscribe') {
+        value = await subscribe(context, a)
+      } else if (method === 'events.unsubscribe') {
+        const id = String(a.subscriptionId)
+        subscriptions.get(id)?.()
+        subscriptions.delete(id)
+        if (cancelledSubscriptions.size >= 128) {
           cancelledSubscriptions.delete(
             cancelledSubscriptions.values().next().value!,
-          );
-        cancelledSubscriptions.add(id);
-      } else if (method === "navigation.open") {
+          )
+        }
+        cancelledSubscriptions.add(id)
+      } else if (method === 'navigation.open') {
         value = await openApplication({
           appId: options.appId,
           params: a.params,
-        });
-      } else if (method === "navigation.back") {
-        if (navigation.application?.appId !== options.appId)
-          throw new AppSdkError("NAVIGATION_DENIED", "只有当前应用可以返回");
+        })
+      } else if (method === 'navigation.back') {
+        if (navigation.application?.appId !== options.appId) {
+          throw new AppSdkError('NAVIGATION_DENIED', '只有当前应用可以返回')
+        }
         // Acknowledge before the renderer unmounts and disposes its transport.
         setTimeout(() => {
-          if (navigation.application?.appId === options.appId)
-            backFromApplication();
-        }, 0);
+          if (navigation.application?.appId === options.appId) {
+            backFromApplication()
+          }
+        }, 0)
       }
-      assertEpoch(started);
-      return value as T;
+      assertEpoch(started)
+      return value as T
     },
-  };
+  }
 }
 
 /** Explicit compatibility boundary for trusted first-party REST clients. */
@@ -427,27 +481,30 @@ export async function trustedApplicationRequest<T>(
   path: string,
   options: RequestInit = {},
   mutation?: {
-    method: "POST" | "PATCH" | "DELETE";
-    body: unknown;
+    method: 'POST' | 'PATCH' | 'DELETE'
+    body: unknown
   },
 ): Promise<T> {
-  const module = applicationModules.find((m) => m.manifest.id === appId);
-  validateApplicationRestPath(module?.sdk?.restPrefixes ?? [], path);
-  const token = identity.token;
+  const module = applicationModules.find((m) => m.manifest.id === appId)
+  validateApplicationRestPath(module?.sdk?.restPrefixes ?? [], path)
+  const token = identity.token
   const context = (
     await request<{ data: ApplicationContext }>(
       `/applications/${appId}/context?platform=${platform()}`,
       { signal: options.signal },
     )
-  ).data;
-  if (identity.token !== token)
-    throw new AppSdkError("SESSION_CHANGED", "登录状态已改变");
-  if (context.runtime !== "shell")
-    throw new AppSdkError("TRUSTED_RUNTIME_REQUIRED", "此接口仅供内置应用使用");
+  ).data
+  if (identity.token !== token) {
+    throw new AppSdkError('SESSION_CHANGED', '登录状态已改变')
+  }
+  if (context.runtime !== 'shell') {
+    throw new AppSdkError('TRUSTED_RUNTIME_REQUIRED', '此接口仅供内置应用使用')
+  }
   const result = mutation
     ? await applicationMutation<T>(path, mutation.method, mutation.body)
-    : await request<T>(path, options);
-  if (identity.token !== token)
-    throw new AppSdkError("SESSION_CHANGED", "登录状态已改变");
-  return result;
+    : await request<T>(path, options)
+  if (identity.token !== token) {
+    throw new AppSdkError('SESSION_CHANGED', '登录状态已改变')
+  }
+  return result
 }

@@ -1,61 +1,67 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
-import type { AdminRechargeConfiguration, RechargePreset } from "@t-box/shared";
-import { request, save, errorMessage } from "../core/api";
-import AdminDialog from "../components/AdminDialog.vue";
-const config = ref<AdminRechargeConfiguration | null>(null),
-  loading = ref(true),
-  busy = ref(false),
-  open = ref(false),
-  error = ref(""),
-  formError = ref("");
+import type { AdminRechargeConfiguration, RechargePreset } from '@t-box/shared'
+import { onMounted, reactive, ref } from 'vue'
+import AdminDialog from '../components/AdminDialog.vue'
+import { errorMessage, request, save } from '../core/api'
+
+const config = ref<AdminRechargeConfiguration | null>(null)
+const loading = ref(true)
+const busy = ref(false)
+const open = ref(false)
+const error = ref('')
+const formError = ref('')
 const form = reactive({
   presets: [] as RechargePreset[],
-  bonusRules: [] as { threshold: string; bonus: string }[],
+  bonusRules: [] as { threshold: string, bonus: string }[],
   customEnabled: false,
   revision: 1,
-});
+})
 async function load() {
-  loading.value = true;
-  error.value = "";
+  loading.value = true
+  error.value = ''
   try {
     config.value = await request<AdminRechargeConfiguration>(
-      "/payments/recharge-options",
-    );
+      '/payments/recharge-options',
+    )
   } catch (cause) {
-    error.value = errorMessage(cause);
+    error.value = errorMessage(cause)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 function edit() {
-  if (!config.value) return;
-  form.presets = config.value.presets.map((preset) => ({ ...preset }));
-  form.bonusRules = config.value.bonusRules.map((rule) => ({ ...rule }));
-  form.customEnabled = config.value.customEnabled;
-  form.revision = config.value.revision;
-  formError.value = "";
-  open.value = true;
+  if (!config.value) {
+    return
+  }
+  form.presets = config.value.presets.map((preset) => ({ ...preset }))
+  form.bonusRules = config.value.bonusRules.map((rule) => ({ ...rule }))
+  form.customEnabled = config.value.customEnabled
+  form.revision = config.value.revision
+  formError.value = ''
+  open.value = true
 }
 async function submit() {
-  if (busy.value) return;
-  busy.value = true;
-  formError.value = "";
+  if (busy.value) {
+    return
+  }
+  busy.value = true
+  formError.value = ''
   try {
     config.value = await save<AdminRechargeConfiguration>(
-      "/payments/recharge-options",
+      '/payments/recharge-options',
       form,
-      "PATCH",
-    );
-    open.value = false;
+      'PATCH',
+    )
+    open.value = false
   } catch (cause) {
-    formError.value = errorMessage(cause);
+    formError.value = errorMessage(cause)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
-onMounted(load);
+onMounted(load)
 </script>
+
 <template>
   <header class="page-heading">
     <div>
@@ -64,12 +70,20 @@ onMounted(load);
       <p>管理充值套餐、套餐优惠与自定义充值，适用于网页与 Android。</p>
     </div>
     <div class="actions">
-      <button class="primary" :disabled="loading || !config" @click="edit">
-        编辑配置</button
-      ><button :disabled="loading" @click="load">刷新</button>
+      <button
+        class="primary"
+        :disabled="loading || !config"
+        @click="edit"
+      > 编辑配置</button><button :disabled="loading" @click="load">刷新</button>
     </div>
   </header>
-  <p v-if="error" class="alert" role="alert">{{ error }}</p>
+  <p
+    v-if="error"
+    class="alert"
+    role="alert"
+  >
+    {{ error }}
+  </p>
   <section class="panel">
     <div class="panel-heading">
       <h2>充值套餐</h2>
@@ -85,14 +99,11 @@ onMounted(load);
           v-for="preset in config.presets"
           :key="preset.amount"
           :class="{ 'preset-offline': !preset.enabled }"
-          ><strong>¥{{ Number(preset.amount) }}</strong
-          ><small>{{
-            Number(preset.bonusAmount) > 0
-              ? `赠 ¥${Number(preset.bonusAmount)}`
-              : "无赠送"
-          }}</small
-          ><small v-if="!preset.enabled">已下架</small></span
-        >
+        ><strong>¥{{ Number(preset.amount) }}</strong><small>{{
+          Number(preset.bonusAmount) > 0
+            ? `赠 ¥${Number(preset.bonusAmount)}`
+            : "无赠送"
+        }}</small><small v-if="!preset.enabled">已下架</small></span>
       </div>
       <div class="recharge-custom-status">
         <h3>自定义充值</h3>
@@ -103,17 +114,16 @@ onMounted(load);
       <p v-if="!config.customEnabled" class="muted">
         用户只能选择已上架的充值套餐，不显示自定义金额输入框。
       </p>
-      <template v-else
-        ><p v-if="!config.bonusRules.length" class="muted">
+      <template v-else>
+        <p v-if="!config.bonusRules.length" class="muted">
           自定义金额按实付到账，不赠送余额。
         </p>
         <div v-else class="recharge-settings-rules">
           <div v-for="rule in config.bonusRules" :key="rule.threshold">
-            <span>自定义金额满 ¥{{ Number(rule.threshold) }}</span
-            ><strong>赠 ¥{{ Number(rule.bonus) }}</strong>
+            <span>自定义金额满 ¥{{ Number(rule.threshold) }}</span><strong>赠 ¥{{ Number(rule.bonus) }}</strong>
           </div>
-        </div></template
-      >
+        </div>
+      </template>
       <p class="muted">
         套餐使用各自的优惠；自定义金额的满赠只取最高达标档，不与套餐优惠叠加。
       </p>
@@ -131,7 +141,13 @@ onMounted(load);
   >
     <form id="recharge-settings-form" @submit.prevent="submit">
       <fieldset :disabled="busy">
-        <p v-if="formError" class="alert" role="alert">{{ formError }}</p>
+        <p
+          v-if="formError"
+          class="alert"
+          role="alert"
+        >
+          {{ formError }}
+        </p>
         <div class="recharge-editor-heading">
           <h3>充值套餐</h3>
           <button
@@ -151,13 +167,11 @@ onMounted(load);
             class="recharge-preset-card"
           >
             <div class="preset-controls">
-              <label
-                ><input
-                  v-model="preset.enabled"
-                  type="checkbox"
-                  :aria-label="`套餐 ${index + 1} 上架`"
-                />上架</label
-              ><button
+              <label><input
+                v-model="preset.enabled"
+                type="checkbox"
+                :aria-label="`套餐 ${index + 1} 上架`"
+              >上架</label><button
                 type="button"
                 :aria-label="`删除套餐 ${index + 1}`"
                 @click="form.presets.splice(index, 1)"
@@ -166,31 +180,27 @@ onMounted(load);
               </button>
             </div>
             <div class="preset-fields">
-              <label
-                >充值金额 {{ index + 1 }} / 元<input
-                  v-model="preset.amount"
-                  inputmode="decimal"
-                  required /></label
-              ><label
-                >赠送金额 {{ index + 1 }} / 元<input
-                  v-model="preset.bonusAmount"
-                  inputmode="decimal"
-                  required
-              /></label>
+              <label>充值金额 {{ index + 1 }} / 元<input
+                v-model="preset.amount"
+                inputmode="decimal"
+                required
+              ></label><label>赠送金额 {{ index + 1 }} / 元<input
+                v-model="preset.bonusAmount"
+                inputmode="decimal"
+                required
+              ></label>
             </div>
           </article>
         </div>
-        <label class="recharge-custom-switch"
-          ><input
-            v-model="form.customEnabled"
-            type="checkbox"
-          />开启自定义充值</label
-        >
+        <label class="recharge-custom-switch"><input
+          v-model="form.customEnabled"
+          type="checkbox"
+        >开启自定义充值</label>
         <p class="muted">
           默认关闭。开启后允许用户输入 1–10000 元，可另设自定义金额的满赠规则。
         </p>
-        <template v-if="form.customEnabled"
-          ><div class="recharge-editor-heading">
+        <template v-if="form.customEnabled">
+          <div class="recharge-editor-heading">
             <h3>自定义充值满赠</h3>
             <button
               type="button"
@@ -206,40 +216,38 @@ onMounted(load);
             :key="index"
             class="recharge-editor-row"
           >
-            <label
-              >满 / 元<input
-                v-model="rule.threshold"
-                inputmode="decimal"
-                required /></label
-            ><label
-              >赠 / 元<input
-                v-model="rule.bonus"
-                inputmode="decimal"
-                required /></label
-            ><button
+            <label>满 / 元<input
+              v-model="rule.threshold"
+              inputmode="decimal"
+              required
+            ></label><label>赠 / 元<input
+              v-model="rule.bonus"
+              inputmode="decimal"
+              required
+            ></label><button
               type="button"
               :aria-label="`删除规则 ${index + 1}`"
               @click="form.bonusRules.splice(index, 1)"
             >
               删除
             </button>
-          </div></template
-        >
+          </div>
+        </template>
       </fieldset>
     </form>
-    <template #footer
-      ><button :disabled="busy" @click="open = false">取消</button
-      ><button
+    <template #footer>
+      <button :disabled="busy" @click="open = false">取消</button><button
         class="primary"
         type="submit"
         form="recharge-settings-form"
         :disabled="busy"
       >
         {{ busy ? "正在保存…" : "保存配置" }}
-      </button></template
-    >
+      </button>
+    </template>
   </AdminDialog>
 </template>
+
 <style scoped>
 .recharge-settings-content {
   padding: 24px 28px;

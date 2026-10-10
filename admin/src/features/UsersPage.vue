@@ -1,96 +1,102 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
-import type { Administrator } from "@t-box/shared";
-import { request, save, errorMessage } from "../core/api";
-import { administrator } from "../core/session";
-import AdminIcon from "../components/AdminIcon.vue";
-import AdminDialog from "../components/AdminDialog.vue";
-const users = ref<Administrator[]>([]),
-  error = ref(""),
-  dialogError = ref(""),
-  notice = ref(""),
-  busy = ref(false),
-  loading = ref(true),
-  editor = ref<"create" | "password" | null>(null),
-  toggling = ref<Administrator | null>(null);
-const create = reactive({ username: "", password: "" }),
-  change = reactive({ currentPassword: "", newPassword: "" });
+import type { Administrator } from '@t-box/shared'
+import { onMounted, reactive, ref } from 'vue'
+import AdminDialog from '../components/AdminDialog.vue'
+import AdminIcon from '../components/AdminIcon.vue'
+import { errorMessage, request, save } from '../core/api'
+import { administrator } from '../core/session'
+
+const users = ref<Administrator[]>([])
+const error = ref('')
+const dialogError = ref('')
+const notice = ref('')
+const busy = ref(false)
+const loading = ref(true)
+const editor = ref<'create' | 'password' | null>(null)
+const toggling = ref<Administrator | null>(null)
+const create = reactive({ username: '', password: '' })
+const change = reactive({ currentPassword: '', newPassword: '' })
 async function load() {
-  loading.value = true;
+  loading.value = true
   try {
-    users.value = await request("/users");
+    users.value = await request('/users')
   } catch (e) {
-    error.value = errorMessage(e);
+    error.value = errorMessage(e)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
-function openEditor(kind: "create" | "password") {
-  create.username = "";
-  create.password = "";
-  change.currentPassword = "";
-  change.newPassword = "";
-  dialogError.value = "";
-  editor.value = kind;
+function openEditor(kind: 'create' | 'password') {
+  create.username = ''
+  create.password = ''
+  change.currentPassword = ''
+  change.newPassword = ''
+  dialogError.value = ''
+  editor.value = kind
 }
 function closeEditor() {
-  if (busy.value) return;
-  editor.value = null;
-  create.password = "";
-  change.currentPassword = "";
-  change.newPassword = "";
+  if (busy.value) {
+    return
+  }
+  editor.value = null
+  create.password = ''
+  change.currentPassword = ''
+  change.newPassword = ''
 }
 async function add() {
-  busy.value = true;
-  dialogError.value = "";
-  notice.value = "";
+  busy.value = true
+  dialogError.value = ''
+  notice.value = ''
   try {
-    await save("/users", create);
-    create.username = "";
-    create.password = "";
-    editor.value = null;
-    notice.value = "管理员已添加";
-    await load();
+    await save('/users', create)
+    create.username = ''
+    create.password = ''
+    editor.value = null
+    notice.value = '管理员已添加'
+    await load()
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 async function toggle() {
-  const user = toggling.value;
-  if (!user) return;
-  busy.value = true;
-  dialogError.value = "";
-  notice.value = "";
+  const user = toggling.value
+  if (!user) {
+    return
+  }
+  busy.value = true
+  dialogError.value = ''
+  notice.value = ''
   try {
-    await save(`/users/${user.id}`, { enabled: !user.enabled }, "PATCH");
-    toggling.value = null;
-    notice.value = `管理员已${user.enabled ? "停用" : "启用"}`;
-    await load();
+    await save(`/users/${user.id}`, { enabled: !user.enabled }, 'PATCH')
+    toggling.value = null
+    notice.value = `管理员已${user.enabled ? '停用' : '启用'}`
+    await load()
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 async function updatePassword() {
-  busy.value = true;
-  dialogError.value = "";
+  busy.value = true
+  dialogError.value = ''
   try {
-    await save("/password", change, "PATCH");
-    change.currentPassword = "";
-    change.newPassword = "";
-    editor.value = null;
-    administrator.value = null;
+    await save('/password', change, 'PATCH')
+    change.currentPassword = ''
+    change.newPassword = ''
+    editor.value = null
+    administrator.value = null
   } catch (e) {
-    dialogError.value = errorMessage(e);
+    dialogError.value = errorMessage(e)
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
-onMounted(load);
+onMounted(load)
 </script>
+
 <template>
   <header class="page-heading">
     <div>
@@ -106,8 +112,20 @@ onMounted(load);
       <AdminIcon name="plus" :size="16" />添加管理员
     </button>
   </header>
-  <p v-if="error" class="alert" role="alert">{{ error }}</p>
-  <p v-if="notice" class="success" role="status">{{ notice }}</p>
+  <p
+    v-if="error"
+    class="alert"
+    role="alert"
+  >
+    {{ error }}
+  </p>
+  <p
+    v-if="notice"
+    class="success"
+    role="status"
+  >
+    {{ notice }}
+  </p>
   <section class="panel">
     <div class="panel-heading">
       <h2>
@@ -133,14 +151,15 @@ onMounted(load);
               <div class="cell-identity">
                 <span class="row-avatar" aria-hidden="true">{{
                   u.username[0]?.toUpperCase()
-                }}</span
-                ><strong>{{ u.username }}</strong
-                ><span v-if="u.id === administrator?.id" class="current-label"
-                  >当前账号</span
-                >
+                }}</span><strong>{{ u.username }}</strong><span
+                  v-if="u.id === administrator?.id"
+                  class="current-label"
+                >当前账号</span>
               </div>
             </td>
-            <td class="mono">{{ u.createdAt.slice(0, 10) }}</td>
+            <td class="mono">
+              {{ u.createdAt.slice(0, 10) }}
+            </td>
             <td>
               <span class="badge" :class="{ disabled: !u.enabled }">{{
                 u.enabled ? "已启用" : "已停用"
@@ -179,86 +198,97 @@ onMounted(load);
     description="新账号可管理服务商、模型及其他管理员。"
     :busy="busy"
     @close="closeEditor"
-    ><p v-if="dialogError" class="alert" role="alert">{{ dialogError }}</p>
-    <form id="admin-create-form" class="dialog-form" @submit.prevent="add">
+  >
+    <p
+      v-if="dialogError"
+      class="alert"
+      role="alert"
+    >
+      {{ dialogError }}
+    </p>
+    <form
+      id="admin-create-form"
+      class="dialog-form"
+      @submit.prevent="add"
+    >
       <fieldset :disabled="busy">
-        <label
-          >登录账号<input
-            v-model="create.username"
-            required
-            pattern="[A-Za-z0-9_.\-]{3,64}"
-            maxlength="64"
-            autocomplete="off"
-            placeholder="3–64 位字母、数字或 _ . -" /></label
-        ><label
-          >初始密码<input
-            v-model="create.password"
-            type="password"
-            required
-            minlength="6"
-            maxlength="128"
-            autocomplete="new-password"
-            placeholder="至少 6 个字符"
-          /><small>请通过安全渠道交给账号使用者。</small></label
-        >
+        <label>登录账号<input
+          v-model="create.username"
+          required
+          pattern="[A-Za-z0-9_.\-]{3,64}"
+          maxlength="64"
+          autocomplete="off"
+          placeholder="3–64 位字母、数字或 _ . -"
+        ></label><label>初始密码<input
+          v-model="create.password"
+          type="password"
+          required
+          minlength="6"
+          maxlength="128"
+          autocomplete="new-password"
+          placeholder="至少 6 个字符"
+        ><small>请通过安全渠道交给账号使用者。</small></label>
       </fieldset>
     </form>
-    <template #footer
-      ><button :disabled="busy" @click="closeEditor">取消</button
-      ><button
+    <template #footer>
+      <button :disabled="busy" @click="closeEditor">取消</button><button
         form="admin-create-form"
         type="submit"
         class="primary"
         :disabled="busy"
       >
         {{ busy ? "正在添加…" : "添加管理员" }}
-      </button></template
-    ></AdminDialog
-  >
+      </button>
+    </template>
+  </AdminDialog>
   <AdminDialog
     :open="editor === 'password'"
     title="修改我的密码"
     description="保存后需重新登录，其他设备也会退出当前账号。"
     :busy="busy"
     @close="closeEditor"
-    ><p v-if="dialogError" class="alert" role="alert">{{ dialogError }}</p>
+  >
+    <p
+      v-if="dialogError"
+      class="alert"
+      role="alert"
+    >
+      {{ dialogError }}
+    </p>
     <form
       id="admin-password-form"
       class="dialog-form"
       @submit.prevent="updatePassword"
     >
       <fieldset :disabled="busy">
-        <label
-          >当前密码<input
-            v-model="change.currentPassword"
-            type="password"
-            required
-            maxlength="128"
-            autocomplete="current-password" /></label
-        ><label
-          >新密码<input
-            v-model="change.newPassword"
-            type="password"
-            required
-            minlength="6"
-            maxlength="128"
-            autocomplete="new-password"
-            placeholder="至少 6 个字符"
-        /></label>
+        <label>当前密码<input
+          v-model="change.currentPassword"
+          type="password"
+          required
+          maxlength="128"
+          autocomplete="current-password"
+        ></label><label>新密码<input
+          v-model="change.newPassword"
+          type="password"
+          required
+          minlength="6"
+          maxlength="128"
+          autocomplete="new-password"
+          placeholder="至少 6 个字符"
+        ></label>
       </fieldset>
     </form>
-    <template #footer
-      ><button :disabled="busy" @click="closeEditor">取消</button
-      ><button
+    <template #footer>
+      <button :disabled="busy" @click="closeEditor">取消</button><button
         form="admin-password-form"
         type="submit"
         class="primary"
         :disabled="busy"
       >
         {{ busy ? "正在更新…" : "更新密码并退出" }}
-      </button></template
-    ></AdminDialog
-  >
+      </button>
+    </template>
+  </AdminDialog>
   <AdminDialog
     :open="!!toggling"
     :title="`${toggling?.enabled ? '停用' : '启用'}管理员？`"
@@ -266,16 +296,22 @@ onMounted(load);
     :busy="busy"
     compact
     @close="toggling = null"
-    ><p v-if="dialogError" class="alert" role="alert">{{ dialogError }}</p>
-    <template #footer
-      ><button :disabled="busy" @click="toggling = null">取消</button
-      ><button
+  >
+    <p
+      v-if="dialogError"
+      class="alert"
+      role="alert"
+    >
+      {{ dialogError }}
+    </p>
+    <template #footer>
+      <button :disabled="busy" @click="toggling = null">取消</button><button
         :class="toggling?.enabled ? 'danger' : 'primary'"
         :disabled="busy"
         @click="toggle"
       >
         {{ busy ? "正在处理…" : "确认" }}
-      </button></template
-    ></AdminDialog
-  >
+      </button>
+    </template>
+  </AdminDialog>
 </template>

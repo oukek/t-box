@@ -1,9 +1,9 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import type { CapacitorConfig } from '@capacitor/cli'
 
-const liveReloadUrl = (process.env.CAP_LIVE_RELOAD_URL ?? process.env.CAP_SERVER_URL)?.trim();
+const liveReloadUrl = (process.env.CAP_LIVE_RELOAD_URL ?? process.env.CAP_SERVER_URL)?.trim()
 
 if (liveReloadUrl && !/^https?:\/\//.test(liveReloadUrl)) {
-  throw new Error('CAP_LIVE_RELOAD_URL must be an absolute HTTP(S) URL.');
+  throw new Error('CAP_LIVE_RELOAD_URL must be an absolute HTTP(S) URL.')
 }
 
 const config: CapacitorConfig = {
@@ -21,6 +21,6 @@ const config: CapacitorConfig = {
         },
       }
     : {}),
-};
+}
 
-export default config;
+export default config

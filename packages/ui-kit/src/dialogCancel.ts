@@ -5,7 +5,11 @@ export function handleDialogCancel(
   busy: boolean | undefined,
   close: () => void,
 ) {
-  if (event.target !== dialog) return;
-  event.preventDefault();
-  if (!busy) close();
+  if (event.target !== dialog) {
+    return
+  }
+  event.preventDefault()
+  if (!busy) {
+    close()
+  }
 }

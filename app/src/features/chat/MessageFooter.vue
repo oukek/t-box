@@ -1,11 +1,13 @@
 <script setup lang="ts">
-defineProps<{ align?: "start" | "end" }>();
+defineProps<{ align?: 'start' | 'end' }>()
 </script>
+
 <template>
   <div class="message-footer" :class="{ 'align-end': align === 'end' }">
     <slot />
   </div>
 </template>
+
 <style scoped>
 .message-footer {
   display: flex;

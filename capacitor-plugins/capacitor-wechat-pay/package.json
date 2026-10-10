@@ -1,19 +1,26 @@
 {
   "name": "@t-box/capacitor-wechat-pay",
+  "type": "module",
   "version": "0.0.1",
   "private": true,
-  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    }
+  },
   "main": "./index.js",
   "types": "./index.d.ts",
   "files": [
-    "android",
-    "ios",
-    "index.js",
-    "index.d.ts",
-    "web.js",
+    "README.md",
     "TBoxCapacitorWechatPay.podspec",
+    "android",
+    "index.d.ts",
+    "index.js",
+    "ios",
     "package.json",
-    "README.md"
+    "web.js"
   ],
   "capacitor": {
     "ios": {
@@ -28,12 +35,5 @@
   },
   "devDependencies": {
     "@capacitor/core": "8.5.2"
-  },
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "import": "./index.js",
-      "default": "./index.js"
-    }
   }
 }

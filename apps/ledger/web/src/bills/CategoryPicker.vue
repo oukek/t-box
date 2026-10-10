@@ -1,44 +1,49 @@
 <script setup lang="ts">
-import CategoryIcon from "../categories/CategoryIcon.vue";
-import { computed, ref } from "vue";
-import type { BillCategory, CategoryId } from "@t-box/ledger-contracts";
-import { AppIcon, BottomSheet } from "@t-box/ui-kit";
+import type { BillCategory, CategoryId } from '@t-box/ledger-contracts'
+import { AppIcon, BottomSheet } from '@t-box/ui-kit'
+import { computed, ref } from 'vue'
+import CategoryIcon from '../categories/CategoryIcon.vue'
 
 const props = defineProps<{
-  ledgerId: string;
-  categories: BillCategory[];
-  type: "expense" | "income";
-  disabled?: boolean;
-}>();
-const selected = defineModel<CategoryId>({ required: true });
-const expanded = ref(false);
-const search = ref("");
-const hasMore = computed(() => props.categories.length > 18);
+  ledgerId: string
+  categories: BillCategory[]
+  type: 'expense' | 'income'
+  disabled?: boolean
+}>()
+const selected = defineModel<CategoryId>({ required: true })
+const expanded = ref(false)
+const search = ref('')
+const hasMore = computed(() => props.categories.length > 18)
 const preview = computed(() => {
-  if (!hasMore.value) return props.categories;
-  const items = props.categories.slice(0, 17);
-  const current = props.categories.find((item) => item.id === selected.value);
+  if (!hasMore.value) {
+    return props.categories
+  }
+  const items = props.categories.slice(0, 17)
+  const current = props.categories.find((item) => item.id === selected.value)
   // Keep the chosen category visible without changing the saved category order.
-  if (current && !items.some((item) => item.id === current.id))
-    items[16] = current;
-  return items;
-});
+  if (current && !items.some((item) => item.id === current.id)) {
+    items[16] = current
+  }
+  return items
+})
 const results = computed(() => {
-  const query = search.value.trim().toLocaleLowerCase();
+  const query = search.value.trim().toLocaleLowerCase()
   return query
     ? props.categories.filter((item) =>
         item.label.toLocaleLowerCase().includes(query),
       )
-    : props.categories;
-});
+    : props.categories
+})
 function openAll() {
-  search.value = "";
-  expanded.value = true;
+  search.value = ''
+  expanded.value = true
 }
 function choose(id: CategoryId) {
-  if (props.disabled) return;
-  selected.value = id;
-  expanded.value = false;
+  if (props.disabled) {
+    return
+  }
+  selected.value = id
+  expanded.value = false
 }
 </script>
 
@@ -57,7 +62,7 @@ function choose(id: CategoryId) {
         name="category"
         :value="category.id"
         :disabled="disabled"
-      />
+      >
       <CategoryIcon
         :ledger-id="ledgerId"
         :icon="category.icon"
@@ -100,7 +105,7 @@ function choose(id: CategoryId) {
           type="search"
           placeholder="搜索分类"
           aria-label="搜索分类"
-        />
+        >
       </label>
       <span class="ledger-category-count">{{ results.length }} 个分类</span>
     </div>

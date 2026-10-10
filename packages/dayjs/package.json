@@ -1,11 +1,8 @@
 {
   "name": "@t-box/dayjs",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "dependencies": {
-    "dayjs": "1.11.23"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,8 +18,11 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
+  "dependencies": {
+    "dayjs": "1.11.23"
+  },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "@types/node": "^24.10.0"
+    "@types/node": "^24.10.0",
+    "typescript": "~5.9.3"
   }
 }

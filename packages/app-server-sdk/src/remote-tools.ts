@@ -1,16 +1,17 @@
-import type { ApplicationModule, ApplicationToolContext } from "./contracts.js";
+import type { ApplicationModule, ApplicationToolContext } from './contracts.js'
+
 export interface RemoteToolPort {
   invoke(
     input: {
-      appId: string;
-      releaseId: string;
-      generation: number;
-      method: string;
-      arguments: unknown;
-      invocationId: string;
+      appId: string
+      releaseId: string
+      generation: number
+      method: string
+      arguments: unknown
+      invocationId: string
     },
     context: ApplicationToolContext,
-  ): Promise<unknown>;
+  ): Promise<unknown>
 }
 /** Schemas, validation, confirmation and resource requirements remain owned by the application. */
 export function bindRemoteTools(
@@ -18,15 +19,16 @@ export function bindRemoteTools(
   methods: Readonly<Record<string, string>>,
   port: RemoteToolPort,
 ): ApplicationModule {
-  const tools = { ...module.tools };
+  const tools = { ...module.tools }
   for (const [name, method] of Object.entries(methods)) {
-    const declaration = tools[name];
+    const declaration = tools[name]
     if (
       !declaration ||
-      declaration.execution !== "server" ||
+      declaration.execution !== 'server' ||
       !/^[a-z][a-z0-9_-]{0,63}$/.test(method)
-    )
-      throw new Error("Invalid remote tool binding");
+    ) {
+      throw new Error('Invalid remote tool binding')
+    }
     tools[name] = {
       ...declaration,
       handler: async (args, context) => {
@@ -34,10 +36,11 @@ export function bindRemoteTools(
           !context.application ||
           context.application.appId !== module.id ||
           !context.callId
-        )
+        ) {
           throw new Error(
-            "Remote tool requires an installed, pinned application context",
-          );
+            'Remote tool requires an installed, pinned application context',
+          )
+        }
         return port.invoke(
           {
             ...context.application,
@@ -46,9 +49,9 @@ export function bindRemoteTools(
             invocationId: context.callId,
           },
           context,
-        );
+        )
       },
-    };
+    }
   }
-  return { ...module, tools };
+  return { ...module, tools }
 }

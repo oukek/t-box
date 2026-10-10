@@ -1,58 +1,70 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from "vue";
-import { AppIcon, SidePanel } from "@t-box/ui-kit";
-import type { Wallet } from "@t-box/shared";
-import { identity } from "../../core/session";
-import { request } from "../../core/network";
-import { openWallet, openResources, openPricing } from "../../core/navigation";
-import { displayMoney } from "../billing/format";
+import type { Wallet } from '@t-box/shared'
+import { AppIcon, SidePanel } from '@t-box/ui-kit'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { openPricing, openResources, openWallet } from '../../core/navigation'
+import { request } from '../../core/network'
+import { identity } from '../../core/session'
+import { displayMoney } from '../billing/format'
 
-const props = defineProps<{ open: boolean }>();
-const emit = defineEmits<{ close: []; tasks: [] }>();
-const wallet = ref<Wallet | null>(null),
-  loading = ref(false),
-  error = ref(false);
-let controller: AbortController | undefined;
+const props = defineProps<{ open: boolean }>()
+const emit = defineEmits<{ close: [], tasks: [] }>()
+const wallet = ref<Wallet | null>(null)
+const loading = ref(false)
+const error = ref(false)
+let controller: AbortController | undefined
 watch(
   () => [props.open, identity.user?.id] as const,
   async ([open, id]) => {
-    controller?.abort();
-    wallet.value = null;
-    error.value = false;
-    loading.value = false;
-    if (!open || !id) return;
-    controller = new AbortController();
-    const signal = controller.signal;
-    loading.value = true;
+    controller?.abort()
+    wallet.value = null
+    error.value = false
+    loading.value = false
+    if (!open || !id) {
+      return
+    }
+    controller = new AbortController()
+    const signal = controller.signal
+    loading.value = true
     try {
-      const result = await request<{ data: Wallet }>("/wallet", { signal });
-      if (!signal.aborted) wallet.value = result.data;
+      const result = await request<{ data: Wallet }>('/wallet', { signal })
+      if (!signal.aborted) {
+        wallet.value = result.data
+      }
     } catch {
-      if (!signal.aborted) error.value = true;
+      if (!signal.aborted) {
+        error.value = true
+      }
     } finally {
-      if (!signal.aborted) loading.value = false;
+      if (!signal.aborted) {
+        loading.value = false
+      }
     }
   },
   { immediate: true },
-);
-onBeforeUnmount(() => controller?.abort());
+)
+onBeforeUnmount(() => controller?.abort())
 function openPage(action: () => void) {
-  emit("close");
-  action();
+  emit('close')
+  action()
 }
 </script>
+
 <template>
-  <SidePanel :open="open" title="AI 中心" @close="emit('close')">
+  <SidePanel
+    :open="open"
+    title="AI 中心"
+    @close="emit('close')"
+  >
     <div class="ai-center">
       <button
         class="ai-center-balance"
         aria-label="查看我的余额"
         @click="openPage(openWallet)"
       >
-        <span
-          ><AppIcon name="wallet" :size="18" />我的余额<AppIcon
-            name="right"
-            :size="16"
+        <span><AppIcon name="wallet" :size="18" />我的余额<AppIcon
+          name="right"
+          :size="16"
         /></span>
         <strong>{{
           loading ? "…" : wallet ? `¥ ${displayMoney(wallet.available)}` : "—"
@@ -85,6 +97,7 @@ function openPage(action: () => void) {
     </div>
   </SidePanel>
 </template>
+
 <style scoped>
 .ai-center {
   padding: 8px 4px;

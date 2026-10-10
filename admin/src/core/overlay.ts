@@ -1,14 +1,18 @@
-let locks = 0;
-let originalOverflow = "";
+let locks = 0
+let originalOverflow = ''
 export function lockScroll() {
   if (locks++ === 0) {
-    originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
   }
-  let released = false;
+  let released = false
   return () => {
-    if (released) return;
-    released = true;
-    if (--locks === 0) document.body.style.overflow = originalOverflow;
-  };
+    if (released) {
+      return
+    }
+    released = true
+    if (--locks === 0) {
+      document.body.style.overflow = originalOverflow
+    }
+  }
 }

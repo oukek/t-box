@@ -1,39 +1,45 @@
 <script setup lang="ts">
-import { handleDialogCancel } from "./dialogCancel";
-import { ref, watch, nextTick, onBeforeUnmount } from "vue";
-import { lockDocumentScroll } from "./sheetScroll";
-const props = defineProps<{ open: boolean; title: string; busy?: boolean }>(),
-  emit = defineEmits<{ close: []; opened: [] }>(),
-  dialog = ref<HTMLDialogElement>();
-let previous: HTMLElement | null = null;
-let release: (() => void) | undefined;
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { handleDialogCancel } from './dialogCancel'
+import { lockDocumentScroll } from './sheetScroll'
+
+const props = defineProps<{ open: boolean, title: string, busy?: boolean }>()
+const emit = defineEmits<{ close: [], opened: [] }>()
+const dialog = ref<HTMLDialogElement>()
+let previous: HTMLElement | null = null
+let release: (() => void) | undefined
 function restore() {
-  release?.();
-  release = undefined;
-  if (previous?.isConnected) previous.focus();
-  previous = null;
+  release?.()
+  release = undefined
+  if (previous?.isConnected) {
+    previous.focus()
+  }
+  previous = null
 }
 watch(
   () => props.open,
   async (open) => {
-    await nextTick();
+    await nextTick()
     if (open && props.open && dialog.value && !dialog.value.open) {
       previous =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
-          : null;
-      release = lockDocumentScroll();
-      dialog.value.showModal();
-      emit("opened");
-    } else dialog.value?.close();
+          : null
+      release = lockDocumentScroll()
+      dialog.value.showModal()
+      emit('opened')
+    } else {
+      dialog.value?.close()
+    }
   },
   { immediate: true },
-);
+)
 onBeforeUnmount(() => {
-  dialog.value?.close();
-  restore();
-});
+  dialog.value?.close()
+  restore()
+})
 </script>
+
 <template>
   <dialog
     ref="dialog"
@@ -62,6 +68,7 @@ onBeforeUnmount(() => {
     </div>
   </dialog>
 </template>
+
 <style scoped>
 .dialog {
   border: 0;

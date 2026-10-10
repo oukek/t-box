@@ -256,7 +256,7 @@
   border-radius: 6px;
   min-width: 0;
 }
-.period-picker input[type="number"] {
+.period-picker input[type='number'] {
   width: 100px;
 }
 .period-picker > span {
@@ -513,7 +513,7 @@
   color: #82929c;
   font-size: 10px;
 }
-.allocation-row input[type="checkbox"] {
+.allocation-row input[type='checkbox'] {
   accent-color: #21857b;
   margin-right: 8px;
   width: auto;

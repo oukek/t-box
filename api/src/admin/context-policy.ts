@@ -1,33 +1,37 @@
+import type { ContextPolicy } from '@t-box/shared'
+import { ApiError } from '@t-box/server-foundation/errors'
 import {
-  DEFAULT_CONTEXT_POLICY,
   contextOutputBudget,
-  type ContextPolicy,
-} from "@t-box/shared";
-import { ApiError } from "@t-box/server-foundation/errors";
+  DEFAULT_CONTEXT_POLICY,
+} from '@t-box/shared'
+
 export function contextPolicy(
   value: unknown,
   reasoning = false,
 ): Required<ContextPolicy> {
-  let v: unknown;
+  let v: unknown
   try {
-    v = typeof value === "string" ? JSON.parse(value) : value;
+    v = typeof value === 'string' ? JSON.parse(value) : value
   } catch {
-    throw new ApiError(400, "INVALID_CONTEXT_POLICY", "上下文配置无效");
+    throw new ApiError(400, 'INVALID_CONTEXT_POLICY', '上下文配置无效')
   }
-  if (v == null) return { ...DEFAULT_CONTEXT_POLICY };
-  if (typeof v !== "object" || Array.isArray(v))
-    throw new ApiError(400, "INVALID_CONTEXT_POLICY", "上下文配置无效");
-  const raw = v as Record<string, unknown>;
+  if (v == null) {
+    return { ...DEFAULT_CONTEXT_POLICY }
+  }
+  if (typeof v !== 'object' || Array.isArray(v)) {
+    throw new ApiError(400, 'INVALID_CONTEXT_POLICY', '上下文配置无效')
+  }
+  const raw = v as Record<string, unknown>
   // Existing records with native compression disabled gain portable summarization.
   // Explicit 'off' is retained. This is normalization, so no schema migration is needed.
   const x = {
     ...DEFAULT_CONTEXT_POLICY,
     ...raw,
     compactionMode:
-      raw.compactionMode ?? (raw.compaction ? "native" : "summary"),
-  } as Required<ContextPolicy>;
+      raw.compactionMode ?? (raw.compaction ? 'native' : 'summary'),
+  } as Required<ContextPolicy>
   const integer = (n: unknown, min: number, max: number) =>
-    Number.isInteger(n) && Number(n) >= min && Number(n) <= max;
+    Number.isInteger(n) && Number(n) >= min && Number(n) <= max
   if (
     Object.keys(raw).some((k) => !(k in DEFAULT_CONTEXT_POLICY)) ||
     !integer(x.maxInputTokens, 8192, 2_000_000) ||
@@ -38,29 +42,31 @@ export function contextPolicy(
     ) ||
     !integer(x.keepRecentTurns, 1, 12) ||
     !integer(x.summaryTargetTokens, 512, 8192) ||
-    typeof x.compactionThreshold !== "number" ||
+    typeof x.compactionThreshold !== 'number' ||
     !Number.isFinite(x.compactionThreshold) ||
     x.compactionThreshold < 0.5 ||
     x.compactionThreshold > 0.9 ||
-    !["summary", "native", "off"].includes(x.compactionMode) ||
+    !['summary', 'native', 'off'].includes(x.compactionMode) ||
     [x.compaction, x.promptCacheKey, x.tokenCounting].some(
-      (v) => typeof v !== "boolean",
+      (v) => typeof v !== 'boolean',
     )
-  )
+  ) {
     throw new ApiError(
       400,
-      "INVALID_CONTEXT_POLICY",
-      "上下文预算或压缩配置无效，请检查字段范围",
-    );
+      'INVALID_CONTEXT_POLICY',
+      '上下文预算或压缩配置无效，请检查字段范围',
+    )
+  }
   if (
     x.contextWindowTokens &&
     x.contextWindowTokens - contextOutputBudget(x, reasoning) - 1024 < 8192
-  )
+  ) {
     throw new ApiError(
       400,
-      "INVALID_CONTEXT_POLICY",
-      "总窗口需至少容纳输出预算、8192 输入 token 及 1024 安全余量",
-    );
-  x.compaction = x.compactionMode !== "off";
-  return x;
+      'INVALID_CONTEXT_POLICY',
+      '总窗口需至少容纳输出预算、8192 输入 token 及 1024 安全余量',
+    )
+  }
+  x.compaction = x.compactionMode !== 'off'
+  return x
 }

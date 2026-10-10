@@ -1,82 +1,86 @@
 <script setup lang="ts">
-import type { DeepReadonly } from "vue";
-import { computed, onMounted, onBeforeUnmount, ref } from "vue";
-import type { MarketEntry } from "@t-box/app-contracts";
-import { Modal } from "@t-box/ui-kit";
-import LauncherIcon from "@t-box/ui-kit/LauncherIcon.vue";
-import { AppIcon } from "@t-box/ui-kit";
+import type { MarketEntry } from '@t-box/app-contracts'
+import type { DeepReadonly } from 'vue'
 import {
   appCatalog,
-  refreshCatalog,
   changeInstallation,
-} from "@t-box/app-shell-sdk";
-import { openApplication } from "@t-box/app-shell-sdk";
-import { presentApplication } from "@t-box/app-shell-sdk";
+  openApplication,
+  presentApplication,
+  refreshCatalog,
+} from '@t-box/app-shell-sdk'
+import { AppIcon, Modal } from '@t-box/ui-kit'
+import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+
 const display = (entry: DeepReadonly<MarketEntry>) =>
-  presentApplication(entry.release.manifest);
-const query = ref(""),
-  selected = ref<DeepReadonly<MarketEntry> | null>(null),
-  busy = ref(false),
-  error = ref("");
-const operationKey = ref(crypto.randomUUID());
+  presentApplication(entry.release.manifest)
+const query = ref('')
+const selected = ref<DeepReadonly<MarketEntry> | null>(null)
+const busy = ref(false)
+const error = ref('')
+const operationKey = ref(crypto.randomUUID())
 const entries = computed(() =>
   appCatalog.entries.filter((e) =>
     (display(e).name + display(e).description).includes(query.value.trim()),
   ),
-);
+)
 const installed = (e: DeepReadonly<MarketEntry>) =>
-  e.installation?.status === "active";
+  e.installation?.status === 'active'
 const updating = (e: DeepReadonly<MarketEntry>) =>
-  Boolean(e.installation?.operationId);
+  Boolean(e.installation?.operationId)
 const action = (e: DeepReadonly<MarketEntry>) =>
   installed(e)
     ? e.installation!.releaseId !== e.release.releaseId
-      ? "update"
-      : "uninstall"
-    : "install";
+      ? 'update'
+      : 'uninstall'
+    : 'install'
 const label = (e: DeepReadonly<MarketEntry>) =>
   updating(e)
-    ? "正在处理"
+    ? '正在处理'
     : installed(e)
       ? e.installation!.releaseId !== e.release.releaseId
-        ? "更新"
-        : "打开"
-      : "安装";
+        ? '更新'
+        : '打开'
+      : '安装'
 function show(entry: DeepReadonly<MarketEntry>) {
-  selected.value = entry;
-  error.value = "";
-  operationKey.value = crypto.randomUUID();
+  selected.value = entry
+  error.value = ''
+  operationKey.value = crypto.randomUUID()
 }
 const permissions: Record<string, string> = {
-  "calculator.calculate": "执行数学计算",
-  storage: "保存应用偏好与本地记录",
-};
+  'calculator.calculate': '执行数学计算',
+  'storage': '保存应用偏好与本地记录',
+}
 async function confirm() {
-  if (!selected.value) return;
-  busy.value = true;
-  error.value = "";
+  if (!selected.value) {
+    return
+  }
+  busy.value = true
+  error.value = ''
   try {
     await changeInstallation(
       selected.value,
       action(selected.value),
       operationKey.value,
-    );
-    selected.value = null;
+    )
+    selected.value = null
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "操作失败";
+    error.value = e instanceof Error ? e.message : '操作失败'
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 const poll = setInterval(() => {
-  if (appCatalog.entries.some((e) => e.installation?.operationId))
+  if (appCatalog.entries.some((e) => e.installation?.operationId)) {
     void refreshCatalog().then(() =>
-      window.dispatchEvent(new Event("tbox:applications-changed")),
-    );
-}, 5000);
-onMounted(() => void refreshCatalog());
-onBeforeUnmount(() => clearInterval(poll));
+      window.dispatchEvent(new Event('tbox:applications-changed')),
+    )
+  }
+}, 5000)
+onMounted(() => void refreshCatalog())
+onBeforeUnmount(() => clearInterval(poll))
 </script>
+
 <template>
   <section class="market-page">
     <div class="market-intro">
@@ -84,12 +88,11 @@ onBeforeUnmount(() => clearInterval(poll));
       <h2>工具，随手可用。</h2>
       <p>一个入口，打开你的日常应用。</p>
     </div>
-    <label class="market-search"
-      ><AppIcon name="search" :size="18" /><input
-        v-model="query"
-        placeholder="搜索应用"
-        aria-label="搜索应用"
-    /></label>
+    <label class="market-search"><AppIcon name="search" :size="18" /><input
+      v-model="query"
+      placeholder="搜索应用"
+      aria-label="搜索应用"
+    ></label>
     <p v-if="appCatalog.error" role="alert">
       {{ appCatalog.error }}
       <button class="button button-secondary" @click="refreshCatalog">
@@ -111,23 +114,16 @@ onBeforeUnmount(() => clearInterval(poll));
             :app-id="entry.release.appId"
             :icon="display(entry).icon"
             :day="new Date().getDate()"
-          /><span
-            ><strong>{{ display(entry).name }}</strong
-            ><small>{{ display(entry).description }}</small
-            ><em
-              >{{ entry.release.kind === "system" ? "系统应用" : "官方应用" }} ·
-              v{{ entry.release.manifest.version
-              }}<template v-if="entry.release.manifest.skillIds.length">
-                · 支持 AI 工具</template
-              ></em
-            ></span
-          ></button
-        ><button
+          /><span><strong>{{ display(entry).name }}</strong><small>{{ display(entry).description }}</small><em>{{ entry.release.kind === "system" ? "系统应用" : "官方应用" }} ·
+            v{{ entry.release.manifest.version
+            }}<template v-if="entry.release.manifest.skillIds.length">
+              · 支持 AI 工具</template></em></span>
+        </button><button
           class="market-action"
           :disabled="updating(entry) || busy"
           @click="
-            installed(entry) &&
-            entry.installation!.releaseId === entry.release.releaseId
+            installed(entry)
+              && entry.installation!.releaseId === entry.release.releaseId
               ? openApplication({ appId: entry.release.appId })
               : show(entry)
           "
@@ -144,7 +140,8 @@ onBeforeUnmount(() => clearInterval(poll));
       :title="selected ? display(selected).name : '应用详情'"
       :busy="busy"
       @close="!busy && (selected = null)"
-      ><div v-if="selected" class="market-detail">
+    >
+      <div v-if="selected" class="market-detail">
         <p>{{ display(selected).description }}</p>
         <dl>
           <div>
@@ -166,8 +163,8 @@ onBeforeUnmount(() => clearInterval(poll));
             </dd>
           </div>
         </dl>
-        <template v-if="action(selected) !== 'uninstall'"
-          ><h4>应用权限</h4>
+        <template v-if="action(selected) !== 'uninstall'">
+          <h4>应用权限</h4>
           <ul v-if="selected.release.permissions.length">
             <li
               v-for="permission in selected.release.permissions"
@@ -176,17 +173,23 @@ onBeforeUnmount(() => clearInterval(poll));
               {{ permissions[permission] || permission }}
             </li>
           </ul>
-          <p v-else>无需额外权限。</p></template
-        >
+          <p v-else>无需额外权限。</p>
+        </template>
         <p v-else-if="selected.release.kind === 'user'">
           卸载后停止提供 AI 工具，已有数据会保留。重新安装后可以继续使用。
         </p>
-        <p v-if="error" role="alert" class="market-error">{{ error }}</p>
+        <p
+          v-if="error"
+          role="alert"
+          class="market-error"
+        >
+          {{ error }}
+        </p>
         <button
           v-if="
-            !updating(selected) &&
-            (selected.release.kind === 'user' ||
-              action(selected) !== 'uninstall')
+            !updating(selected)
+              && (selected.release.kind === 'user'
+                || action(selected) !== 'uninstall')
           "
           class="button"
           :class="
@@ -214,10 +217,11 @@ onBeforeUnmount(() => clearInterval(poll));
               : "正在核对服务结果，可以离开此页面。"
           }}
         </p>
-      </div></Modal
-    >
+      </div>
+    </Modal>
   </section>
 </template>
+
 <style scoped>
 .market-page {
   --market-ink: #233347;

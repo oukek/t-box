@@ -3,7 +3,7 @@ export class RequestError extends Error {
     message: string,
     readonly status: number,
   ) {
-    super(message);
+    super(message)
   }
 }
 export async function request<T>(
@@ -12,32 +12,35 @@ export async function request<T>(
 ): Promise<T> {
   const response = await fetch(`/api/v1/admin${path}`, {
     ...options,
-    credentials: "same-origin",
+    credentials: 'same-origin',
     signal: options.signal ?? AbortSignal.timeout(30_000),
     headers: {
       ...(options.body === undefined
         ? {}
-        : { "Content-Type": "application/json" }),
-      "X-Admin-Request": "1",
+        : { 'Content-Type': 'application/json' }),
+      'X-Admin-Request': '1',
       ...options.headers,
     },
-  });
-  if (response.status === 204) return undefined as T;
+  })
+  if (response.status === 204) {
+    return undefined as T
+  }
   const body = await response
     .json()
-    .catch(() => ({ error: { message: "服务返回了无法读取的数据" } }));
+    .catch(() => ({ error: { message: '服务返回了无法读取的数据' } }))
   if (!response.ok) {
-    if (response.status === 401 && path !== "/session")
-      window.dispatchEvent(new Event("admin-session-expired"));
-    throw new RequestError(body.error?.message ?? "请求失败", response.status);
+    if (response.status === 401 && path !== '/session') {
+      window.dispatchEvent(new Event('admin-session-expired'))
+    }
+    throw new RequestError(body.error?.message ?? '请求失败', response.status)
   }
-  return body.data as T;
+  return body.data as T
 }
-export const save = <T>(path: string, data: unknown, method = "POST") =>
-  request<T>(path, { method, body: JSON.stringify(data) });
+export const save = <T>(path: string, data: unknown, method = 'POST') =>
+  request<T>(path, { method, body: JSON.stringify(data) })
 export const errorMessage = (error: unknown) =>
   error instanceof Error
-    ? error.name === "TimeoutError"
-      ? "请求超时，请检查操作结果后重试。"
+    ? error.name === 'TimeoutError'
+      ? '请求超时，请检查操作结果后重试。'
       : error.message
-    : "操作失败";
+    : '操作失败'

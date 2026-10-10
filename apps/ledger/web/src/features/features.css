@@ -175,7 +175,7 @@
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
 }
-.feature-import-row input:not([type="checkbox"]) {
+.feature-import-row input:not([type='checkbox']) {
   min-width: 0;
   width: 100%;
   padding: 6px 8px;

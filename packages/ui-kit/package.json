@@ -1,8 +1,8 @@
 {
   "name": "@t-box/ui-kit",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./base.css": "./src/base.css",
@@ -12,7 +12,7 @@
     "./*.css": "./src/*.css"
   },
   "dependencies": {
-    "vue": "^3.5.29",
-    "@t-box/dayjs": "workspace:*"
+    "@t-box/dayjs": "workspace:*",
+    "vue": "^3.5.29"
   }
 }

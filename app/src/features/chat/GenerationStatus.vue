@@ -1,24 +1,39 @@
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
+import { onMounted, watch } from 'vue'
+
 const props = withDefaults(
-  defineProps<{ label?: string; waiting?: boolean }>(),
-  { label: "生成中…", waiting: false },
-);
-const emit = defineEmits<{ rendered: [] }>();
-onMounted(() => emit("rendered"));
+  defineProps<{ label?: string, waiting?: boolean }>(),
+  { label: '生成中…', waiting: false },
+)
+const emit = defineEmits<{ rendered: [] }>()
+onMounted(() => emit('rendered'))
 watch(
   () => [props.label, props.waiting],
-  () => emit("rendered"),
-  { flush: "post" },
-);
+  () => emit('rendered'),
+  { flush: 'post' },
+)
 </script>
+
 <template>
-  <div class="generation-status" role="status" aria-live="polite">
-    <span v-if="!waiting" class="spinner small" aria-hidden="true"></span>
-    <span v-else class="waiting-dot" aria-hidden="true"></span>
+  <div
+    class="generation-status"
+    role="status"
+    aria-live="polite"
+  >
+    <span
+      v-if="!waiting"
+      class="spinner small"
+      aria-hidden="true"
+    />
+    <span
+      v-else
+      class="waiting-dot"
+      aria-hidden="true"
+    />
     <span>{{ waiting ? "等待你处理…" : label }}</span>
   </div>
 </template>
+
 <style scoped>
 .generation-status {
   display: flex;

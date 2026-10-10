@@ -1,5 +1,5 @@
 export async function initializeAdminSchema(db: {
-  query(sql: string): Promise<unknown>;
+  query(sql: string): Promise<unknown>
 }) {
   const tables = [
     `CREATE TABLE IF NOT EXISTS admin_users (
@@ -33,6 +33,8 @@ export async function initializeAdminSchema(db: {
       CONSTRAINT single_ai_settings CHECK(id = 1)
     ) ENGINE=InnoDB`,
     `INSERT IGNORE INTO ai_settings (id, model_id) VALUES (1, NULL)`,
-  ];
-  for (const sql of tables) await db.query(sql);
+  ]
+  for (const sql of tables) {
+    await db.query(sql)
+  }
 }

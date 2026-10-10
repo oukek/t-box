@@ -1,13 +1,8 @@
 {
   "name": "@t-box/calendar-contracts",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "dependencies": {
-    "@t-box/app-contracts": "workspace:*",
-    "@t-box/time-contracts": "workspace:*",
-    "lunar-typescript": "1.8.6"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -23,8 +18,13 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/time-contracts": "workspace:*",
+    "lunar-typescript": "1.8.6"
+  },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "@types/node": "^24.10.0"
+    "@types/node": "^24.10.0",
+    "typescript": "~5.9.3"
   }
 }

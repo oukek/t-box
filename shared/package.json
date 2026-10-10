@@ -1,8 +1,8 @@
 {
   "name": "@t-box/shared",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,16 +14,16 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/calculator-contracts": "workspace:*",
+    "@t-box/calendar-contracts": "workspace:*",
+    "@t-box/ledger-contracts": "workspace:*",
+    "@t-box/market-contracts": "workspace:*",
+    "@t-box/settings-contracts": "workspace:*",
+    "@t-box/time-contracts": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "~5.9.3"
-  },
-  "dependencies": {
-    "@t-box/calculator-contracts": "workspace:*",
-    "@t-box/app-contracts": "workspace:*",
-    "@t-box/ledger-contracts": "workspace:*",
-    "@t-box/calendar-contracts": "workspace:*",
-    "@t-box/time-contracts": "workspace:*",
-    "@t-box/settings-contracts": "workspace:*",
-    "@t-box/market-contracts": "workspace:*"
   }
 }

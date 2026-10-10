@@ -1,60 +1,65 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, useId } from "vue";
-import type { ResourceRef } from "@t-box/shared";
-import { Modal } from "@t-box/ui-kit";
-import { request } from "../../core/network";
-import { authorizeResources } from "../../applications/registry";
-import { setConversationTitle } from "./chatStore";
-import { refreshConversationHistory } from "./conversationStore";
+import type { ResourceRef } from '@t-box/shared'
+import { Modal } from '@t-box/ui-kit'
+import { nextTick, ref, useId, watch } from 'vue'
+import { authorizeResources } from '../../applications/registry'
+import { request } from '../../core/network'
+import { setConversationTitle } from './chatStore'
+import { refreshConversationHistory } from './conversationStore'
+
 const props = defineProps<{
-  open: boolean;
-  conversationId: string;
-  title: string;
-  resources?: readonly ResourceRef[];
-}>();
-const emit = defineEmits<{ close: [] }>();
-const inputId = `conversation-title-${useId()}`;
-const value = ref(""),
-  busy = ref(false),
-  error = ref(""),
-  input = ref<HTMLInputElement>();
+  open: boolean
+  conversationId: string
+  title: string
+  resources?: readonly ResourceRef[]
+}>()
+const emit = defineEmits<{ close: [] }>()
+const inputId = `conversation-title-${useId()}`
+const value = ref('')
+const busy = ref(false)
+const error = ref('')
+const input = ref<HTMLInputElement>()
 watch(
   () => props.open,
   (open) => {
     if (open) {
-      value.value = props.title;
-      error.value = "";
+      value.value = props.title
+      error.value = ''
     }
   },
   { immediate: true },
-);
+)
 async function focus() {
-  await nextTick();
-  input.value?.focus();
-  input.value?.select();
+  await nextTick()
+  input.value?.focus()
+  input.value?.select()
 }
 async function save() {
-  if (busy.value || !value.value.trim()) return;
-  busy.value = true;
-  error.value = "";
-  const id = props.conversationId;
+  if (busy.value || !value.value.trim()) {
+    return
+  }
+  busy.value = true
+  error.value = ''
+  const id = props.conversationId
   try {
-    if (!(await authorizeResources(props.resources || [], "修改会话标题")))
-      return;
+    if (!(await authorizeResources(props.resources || [], '修改会话标题'))) {
+      return
+    }
     const result = await request<{ data: { title: string } }>(
       `/conversations/${id}`,
-      { method: "PATCH", body: JSON.stringify({ title: value.value.trim() }) },
-    );
-    setConversationTitle(id, result.data.title);
-    await refreshConversationHistory();
-    emit("close");
+      { method: 'PATCH', body: JSON.stringify({ title: value.value.trim() }) },
+    )
+    setConversationTitle(id, result.data.title)
+    await refreshConversationHistory()
+    emit('close')
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "修改失败";
+    error.value = cause instanceof Error ? cause.message : '修改失败'
   } finally {
-    busy.value = false;
+    busy.value = false
   }
 }
 </script>
+
 <template>
   <Modal
     :open="open"
@@ -73,18 +78,22 @@ async function save() {
         :disabled="busy"
         required
         autocomplete="off"
-      />
+      >
       <p class="title-help">手动修改后，将保留你设置的标题。</p>
-      <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+      <p
+        v-if="error"
+        class="form-error"
+        role="alert"
+      >
+        {{ error }}
+      </p>
       <div class="dialog-actions">
         <button
           type="button"
           class="button button-secondary"
           :disabled="busy"
           @click="emit('close')"
-        >
-          取消</button
-        ><button
+        > 取消</button><button
           class="button button-primary"
           :disabled="busy || !value.trim()"
         >
@@ -94,6 +103,7 @@ async function save() {
     </form>
   </Modal>
 </template>
+
 <style scoped>
 .title-form {
   display: grid;

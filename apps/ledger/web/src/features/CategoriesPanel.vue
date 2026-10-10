@@ -1,28 +1,29 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import CategoryDialog from "../categories/CategoryDialog.vue";
-import CategoryIcon from "../categories/CategoryIcon.vue";
-import { SheetSelect } from "@t-box/ui-kit";
-import type { ManagedCategory } from "@t-box/ledger-contracts";
-import { featureApi, useFeatureAction } from "./api";
-import LedgerFormSheet from "./LedgerFormSheet.vue";
-import type { FormValues, LedgerFormField } from "./form";
-const props = defineProps<{ ledgerId: string; canManage: boolean }>(),
-  api = featureApi(props.ledgerId),
-  action = useFeatureAction(),
-  rows = ref<ManagedCategory[]>([]),
-  type = ref<"expense" | "income">("expense"),
-  editor = ref<"create" | "edit" | "merge" | "delete" | null>(null),
-  target = ref<ManagedCategory>(),
-  form = ref<FormValues>({});
-const visible = computed(() => rows.value.filter((r) => r.type === type.value));
+import type { ManagedCategory } from '@t-box/ledger-contracts'
+import type { FormValues, LedgerFormField } from './form'
+import { SheetSelect } from '@t-box/ui-kit'
+import { computed, onMounted, ref } from 'vue'
+import CategoryDialog from '../categories/CategoryDialog.vue'
+import CategoryIcon from '../categories/CategoryIcon.vue'
+import { featureApi, useFeatureAction } from './api'
+import LedgerFormSheet from './LedgerFormSheet.vue'
+
+const props = defineProps<{ ledgerId: string, canManage: boolean }>()
+const api = featureApi(props.ledgerId)
+const action = useFeatureAction()
+const rows = ref<ManagedCategory[]>([])
+const type = ref<'expense' | 'income'>('expense')
+const editor = ref<'create' | 'edit' | 'merge' | 'delete' | null>(null)
+const target = ref<ManagedCategory>()
+const form = ref<FormValues>({})
+const visible = computed(() => rows.value.filter((r) => r.type === type.value))
 const fields = computed<LedgerFormField[]>(() =>
-  editor.value === "merge"
+  editor.value === 'merge'
     ? [
         {
-          key: "targetId",
-          label: "合并到",
-          kind: "select",
+          key: 'targetId',
+          label: '合并到',
+          kind: 'select',
           options: rows.value
             .filter(
               (r) =>
@@ -34,54 +35,63 @@ const fields = computed<LedgerFormField[]>(() =>
         },
       ]
     : [],
-);
+)
 function create() {
-  target.value = undefined;
-  editor.value = "create";
-  action.error.value = "";
+  target.value = undefined
+  editor.value = 'create'
+  action.error.value = ''
 }
 async function load() {
   try {
-    rows.value = await api.get("/categories");
+    rows.value = await api.get('/categories')
   } catch (e) {
-    action.error.value = e instanceof Error ? e.message : "分类读取失败";
+    action.error.value = e instanceof Error ? e.message : '分类读取失败'
   }
 }
-function open(row: ManagedCategory, mode: "edit" | "merge" | "delete") {
-  if (row.isDefault) return;
-  target.value = row;
-  editor.value = mode;
-  form.value = { targetId: "" };
-  action.error.value = "";
+function open(row: ManagedCategory, mode: 'edit' | 'merge' | 'delete') {
+  if (row.isDefault) {
+    return
+  }
+  target.value = row
+  editor.value = mode
+  form.value = { targetId: '' }
+  action.error.value = ''
 }
 async function save() {
-  const row = target.value;
-  if (!row || (editor.value !== "merge" && editor.value !== "delete")) return;
-  const mode = editor.value;
-  const body = mode === "merge" ? { targetId: form.value.targetId } : {};
+  const row = target.value
+  if (!row || (editor.value !== 'merge' && editor.value !== 'delete')) {
+    return
+  }
+  const mode = editor.value
+  const body = mode === 'merge' ? { targetId: form.value.targetId } : {}
   const result = await action.run(
-    `category:${mode}:${row?.id ?? "new"}`,
+    `category:${mode}:${row?.id ?? 'new'}`,
     body,
     (key) =>
       api.write(
-        `/categories/${row.id}${mode === "merge" ? "/merge" : ""}`,
+        `/categories/${row.id}${mode === 'merge' ? '/merge' : ''}`,
         body,
-        mode === "delete" ? "DELETE" : "POST",
+        mode === 'delete' ? 'DELETE' : 'POST',
         key,
       ),
-  );
+  )
   if (result) {
-    editor.value = null;
-    await load();
+    editor.value = null
+    await load()
   }
 }
-onMounted(() => load().catch((e) => (action.error.value = e.message)));
+onMounted(() => load().catch((e) => (action.error.value = e.message)))
 </script>
+
 <template>
   <div>
     <div class="feature-toolbar">
       <h2>分类管理</h2>
-      <button v-if="canManage" class="button button-primary" @click="create">
+      <button
+        v-if="canManage"
+        class="button button-primary"
+        @click="create"
+      >
         添加自定义分类
       </button>
       <SheetSelect
@@ -97,7 +107,11 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
       系统分类由管理后台统一维护；账本内可添加、编辑或合并自定义分类，停用后保留历史。
     </p>
     <div class="feature-card">
-      <div v-for="row in visible" :key="row.id" class="feature-row">
+      <div
+        v-for="row in visible"
+        :key="row.id"
+        class="feature-row"
+      >
         <CategoryIcon
           :ledger-id="ledgerId"
           :icon="row.icon"
@@ -105,23 +119,20 @@ onMounted(() => load().catch((e) => (action.error.value = e.message)));
           :size="18"
         />
         <div>
-          <strong>{{ row.label }}</strong
-          ><small
-            >{{ row.isDefault ? "系统分类 · " : "自定义 · "
-            }}{{ row.active ? "已启用" : "已停用"
-            }}{{ row.pinned ? " · 置顶" : "" }}</small
-          >
+          <strong>{{ row.label }}</strong><small>{{ row.isDefault ? "系统分类 · " : "自定义 · "
+          }}{{ row.active ? "已启用" : "已停用"
+          }}{{ row.pinned ? " · 置顶" : "" }}</small>
         </div>
         <div v-if="canManage && !row.isDefault" class="feature-actions">
-          <button @click="open(row, 'edit')">编辑</button
-          ><button @click="open(row, 'merge')">合并</button
-          ><button class="feature-danger" @click="open(row, 'delete')">
+          <button @click="open(row, 'edit')">编辑</button><button @click="open(row, 'merge')">合并</button><button class="feature-danger" @click="open(row, 'delete')">
             删除
           </button>
         </div>
       </div>
     </div>
-    <p v-if="action.error.value" class="form-error">{{ action.error.value }}</p>
+    <p v-if="action.error.value" class="form-error">
+      {{ action.error.value }}
+    </p>
     <CategoryDialog
       :open="editor === 'create' || editor === 'edit'"
       :ledger-id="ledgerId"

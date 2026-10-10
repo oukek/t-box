@@ -1,19 +1,26 @@
 {
   "name": "@t-box/capacitor-native-scanner",
+  "type": "module",
   "version": "0.0.1",
   "private": true,
-  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    }
+  },
   "main": "./index.js",
   "types": "./index.d.ts",
   "files": [
+    "README.md",
+    "TBoxCapacitorNativeScanner.podspec",
     "android",
-    "ios",
     "index.d.ts",
     "index.js",
-    "web.js",
-    "TBoxCapacitorNativeScanner.podspec",
-    "README.md",
-    "package.json"
+    "ios",
+    "package.json",
+    "web.js"
   ],
   "capacitor": {
     "ios": {
@@ -28,12 +35,5 @@
   },
   "devDependencies": {
     "@capacitor/core": "8.5.2"
-  },
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "import": "./index.js",
-      "default": "./index.js"
-    }
   }
 }

@@ -1,0 +1,10 @@
+{
+  "editor.formatOnSave": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "never"
+  },
+  "eslint.workingDirectories": [{ "directory": ".", "changeProcessCWD": true }],
+  "eslint.validate": ["javascript", "typescript", "vue", "json", "jsonc", "yaml", "css", "html", "markdown"],
+  "prettier.enable": false
+}

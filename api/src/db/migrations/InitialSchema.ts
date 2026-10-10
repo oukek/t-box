@@ -1,5 +1,6 @@
-import type { MigrationInterface, QueryRunner } from "typeorm";
-import { initializeAdminSchema } from "../../admin/schema.js";
+import type { MigrationInterface, QueryRunner } from 'typeorm'
+import { initializeAdminSchema } from '../../admin/schema.js'
+
 export class InitialSchema1791158400000 implements MigrationInterface {
   async up(runner: QueryRunner) {
     await runner.query(`
@@ -16,12 +17,13 @@ export class InitialSchema1791158400000 implements MigrationInterface {
       INDEX idx_bills_type_date (type, bill_date),
       CONSTRAINT chk_bills_positive_amount CHECK (amount > 0)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-    await initializeAdminSchema(runner);
+  `)
+    await initializeAdminSchema(runner)
   }
+
   async down(): Promise<void> {
     throw new Error(
-      "Existing business data requires an explicit backup/restore; automatic table drops are disabled."
-    );
+      'Existing business data requires an explicit backup/restore; automatic table drops are disabled.',
+    )
   }
 }

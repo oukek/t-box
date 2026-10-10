@@ -1,4 +1,4 @@
-import type { MigrationInterface, QueryRunner } from "typeorm";
+import type { MigrationInterface, QueryRunner } from 'typeorm'
 
 export class CustomerSupport1791244813000 implements MigrationInterface {
   async up(db: QueryRunner) {
@@ -9,10 +9,11 @@ export class CustomerSupport1791244813000 implements MigrationInterface {
       updated_at DATETIME NULL,
       updated_by CHAR(36) NULL,
       CONSTRAINT single_support_settings CHECK (id = 1)
-    ) ENGINE=InnoDB`);
-    await db.query("INSERT IGNORE INTO support_settings(id) VALUES(1)");
+    ) ENGINE=InnoDB`)
+    await db.query('INSERT IGNORE INTO support_settings(id) VALUES(1)')
   }
+
   async down(db: QueryRunner) {
-    await db.query("DROP TABLE support_settings");
+    await db.query('DROP TABLE support_settings')
   }
 }

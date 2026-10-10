@@ -146,7 +146,7 @@
   list-style: none;
 }
 .statistics-cash summary::after {
-  content: "⌄";
+  content: '⌄';
   color: #9aabaa;
   margin-left: 5px;
 }

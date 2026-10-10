@@ -1,69 +1,77 @@
 <script setup lang="ts">
-import { handleDialogCancel } from "./dialogCancel";
-import { nextTick, onBeforeUnmount, ref, watch } from "vue";
-import AppIcon from "./AppIcon.vue";
-import { lockDocumentScroll } from "./sheetScroll";
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import AppIcon from './AppIcon.vue'
+import { handleDialogCancel } from './dialogCancel'
+import { lockDocumentScroll } from './sheetScroll'
+
 const props = defineProps<{
-  open: boolean;
-  title: string;
-  busy?: boolean;
-  fullHeight?: boolean;
-  compact?: boolean;
-}>();
-const emit = defineEmits<{ close: []; opened: [] }>();
-const dialog = ref<HTMLDialogElement>();
-const viewportHeight = ref<number>();
-const bottomInset = ref(0);
+  open: boolean
+  title: string
+  busy?: boolean
+  fullHeight?: boolean
+  compact?: boolean
+}>()
+const emit = defineEmits<{ close: [], opened: [] }>()
+const dialog = ref<HTMLDialogElement>()
+const viewportHeight = ref<number>()
+const bottomInset = ref(0)
 function updateViewport() {
-  const viewport = window.visualViewport;
-  if (!props.fullHeight || (viewport && viewport.scale !== 1)) return;
-  viewportHeight.value = viewport?.height ?? window.innerHeight;
+  const viewport = window.visualViewport
+  if (!props.fullHeight || (viewport && viewport.scale !== 1)) {
+    return
+  }
+  viewportHeight.value = viewport?.height ?? window.innerHeight
   bottomInset.value = viewport
     ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-    : 0;
+    : 0
 }
 function stopViewport() {
-  window.visualViewport?.removeEventListener("resize", updateViewport);
-  window.visualViewport?.removeEventListener("scroll", updateViewport);
-  window.removeEventListener("resize", updateViewport);
+  window.visualViewport?.removeEventListener('resize', updateViewport)
+  window.visualViewport?.removeEventListener('scroll', updateViewport)
+  window.removeEventListener('resize', updateViewport)
 }
-let previous: HTMLElement | null = null,
-  release: (() => void) | undefined;
+let previous: HTMLElement | null = null
+let release: (() => void) | undefined
 function restore() {
-  stopViewport();
-  release?.();
-  release = undefined;
-  const target = previous;
-  previous = null;
-  if (target?.isConnected) target.focus();
+  stopViewport()
+  release?.()
+  release = undefined
+  const target = previous
+  previous = null
+  if (target?.isConnected) {
+    target.focus()
+  }
 }
 watch(
   () => props.open,
   async (open) => {
-    await nextTick();
+    await nextTick()
     if (open && props.open && dialog.value && !dialog.value.open) {
       previous =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
-          : null;
-      release = lockDocumentScroll();
+          : null
+      release = lockDocumentScroll()
       if (props.fullHeight) {
-        updateViewport();
-        window.visualViewport?.addEventListener("resize", updateViewport);
-        window.visualViewport?.addEventListener("scroll", updateViewport);
-        window.addEventListener("resize", updateViewport);
+        updateViewport()
+        window.visualViewport?.addEventListener('resize', updateViewport)
+        window.visualViewport?.addEventListener('scroll', updateViewport)
+        window.addEventListener('resize', updateViewport)
       }
-      dialog.value.showModal();
-      emit("opened");
-    } else if (!open) dialog.value?.close();
+      dialog.value.showModal()
+      emit('opened')
+    } else if (!open) {
+      dialog.value?.close()
+    }
   },
   { immediate: true },
-);
+)
 onBeforeUnmount(() => {
-  dialog.value?.close();
-  restore();
-});
+  dialog.value?.close()
+  restore()
+})
 </script>
+
 <template>
   <!-- Keep the dialog outside field labels so backdrop clicks cannot activate their trigger. -->
   <Teleport to="body">
@@ -74,11 +82,11 @@ onBeforeUnmount(() => {
       :style="
         fullHeight
           ? {
-              '--sheet-viewport-height': viewportHeight
-                ? `${viewportHeight}px`
-                : undefined,
-              '--sheet-bottom-inset': `${bottomInset}px`,
-            }
+            '--sheet-viewport-height': viewportHeight
+              ? `${viewportHeight}px`
+              : undefined,
+            '--sheet-bottom-inset': `${bottomInset}px`,
+          }
           : undefined
       "
       :aria-label="title"
@@ -88,7 +96,7 @@ onBeforeUnmount(() => {
       @close="restore"
       @click.stop="(event) => event.target === dialog && !busy && emit('close')"
     >
-      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-handle" aria-hidden="true" />
       <header class="sheet-heading">
         <h2>{{ title }}</h2>
         <button
@@ -101,13 +109,16 @@ onBeforeUnmount(() => {
           <AppIcon name="close" :size="20" />
         </button>
       </header>
-      <div class="sheet-body"><slot /></div>
+      <div class="sheet-body">
+        <slot />
+      </div>
       <footer v-if="$slots.footer" class="sheet-footer">
         <slot name="footer" />
       </footer>
     </dialog>
   </Teleport>
 </template>
+
 <style scoped>
 .sheet-dialog {
   position: fixed;
@@ -178,9 +189,7 @@ onBeforeUnmount(() => {
   bottom: var(--sheet-bottom-inset, 0px);
   height: 95vh;
   height: calc(var(--sheet-viewport-height, 100dvh) * 0.95);
-  max-height: calc(
-    var(--sheet-viewport-height, 100dvh) - env(safe-area-inset-top)
-  );
+  max-height: calc(var(--sheet-viewport-height, 100dvh) - env(safe-area-inset-top));
 }
 .sheet-full-height .sheet-body {
   flex: 1;
