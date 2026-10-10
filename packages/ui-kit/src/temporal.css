@@ -1,0 +1,242 @@
+.temporal-page {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  --temporal-accent: #34796b;
+  color: #293e44;
+  padding-bottom: 16px;
+}
+.temporal-toolbar,
+.calendar-period,
+.time-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 18px;
+}
+.temporal-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  background: #eaf0ee;
+  border-radius: 12px;
+  width: fit-content;
+}
+.temporal-tabs button {
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  color: #6d817c;
+  padding: 10px 18px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.temporal-tabs button[aria-pressed="true"] {
+  background: #fff;
+  color: #286c5e;
+  box-shadow: 0 2px 5px #243f3210;
+}
+.temporal-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #367c6d;
+  color: white;
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 17px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.temporal-text-button {
+  border: 0;
+  padding: 8px 0;
+  background: none;
+  color: var(--temporal-accent);
+  font-size: 12px;
+}
+.temporal-note {
+  font-size: 11px;
+  line-height: 1.9;
+  color: #83918b;
+  margin: 12px 0;
+}
+.temporal-empty {
+  font-size: 12px;
+  color: #90a19a;
+  padding: 26px 8px;
+  line-height: 1.8;
+  text-align: center;
+}
+.temporal-empty button {
+  display: block;
+  margin: 8px auto 0;
+}
+.temporal-error {
+  background: #fff0ed;
+  border: 1px solid #f5d1c8;
+  color: #b05847;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.temporal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.temporal-editor {
+  display: grid;
+  gap: 15px;
+}
+.temporal-editor fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 15px;
+  min-width: 0;
+}
+.temporal-field {
+  display: grid;
+  gap: 8px;
+  font-size: 11px;
+  color: #6f837b;
+  min-width: 0;
+}
+.temporal-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.temporal-editor input:not([type="checkbox"]),
+.temporal-editor textarea,
+.temporal-inline > input {
+  width: 100%;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #dce5e2;
+  border-radius: 9px;
+  padding: 11px 12px;
+  color: #354b48;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.temporal-editor textarea {
+  resize: vertical;
+}
+.temporal-editor input:focus,
+.temporal-editor textarea:focus,
+.calendar-search:focus-within {
+  outline: none;
+  border-color: #8daf9f;
+  box-shadow: 0 0 0 2px #83a69713;
+}
+.temporal-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.temporal-inline > button {
+  flex-shrink: 0;
+}
+.temporal-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #566c61;
+}
+.temporal-switch input {
+  width: 16px;
+  height: 16px;
+  accent-color: #34796b;
+}
+.temporal-weekdays {
+  display: flex;
+  gap: 7px;
+}
+.temporal-weekdays button {
+  flex: 1;
+  padding: 9px 0;
+  border: 1px solid #dce5e2;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #8a9c93;
+}
+.temporal-weekdays button[aria-pressed="true"] {
+  color: #34796b;
+  background: #eaf5ef;
+  border-color: #a8c9b6;
+}
+.temporal-badge {
+  font-size: 10px;
+  border-radius: 6px;
+  background: #eaf2ee;
+  color: #648b77;
+  padding: 5px 9px;
+}
+.temporal-detail {
+  margin: 20px 0;
+  display: grid;
+  gap: 16px;
+}
+.temporal-detail > div {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.temporal-detail dt {
+  color: #8b9b93;
+}
+.temporal-detail dd {
+  margin: 0;
+  color: #4a6357;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+@media (max-width: 760px) {
+  .temporal-tabs button {
+    padding: 9px 13px;
+    font-size: 11px;
+  }
+  .temporal-toolbar {
+    gap: 8px;
+  }
+  .temporal-primary {
+    padding: 10px 13px;
+    font-size: 11px;
+  }
+  .temporal-field-grid {
+    gap: 10px;
+  }
+  .temporal-detail > div {
+    grid-template-columns: 80px 1fr;
+    font-size: 11px;
+  }
+}
+@media (max-width: 350px) {
+  .temporal-tabs button {
+    padding: 9px 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .temporal-page * {
+    transition: none !important;
+  }
+}
+.temporal-inline > .sheet-select-trigger {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+}

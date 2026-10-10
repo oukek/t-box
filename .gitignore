@@ -1,0 +1,49 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.log
+*.tsbuildinfo
+.DS_Store
+coverage/
+playwright-report/
+test-results/
+output/playwright/
+.playwright-cli/
+.pnpm-store/
+
+# Native build output and local signing / SDK settings
+.gradle/
+build/
+DerivedData/
+Pods/
+xcuserdata/
+*.xcuserstate
+local.properties
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+capacitor/ios/App/App/public/
+capacitor/ios/App/App/capacitor.config.json
+capacitor/android/app/src/main/assets/public/
+capacitor/android/app/src/main/assets/capacitor.config.json
+capacitor/android/app/src/main/assets/capacitor.plugins.json
+
+# Local encryption keys and one-time administrator bootstrap credentials
+.secrets/
+
+# Private user uploads and generated files
+.storage/
+
+# Copied Capacitor web assets
+capacitor/www/
+
+# Generated public Universal Link association file
+capacitor/generated/
+
+# Immutable application web artifacts and private deployment bindings
+output/app-artifacts/
+apps/*/deployment.local.json

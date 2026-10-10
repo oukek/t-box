@@ -1,0 +1,26 @@
+apply plugin: "com.android.library"
+
+android {
+    namespace "com.tbox.plugins.nativescanner"
+    compileSdkVersion rootProject.ext.compileSdkVersion
+    defaultConfig {
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        consumerProguardFiles "consumer-rules.pro"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(":capacitor-android")
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "com.journeyapps:zxing-android-embedded:4.3.0"
+}

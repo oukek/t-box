@@ -1,0 +1,337 @@
+.profile-page,
+.account-settings-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 20px 0 36px;
+}
+.profile-heading {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: 24px;
+}
+.profile-heading h1 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin: 0;
+}
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 4px 32px;
+}
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 22px;
+  background: #e5efed;
+  color: #367c72;
+  font-size: 24px;
+  border: 1px solid #dae8e4;
+}
+.profile-identity > div {
+  flex: 1;
+  min-width: 0;
+}
+.profile-identity h2 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.profile-identity p {
+  font-size: 12px;
+  color: #859298;
+  overflow-wrap: anywhere;
+  margin: 8px 0 0;
+}
+.profile-menu {
+  background: #fff;
+  border: 1px solid #e7ecee;
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 0 18px;
+}
+.profile-action {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  min-height: 76px;
+  padding: 17px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-size: 14px;
+}
+.profile-action + .profile-action {
+  border-top: 1px solid #f0f3f4;
+}
+.profile-action-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: #f3f7f6;
+  color: #62897f;
+}
+.profile-action > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.profile-action small {
+  display: block;
+  font-size: 11px;
+  color: #91a0a3;
+  margin-top: 6px;
+  font-weight: 400;
+}
+.profile-action > svg {
+  color: #a0aeb2;
+}
+.profile-action:hover > span:nth-child(2) {
+  color: var(--accent);
+}
+.profile-secondary-menu {
+  margin-top: 16px;
+}
+.profile-secondary-menu .profile-action {
+  min-height: 64px;
+}
+.profile-version {
+  font-size: 11px;
+  color: #98a5aa;
+  white-space: nowrap;
+}
+.profile-about {
+  text-align: center;
+  padding: 18px 10px 26px;
+}
+.profile-about-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+  margin: 0 auto 20px;
+  background: #e8f0ed;
+  color: var(--accent);
+}
+.profile-about h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.profile-about p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #7b8d94;
+  margin: 0 0 12px;
+}
+.settings-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 22px 18px;
+  border: 1px solid #e2e9ec;
+  border-radius: 16px;
+  color: var(--ink);
+  background: linear-gradient(115deg, #eff5f3, #fff 80%);
+  text-align: left;
+}
+.settings-identity-copy {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.settings-identity-copy strong {
+  font-size: 18px;
+  font-weight: 600;
+}
+.settings-identity-copy small {
+  color: #788b94;
+  font-size: 12px;
+}
+.settings-identity-copy > span {
+  color: #788b94;
+  font-size: 11px;
+  margin-top: 4px;
+}
+.settings-identity > svg {
+  color: #91a0a7;
+  flex-shrink: 0;
+}
+.settings-icon-size {
+  padding: 16px;
+  border: 1px solid #e7ecee;
+  border-radius: 14px;
+  background: #fff;
+}
+.settings-icon-size h3 {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.settings-icon-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.settings-icon-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 6px;
+  border: 1px solid #e8edef;
+  border-radius: 10px;
+  color: #6f838b;
+  background: #fafcfc;
+  min-width: 0;
+}
+.settings-icon-option.selected {
+  border-color: #408d81;
+  color: #297d70;
+  background: #edf6f2;
+}
+.settings-icon-option strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.settings-icon-option small {
+  font-size: 10px;
+  white-space: nowrap;
+}
+.settings-icon-preview {
+  display: grid;
+  grid-template-columns: repeat(var(--preview-columns), var(--preview-size));
+  gap: 3px;
+  height: 30px;
+  align-content: center;
+  margin-bottom: 3px;
+}
+.settings-icon-preview i {
+  width: var(--preview-size);
+  height: var(--preview-size);
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.55;
+}
+.settings-device-note {
+  margin: 10px 4px 0;
+  font-size: 11px;
+  color: #839397;
+  line-height: 1.6;
+}
+.settings-group {
+  margin-top: 26px;
+}
+.settings-group > h2 {
+  margin: 0 0 12px 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8b989e;
+}
+.account-details {
+  margin: 0;
+  background: #fff;
+  border: 1px solid #e7ecee;
+  border-radius: 14px;
+  padding: 0 18px;
+}
+.account-details > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  min-height: 58px;
+  font-size: 13px;
+  padding: 15px 0;
+}
+.account-details > div + div {
+  border-top: 1px solid #f0f3f4;
+}
+.account-details dt {
+  color: #788b94;
+  flex-shrink: 0;
+}
+.account-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+  color: #435b68;
+}
+.settings-group .profile-action {
+  min-height: 64px;
+}
+.settings-session-actions {
+  padding-top: 36px;
+  margin-top: 28px;
+  border-top: 1px solid #e6ecee;
+}
+.settings-logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #e7ecee;
+  border-radius: 12px;
+  font-size: 13px;
+  min-height: 48px;
+  width: 100%;
+  color: #a96354;
+}
+.settings-logout:hover {
+  background: #fcf7f5;
+  border-color: #ead8d3;
+}
+@media (max-width: 760px) {
+  .profile-page,
+  .account-settings-page {
+    padding-top: 12px;
+  }
+  .profile-heading {
+    margin-bottom: 18px;
+  }
+  .profile-heading h1 {
+    font-size: 17px;
+  }
+  .profile-identity {
+    padding-bottom: 28px;
+  }
+  .profile-identity h2 {
+    font-size: 19px;
+  }
+  .profile-menu {
+    padding: 0 16px;
+  }
+}
+
+.account-nickname {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 6px 12px;
+  border: 0;
+  background: transparent;
+  color: #435b68;
+  font: inherit;
+  text-align: right;
+}
+.account-nickname svg {
+  color: #9cadb2;
+  flex-shrink: 0;
+}

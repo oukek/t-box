@@ -1,0 +1,204 @@
+.markdown-preview {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  line-height: inherit;
+  white-space: normal;
+}
+.markdown-preview > :first-child {
+  margin-top: 0;
+}
+.markdown-preview > :last-child {
+  margin-bottom: 0;
+}
+.markdown-preview p {
+  margin: 0.7em 0;
+}
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin: 1.3em 0 0.55em;
+  font-weight: 600;
+  line-height: 1.5;
+  color: inherit;
+}
+.markdown-preview h1 {
+  font-size: 1.35em;
+}
+.markdown-preview h2 {
+  font-size: 1.2em;
+}
+.markdown-preview h3 {
+  font-size: 1.1em;
+}
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  font-size: 1em;
+}
+.markdown-preview strong {
+  font-weight: 600;
+}
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 1.6em;
+  margin: 0.7em 0;
+}
+.markdown-preview li {
+  padding-left: 0.1em;
+  margin: 0.2em 0;
+}
+.markdown-preview li > p {
+  margin: 0.3em 0;
+}
+.markdown-preview li > ul,
+.markdown-preview li > ol {
+  margin: 0.2em 0;
+}
+.markdown-preview input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  margin: 0 5px 0 0;
+  accent-color: var(--accent);
+}
+.markdown-preview blockquote {
+  margin: 0.85em 0;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 3px solid #ccddd6;
+  color: #718079;
+}
+.markdown-preview a {
+  color: var(--accent, #137b72);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.markdown-preview a:hover {
+  opacity: 0.8;
+}
+.markdown-preview img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  margin: 0.7em 0;
+}
+.markdown-preview hr {
+  border: 0;
+  border-top: 1px solid #e2e9e5;
+  margin: 1.3em 0;
+}
+.markdown-preview code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+.markdown-preview :not(pre) > code {
+  background: #edf2ef;
+  padding: 0.18em 0.4em;
+  border-radius: 5px;
+  color: #3b6656;
+}
+.markdown-preview .md-code-block {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0.9em 0;
+  border: 1px solid #e0e7e3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f6f8f7;
+}
+.markdown-preview .md-code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #e5ebe7;
+  color: #7b8b83;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.markdown-preview .md-copy-code {
+  min-height: 28px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #587568;
+  padding: 3px 6px;
+  font: inherit;
+  cursor: pointer;
+}
+.markdown-preview .md-copy-code:hover {
+  background: #e7eeea;
+}
+.markdown-preview pre {
+  margin: 0;
+  padding: 13px 14px;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+  line-height: 1.7;
+  overscroll-behavior-x: contain;
+}
+.markdown-preview pre code {
+  background: transparent;
+  padding: 0;
+  color: #344e41;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.markdown-preview .md-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.85em 0;
+  border: 1px solid #e0e7e3;
+  border-radius: 9px;
+  overscroll-behavior-x: contain;
+}
+.markdown-preview table {
+  border-collapse: collapse;
+  min-width: 100%;
+  width: max-content;
+  font-size: 0.92em;
+  line-height: 1.65;
+}
+.markdown-preview th,
+.markdown-preview td {
+  padding: 8px 12px;
+  border-right: 1px solid #e5ebe7;
+  border-bottom: 1px solid #e5ebe7;
+  max-width: 300px;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.markdown-preview th {
+  background: #f1f5f2;
+  font-weight: 600;
+}
+.markdown-preview th:not([align]),
+.markdown-preview td:not([align]) {
+  text-align: left;
+}
+.markdown-preview tr:last-child td {
+  border-bottom: 0;
+}
+.markdown-preview tr > :last-child {
+  border-right: 0;
+}
+.markdown-preview :is(a, button, [tabindex]):focus-visible {
+  outline: 2px solid #80ad9d;
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .markdown-preview pre {
+    padding: 11px 12px;
+  }
+  .markdown-preview th,
+  .markdown-preview td {
+    padding: 7px 10px;
+    max-width: 240px;
+  }
+}

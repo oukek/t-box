@@ -1,0 +1,25 @@
+{
+  "name": "@t-box/app-web-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

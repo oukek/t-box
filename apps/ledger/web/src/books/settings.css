@@ -1,0 +1,343 @@
+.ledger-settings {
+  display: grid;
+  gap: 12px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+.settings-card {
+  background: #fff;
+  border: 1px solid #e3eaed;
+  border-radius: 14px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.settings-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 13px;
+}
+.settings-card-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  margin: 0;
+  font-weight: 600;
+}
+.settings-card-heading h2 > span {
+  font-size: 10px;
+  color: #9eacab;
+  font-weight: 400;
+}
+.settings-role {
+  font-size: 10px;
+  padding: 5px 8px;
+  color: #718e86;
+  border-radius: 6px;
+  background: #f0f6f3;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: #5b7380;
+  font-size: 12px;
+  padding: 12px 0;
+}
+.settings-row + .settings-row {
+  border-top: 1px solid #f0f3f3;
+}
+.settings-row strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+  font-weight: 400;
+  color: #385966;
+  font-size: 12px;
+}
+.settings-row svg {
+  color: #97aaa9;
+  flex-shrink: 0;
+}
+.settings-row-icon {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.settings-caption {
+  font-size: 11px;
+  color: #8c9fa3;
+  line-height: 1.9;
+  margin: 12px 0 0;
+}
+.settings-invite-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #edf5f2;
+  color: #137b72;
+  border: 1px solid #e1eee7;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  flex-shrink: 0;
+  min-height: 34px;
+}
+.settings-members {
+  display: grid;
+  gap: 0;
+}
+.settings-member {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+.settings-member + .settings-member {
+  border-top: 1px solid #f0f4f3;
+}
+.settings-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  background: #edf4f1;
+  color: #528b7f;
+  border: 1px solid #e4efea;
+  border-radius: 13px;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.settings-member > div {
+  flex: 1;
+  min-width: 0;
+}
+.settings-member strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 500;
+}
+.settings-member strong small {
+  background: #eff3f4;
+  color: #92a2a6;
+  font-size: 9px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.settings-member > div > span {
+  display: block;
+  font-size: 10px;
+  color: #94a5a9;
+  margin-top: 6px;
+}
+.settings-member > .icon-button {
+  color: #8fa7a1;
+}
+.settings-invites {
+  border-top: 1px solid #edf2f2;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+.settings-invites summary,
+.settings-audit summary,
+.settings-maintenance summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  color: #58727a;
+  min-height: 25px;
+}
+.settings-invites summary::-webkit-details-marker,
+.settings-audit summary::-webkit-details-marker,
+.settings-maintenance summary::-webkit-details-marker {
+  display: none;
+}
+.settings-invites summary > span {
+  font-size: 10px;
+  color: #9aaaad;
+}
+.settings-invites summary svg,
+.settings-audit summary svg,
+.settings-maintenance summary svg {
+  margin-left: auto;
+  color: #94a5a9;
+}
+.settings-card[open] > summary svg,
+.settings-invites[open] > summary svg {
+  transform: rotate(180deg);
+}
+.settings-invite-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 0;
+  border-bottom: 1px solid #eff3f2;
+}
+.settings-invite-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.settings-invite-row strong {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #617b81;
+}
+.settings-invite-row strong > small {
+  font-size: 9px;
+  color: #9aaaa9;
+  font-weight: 400;
+}
+.settings-invite-row > div > span {
+  display: block;
+  line-height: 1.8;
+  margin-top: 6px;
+  font-size: 10px;
+  color: #99a9ad;
+  overflow-wrap: anywhere;
+}
+.settings-invite-row > .text-button {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.settings-audit ol {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  max-height: 300px;
+  overflow: auto;
+}
+.settings-audit li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  font-size: 11px;
+  color: #7b9299;
+  line-height: 1.7;
+}
+.settings-audit time {
+  font-size: 10px;
+  color: #a1afb0;
+  flex-shrink: 0;
+}
+.settings-maintenance > summary {
+  margin-bottom: 4px;
+}
+.settings-maintenance .settings-caption {
+  margin-top: 0;
+}
+.settings-maintenance .settings-row {
+  margin-top: 8px;
+}
+.settings-leave {
+  min-height: 44px;
+  border: 1px solid #e5e9eb;
+  background: #fff;
+  color: #b07766;
+  border-radius: 12px;
+  font-size: 12px;
+  margin-top: 8px;
+}
+.settings-notice {
+  background: #eaf4ed;
+  padding: 12px 16px;
+  border: 1px solid #deece2;
+  border-radius: 10px;
+  color: #468b72;
+  font-size: 12px;
+  margin: 0;
+  line-height: 1.7;
+}
+.settings-invite-limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.settings-share-link {
+  margin-top: 20px;
+  padding-top: 4px;
+  border-top: 1px solid #e9efee;
+}
+.settings-share-link .button {
+  margin-top: 12px;
+  width: 100%;
+  min-height: 42px;
+}
+.settings-managed-member {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 8px;
+}
+.settings-managed-member p {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #96a6ab;
+}
+.settings-managed-member strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.settings-member-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+.settings-member-actions .button {
+  flex: 1;
+  min-height: 42px;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .settings-card {
+    padding: 14px;
+  }
+  .settings-audit li {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .settings-row {
+    font-size: 12px;
+  }
+  .settings-row strong {
+    max-width: 70%;
+  }
+}
+@media (max-width: 360px) {
+  .settings-card {
+    padding: 12px;
+  }
+  .settings-invite-button {
+    padding: 7px 8px;
+    font-size: 10px;
+  }
+  .settings-card-heading {
+    gap: 8px;
+  }
+}
+
+.sheet-footer .settings-member-actions {
+  width: 100%;
+  margin: 0;
+  gap: 8px;
+}

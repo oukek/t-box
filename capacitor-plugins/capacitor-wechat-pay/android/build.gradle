@@ -1,0 +1,19 @@
+apply plugin: "com.android.library"
+android {
+    namespace "com.tbox.plugins.wechatpay"
+    compileSdkVersion rootProject.ext.compileSdkVersion
+    defaultConfig {
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        consumerProguardFiles "consumer-rules.pro"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+}
+dependencies {
+    implementation project(":capacitor-android")
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    api "com.tencent.mm.opensdk:wechat-sdk-android:6.8.40"
+}

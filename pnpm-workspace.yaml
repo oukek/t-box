@@ -1,0 +1,15 @@
+packages:
+  - app
+  - admin
+  - api
+  - capacitor
+  - capacitor-plugins/*
+  - shared
+  - packages/*
+  - apps/*/contracts
+  - apps/*/server
+  - apps/*/web
+  - apps/*/shell
+
+allowBuilds:
+  esbuild: true

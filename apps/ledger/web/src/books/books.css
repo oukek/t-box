@@ -1,0 +1,862 @@
+.text-button {
+  border: 0;
+  background: transparent;
+  color: #167c73;
+  padding: 10px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.text-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.danger-text {
+  color: #b35d4c;
+}
+.muted {
+  color: #7d8c96;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.book-hub {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 10px 0;
+}
+.book-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.book-toolbar > label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.book-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.book-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e0e7ea;
+  border-radius: 12px;
+  text-align: left;
+  color: #263e4d;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.book-card:hover {
+  border-color: #a4c5bd;
+  background: #fbfdfc;
+}
+.book-card.selected {
+  border-color: #a4c5bd;
+}
+.book-card.archived {
+  opacity: 0.65;
+}
+.book-card-icon {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #eaf3ef;
+  color: #21857b;
+}
+.book-card-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.book-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.book-card-heading svg {
+  color: #91a19c;
+  flex-shrink: 0;
+}
+.book-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.book-card-kind,
+.book-card-status {
+  font-size: 10px;
+  color: #82929c;
+  line-height: 1.5;
+}
+.book-card-chevron {
+  color: #a3b1b7;
+  flex-shrink: 0;
+}
+.book-create-action {
+  min-height: 36px;
+  padding: 8px 12px;
+  gap: 4px;
+  font-size: 12px;
+}
+.book-join-action {
+  min-height: 36px;
+  padding: 8px 10px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #347469;
+  background: #edf5f2;
+  border: 1px solid #d3e6df;
+  border-radius: 9px;
+}
+.book-join-action:hover:not(:disabled) {
+  background: #e3efea;
+  border-color: #abcfc1;
+}
+.book-join-action svg {
+  flex-shrink: 0;
+}
+.book-tabs {
+  display: flex;
+  gap: 22px;
+  border-bottom: 1px solid #dce6e9;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+.book-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 10px 3px;
+  color: #82929c;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.book-tabs button.active {
+  border-color: #248479;
+  color: #167c73;
+}
+.book-panel {
+  background: #fff;
+  padding: 16px;
+  border: 1px solid #e2e8eb;
+  border-radius: 12px;
+}
+.book-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.book-section-heading h2 {
+  font-size: 16px;
+  margin: 0;
+}
+.book-section-heading h3 {
+  margin: 0 0 6px;
+}
+.book-section-heading small {
+  font-size: 11px;
+  color: #7d8c96;
+}
+.book-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  background: #f6f8f8;
+  padding: 14px;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+.book-metrics.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.book-metrics article {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+.book-metrics article > span {
+  font-size: 12px;
+  color: #71828e;
+}
+.book-metrics strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.book-metrics small {
+  font-size: 10px;
+  color: #87949d;
+}
+.income {
+  color: #21857b;
+}
+.cash-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 30px;
+  border-bottom: 1px solid #e4ebed;
+  padding: 5px 0 24px;
+  font-size: 12px;
+  color: #7d8c96;
+}
+.cash-summary strong {
+  font-size: 14px;
+  color: #324b5a;
+  margin-left: 7px;
+}
+.cash-summary p {
+  width: 100%;
+  font-size: 11px;
+  margin: 0;
+  line-height: 1.7;
+}
+.period-picker {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.period-picker label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.period-picker input,
+.period-picker select,
+.book-toolbar select,
+.member-row select {
+  border: 1px solid #dbe5e8;
+  background: #fff;
+  color: #2a4351;
+  padding: 10px;
+  border-radius: 6px;
+  min-width: 0;
+}
+.period-picker input[type="number"] {
+  width: 100px;
+}
+.period-picker > span {
+  color: #85949e;
+  font-size: 11px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.book-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.book-table caption {
+  text-align: left;
+  font-size: 12px;
+  color: #7d8c96;
+  margin: 4px 0 12px;
+}
+.book-table th,
+.book-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e9eef0;
+  text-align: right;
+  white-space: nowrap;
+}
+.book-table th:first-child {
+  text-align: left;
+}
+.book-table thead th {
+  color: #82929c;
+  font-size: 11px;
+  font-weight: 500;
+}
+.stats-columns {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 35px;
+  margin-top: 34px;
+}
+.stats-columns h3,
+.statistics-details h3,
+.settlement-history h3,
+.book-settings h3 {
+  font-size: 15px;
+}
+.stats-columns h3 small {
+  display: block;
+  color: #82929c;
+  font-size: 10px;
+  font-weight: 400;
+  margin-top: 8px;
+}
+.trend-chart {
+  max-height: 360px;
+  overflow-y: auto;
+}
+.trend-item {
+  border: 0;
+  background: transparent;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 6px 10px;
+  text-align: left;
+  width: 100%;
+  padding: 9px 0;
+}
+.trend-item:hover {
+  background: #f6f8f8;
+}
+.trend-item time {
+  font-size: 10px;
+  color: #82929c;
+  grid-row: span 2;
+}
+.trend-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  min-height: 12px;
+}
+.trend-bars span {
+  height: 5px;
+  min-width: 0;
+  border-radius: 3px;
+}
+.income-bar {
+  background: #69aa99;
+}
+.expense-bar {
+  background: #c6a87e;
+}
+.trend-item small {
+  font-size: 10px;
+  color: #7d8c96;
+}
+.category-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 15px 0;
+  border-bottom: 1px solid #e9eef0;
+  font-size: 12px;
+}
+.category-stat small {
+  display: block;
+  color: #82929c;
+  font-size: 10px;
+  margin-top: 7px;
+}
+.statistics-details {
+  margin-top: 35px;
+  padding-top: 25px;
+  border-top: 1px solid #e4ebed;
+}
+.event-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #edf1f2;
+  padding: 12px 0;
+  font-size: 12px;
+}
+.event-row time,
+.event-row p {
+  display: block;
+  font-size: 11px;
+  color: #82929c;
+  margin: 8px 0 0;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.event-amounts {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 7px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.stats-footnote {
+  margin-top: 20px;
+}
+.debt-row {
+  padding: 16px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #e5ecee;
+}
+.direction-tag {
+  font-size: 10px;
+  border-radius: 4px;
+  background: #eef3f4;
+  padding: 5px 9px;
+  color: #66808b;
+}
+.direction-tag.receivable {
+  color: #21857b;
+  background: #edf5f2;
+}
+.direction-tag.payable {
+  color: #ae8050;
+  background: #f9f2e8;
+}
+.debt-identity {
+  min-width: 0;
+}
+.debt-identity h3 {
+  font-size: 14px;
+  margin: 10px 0 6px;
+  overflow-wrap: anywhere;
+}
+.debt-identity time,
+.debt-identity p {
+  font-size: 11px;
+  color: #82929c;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.debt-identity p small {
+  font-size: 10px;
+}
+.debt-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 9px;
+  min-width: 150px;
+  font-variant-numeric: tabular-nums;
+}
+.debt-amount > span,
+.debt-amount small {
+  font-size: 10px;
+  color: #82929c;
+}
+.debt-amount strong {
+  font-size: 19px;
+}
+.debt-amount .button {
+  font-size: 11px;
+  padding: 9px 14px;
+  margin-top: 8px;
+}
+.settlement-history {
+  margin-top: 20px;
+}
+.book-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: #82929c;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.book-dialog {
+  width: min(520px, calc(100% - 32px));
+  max-height: 85dvh;
+}
+.book-dialog .dialog-heading h2 {
+  font-size: 17px;
+}
+.book-dialog .form-field {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.form-field select {
+  background: #fff;
+  border: 1px solid #d7e1e5;
+  border-radius: 6px;
+  padding: 12px;
+  color: #284452;
+  width: 100%;
+}
+.allocation-row {
+  background: #f5f8f7;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 10px 0;
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 16px;
+  align-items: center;
+  font-size: 12px;
+}
+.allocation-row > label:first-child {
+  line-height: 1.8;
+}
+.allocation-row small {
+  display: block;
+  color: #82929c;
+  font-size: 10px;
+}
+.allocation-row input[type="checkbox"] {
+  accent-color: #21857b;
+  margin-right: 8px;
+  width: auto;
+}
+.book-settings > section {
+  border-top: 1px solid #e4ebed;
+  padding: 25px 0 16px;
+}
+.inline-form,
+.invite-form,
+.invite-link,
+.password-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin: 16px 0;
+}
+.inline-form > .form-field,
+.invite-link > .form-field {
+  flex: 1;
+}
+.invite-form {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr auto;
+}
+.password-form > * {
+  flex: 1;
+}
+.invite-row,
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 0;
+  border-bottom: 1px solid #edf1f2;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.invite-row > span:first-child {
+  flex: 1;
+}
+.invite-row small,
+.member-row small {
+  display: block;
+  margin-top: 6px;
+  color: #82929c;
+  font-size: 10px;
+}
+.member-row > div {
+  flex: 1;
+}
+.member-avatar {
+  width: 36px;
+  height: 36px;
+  background: #edf5f2;
+  color: #21857b;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.audit-list {
+  list-style: none;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.audit-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 12px 0;
+  font-size: 11px;
+  color: #708592;
+}
+.audit-list time {
+  color: #99a4ab;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.book-notice {
+  background: #edf5f2;
+  padding: 13px 16px;
+  border-radius: 6px;
+  color: #21857b;
+  font-size: 12px;
+}
+.book-lock {
+  max-width: 440px;
+  margin: 50px auto;
+  padding: 40px;
+  background: #fff;
+  border: 1px solid #e0e7ea;
+  border-radius: 12px;
+  text-align: center;
+}
+.book-lock-symbol {
+  display: block;
+  font-size: 30px;
+  color: #21857b;
+}
+.book-lock h2 {
+  font-size: 17px;
+  margin: 22px 0 12px;
+}
+.book-lock p {
+  font-size: 12px;
+  color: #82929c;
+  line-height: 1.8;
+}
+.book-lock form {
+  text-align: left;
+  margin: 25px 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.identity-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 25px;
+  background: #f4f6f8;
+}
+.identity-card {
+  width: min(440px, 100%);
+  background: #fff;
+  border: 1px solid #e0e7ea;
+  border-radius: 15px;
+  padding: 38px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.identity-card h1 {
+  font-size: 30px;
+  margin: 0;
+}
+.identity-card > p {
+  font-size: 12px;
+  color: #82929c;
+  line-height: 1.8;
+  margin: 0;
+}
+.identity-card .form-field {
+  font-size: 12px;
+}
+.book-hub .ledger-content.main-content {
+  padding: 0;
+}
+@media (max-width: 760px) {
+  .book-hub {
+    padding: 10px 0;
+  }
+  .book-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .book-tabs {
+    gap: 20px;
+    margin-bottom: 12px;
+  }
+  .book-tabs button {
+    font-size: 12px;
+  }
+  .book-panel {
+    padding: 14px;
+  }
+  .book-section-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+  .book-section-heading h2 {
+    font-size: 16px;
+  }
+  .book-metrics {
+    padding: 14px 12px;
+    gap: 15px;
+    grid-template-columns: 1fr;
+  }
+  .book-metrics.two {
+    grid-template-columns: 1fr 1fr;
+  }
+  .book-metrics strong {
+    font-size: 20px;
+  }
+  .book-metrics:not(.two) article {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    border-bottom: 1px solid #e5ecee;
+    padding-bottom: 15px;
+  }
+  .book-metrics:not(.two) article:last-child {
+    border: 0;
+    padding: 0;
+  }
+  .book-metrics:not(.two) small {
+    width: 100%;
+  }
+  .period-picker {
+    gap: 12px;
+  }
+  .period-picker > span {
+    width: 100%;
+  }
+  .cash-summary {
+    gap: 14px;
+  }
+  .cash-summary > span {
+    width: 100%;
+  }
+  .stats-columns {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    margin-top: 25px;
+  }
+  .book-table th,
+  .book-table td {
+    padding: 12px 10px;
+    font-size: 11px;
+  }
+  .debt-row {
+    gap: 12px;
+  }
+  .debt-amount {
+    min-width: 125px;
+    max-width: 50%;
+  }
+  .debt-amount strong {
+    font-size: 18px;
+  }
+  .debt-amount small {
+    font-size: 9px;
+    text-align: right;
+    line-height: 1.7;
+  }
+  .event-row {
+    gap: 10px;
+  }
+  .event-amounts {
+    font-size: 10px;
+    max-width: 48%;
+    overflow-wrap: anywhere;
+    flex-shrink: 1;
+    text-align: right;
+  }
+  .book-panel h3 {
+    font-size: 14px;
+  }
+  .invite-form {
+    grid-template-columns: 1fr 1fr;
+  }
+  .password-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .member-row {
+    gap: 12px;
+  }
+  .member-row > div {
+    min-width: 90px;
+  }
+  .member-row select {
+    font-size: 10px;
+    padding: 8px;
+  }
+  .audit-list li {
+    flex-direction: column;
+    gap: 7px;
+  }
+  .book-lock {
+    padding: 25px;
+    margin: 25px auto;
+  }
+  .identity-card {
+    padding: 28px;
+  }
+  .book-dialog .dialog-content {
+    padding: 24px;
+  }
+  .allocation-row {
+    grid-template-columns: 1fr 100px;
+  }
+}
+@media (max-width: 370px) {
+  .book-grid {
+    grid-template-columns: 1fr;
+  }
+  .book-tabs {
+    gap: 15px;
+  }
+  .book-metrics.two strong {
+    font-size: 17px;
+  }
+  .book-panel {
+    padding: 12px;
+  }
+}
+
+.consent-details {
+  padding: 0 0 0 20px;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.consent-details li {
+  margin: 12px 0;
+}
+
+.book-read-grant {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  background: #edf3ef;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #678173;
+}
+.book-read-grant .text-button {
+  font-size: 12px;
+  padding: 4px;
+}
+
+/* Density belongs to the ledger application, not the host or other apps. */
+.book-hub .application-page-header {
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.book-hub .application-page-title h1 {
+  font-size: 17px;
+}
+.book-hub .application-page-title p {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.book-hub .button {
+  font-size: 12px;
+  padding: 8px 12px;
+}
+.book-hub .book-tabs button {
+  min-height: 40px;
+}

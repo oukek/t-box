@@ -1,0 +1,212 @@
+.ledger-tools {
+  padding: 12px 0;
+}
+.feature-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.feature-toolbar h2 {
+  font-size: 15px;
+  margin: 0;
+}
+.feature-toolbar .button {
+  padding: 8px 12px;
+  min-height: 38px;
+}
+.feature-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.feature-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid #edf1f3;
+  font-size: 13px;
+}
+.feature-row:last-child {
+  border: 0;
+}
+.feature-row > div:first-of-type {
+  min-width: 0;
+  flex: 1;
+}
+.feature-row strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.feature-row small,
+.feature-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.65;
+  margin-top: 5px;
+}
+.feature-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.feature-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 8px;
+  font-size: 11px;
+  cursor: pointer;
+  min-height: 36px;
+}
+.feature-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.feature-empty {
+  padding: 26px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.feature-grid button {
+  min-height: 84px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+.feature-grid svg {
+  color: var(--accent);
+}
+.feature-row .feature-money {
+  font-family: var(--number-font);
+  font-size: 18px;
+  font-weight: 500;
+}
+.feature-progress {
+  height: 5px;
+  border-radius: 6px;
+  background: #edf1f2;
+  overflow: hidden;
+  margin-top: 10px;
+}
+.feature-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.feature-progress.over span {
+  background: var(--expense);
+}
+.feature-sheet-list {
+  padding: 0;
+  list-style: none;
+}
+.feature-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  font-size: 13px;
+}
+.feature-detail-grid dt {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.feature-detail-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.feature-section-title {
+  font-size: 13px;
+  margin: 20px 0 8px;
+  font-weight: 600;
+}
+.feature-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.feature-alert {
+  font-size: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #edf6f3;
+  color: var(--accent);
+  margin: 10px 0;
+}
+.feature-danger {
+  color: var(--expense) !important;
+}
+.feature-import-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  font-size: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.feature-import-row input:not([type="checkbox"]) {
+  min-width: 0;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 16px;
+}
+.feature-import-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.form-field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 16px;
+  resize: vertical;
+}
+.feature-batch-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+}
+@media (min-width: 760px) {
+  .feature-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .feature-import-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

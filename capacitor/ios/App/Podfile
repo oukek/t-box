@@ -1,0 +1,26 @@
+require_relative '../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios/scripts/pods_helpers'
+
+platform :ios, '15.4'
+use_frameworks! :linkage => :static
+
+# workaround to avoid Xcode caching of Pods that requires
+# Product -> Clean Build Folder after new Cordova plugins installed
+# Requires CocoaPods 1.6 or newer
+install! 'cocoapods', :disable_input_output_paths => true
+
+def capacitor_pods
+  pod 'Capacitor', :path => '../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios'
+  pod 'CapacitorLocalNotifications', :path => '../../../node_modules/.pnpm/@capacitor+local-notifications@8.3.1_@capacitor+core@8.5.2/node_modules/@capacitor/local-notifications'
+  pod 'TBoxCapacitorNativeScanner', :path => '../../../capacitor-plugins/capacitor-native-scanner'
+  pod 'TBoxCapacitorWechatPay', :path => '../../../capacitor-plugins/capacitor-wechat-pay'
+end
+
+target 'App' do
+  capacitor_pods
+  # Add your Pods here
+end
+
+post_install do |installer|
+  assertDeploymentTarget(installer)
+end

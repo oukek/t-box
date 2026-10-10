@@ -1,0 +1,47 @@
+{
+  "name": "@t-box/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "pack": "pnpm run build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "vue-tsc --noEmit",
+    "test:markdown": "tsx --test test/markdown.test.ts"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.2",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-sdk": "workspace:*",
+    "@t-box/app-shell-sdk": "workspace:*",
+    "@t-box/calculator-shell": "workspace:*",
+    "@t-box/calendar-web": "workspace:*",
+    "@t-box/capacitor-native-scanner": "workspace:*",
+    "@t-box/capacitor-wechat-pay": "workspace:*",
+    "@t-box/device-reminders": "workspace:*",
+    "@t-box/ledger-web": "workspace:*",
+    "@t-box/market-web": "workspace:*",
+    "@t-box/settings-contracts": "workspace:*",
+    "@t-box/settings-web": "workspace:*",
+    "@t-box/shared": "workspace:*",
+    "@t-box/time-web": "workspace:*",
+    "@t-box/ui-kit": "workspace:*",
+    "dompurify": "^3.4.16",
+    "marked": "^18.1.0",
+    "qrcode": "^1.5.4",
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@vitejs/plugin-vue": "6.0.9",
+    "jsdom": "^30.1.2",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vite": "8.3.2",
+    "vue-tsc": "^3.2.5"
+  }
+}

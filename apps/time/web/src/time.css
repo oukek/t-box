@@ -1,0 +1,314 @@
+.time-tabs {
+  margin-bottom: 22px;
+}
+.time-now {
+  background: #fff;
+  border: 1px solid #e2ebe6;
+  border-radius: 18px;
+  padding: 26px 30px;
+  text-align: center;
+}
+.time-clock-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  color: #99a59c;
+  font-size: 11px;
+}
+.time-clock-heading .sheet-select-trigger {
+  width: 160px;
+  font-size: 11px;
+  min-height: 34px;
+  padding: 8px;
+}
+.time-digital {
+  font-size: clamp(44px, 8vw, 72px);
+  font-weight: 300;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+  color: #346d5c;
+  margin: 32px 0 14px;
+  line-height: 1;
+}
+.time-date {
+  font-size: 13px;
+  color: #7d9487;
+}
+.time-facts {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin: 24px 0 15px;
+  color: #99a99f;
+  font-size: 10px;
+}
+.time-now > small {
+  font-size: 9px;
+  color: #acb7af;
+}
+.time-section-heading {
+  margin: 26px 0 16px;
+}
+.time-section-heading p {
+  font-size: 11px;
+  color: #99a89f;
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+.time-world-grid,
+.time-timer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.time-world-grid article,
+.time-timer {
+  background: white;
+  border: 1px solid #e2ebe6;
+  border-radius: 13px;
+  padding: 18px 20px;
+  min-width: 0;
+}
+.time-world-grid header,
+.time-timer header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.time-world-grid header strong,
+.time-timer header strong {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b8376;
+  overflow-wrap: anywhere;
+}
+.time-world-grid p {
+  font-size: 27px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  color: #496c59;
+  margin: 18px 0 10px;
+  letter-spacing: 1px;
+}
+.time-world-grid small,
+.time-timer small {
+  color: #97a89b;
+  font-size: 10px;
+  line-height: 1.7;
+}
+.time-timer-digits {
+  font-size: 29px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  color: #447660;
+  font-weight: 300;
+  margin: 22px 0 10px;
+}
+.time-timer.completed {
+  background: #eef6ee;
+}
+.time-timer.paused .time-timer-digits {
+  color: #b3986b;
+}
+.time-timer.cancelled {
+  opacity: 0.65;
+}
+.time-timer-actions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.time-timer-actions button {
+  font-size: 11px;
+}
+.time-stopwatch {
+  text-align: center;
+  padding: 35px 20px;
+}
+.time-stopwatch > span {
+  font-size: 12px;
+  color: #96a99b;
+}
+.time-stopwatch-digits {
+  font-size: clamp(30px, 6.4vw, 62px);
+  font-variant-numeric: tabular-nums;
+  color: #34785f;
+  font-weight: 300;
+  letter-spacing: 1px;
+  margin: 30px 0;
+}
+.time-stopwatch-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.time-stopwatch-actions button {
+  min-width: 78px;
+}
+.time-laps {
+  max-width: 650px;
+  margin: 15px auto;
+}
+.time-laps > header,
+.time-laps > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  padding: 15px 18px;
+  border-bottom: 1px solid #e2ebe5;
+  font-size: 12px;
+  color: #658471;
+  font-variant-numeric: tabular-nums;
+}
+.time-laps > header {
+  font-size: 10px;
+  color: #9aa99d;
+}
+.time-laps > div > strong {
+  font-weight: 500;
+}
+.time-laps > div > span,
+.time-laps > header > span:not(:first-child) {
+  text-align: right;
+}
+.time-conversion {
+  max-width: 650px;
+  margin: 0 auto;
+}
+.time-conversion > .temporal-primary {
+  justify-self: start;
+}
+.time-result {
+  max-width: 650px;
+  margin: 22px auto;
+  padding: 20px;
+  background: #edf5f0;
+  border-radius: 12px;
+}
+.time-result > p {
+  font-size: 11px;
+  color: #8f9e94;
+}
+.time-duration-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.time-duration-fields label {
+  display: grid;
+  gap: 8px;
+  color: #8c9d92;
+  font-size: 11px;
+}
+.time-duration-fields input {
+  text-align: center;
+  font-size: 23px !important;
+  font-variant-numeric: tabular-nums;
+}
+.time-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.time-presets button {
+  font-size: 10px;
+  background: #eef5f0;
+  border: 1px solid #e0eae2;
+  border-radius: 6px;
+  padding: 8px;
+  color: #779985;
+}
+.time-zone-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 20px;
+  max-height: 320px;
+  overflow: auto;
+}
+.time-zone-picker button {
+  padding: 12px;
+  border: 1px solid #e1e9e3;
+  border-radius: 9px;
+  text-align: left;
+  background: #f9fcfa;
+  color: #647e6c;
+  font-size: 12px;
+}
+.time-zone-picker small {
+  font-size: 9px;
+  display: block;
+  margin-top: 7px;
+  color: #a2aea4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .time-world-grid,
+  .time-timer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .time-world-grid article,
+  .time-timer {
+    padding: 14px;
+  }
+  .time-world-grid p {
+    font-size: 23px;
+    letter-spacing: 0;
+  }
+  .time-world-grid small {
+    font-size: 9px;
+  }
+  .time-timer-digits {
+    font-size: 24px;
+    letter-spacing: 0;
+  }
+  .time-timer-actions {
+    gap: 12px;
+  }
+  .time-timer-actions button {
+    font-size: 10px;
+  }
+  .time-now {
+    padding: 20px 16px;
+  }
+  .time-facts {
+    gap: 12px;
+    font-size: 9px;
+  }
+  .time-section-heading h2 {
+    font-size: 13px;
+  }
+  .time-stopwatch {
+    padding: 30px 0;
+  }
+  .time-tabs {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .time-tabs button {
+    flex: 1;
+    padding: 10px 5px;
+  }
+  .time-result {
+    padding: 16px;
+  }
+  .time-conversion {
+    gap: 16px;
+  }
+}
+@media (max-width: 350px) {
+  .time-world-grid,
+  .time-timer-grid {
+    grid-template-columns: 1fr;
+  }
+  .time-stopwatch-actions {
+    gap: 6px;
+  }
+  .time-stopwatch-actions button {
+    min-width: 70px;
+  }
+}

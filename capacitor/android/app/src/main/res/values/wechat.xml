@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="tbox_wechat_enabled" translatable="false">false</string>
+  <string name="tbox_wechat_app_id" translatable="false"></string>
+</resources>

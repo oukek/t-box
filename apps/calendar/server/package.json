@@ -1,0 +1,35 @@
+{
+  "name": "@t-box/calendar-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "typeorm": "1.1.1",
+    "fastify": "^5.6.2",
+    "@t-box/shared": "workspace:*",
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-server-sdk": "workspace:*",
+    "@t-box/server-foundation": "workspace:*",
+    "@t-box/calendar-contracts": "workspace:*",
+    "@t-box/time-contracts": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "@types/node": "^24.10.0"
+  }
+}

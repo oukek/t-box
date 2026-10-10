@@ -1,0 +1,26 @@
+{
+  "name": "@t-box/calculator-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5176 --strictPort",
+    "build": "vue-tsc --noEmit && vite build && node ../../../scripts/build-application-artifact.mjs calculator",
+    "typecheck": "vue-tsc --noEmit",
+    "preview": "vite preview --host 0.0.0.0 --port 5176 --strictPort"
+  },
+  "dependencies": {
+    "@t-box/calculator-contracts": "workspace:*",
+    "@t-box/app-web-sdk": "workspace:*",
+    "@t-box/ui-kit": "workspace:*",
+    "vue": "^3.5.29",
+    "@t-box/app-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.4",
+    "typescript": "~5.9.3",
+    "vite": "8.3.2",
+    "vue-tsc": "^3.2.5",
+    "@types/node": "^24.10.0"
+  }
+}

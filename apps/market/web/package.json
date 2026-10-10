@@ -1,0 +1,27 @@
+{
+  "name": "@t-box/market-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "vue": "3.5.43",
+    "@t-box/app-shell-sdk": "workspace:*",
+    "@t-box/ui-kit": "workspace:*",
+    "@t-box/shared": "workspace:*",
+    "@t-box/market-contracts": "workspace:*",
+    "@t-box/app-contracts": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts",
+    "./*.vue": "./src/*.vue",
+    "./*.css": "./src/*.css"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vue-tsc": "^3.2.5"
+  }
+}

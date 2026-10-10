@@ -1,0 +1,299 @@
+.statistics-panel {
+  display: grid;
+  gap: 12px;
+}
+.statistics-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.statistics-loading {
+  font-size: 12px;
+  color: #8d9da4;
+  padding: 30px;
+  text-align: center;
+}
+.statistics-card {
+  background: #fff;
+  border: 1px solid #e2e9ec;
+  border-radius: 14px;
+  padding: 16px;
+  min-width: 0;
+}
+.statistics-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.statistics-card-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.statistics-card-heading > small {
+  font-size: 10px;
+  color: #93a4a6;
+}
+.statistics-card-heading .segmented-control button {
+  padding: 5px 12px;
+  min-height: 27px;
+  font-size: 10px;
+}
+.statistics-range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: #8a9da2;
+  margin-bottom: 18px;
+}
+.statistics-range > span {
+  font-size: 10px;
+}
+.statistics-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.statistics-totals article {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.statistics-totals article + article {
+  border-left: 1px solid #eaf0ef;
+  padding-left: 16px;
+}
+.statistics-totals article > span {
+  font-size: 11px;
+  color: #8a9da2;
+}
+.statistics-totals strong {
+  font-family: var(--number-font);
+  font-weight: 500;
+  font-size: 21px;
+  letter-spacing: -0.7px;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+.statistics-unit {
+  display: block;
+  font-size: 10px;
+  color: #a5b2b5;
+  margin-top: 16px;
+}
+.statistics-charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.category-total-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 5px 0 12px;
+  font-size: 11px;
+  color: #8a9da2;
+}
+.category-total-heading strong {
+  font-size: 17px;
+  font-family: var(--number-font);
+  font-weight: 500;
+  color: #385863;
+  overflow-wrap: anywhere;
+}
+.statistics-debt-balances {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.statistics-debt-balances article {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+.statistics-debt-balances article > span {
+  font-size: 11px;
+  color: #8a9da2;
+}
+.statistics-debt-balances strong {
+  font-size: 20px;
+  font-family: var(--number-font);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.statistics-debt-balances small {
+  font-size: 10px;
+  color: #a1afb0;
+}
+.statistics-cash summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  list-style: none;
+}
+.statistics-cash summary::after {
+  content: "⌄";
+  color: #9aabaa;
+  margin-left: 5px;
+}
+.statistics-cash[open] summary::after {
+  transform: rotate(180deg);
+}
+.statistics-cash summary::-webkit-details-marker {
+  display: none;
+}
+.statistics-cash summary small {
+  font-size: 10px;
+  color: #8ea3a1;
+  margin-left: auto;
+}
+.statistics-cash summary strong {
+  font-size: 13px;
+  font-family: var(--number-font);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  max-width: 55%;
+}
+.cash-flow-values {
+  display: flex;
+  gap: 30px;
+  margin-top: 16px;
+}
+.cash-flow-values > span {
+  font-size: 11px;
+  color: #92a1a7;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.cash-flow-values strong {
+  font-size: 15px;
+  color: #385b65;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.statistics-cash p {
+  font-size: 11px;
+  margin: 17px 0 0;
+}
+.statistics-details {
+  margin-top: 0;
+}
+.statistics-details .book-section-heading {
+  margin-bottom: 12px;
+}
+.statistics-details .book-section-heading h3 {
+  font-size: 14px;
+}
+.statistics-details .event-row b {
+  font-size: 12px;
+}
+.statistics-details .pagination {
+  margin: 0 -16px -16px;
+}
+.statistics-details .event-row:last-of-type {
+  border-bottom: 0;
+}
+@media (max-width: 1100px) {
+  .statistics-charts {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .statistics-card {
+    padding: 14px;
+  }
+  .statistics-range {
+    font-size: 10px;
+    margin-bottom: 20px;
+  }
+  .statistics-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+  .statistics-totals strong {
+    font-size: 20px;
+  }
+  .statistics-totals article + article {
+    padding-left: 20px;
+  }
+  .statistics-totals .statistics-balance {
+    grid-column: 1/-1;
+    border-left: 0;
+    border-top: 1px solid #eaf0ef;
+    padding: 17px 0 0;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .statistics-balance strong {
+    font-size: 18px;
+  }
+  .statistics-unit {
+    margin-top: 15px;
+  }
+  .statistics-charts {
+    gap: 12px;
+  }
+  .statistics-details .pagination {
+    margin: 0 -14px -14px;
+  }
+  .statistics-toolbar .date-sheet-trigger {
+    font-size: 10px;
+  }
+  .statistics-toolbar > .segmented-control button {
+    padding: 6px 10px;
+  }
+  .statistics-debt-balances strong {
+    font-size: 17px;
+  }
+  .statistics-details .book-section-heading {
+    align-items: center;
+  }
+  .statistics-details .book-section-heading small {
+    font-size: 10px;
+  }
+  .statistics-details .book-section-heading .text-button {
+    font-size: 10px;
+  }
+  .cash-flow-values {
+    gap: 20px;
+  }
+}
+@media (max-width: 360px) {
+  .statistics-toolbar {
+    gap: 8px;
+  }
+  .statistics-toolbar > .segmented-control button {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+  .statistics-card {
+    padding: 12px;
+  }
+  .statistics-totals strong {
+    font-size: 19px;
+  }
+  .statistics-details .pagination {
+    margin: 0 -12px -12px;
+  }
+}
+
+.statistics-charts.single {
+  grid-template-columns: 1fr;
+}

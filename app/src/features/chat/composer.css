@@ -1,0 +1,344 @@
+.conversation-composer {
+  position: relative;
+  border: 1px solid #dce5e6;
+  border-radius: 20px;
+  background: #fff;
+  padding: 15px 16px 11px;
+  box-shadow: 0 6px 24px #20344707;
+  transition: border-color 0.15s;
+}
+.conversation-composer:focus-within,
+.conversation-composer.dragging {
+  border-color: #8cb4aa;
+}
+.conversation-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 70px;
+  max-height: 190px;
+  border: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  resize: none;
+  padding: 4px 4px 9px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink);
+  overflow-y: auto;
+}
+.conversation-composer textarea:focus {
+  outline: none;
+  box-shadow: none;
+  border: 0;
+}
+.conversation-composer textarea::placeholder {
+  color: #9eabb0;
+}
+.composer-tools,
+.composer-tools-left,
+.composer-tools-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.composer-tools {
+  justify-content: space-between;
+  margin-top: 7px;
+}
+.composer-tool {
+  width: 35px;
+  height: 35px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #7b8c90;
+}
+.composer-tool:hover:not(:disabled) {
+  background: #f3f6f5;
+  color: #317b6a;
+}
+.composer-app-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 31px;
+  border: 0;
+  border-radius: 8px;
+  background: #f5f7f6;
+  color: #6c8079;
+  padding: 0 10px;
+  font-size: 11px;
+}
+.composer-app-picker > span {
+  font:
+    500 15px ui-monospace,
+    monospace;
+}
+.composer-model-status {
+  font-size: 10px;
+  color: #7c9189;
+  margin-right: 7px;
+}
+.composer-model-status.unconfigured {
+  color: #a0a7ac;
+}
+.composer-send {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #203b36;
+  color: #fff;
+  flex-shrink: 0;
+}
+.composer-send:disabled {
+  background: #edf1ef;
+  color: #b7c1bb;
+  opacity: 1;
+}
+.composer-send.stop {
+  background: #ebf2ee;
+  color: #49816a;
+}
+.composer-app-tags {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 0 3px 8px;
+}
+.composer-app-tag,
+.message-app-tags > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #edf5f0;
+  color: #467e69;
+  border: 1px solid #e3eee7;
+  border-radius: 7px;
+  font-size: 11px;
+  padding: 4px 6px 4px 8px;
+}
+.composer-app-tag button {
+  width: 19px;
+  height: 19px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #87a799;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+}
+.message-app-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.draft-attachments {
+  display: flex;
+  gap: 8px;
+  padding: 0 2px 11px;
+  overflow-x: auto;
+}
+.draft-attachment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 130px;
+  max-width: 200px;
+  border: 1px solid #e5ece8;
+  border-radius: 10px;
+  padding: 7px 25px 7px 7px;
+  color: #6e8379;
+  background: #fbfdfb;
+  flex-shrink: 0;
+}
+.draft-attachment img {
+  width: 39px;
+  height: 39px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.draft-attachment > span {
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draft-attachment button {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: #eef2ef;
+  color: #7c9185;
+  border-radius: 50%;
+}
+.composer-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 15;
+  width: min(380px, 100%);
+  padding: 6px;
+  border: 1px solid #dfe8e2;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 35px #20344718;
+  max-height: min(260px, 40dvh);
+  overflow: auto;
+}
+.composer-popover-heading {
+  padding: 8px 10px 11px;
+  font-size: 11px;
+  font-weight: 550;
+  color: #5a7768;
+  display: flex;
+  justify-content: space-between;
+  gap: 9px;
+}
+.composer-popover-heading > span {
+  color: #a0aca4;
+  font-weight: 400;
+  font-size: 10px;
+}
+.app-mention-option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  border-radius: 9px;
+  background: transparent;
+  padding: 11px;
+}
+.app-mention-option.highlighted,
+.app-mention-option:hover {
+  background: #f2f7f3;
+}
+.mention-app-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  color: #5b9277;
+  background: #e9f2ea;
+  flex-shrink: 0;
+}
+.app-mention-option > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.app-mention-option strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+  color: #395b48;
+}
+.app-mention-option small,
+.composer-add-menu small {
+  display: block;
+  color: #8a9b90;
+  font-size: 10px;
+  margin-top: 4px;
+}
+.mention-empty {
+  font-size: 12px;
+  color: #91a097;
+  padding: 14px 12px;
+  margin: 0;
+}
+.composer-add-menu {
+  width: 270px;
+}
+.composer-add-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12px;
+  color: #53765f;
+}
+.composer-add-menu > button:hover {
+  background: #f4f8f4;
+}
+.chat-config-refresh {
+  padding: 0 0 0 7px;
+  border: 0;
+  background: transparent;
+  color: #4c806b;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.composer-caption {
+  color: #75897e;
+}
+@media (max-width: 700px) {
+  .conversation-composer {
+    padding: 12px 12px 9px;
+    border-radius: 17px;
+  }
+  .conversation-composer textarea {
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 50px;
+    max-height: 130px;
+    padding: 2px 2px 6px;
+  }
+  .composer-tools {
+    margin-top: 3px;
+  }
+  .composer-tool {
+    width: 36px;
+    height: 36px;
+  }
+  .composer-send {
+    width: 38px;
+    height: 38px;
+  }
+  .composer-model-status {
+    font-size: 10px;
+    margin-right: 2px;
+  }
+  .composer-tools-left,
+  .composer-tools-right {
+    gap: 3px;
+  }
+  .composer-caption {
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  .composer-popover {
+    border-radius: 12px;
+  }
+  .app-mention-option {
+    min-height: 56px;
+  }
+  .composer-app-tag button {
+    width: 22px;
+    height: 22px;
+  }
+}

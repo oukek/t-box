@@ -1,0 +1,47 @@
+PODS:
+  - Capacitor (8.5.2):
+    - CapacitorCordova
+  - CapacitorCordova (8.5.2)
+  - CapacitorLocalNotifications (8.3.1):
+    - Capacitor
+  - TBoxCapacitorNativeScanner (0.0.1):
+    - Capacitor
+  - TBoxCapacitorWechatPay (0.0.1):
+    - Capacitor
+    - WechatOpenSDK-XCFramework (= 2.0.9)
+  - WechatOpenSDK-XCFramework (2.0.9)
+
+DEPENDENCIES:
+  - "Capacitor (from `../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios`)"
+  - "CapacitorCordova (from `../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios`)"
+  - "CapacitorLocalNotifications (from `../../../node_modules/.pnpm/@capacitor+local-notifications@8.3.1_@capacitor+core@8.5.2/node_modules/@capacitor/local-notifications`)"
+  - TBoxCapacitorNativeScanner (from `../../../capacitor-plugins/capacitor-native-scanner`)
+  - TBoxCapacitorWechatPay (from `../../../capacitor-plugins/capacitor-wechat-pay`)
+
+SPEC REPOS:
+  trunk:
+    - WechatOpenSDK-XCFramework
+
+EXTERNAL SOURCES:
+  Capacitor:
+    :path: "../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios"
+  CapacitorCordova:
+    :path: "../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios"
+  CapacitorLocalNotifications:
+    :path: "../../../node_modules/.pnpm/@capacitor+local-notifications@8.3.1_@capacitor+core@8.5.2/node_modules/@capacitor/local-notifications"
+  TBoxCapacitorNativeScanner:
+    :path: "../../../capacitor-plugins/capacitor-native-scanner"
+  TBoxCapacitorWechatPay:
+    :path: "../../../capacitor-plugins/capacitor-wechat-pay"
+
+SPEC CHECKSUMS:
+  Capacitor: 89067779e14fb7ea56af07b4817f45d1f0c2a269
+  CapacitorCordova: 5bec5648cbd09a176ce34ce5e7b6cdabb2c8a327
+  CapacitorLocalNotifications: e0747a329ddde3074d52dc74a003688af90e42be
+  TBoxCapacitorNativeScanner: 923a7c0fc4908507971b93f6fd6911af8237a938
+  TBoxCapacitorWechatPay: 299589926f1216cc5b570a7f2d61cb89e5606b99
+  WechatOpenSDK-XCFramework: 996f8fe4f5ca9d75529546f7246da459ef31aa0d
+
+PODFILE CHECKSUM: 20accf3d2a5aedd092025f1152052c6a95f2cd2c
+
+COCOAPODS: 1.16.2
