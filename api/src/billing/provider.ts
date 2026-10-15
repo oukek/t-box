@@ -3,6 +3,7 @@ import type { ChatProvider, ProviderInput } from '../chat/provider.js'
 import type { BillingService } from './service.js'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { estimateInputTokens } from '../agent/context.js'
+import { settingNumber } from '../configuration/defaults.js'
 import { money, tokenFee } from './money.js'
 
 export class MeteredChatProvider implements ChatProvider {
@@ -143,8 +144,34 @@ export class MeteredChatProvider implements ChatProvider {
     }
   }
 
-  // Title generation never enters the user's billing pipeline.
-  async title(input: { text: string, signal: AbortSignal }) {
-    return this.provider.title ? this.provider.title(input) : ''
+  // Free to the user; provider overhead still belongs to the platform budget.
+  async title(input: Parameters<NonNullable<ChatProvider['title']>>[0]) {
+    if (!this.provider.title) {
+      return ''
+    }
+    if (!input.execution) {
+      return this.provider.title(input)
+    }
+    const execution = input.execution
+    const output = input.outputTokenBudget ?? settingNumber(input.configuration, 'ai.title.reasoningTokens', 1024)
+    const estimate = estimateInputTokens({ history: [{ role: 'user', content: input.text.slice(0, 2000) }], tools: [], instructions: input.instructions || '' })
+    await this.billing.begin({ id: execution.operationId, userId: execution.userId, taskId: execution.taskId, modelId: this.modelId, prices: this.prices, kind: 'conversation', purpose: 'title', free: true, reserve: tokenFee(this.prices, estimate, output) })
+    let settled = false
+    try {
+      const title = await this.provider.title({ ...input, onUsage: async (usage) => {
+        await this.billing.settle(execution.userId, execution.operationId, usage)
+        settled = true
+        await input.onUsage?.(usage)
+      } })
+      if (!settled) {
+        await this.billing.uncertain(execution.userId, execution.operationId)
+      }
+      return title
+    } catch (error) {
+      if (!settled) {
+        await this.billing.uncertain(execution.userId, execution.operationId)
+      }
+      throw error
+    }
   }
 }

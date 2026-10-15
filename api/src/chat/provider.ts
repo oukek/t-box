@@ -69,6 +69,8 @@ export interface ChatProvider {
   forRun?: () => Promise<ChatProvider>
   next(input: ProviderInput): Promise<ProviderTurn>
   title?(input: {
+    execution?: ProviderInput['execution']
+    onUsage?: ProviderInput['onUsage']
     text: string
     signal: AbortSignal
     instructions?: string
@@ -422,6 +424,8 @@ export class OpenAIResponsesProvider implements ChatProvider {
   }
 
   async title(input: {
+    execution?: ProviderInput['execution']
+    onUsage?: ProviderInput['onUsage']
     text: string
     signal: AbortSignal
     instructions?: string
@@ -454,6 +458,9 @@ export class OpenAIResponsesProvider implements ChatProvider {
         ),
       },
     )
+    if (response.usage) {
+      await input.onUsage?.({ inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens, cachedInputTokens: response.usage.input_tokens_details?.cached_tokens ?? null, reasoningTokens: response.usage.output_tokens_details?.reasoning_tokens ?? null, responseId: response.id })
+    }
     if (response.status !== 'completed') {
       throw new Error('Title response incomplete')
     }

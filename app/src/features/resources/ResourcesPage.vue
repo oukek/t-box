@@ -16,6 +16,7 @@ const filters = [
 ] as const
 const items = ref<Resource[]>([])
 const total = ref(0)
+const quota = ref<{ bytes: number, maxBytes: number, files: number, maxFiles: number } | null>(null)
 const page = ref(1)
 const filter = ref('')
 const loading = ref(false)
@@ -31,14 +32,16 @@ async function load(more = false) {
   error.value = ''
   const next = more ? page.value + 1 : 1
   try {
-    const result = await request<{ data: Resource[], meta: { total: number } }>(
-      `/resources?page=${next}&source=${filter.value}`,
-    )
+    const [result, capacity] = await Promise.all([
+      request<{ data: Resource[], meta: { total: number } }>(`/resources?page=${next}&source=${filter.value}`),
+      request<{ data: NonNullable<typeof quota.value> }>('/resources/quota'),
+    ])
     if (current !== revision) {
       return
     }
     items.value = more ? [...items.value, ...result.data] : result.data
     total.value = result.meta.total
+    quota.value = capacity.data
     page.value = next
   } catch (cause) {
     if (current === revision) {
@@ -131,6 +134,7 @@ onMounted(() => load())
         {{ item.label }}
       </button><span>{{ total }} 个资源</span>
     </div>
+    <p v-if="quota" class="resource-capacity">已用 {{ fileSize(quota.bytes) }} / {{ fileSize(quota.maxBytes) }} · {{ quota.files }} / {{ quota.maxFiles }} 个文件</p>
     <p
       v-if="error"
       class="form-error"
@@ -234,3 +238,12 @@ onMounted(() => load())
     <ImageViewer :resource="previewImage" @close="previewImage = null" />
   </section>
 </template>
+
+<style scoped>
+.resource-capacity {
+  margin: 0 0 18px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+</style>

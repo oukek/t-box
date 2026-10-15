@@ -276,7 +276,9 @@ test('optional title generation cannot overwrite a concurrent manual rename, exe
         async authenticate() {
           return actor!
         },
-        async authenticateHash() {},
+        async authenticateHash() {
+          return actor!
+        },
       },
       conversations: {
         async save() {},

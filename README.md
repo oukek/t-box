@@ -214,3 +214,9 @@ API 默认监听 `127.0.0.1`，跨域来源通过 `CORS_ORIGINS` 配置。公开
 图标源文件、版本图片与后台上传：[应用图标与独立日历、时间](docs/application-icons.md)。
 
 节假日同步、年度管理与缓存：[日历节假日数据](docs/calendar-holidays.md)。
+
+## 运行与验收基线
+
+本轮完善及验收范围见 [平台完善清单](docs/platform-hardening.md)。后端启动仍使用 `pnpm dev:api`；生产在迁移后通过 PM2 启动 API、独立恢复 worker 和静态产物服务。所有工作流保持手动触发，上传不自动启动服务。运行概况、备份和恢复步骤见 [运维手册](docs/operations-and-recovery.md)。
+
+[统一 SDK 与应用脚手架](docs/application-sdk.md)、[成本与并发](docs/ai-cost-controls.md)、[退款与渠道对账](docs/payment-refunds-and-reconciliation.md)、[账号、通知、离线与存储](docs/account-and-offline.md)说明各自的权限、故障与验收边界。

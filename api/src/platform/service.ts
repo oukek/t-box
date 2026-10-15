@@ -7,6 +7,7 @@ import { calculatorBackend } from '@t-box/calculator-server'
 import { CalendarService } from '@t-box/calendar-server/service'
 import { FinanceService } from '@t-box/ledger-server/finance/service'
 import { LedgerAccess } from '@t-box/ledger-server/ledgers/access'
+import { createLedgerRows } from '@t-box/ledger-server/ledgers/create'
 import { LedgerService } from '@t-box/ledger-server/ledgers/service'
 import { StatisticsService } from '@t-box/ledger-server/statistics/service'
 import { TimeService } from '@t-box/time-server/service'
@@ -18,12 +19,18 @@ import {
 } from '../application-platform/catalog.js'
 import { ApplicationPlatform } from '../application-platform/service.js'
 import { createApplicationResourceAdapters } from '../applications/registry.js'
+import { ProviderConcurrency } from '../billing/concurrency.js'
 import { BillingPricingService } from '../billing/pricing.js'
 import { BillingService } from '../billing/service.js'
 import { ConversationArchive } from '../chat/archive.js'
 import { DesktopService } from '../desktop/service.js'
+import { AccountSecurityService } from '../identity/security.js'
 import { IdentityService } from '../identity/service.js'
+import { NotificationService } from '../notifications/service.js'
+import { OperationsService } from '../operations/service.js'
 import { RechargeSettingsService } from '../payments/recharge.js'
+import { PaymentReconciliationService } from '../payments/reconciliation.js'
+import { PaymentRefundService } from '../payments/refunds.js'
 import { PaymentService } from '../payments/service.js'
 import { ImageTools } from '../resources/images.js'
 import { ResourceService } from '../resources/service.js'
@@ -39,9 +46,15 @@ export class PlatformService {
   readonly recharge: RechargeSettingsService
   readonly support: CustomerSupportService
   readonly billing: BillingService
+  readonly providerConcurrency: ProviderConcurrency
   readonly payments: PaymentService
+  readonly refunds: PaymentRefundService
+  readonly paymentReconciliation: PaymentReconciliationService
   readonly tasks: TaskStore
+  readonly notifications: NotificationService
+  readonly operations: OperationsService
   readonly identity: IdentityService
+  readonly accountSecurity: AccountSecurityService
   readonly access: LedgerAccess
   readonly ledgers: LedgerService
   readonly statistics: StatisticsService
@@ -69,10 +82,16 @@ export class PlatformService {
     this.pricing = new BillingPricingService(source, configuration?.cache)
     this.recharge = new RechargeSettingsService(source, configuration?.cache)
     this.support = new CustomerSupportService(source, configuration?.cache)
-    this.billing = new BillingService(source)
+    this.billing = new BillingService(source, configuration?.configuration)
+    this.providerConcurrency = new ProviderConcurrency(source)
     this.payments = new PaymentService(source, this.billing, gateway)
+    this.refunds = new PaymentRefundService(source, this.billing, gateway)
+    this.paymentReconciliation = new PaymentReconciliationService(source, gateway, paymentConfiguration)
     this.tasks = new TaskStore(source)
-    this.identity = new IdentityService(source)
+    this.notifications = new NotificationService(source)
+    this.operations = new OperationsService(source)
+    this.identity = new IdentityService(source, (db, userId) => createLedgerRows(db, userId, { name: '我的账本', template: 'daily' }))
+    this.accountSecurity = new AccountSecurityService(this.identity)
     this.access = new LedgerAccess(source, this.identity)
     this.ledgers = new LedgerService(this.access)
     this.statistics = new StatisticsService(this.access)
@@ -82,6 +101,6 @@ export class PlatformService {
       source,
       new ResourceAccessRegistry(createApplicationResourceAdapters(this)),
     )
-    this.images = new ImageTools(this.resources, configuration, this.billing)
+    this.images = new ImageTools(this.resources, configuration, this.billing, this.providerConcurrency)
   }
 }

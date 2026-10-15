@@ -272,6 +272,7 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
   }
 
   async title(input: {
+    onUsage?: ProviderInput['onUsage']
     text: string
     signal: AbortSignal
     instructions?: string
@@ -280,6 +281,7 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
   }): Promise<string> {
     let text = ''
     await this.next({
+      onUsage: input.onUsage,
       configuration: input.configuration,
       history: [{ role: 'user', content: input.text.slice(0, 2000) }],
       instructions: input.instructions ?? titleInstructions,

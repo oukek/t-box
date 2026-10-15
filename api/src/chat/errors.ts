@@ -57,6 +57,11 @@ export function publicRunError(
   abortReason?: unknown,
 ): RunError {
   const aborts: Record<string, RunError> = {
+    SERVER_SHUTDOWN: {
+      code: 'SERVER_SHUTDOWN',
+      message: '服务正在重启，安全任务将从检查点自动继续',
+      retryable: true,
+    },
     TIMEOUT: { code: 'RUN_TIMEOUT', message: '任务执行超时', retryable: true },
     OUTPUT_LIMIT: {
       code: 'OUTPUT_LIMIT',

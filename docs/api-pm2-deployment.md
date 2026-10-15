@@ -118,7 +118,7 @@ NODE_ENV=production node "$release/api/dist/admin/bootstrap.js"
 
 初始管理员凭据保存在 shared/secrets/bootstrap-admin.txt；已有管理员不会重置。首次登录修改密码后删除该文件。
 
-启动两个单实例进程：
+启动三个单实例进程（API、任务恢复 worker、应用产物服务）：
 
 ```sh
 PM2_NODE="$(command -v node)" pm2 start "$release/control/ecosystem.config.cjs"
@@ -143,10 +143,10 @@ ecosystem 使用绝对版本路径、fork 模式、单实例、关闭 watch，�
 ```sh
 release="/www/server/t-box/releases/NEW_RELEASE_ID"
 node "$release/control/prepare-release.mjs"
-pm2 stop t-box-api
+pm2 stop t-box-api t-box-worker
 NODE_ENV=production node "$release/api/dist/init-db.js"
 # 迁移成功后再切换；显式删除旧进程记录，确保使用新版本的绝对脚本路径。
-pm2 delete t-box-api t-box-artifacts
+pm2 delete t-box-api t-box-worker t-box-artifacts
 PM2_NODE="$(command -v node)" pm2 start "$release/control/ecosystem.config.cjs"
 curl -fsS http://127.0.0.1:3000/api/v1/health
 pm2 save
@@ -165,3 +165,5 @@ API 日志自身对敏感字段脱敏，PM2 日志保存在 shared/logs。运行
 - [GitHub 手动工作流](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)。
 - [PM2 ecosystem 配置](https://pm2.keymetrics.io/docs/usage/application-declaration/)。
 - [PM2 开机恢复](https://pm2.keymetrics.io/docs/usage/startup/)。
+
+备份、隔离恢复与后台故障定位见 [运行与恢复](operations-and-recovery.md)。升级时必须同时停止旧 worker，避免旧代码使用新数据库继续执行。

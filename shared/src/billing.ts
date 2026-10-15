@@ -32,7 +32,7 @@ export interface UsageRecord {
 }
 export interface WalletEntry {
   id: string
-  kind: 'usage' | 'recharge' | 'grant'
+  kind: 'usage' | 'recharge' | 'grant' | 'refund'
   amount: string
   balance: string
   createdAt: string

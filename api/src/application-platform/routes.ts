@@ -161,4 +161,13 @@ export function registerApplicationPlatform(
       ),
     }
   })
+  app.post<{ Params: { id: string } }>('/api/v1/applications/:id/events', async (req, reply) => {
+    const a = await actor(req.headers.authorization)
+    const input = req.body as { releaseId: string, generation: number, channel: string, cursor?: string, arguments?: unknown }
+    if (!validId(req.params.id) || !input || Object.keys(input).some((key) => !['releaseId', 'generation', 'channel', 'cursor', 'arguments'].includes(key)) || typeof input.releaseId !== 'string' || !Number.isSafeInteger(input.generation) || typeof input.channel !== 'string' || !/^[a-z][a-z0-9_.-]{0,63}$/.test(input.channel) || (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))) {
+      throw new ApiError(400, 'INVALID_APP_EVENT', '应用事件参数无效')
+    }
+    reply.header('Cache-Control', 'no-store')
+    return { data: await service.events(a.user.id, req.params.id, input) }
+  })
 }

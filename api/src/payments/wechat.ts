@@ -8,104 +8,19 @@ import type { PaymentConfiguration, WechatRuntime } from './configuration.js'
 import type {
   PaymentContext,
   PaymentGateway,
+  RefundRequest,
   VerifiedPayment,
 } from './gateway.js'
-import { createDecipheriv, randomBytes, sign, verify } from 'node:crypto'
+import { createHash, randomBytes, sign } from 'node:crypto'
 import { isIP } from 'node:net'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { parseStatementCSV } from './statement.js'
 import { WechatAuthorization } from './wechat-authorization.js'
+import { decryptWechat, wechatFailure as fail, localOrder, merchantOrder, readWechatBody, verifyWechat } from './wechat-message.js'
+import { parseWechatRefund, verifyWechatRefund } from './wechat-refund.js'
 
-const fail = (message = '微信支付响应校验失败，请稍后核对订单') =>
-  new ApiError(502, 'WECHAT_UNAVAILABLE', message)
-export function merchantOrder(id: string) {
-  if (
-    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)
-  ) {
-    throw fail()
-  }
-  return id.replaceAll('-', '')
-}
-export function localOrder(value: unknown) {
-  if (typeof value !== 'string' || !/^[a-f0-9]{32}$/i.test(value)) {
-    throw fail()
-  }
-  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`.toLowerCase()
-}
-export function verifyWechat(
-  raw: Buffer,
-  headers: Record<string, string | string[] | undefined>,
-  config: WechatRuntime,
-  now = Date.now(),
-) {
-  const timestamp = headers['wechatpay-timestamp']
-  const nonce = headers['wechatpay-nonce']
-  const signature = headers['wechatpay-signature']
-  const serial = headers['wechatpay-serial']
-  if (
-    typeof timestamp !== 'string' ||
-    !/^\d{10}$/.test(timestamp) ||
-    Math.abs(now / 1000 - Number(timestamp)) > 300 ||
-    typeof nonce !== 'string' ||
-    !/^[\x21-\x7E]{1,128}$/.test(nonce) ||
-    typeof signature !== 'string' ||
-    !/^[A-Z0-9+/]+={0,2}$/i.test(signature) ||
-    signature.length > 2048 ||
-    serial !== config.platformSerial
-  ) {
-    throw fail()
-  }
-  const payload = Buffer.concat([
-    Buffer.from(`${timestamp}\n${nonce}\n`),
-    raw,
-    Buffer.from('\n'),
-  ])
-  if (
-    !verify(
-      'RSA-SHA256',
-      payload,
-      config.platformPublicKey,
-      Buffer.from(signature, 'base64'),
-    )
-  ) {
-    throw fail()
-  }
-}
-export function decryptWechat(
-  resource: Record<string, unknown>,
-  key: string,
-): Record<string, unknown> {
-  if (
-    resource.algorithm !== 'AEAD_AES_256_GCM' ||
-    resource.original_type !== 'transaction' ||
-    typeof resource.nonce !== 'string' ||
-    Buffer.byteLength(resource.nonce) !== 12 ||
-    typeof resource.ciphertext !== 'string' ||
-    typeof resource.associated_data !== 'string'
-  ) {
-    throw fail()
-  }
-  try {
-    const bytes = Buffer.from(resource.ciphertext, 'base64')
-    if (bytes.length <= 16) {
-      throw new Error('Encrypted payment resource has no payload')
-    }
-    const cipher = createDecipheriv(
-      'aes-256-gcm',
-      Buffer.from(key),
-      Buffer.from(resource.nonce),
-    )
-    cipher.setAuthTag(bytes.subarray(-16))
-    cipher.setAAD(Buffer.from(resource.associated_data))
-    return JSON.parse(
-      Buffer.concat([
-        cipher.update(bytes.subarray(0, -16)),
-        cipher.final(),
-      ]).toString('utf8'),
-    )
-  } catch {
-    throw fail()
-  }
-}
+export { decryptWechat, localOrder, merchantOrder, verifyWechat } from './wechat-message.js'
+
 function payment(
   data: Record<string, unknown>,
   c: WechatRuntime,
@@ -187,12 +102,12 @@ export class WechatGateway implements PaymentGateway {
     return this.configuration.credentials(c)
   }
 
-  private async request(
+  private async send(
     c: WechatRuntime,
     method: string,
     path: string,
     body?: unknown,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<Response> {
     const text = body === undefined ? '' : JSON.stringify(body)
     const timestamp = Math.floor(Date.now() / 1000).toString()
     const nonce = randomBytes(16).toString('hex')
@@ -218,10 +133,17 @@ export class WechatGateway implements PaymentGateway {
     } catch {
       throw fail('微信支付连接未完成，请核对原订单后重试')
     }
-    const raw = Buffer.from(await response.arrayBuffer())
-    if (raw.length > 64 * 1024) {
-      throw fail()
-    }
+    return response
+  }
+
+  private async request(
+    c: WechatRuntime,
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<Record<string, unknown>> {
+    const response = await this.send(c, method, path, body)
+    const raw = response.status === 204 ? Buffer.alloc(0) : await readWechatBody(response, 64 * 1024)
     verifyWechat(raw, Object.fromEntries(response.headers), c)
     if (response.status === 204) {
       return {}
@@ -233,6 +155,12 @@ export class WechatGateway implements PaymentGateway {
       throw fail()
     }
     if (!response.ok) {
+      if (json.code === 'NO_STATEMENT_EXIST') {
+        throw new ApiError(404, 'STATEMENT_EMPTY', '渠道当日没有交易账单')
+      }
+      if (response.status === 404 && json.code === 'RESOURCE_NOT_EXISTS' && path.startsWith('/v3/refund/domestic/refunds/')) {
+        throw new ApiError(404, 'REFUND_NOT_FOUND', '渠道暂未查到此退款单')
+      }
       if (json.code === 'ORDERPAID') {
         throw new ApiError(409, 'ORDER_PAID', '订单已支付，请刷新核对到账状态')
       }
@@ -241,6 +169,76 @@ export class WechatGateway implements PaymentGateway {
       )
     }
     return json
+  }
+
+  async refund(input: RefundRequest, context: PaymentContext) {
+    const c = await this.config(context)
+    const result = parseWechatRefund(await this.request(c, 'POST', '/v3/refund/domestic/refunds', {
+      transaction_id: input.transactionId,
+      out_refund_no: merchantOrder(input.id),
+      reason: input.reason,
+      notify_url: `${c.apiBaseUrl}/api/v1/payments/webhooks/wechat/refunds`,
+      amount: { refund: input.amountCents, total: input.amountCents, currency: 'CNY' },
+    }), c)
+    if (result.id !== input.id || result.orderId !== input.orderId || result.transactionId !== input.transactionId || result.amountCents !== input.amountCents) {
+      throw fail('微信退款结果与原退款单不一致')
+    }
+    return result
+  }
+
+  async statement(day: string, context: PaymentContext) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      throw new ApiError(400, 'STATEMENT_DATE', '账单日期无效')
+    }
+    const c = await this.config(context)
+    let metadata: Record<string, unknown>
+    try {
+      metadata = await this.request(c, 'GET', `/v3/bill/tradebill?bill_date=${day}&bill_type=ALL`)
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'STATEMENT_EMPTY') {
+        return { day, merchantId: c.merchantId, sha1: '', rows: [] }
+      }
+      throw error
+    }
+    if (metadata.hash_type !== 'SHA1' || typeof metadata.hash_value !== 'string' || !/^[a-f0-9]{40}$/i.test(metadata.hash_value) || typeof metadata.download_url !== 'string') {
+      throw fail('微信账单摘要无效')
+    }
+    const url = new URL(metadata.download_url)
+    if (url.origin !== 'https://api.mch.weixin.qq.com' || url.username || url.password || url.hash || !['/v3/billdownload/file', '/v3/bill/downloadurl'].includes(url.pathname)) {
+      throw fail('微信账单下载来源无效')
+    }
+    const response = await this.send(c, 'GET', url.pathname + url.search)
+    if (!response.ok) {
+      throw fail('微信账单下载尚未完成')
+    }
+    // File responses use the authenticated metadata hash per WeChat's two-step
+    // protocol. Normal API response signature verification remains mandatory.
+    const bytes = await readWechatBody(response, 20 * 1024 * 1024)
+    const sha1 = createHash('sha1').update(bytes).digest('hex')
+    if (sha1 !== metadata.hash_value.toLowerCase()) {
+      throw fail('微信账单文件校验失败')
+    }
+    return { day, merchantId: c.merchantId, sha1, rows: parseStatementCSV(bytes.toString('utf8'), c.merchantId) }
+  }
+
+  async queryRefund(id: string, context: PaymentContext) {
+    const c = await this.config(context)
+    try {
+      const result = parseWechatRefund(await this.request(c, 'GET', `/v3/refund/domestic/refunds/${merchantOrder(id)}`), c)
+      if (result.id !== id) {
+        throw fail()
+      }
+      return result
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'REFUND_NOT_FOUND') {
+        return null
+      }
+      throw error
+    }
+  }
+
+  verifyRefund(raw: Buffer, headers: Record<string, string | string[] | undefined>) {
+    return verifyWechatRefund(this.configuration, raw, headers)
   }
 
   async create(

@@ -37,6 +37,26 @@ const prompt = (
   effect: 'new_task',
 })
 export const platformDefinitions: ConfigurationDefinition[] = [
+  ...[
+    ['ai.cost.taskYuan', '单任务 AI 成本上限 / 元', 20],
+    ['ai.cost.userDailyYuan', '用户每日 AI 成本上限 / 元', 100],
+    ['ai.cost.platformDailyYuan', '平台每日 AI 成本上限 / 元', 1000],
+  ].map(([key, title, value]): ConfigurationDefinition => ({
+    key: String(key),
+    title: String(title),
+    group: '成本与并发',
+    type: 'number',
+    defaultValue: Number(value),
+    min: 0,
+    max: 1000000,
+    integer: false,
+    step: 0.01,
+    effect: 'next_request',
+    description: '0 表示不限制。按北京时间每日统计；记录不扣费用户同样占用成本预算，未知用量保守保留预估成本。标题生成不扣用户余额。',
+  })),
+  { ...number('ai.provider.concurrency', '每个服务商的请求并发上限', 8, 1, 128, '跨 API/恢复进程共享；普通会话和图片请求共用服务商额度。'), group: '成本与并发', effect: 'next_request' },
+  { ...number('ai.provider.queueTimeoutMs', '服务商并发排队时限 / 毫秒', 30000, 1000, 120000, '并发已满时最多等待此时长；取消优先，排队期间不预留余额。'), group: '成本与并发', effect: 'next_request' },
+  number('ai.worker.concurrency', '后台自动续办并发任务数', 2, 1, 32, '每个恢复进程的并发上限；新启动恢复任务时读取。模型失败和等待用户输入的任务不会自动续办。'),
   {
     key: 'ai.images.timeoutMs',
     group: '图片模型请求参数',

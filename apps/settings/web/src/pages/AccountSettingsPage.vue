@@ -4,6 +4,7 @@ import { AppIcon, Modal } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, ref } from 'vue'
 import AccountDialog from './AccountDialog.vue'
+import AccountSecurityPanel from './AccountSecurityPanel.vue'
 
 const passwordOpen = ref(false)
 const logoutOpen = ref(false)
@@ -105,6 +106,7 @@ async function signOut() {
         <button class="profile-action" @click="passwordOpen = true">
           <span class="profile-action-icon"><AppIcon name="lock" :size="19" /></span><span>修改登录密码</span><AppIcon name="right" :size="17" />
         </button>
+        <AccountSecurityPanel />
       </div>
     </div>
     <div class="settings-session-actions">

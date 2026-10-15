@@ -1,8 +1,8 @@
 import type { AdminRechargeConfiguration, RechargeConfiguration } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { ConfigurationCache } from '../configuration/cache.js'
-import { object } from '@t-box/ledger-server/ledgers/validation'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { object } from '@t-box/server-foundation/input'
 import {
   rechargeBonusCents,
   rechargeCents,

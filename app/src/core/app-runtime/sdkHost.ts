@@ -21,6 +21,7 @@ import {
 import { chatWebSocketUrl, request } from '../network'
 import { identity } from '../session'
 import { appCatalog } from './catalog'
+import { chooseApplicationFiles, decodeApplicationFile, readApplicationFile, uploadApplicationFile } from './files'
 import { setApplicationBindings } from './resourceBindings'
 import { parseApplicationHttpRequest, validateApplicationRestPath } from './trustedPath'
 
@@ -51,6 +52,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
   let closed = false
   let epoch = 0
   let bound: ApplicationContext | undefined
+  const lifetime = new AbortController()
   const listeners = new Set<(event: ApplicationBridgeEvent) => void>()
   const subscriptions = new Map<string, () => void>()
   const cancelledSubscriptions = new Set<string>()
@@ -93,6 +95,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
       })
     }
     closed = true
+    lifetime.abort()
     epoch++
     stopSubscriptions()
     // eslint-disable-next-line ts/no-use-before-define -- Watchers call close only after registration completes.
@@ -222,7 +225,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
                 'storage.remove' as const,
               ]
             : []),
-          ...(events.length
+          ...(events.length || context.permissions.some((permission) => /^events\.[a-z][a-z0-9_.-]{0,63}$/.test(permission))
             ? ['events.subscribe' as const, 'events.unsubscribe' as const]
             : []),
         ]),
@@ -248,6 +251,55 @@ export function createHostTransport(options: HostOptions): AppTransport {
     }
     const channel = typeof args.channel === 'string' ? args.channel : ''
     const registered = module?.sdk?.events?.[channel]
+    if (!registered && context.permissions.includes(`events.${channel}`) && /^[a-z][a-z0-9_.-]{0,63}$/.test(channel)) {
+      const started = epoch
+      let stopped = false
+      let cursor: string | undefined
+      let failures = 0
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const abort = new AbortController()
+      subscriptions.set(id, () => {
+        stopped = true
+        clearTimeout(timer)
+        abort.abort()
+      })
+      const poll = async () => {
+        try {
+          assertEpoch(started)
+          const result = (await request<{ data: { cursor: string, events: unknown[] } }>(`/applications/${encodeURIComponent(options.appId)}/events`, {
+            method: 'POST',
+            signal: abort.signal,
+            body: JSON.stringify({ releaseId: context.releaseId, generation: context.generation, channel, cursor, arguments: args.arguments }),
+          })).data
+          assertEpoch(started)
+          if (!stopped) {
+            for (const value of result.events) {
+              emit({ type: 'event', name: 'app.event', data: { subscriptionId: id, value } })
+            }
+            cursor = result.cursor
+            failures = 0
+          }
+        } catch (error) {
+          if (!stopped && !closed) {
+            failures++
+            const failure = AppSdkError.from(error)
+            emit({ type: 'event', name: 'app.event.error', data: { subscriptionId: id, error: failure } })
+            if ([401, 403, 409].includes(failure.status ?? 0)) {
+              subscriptions.get(id)?.()
+              subscriptions.delete(id)
+            }
+          }
+        } finally {
+          if (!stopped && !closed) {
+            timer = setTimeout(() => {
+              void poll()
+            }, Math.min(60_000, 5000 * 2 ** Math.min(failures, 4)))
+          }
+        }
+      }
+      void poll()
+      return { subscribed: true }
+    }
     if (
       !registered ||
       (!options.trusted && !context.permissions.includes(`events.${channel}`))
@@ -403,6 +455,22 @@ export function createHostTransport(options: HostOptions): AppTransport {
         value = session()
       } else if (method === 'resources.bindings') {
         setApplicationBindings(options.appId, a.bindings)
+      } else if (method === 'files.pick' || method === 'files.upload') {
+        const signal = callOptions.signal ? AbortSignal.any([lifetime.signal, callOptions.signal]) : lifetime.signal
+        const files = method === 'files.pick' ? await chooseApplicationFiles(a, signal) : [decodeApplicationFile(a)]
+        assertEpoch(started)
+        const uploaded = []
+        for (const file of files) {
+          assertEpoch(started)
+          signal.throwIfAborted()
+          uploaded.push(await uploadApplicationFile(options.appId, file, signal))
+        }
+        value = method === 'files.pick' ? uploaded : uploaded[0]
+      } else if (method === 'files.read') {
+        if (Object.keys(a).some((key) => key !== 'id')) {
+          throw new AppSdkError('INVALID_ARGUMENTS', '文件读取参数无效')
+        }
+        value = await readApplicationFile(options.appId, a.id, callOptions.signal)
       } else if (method === 'device.reminders') {
         if (Object.keys(a).some((k) => k !== 'action') || !module?.sdk?.reminders) {
           throw new AppSdkError('INVALID_ARGUMENTS', '提醒操作无效')

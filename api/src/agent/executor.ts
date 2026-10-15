@@ -291,6 +291,11 @@ export async function executeTool(
         run.abort.signal.throwIfAborted()
         await tool.validate?.(args, context)
         run.abort.signal.throwIfAborted()
+        // Validation may now include remote preflight UI; recheck rights after the wait.
+        await registry.requireTool(call.name, args, context)
+        for (const requirement of requirements) {
+          await registry.access.ensure(ctx.actor!, requirement.resource, requirement.action, undefined, tool.title)
+        }
         await ctx.journal?.guard()
         await ctx.journal?.dispatch(
           durableCall,

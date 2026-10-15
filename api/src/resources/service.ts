@@ -1,14 +1,13 @@
-import type { Principal } from '@t-box/ledger-server/ledgers/types'
+import type { Actor as Principal } from '@t-box/app-server-sdk'
 import type { Resource } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { ProviderItem } from '../chat/provider.js'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isoTime } from '@t-box/ledger-server/ledgers/time'
-import { parseId } from '@t-box/ledger-server/validation'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { isoTime } from '@t-box/server-foundation/time'
+import { parseId } from '@t-box/server-foundation/validation'
+import { LocalResourceStorage, ResourceStorageRegistry } from './storage.js'
 
 export const MAX_RESOURCE_SIZE = 10 * 1024 * 1024
 /** Never trust the extension or browser Content-Type for image display. */
@@ -52,12 +51,16 @@ const dto = (r: Resource): Resource => ({
 const columns =
   'id,name,mime_type AS mimeType,size,source,created_at AS createdAt'
 export class ResourceService {
+  readonly storage: ResourceStorageRegistry
   constructor(
     readonly source: DataSource,
     readonly root = fileURLToPath(
       new URL('../../.storage/resources/', import.meta.url),
     ),
-  ) {}
+    storage?: ResourceStorageRegistry,
+  ) {
+    this.storage = storage || new ResourceStorageRegistry('local', [{ id: 'local', storage: new LocalResourceStorage(root) }])
+  }
 
   async create(
     principal: Principal,
@@ -91,8 +94,7 @@ export class ResourceService {
         .replace(/[\x00-\x1F]/g, '')
         .trim()
         .slice(0, 200) || '未命名文件'
-    await mkdir(this.root, { recursive: true, mode: 0o700 })
-    await writeFile(join(this.root, id), bytes, { flag: 'wx', mode: 0o600 })
+    await this.storage.get(this.storage.activeId).write(id, bytes)
     try {
       await this.source.transaction(async (db) => {
         await db.query('SELECT id FROM app_users WHERE id=? FOR UPDATE', [
@@ -113,12 +115,12 @@ export class ResourceService {
           )
         }
         await db.query(
-          'INSERT INTO resources(id,user_id,name,mime_type,size,source) VALUES(?,?,?,?,?,?)',
-          [id, principal.user.id, name, mimeType, bytes.length, source],
+          'INSERT INTO resources(id,user_id,name,mime_type,size,source,storage_backend) VALUES(?,?,?,?,?,?,?)',
+          [id, principal.user.id, name, mimeType, bytes.length, source, this.storage.activeId],
         )
       })
     } catch (cause) {
-      await unlink(join(this.root, id)).catch(() => {})
+      await this.storage.get(this.storage.activeId).remove(id).catch(() => {})
       throw cause
     }
     return this.get(principal, id)
@@ -153,9 +155,12 @@ export class ResourceService {
     try {
       return {
         resource: dto(row),
-        bytes: await readFile(join(this.root, row.id)),
+        bytes: await this.readStored(row.id),
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error
+      }
       throw new ApiError(404, 'RESOURCE_MISSING', '文件已不存在')
     }
   }
@@ -163,8 +168,11 @@ export class ResourceService {
   async bytes(principal: Principal, id: string) {
     const resource = await this.get(principal, id)
     try {
-      return { resource, bytes: await readFile(join(this.root, resource.id)) }
-    } catch {
+      return { resource, bytes: await this.readStored(resource.id) }
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error
+      }
       throw new ApiError(404, 'RESOURCE_MISSING', '文件已不存在')
     }
   }
@@ -220,7 +228,36 @@ export class ResourceService {
       'UPDATE resources SET deleted_at=UTC_TIMESTAMP(3) WHERE id=? AND user_id=?',
       [id, principal.user.id],
     )
-    await unlink(join(this.root, id)).catch(() => {})
+    await this.purge(id).catch(() => {})
+  }
+
+  private async readStored(id: string) {
+    const [row] = await this.source.query('SELECT storage_backend FROM resources WHERE id=? AND deleted_at IS NULL', [id])
+    if (!row) {
+      throw new ApiError(404, 'RESOURCE_NOT_FOUND', '文件不存在')
+    }
+    return this.storage.get(row.storage_backend).read(id)
+  }
+
+  private async purge(id: string) {
+    const [row] = await this.source.query('SELECT storage_backend FROM resources WHERE id=? AND deleted_at IS NOT NULL AND purged_at IS NULL', [id])
+    if (!row) {
+      return
+    }
+    await this.storage.get(row.storage_backend).remove(id)
+    await this.source.query('UPDATE resources SET purged_at=UTC_TIMESTAMP(3) WHERE id=? AND deleted_at IS NOT NULL', [id])
+  }
+
+  async purgeDeleted() {
+    const rows = await this.source.query('SELECT id FROM resources WHERE deleted_at IS NOT NULL AND purged_at IS NULL ORDER BY deleted_at LIMIT 100')
+    for (const row of rows) {
+      await this.purge(row.id)
+    }
+  }
+
+  async quota(principal: Principal) {
+    const [row] = await this.source.query('SELECT COUNT(*) AS count,COALESCE(SUM(size),0) AS bytes FROM resources WHERE user_id=? AND deleted_at IS NULL', [principal.user.id])
+    return { files: Number(row.count), bytes: Number(row.bytes), maxFiles: 500, maxBytes: 300 * 1024 * 1024, maxFileBytes: MAX_RESOURCE_SIZE }
   }
 
   async attachments(principal: Principal, value: unknown): Promise<Resource[]> {

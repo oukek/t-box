@@ -22,7 +22,8 @@ export interface ApplicationSession {
   profile?: { nickname: string }
 }
 export type HostMethod =
-  | 'device.reminders' |
+  | 'files.pick' | 'files.upload' | 'files.read' |
+  'device.reminders' |
   'runtime.context' |
   'auth.session' |
   'api.invoke' |
@@ -47,4 +48,4 @@ export interface ApplicationBridgeEvent {
 }
 /** JSON attachments have a separate bounded transport budget; ordinary calls remain small. */
 export const APP_HTTP_MAX_BYTES = 15 * 1024 * 1024
-export const applicationPayloadLimit = (method: string) => method === 'api.request' ? APP_HTTP_MAX_BYTES : 64000
+export const applicationPayloadLimit = (method: string) => ['api.request', 'files.upload', 'files.read'].includes(method) ? APP_HTTP_MAX_BYTES : 64000

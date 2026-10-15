@@ -56,6 +56,7 @@ await application.client.storage.set('view', 'month')
 | `auth.ensureSignedIn()`                        | 检查登录状态；未登录返回 `AUTH_REQUIRED`，登录表单由宿主提供       |
 | `auth.onChange(fn)`                            | 监听恢复、登录、退出及会话替换；返回取消监听函数                   |
 | `api.invoke(method, args, options)`            | 调用当前应用的方法，不接受应用 ID、任意 URL 或 bearer token        |
+| `files.pick/upload/read`                       | 按应用与安装代次授权的文件选择、上传、私有读取；需要 files 权限 |
 | `storage.get/set/remove`                       | 使用宿主来源中按应用与用户隔离的存储；不依赖 iframe 第三方存储权限 |
 | `events.subscribe(channel, args, fn, options)` | 订阅已注册通道；返回取消订阅函数；可传 `signal` 和 `onError`       |
 | `permissions.list/has`                         | 查询安装时授予的权限；仅用于界面提示，后端仍验证权限               |
@@ -95,15 +96,42 @@ const stop = await application.client.events.subscribe(
 stop()
 ```
 
-独立 Web 应用还必须获得 `events.${channel}` 权限；仅声明通道不足以授权。现有通道使用平台的 WebSocket 认证协议，独立远程后端的推送协议尚未接入此注册机制。
+独立 Web 应用还必须获得 `events.${channel}` 权限；仅声明通道不足以授权。现有内置通道使用平台的 WebSocket 认证协议。独立远程后端实现 events 接口，宿主通过带游标的短轮询转接同一个 SDK 订阅接口；默认 5 秒，故障退避最多 60 秒，权限或安装失效即停止。游标和事件去重语义由应用提供，不能假定恰好投递一次。
 
 实时订阅是当前页面的通知通道。AI 持久任务继续由后端执行，遇到前端交互时使用现有任务暂停/恢复机制，不依赖这个页面连接保持打开。
 
+### 文件端口
+
+发布版本显式声明 `files` 权限，升级时由用户授予，旧安装不会自动扩大权限。`client.files.pick({ multiple: true })` 由宿主弹系统选择器，上传后返回资源元数据；`upload(file)` 上传 File 或带 name 属性的 Blob；`read(id)` 返回元数据与 Blob。单文件最多 10 MB、一次最多 10 个，不限制文件扩展名，仍遵守账号总容量限制。通用资源页的上传类型限制与此独立应用端口不同。
+
+宿主拥有登录凭据；应用只得到此用户、此应用、此安装代次的文件授权，不能读取另一个应用的资源。卸载重装后旧代次的文件授权失效，文件本身仍保留在用户资源中。关闭应用或切换账号会取消选择器及未完成请求；已成功上传的文件不会因为后续取消而自动删除。已有应用的专用附件入口保持其领域授权，并未一律迁移为这个通用端口。
+
+### 独立后端执行前交互
+
+需要运行中授权/确认的远程应用，在模块里声明 `interactions`，并在 `remoteApplicationModule(..., { preparation: true })` 启用协议。独立后端实现可选 `prepare(BackendPreparation)`，HTTP 端点为 `POST /prepare`：
+
+1. 平台发送固定调用 ID、应用范围 subject、版本、代次、方法及参数；prepare 不允许写业务数据或触发外部副作用。
+2. 后端返回 ready + 可选短期执行 ticket，或 interaction + continuation + 已声明的客户端动作。最多 8 次交互。
+3. 宿主先执行动作，随后把回执送到 prepare。密码不得作为回执；前端应向应用授权端点换取绑定资源/操作的短期授权 token。回执、continuation 和执行 ticket 不写模型参数或工具结果。
+4. 所有交互完成后，平台重新检查安装和资源授权，才记录工具派发并调用 invoke；ticket 仅通过独立字段 `preparationTicket` 传递。前端缺席时停在派发之前，恢复后重新准备，不重复业务写入。
+
+后端必须验证 ticket 绑定的 subject、generation、releaseId、invocationId、参数摘要及有效期，原子消费并持久化相同调用 ID 的最终回执。不能只在内存里存一个“已同意”。执行阶段发生连接丢失仍进入原有不确定副作用核对流程，平台不会盲目重发写入。已发布旧远程绑定默认不启用 preparation，避免破坏旧服务。
+
+### 独立后端事件
+
+应用实现可选 `events(BackendEventRequest)`，HTTP 端点 `POST /events/poll`，返回 `{ cursor, events }`。批次最多 50 条、整个响应最多 256 KB，游标最多 4096 字符。宿主网关每次验证账号、安装版本、代次和 `events.<channel>` 授权；远程地址与服务凭据只由部署绑定决定，应用前端不能自选 URL。后端自行验证成员/资源权限，事件尽量只带变更 ID。授权或安装失效停止订阅，网络故障保留游标退避重连；应用按事件 ID 幂等刷新。该端口是轮询转接，并非已实现跨进程实时 WebSocket 总线。
+
+### 新应用脚手架
+
+在仓库根目录执行 `pnpm create:application notes 5180`，生成 `apps/notes/{contracts,server,web}`、manifest、build.config 与接入说明。模板包含统一 SDK 登录、文件选择、服务端方法与前端工具示例；拒绝覆盖已有目录。生成后按应用 README 注册组装入口、部署后端绑定，执行 `pnpm apps:workflow` 更新手动发布下拉列表。创建脚手架不会自动安装依赖、迁移数据库、授予权限或发布应用。
+
+脚手架验证会实际编译 contracts/server、执行 Vue 类型检查和 Vite 构建。模板中的示例方法无写入副作用；添加写入前必须自行实现持久幂等回执和安装代次隔离。
+
 ## 扩展边界
 
-本轮完成登录态、调用、事件、存储、导航及生命周期统一。文件选择/上传、资源临时授权弹窗、原生设备能力暂沿用现有实现，尚未纳入公共 SDK。后续扩展应新增明确能力契约和宿主适配器，不把账本或日历业务添加进公共 SDK。
+公共 SDK 统一登录态、调用、事件、存储、导航、文件和生命周期；提醒能力通过 device.reminders 端口由宿主适配。资源密码授权仍由应用自己的权限接口与宿主交互协作，不提供跨应用的万能 token。摄像头、定位等新增设备能力必须单独声明权限与宿主适配，不能把账本或日历业务添加进公共 SDK。
 
-SDK 协议 `APP_SDK_VERSION` 与已有应用发布协议 `APP_PROTOCOL` 分开。本轮为增量扩展，不修改已经发布的不可变版本定义，也不要求数据库表迁移。应用和宿主发布时应协同升级 SDK；未知 SDK 版本会明确拒绝连接。
+SDK 协议 `APP_SDK_VERSION` 与已有应用发布协议 `APP_PROTOCOL` 分开。本轮为增量扩展，不修改已经发布的不可变版本定义；文件授权需要先执行数据库迁移，新能力要在新发布版本声明。应用和宿主发布时应协同升级 SDK；未知 SDK 版本会明确拒绝连接。
 
 ## 验证
 

@@ -3,6 +3,8 @@ import type { AdminPaymentOrder, PaymentCapabilities } from '@t-box/shared'
 import { onMounted, ref } from 'vue'
 import AdminDialog from '../components/AdminDialog.vue'
 import { errorMessage, request, save } from '../core/api'
+import ReconciliationPanel from './ReconciliationPanel.vue'
+import RefundsPanel from './RefundsPanel.vue'
 import WechatSettings from './WechatSettings.vue'
 
 const orders = ref<AdminPaymentOrder[]>([])
@@ -118,7 +120,7 @@ onMounted(load)
               }}</span>
             </td>
             <td class="actions">
-              <button :disabled="!enabled || busy" @click="selected = o">
+              <button :disabled="busy" @click="selected = o">
                 渠道核对
               </button>
             </td>
@@ -127,6 +129,8 @@ onMounted(load)
       </table>
     </div>
   </section>
+  <RefundsPanel :orders="orders" @updated="load" />
+  <ReconciliationPanel />
   <p class="footnote">
     渠道核对会查询微信实际支付结果，并幂等入账。后台不提供“手动标记支付成功”。
   </p>

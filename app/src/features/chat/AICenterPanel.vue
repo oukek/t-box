@@ -6,12 +6,17 @@ import { openPricing, openResources, openWallet } from '../../core/navigation'
 import { request } from '../../core/network'
 import { identity } from '../../core/session'
 import { displayMoney } from '../billing/format'
+import NotificationPanel from './NotificationPanel.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [], tasks: [] }>()
 const wallet = ref<Wallet | null>(null)
 const loading = ref(false)
 const error = ref(false)
+const notificationsOpen = ref(false)
+watch(() => [props.open, identity.user?.id], () => {
+  notificationsOpen.value = false
+})
 let controller: AbortController | undefined
 watch(
   () => [props.open, identity.user?.id] as const,
@@ -84,6 +89,11 @@ function openPage(action: () => void) {
         <AppIcon name="right" :size="16" />
       </button>
       <h3>资料与任务</h3>
+      <button class="ai-center-link" @click="notificationsOpen = true">
+        <span class="ai-center-icon"><AppIcon name="info" :size="20" /></span>
+        <span>通知<small>已完成与待处理的任务</small></span>
+        <AppIcon name="right" :size="16" />
+      </button>
       <button class="ai-center-link" @click="openPage(openResources)">
         <span class="ai-center-icon"><AppIcon name="image" :size="20" /></span>
         <span>我的资源<small>上传的文件与生成的作品</small></span>
@@ -96,6 +106,11 @@ function openPage(action: () => void) {
       </button>
     </div>
   </SidePanel>
+  <NotificationPanel
+    :open="notificationsOpen"
+    @close="notificationsOpen = false"
+    @tasks="notificationsOpen = false; emit('tasks')"
+  />
 </template>
 
 <style scoped>

@@ -1,5 +1,9 @@
 import type {
+  BackendEventBatch,
+  BackendEventRequest,
   BackendInvocation,
+  BackendPreparation,
+  BackendPreparationResult,
   LifecycleReceipt,
   LifecycleRequest,
 } from '@t-box/app-contracts'
@@ -54,11 +58,28 @@ export class RemoteApplicationBackend implements ApplicationBackend {
     if (!response.ok) {
       throw new ApiError(502, 'APP_BACKEND_UNAVAILABLE', '应用后端暂时不可用')
     }
-    const text = await response.text()
-    if (text.length > 256_000) {
-      throw new Error('Application response too large')
+    const reader = response.body?.getReader()
+    const chunks: Uint8Array[] = []
+    let size = 0
+    try {
+      if (!reader) {
+        throw new Error('Empty application response')
+      }
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) {
+          break
+        }
+        size += value.byteLength
+        if (size > 256_000) {
+          throw new Error('Application response too large')
+        }
+        chunks.push(value)
+      }
+    } finally {
+      await reader?.cancel().catch(() => {})
     }
-    return JSON.parse(text)
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
   }
 
   private receipt(value: unknown): LifecycleReceipt | null {
@@ -100,5 +121,25 @@ export class RemoteApplicationBackend implements ApplicationBackend {
 
   async invoke(request: BackendInvocation, signal?: AbortSignal) {
     return this.request('invoke', request, signal)
+  }
+
+  async prepare(request: BackendPreparation, signal?: AbortSignal): Promise<BackendPreparationResult> {
+    const value = await this.request('prepare', request, signal) as BackendPreparationResult
+    const opaque = (text: unknown) => typeof text === 'string' && text.length > 0 && text.length <= 4096
+    if (value?.status === 'ready' && (value.ticket === undefined || opaque(value.ticket))) {
+      return { status: 'ready', ...(value.ticket ? { ticket: value.ticket } : {}) }
+    }
+    if (value?.status === 'interaction' && opaque(value.continuation) && typeof value.request?.name === 'string' && value.request.name.length <= 128 && JSON.stringify(value.request.arguments ?? null).length <= 64_000) {
+      return { status: 'interaction', continuation: value.continuation, request: { name: value.request.name, arguments: value.request.arguments } }
+    }
+    throw new ApiError(502, 'APP_PROTOCOL_INVALID', '应用交互协议无效')
+  }
+
+  async events(request: BackendEventRequest, signal?: AbortSignal): Promise<BackendEventBatch> {
+    const value = await this.request('events/poll', request, signal) as BackendEventBatch
+    if (!value || typeof value.cursor !== 'string' || value.cursor.length > 4096 || !Array.isArray(value.events) || value.events.length > 50) {
+      throw new ApiError(502, 'APP_PROTOCOL_INVALID', '应用事件协议无效')
+    }
+    return { cursor: value.cursor, events: value.events }
   }
 }

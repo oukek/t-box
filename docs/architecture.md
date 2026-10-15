@@ -130,7 +130,7 @@ app/src/
 
 现有运行循环继续通过后端 `openai` 库处理模型调用，Provider 和应用模块相互独立。如果后续接入 Agents SDK，应替换/适配运行层，不让 SDK 工具再次实现一套业务规则。当前 Skill 是项目内的受控任务说明，不执行任意 `SKILL.md` 脚本或模型生成代码。
 
-已实现交互式持久任务和专业 Agent 委派。专业 Agent 顺序执行，使用独立上下文及所属模块的技能/工具白名单，由主助手汇总结果；显式 @单一应用可直接进入对应 Agent。使用后端 `openai` Responses / Chat Completions 适配，未引入第二套模型 SDK。多应用操作不天然原子；需要领域服务提供事务或补偿及明确用户确认。无人值守导出/抓取可在此 TaskPort 上增加独立 worker，但不能直接复用交互会话的过期授权。
+已实现交互式持久任务和专业 Agent 委派。专业 Agent 顺序执行，使用独立上下文及所属模块的技能/工具白名单，由主助手汇总结果；显式 @单一应用可直接进入对应 Agent。使用后端 `openai` Responses / Chat Completions 适配，未引入第二套模型 SDK。多应用操作不天然原子；需要领域服务提供事务或补偿及明确用户确认。独立恢复 worker 已通过 TaskPort 从安全检查点续办，但不能复用交互会话的过期授权；定时批处理仍需独立作业模型。
 
 生产反向代理需要为 `/api/v1/chat/ws` 和 `/api/v1/ledgers/ws` 转发 WebSocket Upgrade，允许连接持续超过运行超时。原生生产包的 `VITE_API_BASE_URL` 应为 HTTPS，客户端据此使用 WSS；开发模式通过 Vite 代理连接。
 
@@ -144,7 +144,7 @@ app/src/
 
 ## 计费与支付边界
 
-计费装饰 Provider，不在编排循环内判断模型价格、用户扣费规则或应用名称。编排仅提供执行上下文；`billing/MeteredChatProvider` 与图片服务调用 `BillingService`，价格、用户模式及费用审计在独立模块持久化。标题生成直接调用未计费的 Provider 方法。支付订单经 `payments/PaymentGateway` 验签或查单后，在本地事务中调用同一个钱包入账服务；前端支付结果不授权入账。具体规则及微信接入点见 [计费与支付](billing-and-payments.md)。
+计费装饰 Provider，不在编排循环内判断模型价格、用户扣费规则或应用名称。编排仅提供执行上下文；`billing/MeteredChatProvider` 与图片服务调用 `BillingService`，价格、用户模式及费用审计在独立模块持久化。标题生成记录平台用量和成本，用户不预留余额、不扣费；同样受成本与服务商并发约束。支付订单经 `payments/PaymentGateway` 验签或查单后，在本地事务中调用同一个钱包入账服务；前端支付结果不授权入账。具体规则及微信接入点见 [计费与支付](billing-and-payments.md)。
 
 上下文预算、真实 Responses 压缩及公开 usage 回调是通用 Provider / Agent 能力。附件投影由 AttachmentPort 还原，模型配置、费用和支付适配器分别由独立服务承载。完整边界见 [上下文与用量](ai-context-and-usage.md)。微信三个网页场景通过 PaymentGateway 接入，账户授权与凭据轮换留在 payments 模块，AI 不读取商户配置或支付认证。
 

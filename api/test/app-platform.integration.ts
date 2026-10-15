@@ -54,6 +54,16 @@ const backend: ApplicationBackend = {
   async invoke(r) {
     return { subject: r.subject, generation: r.generation, value: r.arguments }
   },
+  async prepare(r) {
+    assert.equal(r.invocation.appId, id)
+    assert.notEqual(r.invocation.subject.length, 0)
+    assert.equal('actor' in r, false)
+    return { status: 'ready', ticket: 'fixture-bound-preparation' }
+  },
+  async events(r) {
+    assert.equal(r.channel, 'changed')
+    return { cursor: 'event-cursor-1', events: [{ type: 'changed', generation: r.generation, cursor: r.cursor || null }] }
+  },
 }
 const handler = createApplicationBackendHandler({
   appId: id,
@@ -109,7 +119,7 @@ const release: AppRelease = {
     integrity: 'sha256-' + 'a'.repeat(64),
   },
   backend: { type: 'remote', binding: id },
-  permissions: [`${id}.echo`],
+  permissions: [`${id}.echo`, 'events.changed'],
   clientTools: [],
   defaultInstalled: false,
 }
@@ -350,6 +360,10 @@ try {
   assert.deepEqual(answer.value, { hello: true })
   assert.notEqual(answer.subject, user)
   assert.equal(answer.subject.length, 64)
+  const batch = await recovered.events(user, id, { releaseId: release.releaseId, generation: active.installation.generation, channel: 'changed' })
+  assert.equal(batch.cursor, 'event-cursor-1')
+  assert.equal(batch.events.length, 1)
+  await assert.rejects(recovered.events(user, id, { releaseId: release.releaseId, generation: active.installation.generation, channel: 'private' }), /权限/)
   const remoteModule = remoteApplicationModule(
     {
       id,
@@ -371,6 +385,7 @@ try {
     },
     { [`${id}_echo`]: 'echo' },
     recovered,
+    { preparation: true },
   )
   const remoteRegistry = new CapabilityRegistry([
     bindInstalledCapabilities(adaptApplication(remoteModule), recovered),
@@ -446,6 +461,7 @@ try {
   assert.equal(other.statusCode, 201)
   const b = other.json().data
   users.push(b.user.id)
+  await assert.rejects(recovered.events(b.user.id, id, { releaseId: release.releaseId, generation: active.installation.generation, channel: 'changed' }), /安装/)
   await assert.rejects(recovered.operation(b.user.id, pending.id), /不存在/)
   const release2 = {
     ...release,
@@ -510,6 +526,7 @@ try {
     release2.permissions,
   )
   assert.equal(updated.status, 'completed')
+  await assert.rejects(upgraded.events(user, id, { releaseId: release.releaseId, generation: active.installation.generation, channel: 'changed' }), /重新打开/)
   await assert.rejects(
     upgraded.invoke(
       user,

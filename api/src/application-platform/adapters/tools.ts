@@ -7,8 +7,17 @@ export function remoteApplicationModule(
   module: ApplicationModule,
   methods: Readonly<Record<string, string>>,
   platform: ApplicationPlatform,
+  options: { preparation?: boolean } = {},
 ) {
   return bindRemoteTools(module, methods, {
+    ...(options.preparation
+      ? { prepare: async (input, context) => {
+          if (!context.actor) {
+            throw new ApiError(401, 'AUTH_REQUIRED', '请先登录')
+          }
+          return platform.prepare(context.actor.user.id, input, context.signal)
+        } }
+      : {}),
     invoke: async (input, context) => {
       if (!context.actor) {
         throw new ApiError(401, 'AUTH_REQUIRED', '请先登录')
@@ -22,6 +31,7 @@ export function remoteApplicationModule(
         input.arguments,
         input.invocationId,
         context.signal,
+        input.preparationTicket,
       )
     },
   })

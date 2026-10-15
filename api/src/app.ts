@@ -7,6 +7,7 @@ import type { ApplicationModule } from './agent/contracts.js'
 import type { ChatProvider } from './chat/provider.js'
 import type { SessionRepository } from './chat/session.js'
 import type { PlatformService } from './platform/service.js'
+import { randomUUID } from 'node:crypto'
 import cors from '@fastify/cors'
 import { ApplicationError } from '@t-box/app-server-sdk'
 import { registerCalculator } from '@t-box/calculator-server'
@@ -31,13 +32,16 @@ import { registerBilling } from './billing/routes.js'
 import { ApplicationChatService as ChatService } from './bootstrap/chat.js'
 import { UnconfiguredProvider } from './chat/provider.js'
 import { registerChatSocket } from './chat/websocket.js'
+import { settingNumber } from './configuration/defaults.js'
 import { registerDesktop } from './desktop/routes.js'
 import { registerApplicationCatalog } from './platform/application-catalog.js'
 import { registerPlatform } from './platform/routes.js'
 import { registerLedgerSocket } from './platform/socket.js'
+import { registerApplicationFiles } from './resources/application-file-routes.js'
 import { registerResources } from './resources/routes.js'
 import { registerCustomerSupport } from './support/routes.js'
 import { registerTasks } from './tasks/routes.js'
+import { TaskRecoveryWorker } from './tasks/worker.js'
 
 export interface DependencyHealth {
   mysql: 'up' | 'down'
@@ -57,10 +61,12 @@ export interface AppDependencies {
   chatProvider?: ChatProvider
   chatSessions?: SessionRepository
   applicationModules?: ApplicationModule[]
+  taskWorker?: boolean
 }
 
 export function createApp(deps: AppDependencies) {
   const app = Fastify({
+    genReqId: () => randomUUID(),
     trustProxy: deps.trustedProxies ?? false,
     logger: deps.logger ?? false,
     bodyLimit: 16 * 1024,
@@ -74,7 +80,11 @@ export function createApp(deps: AppDependencies) {
       await deps.platform!.tasks.recover()
       recoveryTimer = setInterval(() => {
         void deps.platform!.tasks.recover().catch(() => {})
+        void deps.platform!.notifications.recover().catch(() => app.log.warn({ code: 'NOTIFICATION_RECOVERY_FAILED' }, 'Inbox delivery will retry'))
         void deps.platform!.billing.recover().catch(() => {})
+        void deps.platform!.resources.purgeDeleted().catch(() => app.log.warn({ code: 'RESOURCE_PURGE_FAILED' }, 'Private resource deletion will retry'))
+        void deps.platform!.refunds.recover().catch(() => app.log.warn({ code: 'REFUND_RECOVERY_FAILED' }, 'Refund reconciliation failed'))
+        void deps.platform!.paymentReconciliation.recover().catch(() => app.log.warn({ code: 'STATEMENT_RECOVERY_FAILED' }, 'Merchant statement reconciliation failed'))
         void deps.platform!.applications?.recover().catch(() => {})
       }, 30_000)
       recoveryTimer.unref()
@@ -91,8 +101,17 @@ export function createApp(deps: AppDependencies) {
     configuration: deps.administration?.configuration,
     onRunError: (error) => {
       app.log.warn(error, 'Agent run interrupted')
+      if (!['SERVER_SHUTDOWN', 'CLIENT_REQUIRED', 'RUN_CANCELLED'].includes(error.code)) {
+        void deps.platform?.operations?.record({ kind: 'task_error', code: error.code, taskId: error.runId, requestId: error.requestId, stage: error.stage, agentId: error.agentId, httpStatus: error.diagnostics?.httpStatus, providerRequestId: error.diagnostics?.providerRequestId }).catch(() => app.log.warn({ code: 'OPERATIONS_WRITE_FAILED' }, 'Operational event not saved'))
+      }
     },
   })
+  const worker = deps.taskWorker && deps.platform?.tasks
+    ? new TaskRecoveryWorker(deps.platform.tasks, chat, async () => settingNumber(await deps.administration?.configuration.snapshot(), 'ai.worker.concurrency', 2), (code, taskId) => {
+        app.log.warn({ code, taskId }, 'Background task recovery paused')
+        void deps.platform?.operations.record({ kind: 'recovery_error', code, taskId }).catch(() => {})
+      })
+    : undefined
   if (deps.administration) {
     app.addHook('onReady', async () => {
       const { platformDefinitions } =
@@ -100,6 +119,15 @@ export function createApp(deps: AppDependencies) {
       await deps.administration!.configuration.register(platformDefinitions)
     })
   }
+  app.addHook('onReady', async () => worker?.start())
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('X-Request-Id', request.id)
+  })
+  app.addHook('onResponse', async (request, reply) => {
+    if (reply.statusCode >= 500 && deps.platform?.operations) {
+      await deps.platform.operations.record({ kind: 'http_error', code: 'HTTP_SERVER_ERROR', requestId: request.id, httpStatus: reply.statusCode, durationMs: reply.elapsedTime }).catch(() => {})
+    }
+  })
   registerChatSocket(app, chat, deps.corsOrigins, (scope, allowed) => {
     if (deps.platform) {
       registerLedgerSocket(scope, deps.platform, allowed)
@@ -231,6 +259,7 @@ export function createApp(deps: AppDependencies) {
     registerBilling(app, deps.platform)
     registerCustomerSupport(app, deps.platform)
     registerResources(app, deps.platform)
+    registerApplicationFiles(app, deps.platform)
     if (deps.platform.tasks) {
       registerTasks(app, deps.platform, chat.registry)
     }
@@ -333,7 +362,9 @@ export function createApp(deps: AppDependencies) {
 
   app.addHook('onClose', async () => {
     clearInterval(recoveryTimer)
+    await worker?.stopScheduling()
     await chat.close()
+    await worker?.drain()
     await deps.close?.()
   })
   return app

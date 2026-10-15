@@ -4,8 +4,8 @@ import type { ConfigurationService } from './service.js'
 import { registerHolidayAdministration } from '@t-box/calendar-server/holiday-admin-routes'
 import { registerLedgerCategoryAdministration } from '@t-box/ledger-server/categories/admin-routes'
 import { CategoryPresetAdministration } from '@t-box/ledger-server/categories/administration'
-import { parseId } from '@t-box/ledger-server/validation'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { parseId } from '@t-box/server-foundation/validation'
 import { registerApplicationPublishing } from '../application-platform/admin-routes.js'
 import { ApplicationPublishing } from '../application-platform/publishing.js'
 import { requestKey } from '../payments/service.js'
@@ -52,6 +52,9 @@ export function registerAdmin(
           reply.header('Set-Cookie', cookie('', 0)).code(204).send()
         })
         if (platform) {
+          secure.get('/operations', async () => ({ data: await platform.operations.overview() }))
+          secure.get('/operations/events', async () => ({ data: await platform.operations.events() }))
+          secure.get<{ Params: { id: string } }>('/operations/tasks/:id', async (r) => ({ data: await platform.operations.task(parseId(r.params.id)) }))
           registerLedgerCategoryAdministration(
             secure,
             new CategoryPresetAdministration(service.store.source),
@@ -192,6 +195,22 @@ export function registerAdmin(
           secure.get('/payments/orders', async () => ({
             data: await platform.payments.adminList(),
           }))
+          secure.get('/payments/refunds', async () => ({ data: await platform.refunds.list() }))
+          secure.get('/payments/reconciliations', async () => ({ data: await platform.paymentReconciliation.list() }))
+          secure.post('/payments/reconciliations', async (r) => {
+            const input = body(r.body, ['day'])
+            return { data: await platform.paymentReconciliation.run(text(input.day, '账单日期', 10)) }
+          })
+          secure.post<{ Params: { id: string } }>('/payments/orders/:id/refunds', async (r) => {
+            const actor = await auth.authenticate(sessionToken(r))
+            const input = body(r.body, ['reason'])
+            return { data: await platform.refunds.create(parseId(r.params.id), actor.id, text(input.reason, '退款原因', 80), requestKey(r.headers['idempotency-key'])) }
+          })
+          secure.post<{ Params: { id: string } }>('/payments/refunds/:id/reconcile', async (r) => {
+            const id = parseId(r.params.id)
+            await platform.refunds.process(id)
+            return { data: await platform.refunds.get(id) }
+          })
           secure.get('/payments/capabilities', async () => ({
             data: await platform.payments.capabilities(),
           }))

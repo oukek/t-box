@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { PlatformService } from '../platform/service.js'
-import { object } from '@t-box/ledger-server/ledgers/validation'
-import { parseId } from '@t-box/ledger-server/validation'
+import { object } from '@t-box/server-foundation/input'
+import { parseId } from '@t-box/server-foundation/validation'
 import { bearer } from '../identity/service.js'
 import { requestKey } from '../payments/service.js'
 
@@ -92,6 +92,10 @@ export function registerBilling(app: FastifyInstance, p: PlatformService) {
     )
     scope.post('/api/v1/payments/webhooks/wechat', async (r) => {
       await p.payments.notify(r.body as Buffer, r.headers)
+      return { code: 'SUCCESS', message: '成功' }
+    })
+    scope.post('/api/v1/payments/webhooks/wechat/refunds', async (r) => {
+      await p.refunds.notify(r.body as Buffer, r.headers)
       return { code: 'SUCCESS', message: '成功' }
     })
   })

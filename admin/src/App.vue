@@ -10,6 +10,7 @@ import ConfigurationPage from './features/ConfigurationPage.vue'
 import HolidaysPage from './features/HolidaysPage.vue'
 import LedgerCategoriesPage from './features/LedgerCategoriesPage.vue'
 import ModelsPage from './features/ModelsPage.vue'
+import OperationsPage from './features/OperationsPage.vue'
 import PaymentsPage from './features/PaymentsPage.vue'
 import ProvidersPage from './features/ProvidersPage.vue'
 import RechargeSettingsPage from './features/RechargeSettingsPage.vue'
@@ -18,6 +19,7 @@ import UsersPage from './features/UsersPage.vue'
 import WorkflowPage from './features/WorkflowPage.vue'
 
 const pages = {
+  'operations': { title: '运行概况', symbol: 'connection', component: OperationsPage },
   'configuration': {
     title: '配置中心',
     symbol: 'model',

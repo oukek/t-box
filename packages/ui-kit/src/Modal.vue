@@ -65,6 +65,9 @@ onBeforeUnmount(() => {
         </button>
       </header>
       <slot />
+      <footer v-if="$slots.footer" class="dialog-footer">
+        <slot name="footer" />
+      </footer>
     </div>
   </dialog>
 </template>
@@ -100,6 +103,13 @@ onBeforeUnmount(() => {
 .dialog-heading .icon-button {
   align-self: flex-start;
   margin: -4px -6px 0 0;
+}
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
 }
 @media (max-width: 560px) {
   .dialog-content {

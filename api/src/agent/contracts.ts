@@ -76,7 +76,7 @@ export interface TaskPort {
     existingConversation?: boolean,
     archiveRevision?: number,
   ): Promise<void>
-  claim(actor: Actor, id: string, owner: string): Promise<void>
+  claim(actor: Actor, id: string, owner: string, recoveryClaim?: string): Promise<void>
   guard(id: string, owner: string): Promise<void>
   checkpoint(
     id: string,
@@ -90,6 +90,7 @@ export interface TaskPort {
     status: TaskStatus,
     reason?: string,
     execution?: import('@t-box/shared').MessageExecution,
+    recoverAfterShutdown?: boolean,
   ): Promise<void>
   get(
     actor: Actor,
@@ -128,6 +129,7 @@ export interface ConversationPort {
     id: string,
     session: ChatSession,
     trustedRefresh?: boolean,
+    running?: boolean,
   ): Promise<void>
   exists(actor: Actor, id: string): Promise<boolean>
 }
@@ -144,7 +146,7 @@ export interface AttachmentPort {
 export interface AgentHost {
   identity: {
     authenticate(token: string): Promise<Actor>
-    authenticateHash(hash: string): Promise<unknown>
+    authenticateHash(hash: string): Promise<Actor>
   }
   conversations?: ConversationPort
   attachments?: AttachmentPort
@@ -159,6 +161,7 @@ export interface AgentRuntimeOptions {
     code: string
     message: string
     runId: string
+    requestId?: string
     agentId: string
     stage?: string
     diagnostics?: ReturnType<

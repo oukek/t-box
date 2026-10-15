@@ -142,12 +142,13 @@ onMounted(load)
             :size="19"
           /></span>
           <div>
-            <h3>{{ r.kind === "image" ? "图片处理" : "AI 会话" }}</h3>
+            <h3>{{ r.purpose === 'title' ? '会话标题 · 免费' : r.kind === "image" ? "图片处理" : "AI 会话" }}</h3>
             <p>{{ date(r.createdAt) }} · {{ status[r.status] }}</p>
-            <small v-if="r.mode === 'record_only' && r.status === 'settled'">费用 ¥{{ fee(r.fee) }}，本次免扣</small>
+            <small v-if="r.purpose === 'title'">费用由平台承担</small>
+            <small v-else-if="r.mode === 'record_only' && r.status === 'settled'">费用 ¥{{ fee(r.fee) }}，本次免扣</small>
           </div>
           <strong>{{
-            r.status === "reserved" || r.status === "review"
+            r.purpose === 'title' ? '¥0' : r.status === "reserved" || r.status === "review"
               ? "待结算"
               : `¥${fee(r.charged)}`
           }}</strong>
@@ -162,7 +163,7 @@ onMounted(load)
       <ol v-else class="wallet-records">
         <li v-for="e in entries" :key="e.id">
           <span class="wallet-record-icon"><AppIcon
-            :name="e.kind === 'usage' ? 'arrowUp' : 'arrowDown'"
+            :name="e.amount.startsWith('-') ? 'arrowUp' : 'arrowDown'"
             :size="19"
           /></span>
           <div>
@@ -172,12 +173,14 @@ onMounted(load)
                   ? "服务费用"
                   : e.kind === "recharge"
                     ? "充值到账"
-                    : "余额赠送"
+                    : e.kind === "refund"
+                      ? "充值退款"
+                      : "余额赠送"
               }}
             </h3>
             <p>{{ date(e.createdAt) }} · 余额 ¥{{ fee(e.balance) }}</p>
           </div>
-          <strong :class="{ credit: e.kind !== 'usage' }">{{ e.amount.startsWith("-") ? "" : "+"
+          <strong :class="{ credit: !e.amount.startsWith('-') }">{{ e.amount.startsWith("-") ? "" : "+"
           }}{{ fee(e.amount) }}</strong>
         </li>
       </ol>

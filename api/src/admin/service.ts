@@ -350,6 +350,7 @@ export class ConfigurationService {
       configuration: await this.configuration.snapshot(),
       invocationMode: method,
       billingModelId: row.modelId,
+      providerId: row.id,
       contextPolicy: policy,
       prices: prices(row),
       model: row.remoteId,

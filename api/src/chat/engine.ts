@@ -10,6 +10,7 @@ import {
 import { ResourceAuthorizationRequired } from '../agent/access.js'
 import { restoreCheckpoint } from '../agent/checkpoint.js'
 import { rebuildConversationHistory } from '../agent/history.js'
+import { prepareTaskResume } from '../agent/resume.js'
 import { runConversation } from '../agent/runner.js'
 import { object, parseDate, parseIdentifier } from '../agent/schema.js'
 import { authorizedSnapshot } from '../agent/snapshot.js'
@@ -73,14 +74,44 @@ export class ChatService {
   }
 
   private readonly jobs = new Set<Promise<void>>()
+  private readonly backgroundSessions = new MemorySessionRepository()
   constructor(private readonly options: ChatServiceOptions) {
     this.sessions = options.sessions ?? new MemorySessionRepository()
   }
 
-  private startRun(input: AgentRunInput) {
-    const job = runConversation(this.options, this.sessions, input)
+  private startRun(input: AgentRunInput, sessions = this.sessions) {
+    const job = runConversation(this.options, sessions, input)
     this.jobs.add(job)
     void job.finally(() => this.jobs.delete(job))
+    return job
+  }
+
+  /** No fake socket or blanket permissions: required device interactions pause naturally. */
+  async resumeInBackground(task: { id: string, userId: string, conversationId: string, sessionHash: string }, recoveryClaim: string) {
+    if (!this.options.host) {
+      throw new ApiError(503, 'TASKS_UNAVAILABLE', '持久任务服务不可用')
+    }
+    const principal = await this.options.host.identity.authenticateHash(task.sessionHash)
+    if (!principal || principal.user.id !== task.userId) {
+      throw new ApiError(403, 'TASK_IDENTITY_CHANGED', '任务身份已改变，请重新打开会话')
+    }
+    // Keep recovery state separate from socket subscriber objects. Otherwise an
+    // async restore can replace a live UI session while another command uses it.
+    const session = this.backgroundSessions.create()
+    session.userId = task.userId
+    session.conversationId = task.conversationId
+    try {
+      const conversations = this.options.host.conversations
+      if (conversations && await conversations.exists(principal, task.conversationId)) {
+        await conversations.restore(principal, task.conversationId, session)
+      }
+      const input = await prepareTaskResume(this.options, session, principal, task.id)
+      await this.startRun({ ...input, recoveryClaim }, this.backgroundSessions)
+    } finally {
+      if (!session.owner) {
+        this.backgroundSessions.remove(session.id)
+      }
+    }
   }
 
   connect(send: (event: ChatServerEvent) => void) {
@@ -110,14 +141,17 @@ export class ChatService {
           if (
             principal &&
             session?.conversationId &&
-            session.task?.status === 'running' &&
+            session.task &&
             !session.active &&
             this.options.host?.tasks
           ) {
+            // Another process may own this task. Refresh its durable timeline,
+            // never overwrite it with the subscriber's stale in-memory messages.
             session.task = await this.options.host.tasks.current(
               principal,
               session.conversationId,
             )
+            await this.options.host.conversations?.restore(principal, session.conversationId, session, false, session.task?.status === 'running')
             send({
               type: 'session.snapshot',
               snapshot: await authorizedSnapshot(
@@ -229,14 +263,16 @@ export class ChatService {
                 }
                 if (
                   !candidate.active &&
-                  !candidate.finishing &&
-                  (!candidate.conversationId || !candidate.archived)
+                  !candidate.finishing
                 ) {
                   try {
+                    const durable = await this.options.host.tasks?.current(principal, conversationId)
                     await this.options.host.conversations.restore(
                       principal,
                       conversationId,
                       candidate,
+                      false,
+                      durable?.status === 'running',
                     )
                   } catch (error) {
                     // Admission is durable before the first archive write. Recover even if
@@ -791,10 +827,11 @@ export class ChatService {
   }
 
   async close() {
-    for (const session of this.sessions.all()) {
-      session.active?.abort.abort('DISCONNECTED')
+    for (const session of [...this.sessions.all(), ...this.backgroundSessions.all()]) {
+      session.active?.abort.abort('SERVER_SHUTDOWN')
     }
     await Promise.allSettled(this.jobs)
     this.sessions.clear()
+    this.backgroundSessions.clear()
   }
 }

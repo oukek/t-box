@@ -743,6 +743,7 @@ export class ApplicationPlatform {
         'auth.session',
         'navigation.back',
         'navigation.open',
+        ...(installation.grants.includes('files') ? ['files.pick' as const, 'files.upload' as const, 'files.read' as const] : []),
         ...(installation.grants.includes('api.request') ? ['api.request' as const] : []),
         ...(installation.grants.includes('device.reminders') ? ['device.reminders' as const] : []),
         ...(installation.grants.includes('resources.bindings') ? ['resources.bindings' as const] : []),
@@ -767,6 +768,7 @@ export class ApplicationPlatform {
     args: unknown,
     invocationId: string,
     signal?: AbortSignal,
+    preparationTicket?: string,
   ) {
     const { installation, release } = await this.assertActive(userId, appId, {
       releaseId,
@@ -788,8 +790,39 @@ export class ApplicationPlatform {
         generation,
         method,
         arguments: args,
+        ...(preparationTicket ? { preparationTicket } : {}),
       },
       signal,
     )
+  }
+
+  async prepare(userId: string, input: { invocation: Omit<import('@t-box/app-contracts').BackendInvocation, 'subject'>, continuation?: string, response?: import('@t-box/app-contracts').BackendPreparation['response'] }, signal?: AbortSignal) {
+    const invocation = input.invocation
+    const { installation, release } = await this.assertActive(userId, invocation.appId, invocation)
+    if (!installation.grants.includes(`${invocation.appId}.${invocation.method}`)) {
+      throw new ApiError(403, 'APP_PERMISSION_DENIED', '此应用没有该操作权限')
+    }
+    const backend = this.backends.get(release.backend.binding)
+    if (!backend?.prepare) {
+      throw new ApiError(409, 'APP_PREPARATION_UNSUPPORTED', '应用后端未提供执行前交互协议')
+    }
+    return backend.prepare({ ...input, invocation: { ...invocation, subject: this.subject(userId, invocation.appId) } }, signal)
+  }
+
+  async events(userId: string, appId: string, input: { releaseId: string, generation: number, channel: string, cursor?: string, arguments?: unknown }, signal?: AbortSignal) {
+    const { installation, release } = await this.assertActive(userId, appId, input)
+    if (!installation.grants.includes(`events.${input.channel}`)) {
+      throw new ApiError(403, 'APP_PERMISSION_DENIED', '此应用没有该事件权限')
+    }
+    const backend = this.backends.get(release.backend.binding)
+    if (!backend?.events) {
+      throw new ApiError(409, 'APP_EVENTS_UNSUPPORTED', '应用后端未提供此事件通道')
+    }
+    const result = await backend.events({ ...input, appId, subject: this.subject(userId, appId) }, signal)
+    if (!result || typeof result.cursor !== 'string' || result.cursor.length > 4096 || !Array.isArray(result.events) || result.events.length > 50 || JSON.stringify(result).length > 256_000) {
+      throw new ApiError(502, 'APP_PROTOCOL_INVALID', '应用事件协议无效')
+    }
+    await this.assertActive(userId, appId, input)
+    return result
   }
 }

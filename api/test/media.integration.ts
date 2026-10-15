@@ -52,12 +52,14 @@ const remote = createServer(async (req, res) => {
 })
 await new Promise<void>((r) => remote.listen(0, '127.0.0.1', r))
 const configuration = {
+  configuration: { snapshot: async () => ({ revision: 1, values: {} }) },
   runtime: async (purpose: string) => {
     assert.equal(purpose, 'image')
     return {
       apiKey: 'fake-media-key',
       model: 'image-fixture',
       billingModelId: '00000000-0000-4000-8000-000000000002',
+      providerId: '00000000-0000-4000-8000-000000000003',
       prices: { inputPrice: '0', outputPrice: '0', imagePrice: '0' },
       baseURL: `http://127.0.0.1:${(remote.address() as { port: number }).port}/v1`,
     }

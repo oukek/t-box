@@ -4,9 +4,9 @@ import type { ResourceAccessRegistry } from '../agent/access.js'
 import type { Actor } from '../agent/contracts.js'
 import type { ChatSession } from './session.js'
 import { randomUUID } from 'node:crypto'
-import { parseId } from '@t-box/ledger-server/validation'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
+import { parseId } from '@t-box/server-foundation/validation'
 import {
   uniqueResources,
 } from '@t-box/shared'
@@ -236,6 +236,7 @@ export class ConversationArchive {
     id: string,
     session: ChatSession,
     trustedRefresh = false,
+    running = false,
   ) {
     const saved = await this.load(principal, id, trustedRefresh)
     Object.assign(session, {
@@ -245,7 +246,7 @@ export class ConversationArchive {
       conversationId: id,
       archived: true,
     })
-    if (saved.interrupted) {
+    if (saved.interrupted && !running) {
       session.rebuildHistory = true
       for (const message of session.messages) {
         for (const tool of message.toolCalls) {

@@ -17,6 +17,7 @@ import {
 import { shellVersionCompatible } from './core/app-runtime/compatibility'
 import { clearApplicationBindings } from './core/app-runtime/resourceBindings'
 import { getApplication } from './core/applications'
+import { online } from './core/connectivity'
 import {
   backFromApplication,
   navigateTab,
@@ -118,6 +119,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <aside
+    v-if="!online"
+    class="offline-banner"
+    role="status"
+  >当前离线，联网后可继续。记账、AI 和支付操作需要网络。</aside>
   <div
     v-if="!identity.ready"
     class="identity-page"

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { RunCheckpoint } from '../agent/checkpoint.js'
 import type { CapabilityRegistry } from '../agent/registry.js'
 import type { PlatformService } from '../platform/service.js'
-import { parseId } from '@t-box/ledger-server/validation'
+import { parseId } from '@t-box/server-foundation/validation'
 import { bearer } from '../identity/service.js'
 
 export function registerTasks(

@@ -33,6 +33,14 @@ export class TaskStore implements TaskPort {
   }
 
   private async recoverExpired() {
+    const exhausted: { id: string }[] = await this.source.query(`SELECT id FROM agent_tasks WHERE recovery_ready=TRUE AND recovery_attempts>=5
+      AND status IN ('queued','paused') AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3)) LIMIT 256`)
+    for (const { id } of exhausted) {
+      await this.source.query(`UPDATE agent_tasks SET recovery_ready=FALSE,recovery_claim=NULL,recovery_claim_until=NULL,
+        status='paused',reason='自动恢复尝试已达上限，请打开会话核对后继续',updated_at=UTC_TIMESTAMP(3)
+        WHERE id=? AND recovery_ready=TRUE AND recovery_attempts>=5 AND status IN ('queued','paused')
+        AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3))`, [id])
+    }
     // A range UPDATE takes InnoDB next-key locks even when no lease has expired.
     // Read candidates without locks, then fence each update by its current lease.
     // Bound each sweep so recovery cannot monopolize admission on a large backlog.
@@ -45,6 +53,9 @@ export class TaskStore implements TaskPort {
         `UPDATE agent_tasks t SET
       status=IF(EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')), 'needs_review', IF(cancel_requested,'cancelled','paused')),
       active_key=IF(cancel_requested AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),NULL,active_key),
+      recovery_ready=NOT cancel_requested AND recovery_auth_hash IS NOT NULL AND recovery_attempts<5
+        AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),
+      recovery_after=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 2 SECOND),recovery_claim=NULL,recovery_claim_until=NULL,
       reason='服务执行已中断，已完成的操作保留',lease_owner=NULL,lease_until=NULL,updated_at=UTC_TIMESTAMP(3)
       WHERE id=? AND status='running' AND lease_until < UTC_TIMESTAMP(3)`,
         [id],
@@ -89,7 +100,7 @@ export class TaskStore implements TaskPort {
           }
         }
         await db.query(
-          `INSERT INTO agent_tasks(id,user_id,conversation_id,request_id,status,active_key,agent_id,checkpoint_json) VALUES(?,?,?,?,'queued',?,?,?)`,
+          `INSERT INTO agent_tasks(id,user_id,conversation_id,request_id,status,active_key,agent_id,checkpoint_json,recovery_auth_hash,recovery_ready,recovery_after) VALUES(?,?,?,?,'queued',?,?,?,?,TRUE,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 SECOND))`,
           [
             id,
             actor.user.id,
@@ -98,6 +109,7 @@ export class TaskStore implements TaskPort {
             conversationId,
             agentId,
             JSON.stringify(checkpoint),
+            actor.sessionHash,
           ],
         )
       })
@@ -113,11 +125,14 @@ export class TaskStore implements TaskPort {
     }
   }
 
-  async claim(actor: Actor, id: string, owner: string) {
+  async claim(actor: Actor, id: string, owner: string, recoveryClaim?: string) {
     await this.recover()
     const result = await this.source.query(
-      `UPDATE agent_tasks SET status='running',reason=NULL,lease_owner=?,lease_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 90 SECOND),updated_at=UTC_TIMESTAMP(3) WHERE id=? AND user_id=? AND status IN ('queued','paused','waiting_client') AND cancel_requested=FALSE`,
-      [owner, id, actor.user.id],
+      `UPDATE agent_tasks SET status='running',reason=NULL,lease_owner=?,lease_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 90 SECOND),
+       recovery_auth_hash=?,recovery_ready=FALSE,recovery_claim=NULL,recovery_claim_until=NULL,updated_at=UTC_TIMESTAMP(3)
+       WHERE id=? AND user_id=? AND status IN ('queued','paused','waiting_client') AND cancel_requested=FALSE
+       ${recoveryClaim ? 'AND recovery_ready=TRUE AND recovery_claim=? AND recovery_claim_until>=UTC_TIMESTAMP(3)' : ''}`,
+      [owner, actor.sessionHash, id, actor.user.id, ...(recoveryClaim ? [recoveryClaim] : [])],
     )
     if (!result.affectedRows) {
       throw new ApiError(
@@ -169,6 +184,7 @@ export class TaskStore implements TaskPort {
     status: TaskStatus,
     reason?: string,
     execution?: import('@t-box/shared').MessageExecution,
+    recoverAfterShutdown = false,
   ) {
     const terminal = ['completed', 'cancelled'].includes(status)
     await this.source.query(
@@ -176,17 +192,47 @@ export class TaskStore implements TaskPort {
       status=IF(EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),'needs_review',IF(cancel_requested,'cancelled',?)),
       active_key=IF((? OR cancel_requested) AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),NULL,active_key),
       checkpoint_json=IF(? IS NULL,checkpoint_json,JSON_SET(checkpoint_json,'$.execution',JSON_EXTRACT(?,'$'))),
+      recovery_ready=? AND ?='paused' AND NOT cancel_requested AND recovery_auth_hash IS NOT NULL AND recovery_attempts<5
+        AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),
+      recovery_after=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 2 SECOND),recovery_claim=NULL,recovery_claim_until=NULL,
       reason=?,lease_owner=NULL,lease_until=NULL,updated_at=UTC_TIMESTAMP(3) WHERE id=? AND lease_owner=? AND status='running'`,
       [
         status,
         terminal,
         execution ? JSON.stringify(execution) : null,
         execution ? JSON.stringify(execution) : null,
+        recoverAfterShutdown,
+        status,
         reason?.slice(0, 200) || null,
         id,
         owner,
       ],
     )
+  }
+
+  /** Reserve a preparation slot without executing anything; abandoned preparations expire. */
+  async takeRecovery(claim: string): Promise<{ id: string, userId: string, conversationId: string, sessionHash: string } | undefined> {
+    await this.recover()
+    return this.source.transaction('READ COMMITTED', async (db) => {
+      const [row] = await db.query(`SELECT id,user_id,conversation_id,recovery_auth_hash FROM agent_tasks
+        WHERE recovery_ready=TRUE AND status IN ('queued','paused') AND cancel_requested=FALSE
+          AND recovery_attempts<5 AND recovery_after<=UTC_TIMESTAMP(3)
+          AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3))
+          AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=agent_tasks.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain'))
+        ORDER BY recovery_after,id LIMIT 1 FOR UPDATE SKIP LOCKED`)
+      if (!row) {
+        return undefined
+      }
+      await db.query(`UPDATE agent_tasks SET recovery_claim=?,recovery_claim_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND),
+        recovery_attempts=recovery_attempts+1 WHERE id=?`, [claim, row.id])
+      return { id: row.id, userId: row.user_id, conversationId: row.conversation_id, sessionHash: row.recovery_auth_hash }
+    })
+  }
+
+  async stopRecovery(id: string, claim: string, waitingClient: boolean, reason: string) {
+    await this.source.query(`UPDATE agent_tasks SET recovery_ready=FALSE,recovery_claim=NULL,recovery_claim_until=NULL,
+      status=?,reason=?,updated_at=UTC_TIMESTAMP(3)
+      WHERE id=? AND recovery_claim=? AND status IN ('queued','paused')`, [waitingClient ? 'waiting_client' : 'paused', reason.slice(0, 200), id, claim])
   }
 
   private summary(row: any): TaskSummary {

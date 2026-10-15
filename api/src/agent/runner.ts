@@ -43,6 +43,8 @@ export interface AgentRunInput {
   applicationIds: string[]
   resume?: RunCheckpoint
   retry?: { assistantId: string }
+  /** Server-only reservation, never part of model input or the public checkpoint. */
+  recoveryClaim?: string
 }
 /** The local lock is synchronous; durable admission/claim happens before any application operation. */
 export async function runConversation(
@@ -272,7 +274,7 @@ export async function runConversation(
           session.archiveRevision,
         )
       }
-      await tasks.claim(principal!, run.view.id, owner)
+      await tasks.claim(principal!, run.view.id, owner, input.recoveryClaim)
       claimed = true
       admitted = true
       heartbeat = setInterval(() => {
@@ -358,6 +360,7 @@ export async function runConversation(
       options.onRunError?.({
         ...failure,
         runId: run.view.id,
+        requestId,
         agentId: state.frames.at(-1)?.agentId || initialAgent,
         stage: state.frames.at(-1)?.workflow?.phase,
         diagnostics: runErrorDiagnostics(error),
@@ -517,6 +520,7 @@ export async function runConversation(
           taskStatus,
           reason,
           assistant.execution,
+          run.abort.signal.reason === 'SERVER_SHUTDOWN',
         )
         session.task = (await tasks.get(principal!, run.view.id)).summary
       } catch {

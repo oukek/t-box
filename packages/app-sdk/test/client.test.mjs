@@ -264,3 +264,23 @@ test('reminder SDK delegates fixed operations to the host without receiving nati
   assert.deepEqual(f.calls[0].args, { action: 'sync' })
   f.client.dispose()
 })
+
+test('file SDK transports bounded binary content and exposes no host file path or bearer token', async () => {
+  const file = { id: 'fixture', name: 'file.bin', mimeType: 'application/octet-stream', size: 3, source: 'uploaded', createdAt: '2026-10-15T00:00:00Z' }
+  const f = fixture(async (method, args) => {
+    if (method === 'files.upload') {
+      assert.deepEqual(Buffer.from(args.base64, 'base64'), Buffer.from([0, 128, 255]))
+      return file
+    }
+    return method === 'files.pick' ? [file] : { file, base64: Buffer.from([0, 128, 255]).toString('base64') }
+  })
+  const binary = new Blob([new Uint8Array([0, 128, 255])])
+  assert.deepEqual(await f.client.files.upload(binary), file)
+  assert.deepEqual(await f.client.files.pick({ multiple: true }), [file])
+  const content = await f.client.files.read(file.id)
+  assert.deepEqual(Buffer.from(await content.blob.arrayBuffer()), Buffer.from([0, 128, 255]))
+  assert.equal(f.calls.length, 3)
+  await assert.rejects(f.client.files.upload(new Blob([])), { code: 'FILE_SIZE' })
+  assert.equal(f.calls.length, 3)
+  f.client.dispose()
+})

@@ -2,10 +2,13 @@ import type {
   ApplicationBridgeError,
   ApplicationBridgeEvent,
   ApplicationContext,
+  ApplicationFile,
+  ApplicationFileContent,
   ApplicationSession,
+  FilePickOptions,
   HostMethod,
 } from '@t-box/app-contracts'
-import { createApplicationRequestId } from '@t-box/app-contracts'
+import { APPLICATION_FILE_MAX_BYTES, createApplicationRequestId } from '@t-box/app-contracts'
 
 export type {
   ApplicationContext,
@@ -241,6 +244,29 @@ export function createAppClient(transport: AppTransport) {
     resources: {
       async setBindings(bindings: { appId: string, resourceType: string, resourceId: string }[]) {
         await call('resources.bindings', { bindings })
+      },
+    },
+    files: {
+      /** Call from a user gesture. The host picker never exposes the account's entire library. */
+      pick(options: FilePickOptions = {}, request: RequestOptions = {}) {
+        return call<ApplicationFile[]>('files.pick', options, { timeoutMs: 120000, ...request })
+      },
+      async upload(file: Blob & { name?: string }, request: RequestOptions = {}) {
+        if (!file.size || file.size > APPLICATION_FILE_MAX_BYTES) {
+          throw new AppSdkError('FILE_SIZE', '每个文件需为 1 字节至 10 MB')
+        }
+        const bytes = new Uint8Array(await file.arrayBuffer())
+        let binary = ''
+        for (let offset = 0; offset < bytes.length; offset += 32768) {
+          binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768))
+        }
+        return call<ApplicationFile>('files.upload', { name: file.name || '未命名文件', base64: btoa(binary) }, { timeoutMs: 120000, ...request })
+      },
+      async read(id: string, request: RequestOptions = {}) {
+        const content = await call<ApplicationFileContent>('files.read', { id }, { timeoutMs: 60000, ...request })
+        const binary = atob(content.base64)
+        const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+        return { file: content.file, blob: new Blob([bytes], { type: content.file.mimeType }) }
       },
     },
     permissions: {

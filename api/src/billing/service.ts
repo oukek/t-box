@@ -7,8 +7,9 @@ import type {
 } from '@t-box/shared'
 import type { DataSource, EntityManager } from 'typeorm'
 import { randomUUID } from 'node:crypto'
-import { isoTime } from '@t-box/ledger-server/ledgers/time'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { isoTime } from '@t-box/server-foundation/time'
+import { admitCost } from './budget.js'
 import { count, decimal, money, tokenFee } from './money.js'
 
 interface WalletRow {
@@ -49,7 +50,11 @@ const viewWallet = (w: WalletRow): Wallet => ({
   available: decimal(BigInt(w.balance_micro) - BigInt(w.reserved_micro)),
 })
 export class BillingService {
-  constructor(readonly source: DataSource) {}
+  constructor(
+    readonly source: DataSource,
+    private readonly configuration?: { snapshot(): Promise<import('@t-box/shared').ConfigurationSnapshot> },
+  ) {}
+
   async lock(db: EntityManager, userId: string): Promise<WalletRow> {
     await db.query(
       'INSERT INTO billing_wallets(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)',
@@ -79,8 +84,12 @@ export class BillingService {
     prices: ModelPrices
     kind: UsageRecord['kind']
     reserve: bigint
+    /** Internal metadata request; records provider cost without any wallet debit. */
+    free?: boolean
   }) {
+    const configuration = await this.configuration?.snapshot()
     return this.source.transaction(async (db) => {
+      await admitCost(db, input, configuration)
       const wallet = await this.lock(db, input.userId)
       const [old] = await db.query('SELECT id FROM billing_usage WHERE id=?', [
         input.id,
@@ -92,7 +101,8 @@ export class BillingService {
           '本次调用已记录，请先核对执行结果',
         )
       }
-      const reserve = wallet.mode === 'record_only' ? 0n : input.reserve
+      const mode = input.free ? 'record_only' : wallet.mode
+      const reserve = mode === 'record_only' ? 0n : input.reserve
       if (
         reserve < 0n ||
         BigInt(wallet.balance_micro) - BigInt(wallet.reserved_micro) < reserve
@@ -108,7 +118,7 @@ export class BillingService {
         [reserve.toString(), input.userId],
       )
       await db.query(
-        'INSERT INTO billing_usage(id,user_id,task_id,model_config_id,prices_json,kind,mode,reserved_micro,message_id,agent_id,purpose) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO billing_usage(id,user_id,task_id,model_config_id,prices_json,kind,mode,reserved_micro,message_id,agent_id,purpose,cost_reserved_micro) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
         [
           input.id,
           input.userId,
@@ -116,14 +126,15 @@ export class BillingService {
           input.modelId,
           JSON.stringify(input.prices),
           input.kind,
-          wallet.mode,
+          mode,
           reserve.toString(),
           input.messageId ?? null,
           input.agentId ?? null,
           input.purpose ?? 'response',
+          input.reserve.toString(),
         ],
       )
-      return wallet.mode
+      return mode
     })
   }
 

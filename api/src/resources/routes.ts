@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type { PlatformService } from '../platform/service.js'
-import { parseId } from '@t-box/ledger-server/validation'
+import { parseId } from '@t-box/server-foundation/validation'
 import { bearer } from '../identity/service.js'
 import { MAX_RESOURCE_SIZE } from './service.js'
 
@@ -47,6 +47,10 @@ export function registerResources(app: FastifyInstance, p: PlatformService) {
         await p.identity.authenticate(bearer(req.headers.authorization)),
         req.query,
       ))
+    routes.get('/api/v1/resources/quota', async (req, reply) => {
+      reply.header('Cache-Control', 'no-store')
+      return { data: await p.resources.quota(await p.identity.authenticate(bearer(req.headers.authorization))) }
+    })
     routes.get<{ Params: { id: string } }>(
       '/api/v1/resources/:id/content',
       async (req, reply) => {

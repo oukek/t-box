@@ -47,6 +47,7 @@ try {
   for (const file of ['prepare-release.mjs', 'ecosystem.config.cjs', 'api.env.example']) {
     await cp(join(workspace, 'deploy/pm2', file), join(payload, 'control', file))
   }
+  await cp(join(workspace, 'scripts/operations-backup.mjs'), join(payload, 'control/operations-backup.mjs'))
   const info = {
     format: 'tbox-pm2-v1',
     releaseId,

@@ -103,7 +103,9 @@ test('delete persistence failure rolls back the pair and memory; revision checks
       async authenticate() {
         throw new Error('unused')
       },
-      async authenticateHash() {},
+      async authenticateHash() {
+        throw new Error('unused')
+      },
     },
     conversations: {
       async save() {

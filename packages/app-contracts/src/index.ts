@@ -67,6 +67,8 @@ export interface BackendInvocation {
   generation: number
   method: string
   arguments: unknown
+  /** Opaque preparation capability. Never expose it to the model or public catalog. */
+  preparationTicket?: string
 }
 export interface RuntimeDescriptor {
   protocol: typeof APP_PROTOCOL
@@ -160,8 +162,10 @@ export interface ApplicationPublicationEvent {
   createdAt: string
 }
 
+export * from './backend.js'
 export * from './capabilities.js'
 export * from './desktop-appearance.js'
+export * from './files.js'
 export * from './icons.js'
 export * from './identifiers.js'
 export * from './resources.js'

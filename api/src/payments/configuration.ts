@@ -13,8 +13,8 @@ import {
   verify,
 } from 'node:crypto'
 import { isIP } from 'node:net'
-import { object } from '@t-box/ledger-server/ledgers/validation'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { object } from '@t-box/server-foundation/input'
 
 export type WechatRuntime = WechatPaymentConfiguration &
   Required<WechatPaymentSecrets> & { id: string }
