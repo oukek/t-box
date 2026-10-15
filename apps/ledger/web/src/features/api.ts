@@ -1,6 +1,6 @@
-import { createRequestId } from '@t-box/app-shell-sdk'
 import { ref } from 'vue'
 import { invalidateBook } from '../books/bookStore'
+import { createRequestId } from '../runtime'
 import { request } from '../sdk'
 
 export const featureApi = (book: string) => {

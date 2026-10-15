@@ -5,6 +5,7 @@ import { moveDesktopApp } from '@t-box/shared'
 import { AppIcon, Modal } from '@t-box/ui-kit'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { repairInstallation } from '../../core/app-runtime/catalog'
 import { getApplication, presentApplication } from '../../core/applications'
 import {
   openApplication,
@@ -27,6 +28,21 @@ const iconStyle = computed(() => {
 const editing = ref(false)
 const order = ref<string[]>([])
 const info = ref<DesktopApplication | null>(null)
+const repairing = ref(false)
+const repairError = ref('')
+async function repair(appId: string) {
+  repairing.value = true
+  repairError.value = ''
+  try {
+    await repairInstallation(appId)
+    desktop.retry()
+    info.value = null
+  } catch (cause) {
+    repairError.value = cause instanceof Error ? cause.message : '修复失败，请重试'
+  } finally {
+    repairing.value = false
+  }
+}
 const now = ref(new Date())
 const clockTimer = setInterval(() => {
   now.value = new Date()
@@ -82,7 +98,8 @@ function launch(app: DesktopApplication) {
   if (sort.consumeClick()) {
     return
   }
-  if (editing.value) {
+  if (editing.value || (app.installation.status && app.installation.status !== 'active')) {
+    repairError.value = ''
     info.value = app
   } else {
     void openApplication({ appId: app.manifest.id })
@@ -193,6 +210,7 @@ const status = computed(() =>
             :day="now.getDate()"
           />
           <span class="desktop-app-name">{{ app.manifest.name }}</span>
+          <small v-if="app.installation.status && app.installation.status !== 'active'" class="desktop-app-state">{{ app.installation.status === 'installing' ? '准备中…' : '暂不可用' }}</small>
         </button>
         <button
           v-if="editing"
@@ -246,6 +264,7 @@ const status = computed(() =>
           </div>
         </div>
         <dl>
+          <div><dt>状态</dt><dd>{{ info.installation.status === 'installing' ? '正在安装' : info.installation.status === 'failed' ? '暂不可用' : '已安装' }}</dd></div>
           <div>
             <dt>类型</dt>
             <dd>
@@ -263,6 +282,17 @@ const status = computed(() =>
             <dd>{{ info.aiAvailable ? "可在 AI 对话中使用" : "独立使用" }}</dd>
           </div>
         </dl>
+        <p
+          v-if="info.installation.error || repairError"
+          class="form-error"
+          role="alert"
+        >{{ repairError || info.installation.error }}</p>
+        <button
+          v-if="info.installation.status && info.installation.status !== 'active'"
+          class="button button-primary"
+          :disabled="repairing"
+          @click="repair(info.manifest.id)"
+        >{{ repairing ? '正在重试…' : '重试安装' }}</button>
         <button
           v-if="info.aiAvailable"
           class="button button-secondary desktop-capabilities"

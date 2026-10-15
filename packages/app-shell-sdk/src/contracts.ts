@@ -29,6 +29,8 @@ export interface ClientApplicationModule {
   navigation: 'shell' | 'feature'
   host?: Component
   parseParams(value: unknown): Record<string, string>
+  /** App-owned public links; the host only validates and routes the returned parameters. */
+  resolveLink?(path: string, query: URLSearchParams): Record<string, string> | null
   props(
     params: Readonly<Record<string, string>>,
     context: Readonly<{ openRevision: number }>,

@@ -1,1 +1,1 @@
-export { ledgerModule } from './module'
+export { parseLedgerParams } from './navigation'

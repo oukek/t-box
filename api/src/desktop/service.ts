@@ -36,15 +36,25 @@ export class DesktopService {
         aiAvailable: manifest.skillIds.length > 0,
       }))
     }
-    return (await this.platform.installed(userId)).map((e) => ({
-      manifest: e.release.manifest,
+    const catalog = await this.platform.catalog(userId)
+    const entries = await Promise.all(catalog.filter((e) => e.release.kind === 'system' || (e.installation && e.installation.status !== 'revoked')).map(async (e) => ({
+      manifest: e.installation?.status === 'active' ? (await this.platform!.release(e.installation.releaseId)).manifest : e.release.manifest,
       installation: {
         kind: e.release.kind,
         uninstallable: e.release.kind !== 'system',
-        installationId: `${e.release.appId}:${e.installation!.generation}`,
+        installationId: `${e.release.appId}:${e.installation?.generation || 0}`,
+        status: e.installation?.status || 'failed',
+        error: e.installation?.error || e.issue || null,
       },
-      aiAvailable: e.release.manifest.skillIds.length > 0,
-    }))
+      aiAvailable: e.installation?.status === 'active' && e.release.manifest.skillIds.length > 0,
+    })))
+    for (const manifest of this.manifests) {
+      if (this.platform.applicationKind(manifest.id) === 'system' && !entries.some((e) => e.manifest.id === manifest.id)) {
+        entries.push({ manifest, installation: { kind: 'system', uninstallable: false, installationId: `${manifest.id}:0`, status: 'failed', error: this.platform.deploymentIssue(manifest.id) || '应用尚未部署' }, aiAvailable: false })
+      }
+    }
+    const order = new Map(this.manifests.map((manifest, index) => [manifest.id, index]))
+    return entries.sort((a, b) => (order.get(a.manifest.id) ?? this.manifests.length) - (order.get(b.manifest.id) ?? this.manifests.length) || a.manifest.id.localeCompare(b.manifest.id))
   }
 
   private async available(userId: string) {

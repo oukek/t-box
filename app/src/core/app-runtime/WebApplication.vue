@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { RuntimeDescriptor } from '@t-box/app-contracts'
+import { AppIcon } from '@t-box/ui-kit'
 import { onBeforeUnmount, ref, watch } from 'vue'
+import { backFromApplication } from '../navigation'
 import { connectFrame, descriptor } from './bridge'
 
 const props = defineProps<{
@@ -8,6 +10,7 @@ const props = defineProps<{
   params: Record<string, string>
   openRevision: number
   initializeRuntime?: (runtime: RuntimeDescriptor) => Promise<void>
+  persistentNavigation?: boolean
 }>()
 const locationOrigin = location.origin
 const frame = ref<HTMLIFrameElement>()
@@ -60,7 +63,13 @@ async function connected() {
 }
 watch(
   () => [props.appId, props.openRevision],
-  () => void load(),
+  (next, old) => {
+    if (props.persistentNavigation && next[0] === old?.[0] && connection && runtime.value && !error.value) {
+      void connection.promise.then((client) => client.navigate({ ...props.params })).catch(() => {})
+    } else {
+      void load()
+    }
+  },
   { immediate: true },
 )
 onBeforeUnmount(() => {
@@ -81,18 +90,23 @@ onBeforeUnmount(() => {
       class="runtime-error"
       role="alert"
     >
+      <button
+        class="icon-button runtime-error-back"
+        aria-label="返回"
+        @click="backFromApplication"
+      ><AppIcon name="left" :size="21" /></button>
       <p>{{ error }}</p>
       <button class="button button-secondary" @click="load">重新打开</button>
     </div>
     <iframe
       v-if="runtime && !error"
       ref="frame"
-      :key="`${runtime.appId}:${openRevision}`"
+      :key="`${runtime.appId}:${persistentNavigation ? runtime.generation : openRevision}`"
       :src="`${runtime.entryUrl}#tbox-host=${encodeURIComponent(locationOrigin)}`"
       :title="appId === 'calculator' ? '数学计算器' : appId"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-downloads"
       referrerpolicy="strict-origin-when-cross-origin"
-      allow=""
+      allow="clipboard-write"
       @load="connected"
     />
   </section>
@@ -123,7 +137,13 @@ iframe {
   z-index: 1;
 }
 .runtime-error {
+  position: relative;
   padding: 24px;
   text-align: center;
+}
+.runtime-error-back {
+  position: absolute;
+  left: 0;
+  top: 0;
 }
 </style>

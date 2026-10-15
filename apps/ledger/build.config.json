@@ -1,0 +1,7 @@
+{
+  "appId": "ledger",
+  "package": "@t-box/ledger-web",
+  "releasePackage": "@t-box/ledger-server",
+  "releaseModule": "server/dist/release.js",
+  "releaseExport": "ledgerRelease"
+}

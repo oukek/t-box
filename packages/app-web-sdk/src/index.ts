@@ -3,6 +3,8 @@ import type { AppTransport, RequestOptions } from '@t-box/app-sdk'
 import {
   APP_PROTOCOL,
   APP_SDK_VERSION,
+  applicationPayloadLimit,
+  createApplicationRequestId,
 } from '@t-box/app-contracts'
 import {
   AppSdkError,
@@ -37,8 +39,10 @@ export function connectApplication(
     const referrerOrigin = document.referrer
       ? new URL(document.referrer).origin
       : null
+    // Self reloads (including Vite HMR) may use the app itself as referrer.
+    // The handshake still verifies the actual parent window AND its advertised origin.
     const expectedOrigin =
-      referrerOrigin && referrerOrigin !== 'null'
+      referrerOrigin && referrerOrigin !== 'null' && referrerOrigin !== location.origin
         ? referrerOrigin
         : advertisedOrigin
     if (
@@ -168,11 +172,11 @@ export function connectApplication(
           }
           return new Promise<T>((resolveCall, rejectCall) => {
             const serialized = JSON.stringify(args)
-            if (!serialized || serialized.length > 64000) {
+            if (!serialized || serialized.length > applicationPayloadLimit(method)) {
               throw new Error('应用请求参数无效或过大')
             }
             const payload = JSON.parse(serialized)
-            const id = crypto.randomUUID()
+            const id = createApplicationRequestId()
             const timer = setTimeout(() => {
               pending.get(id)?.cleanup()
               pending.delete(id)

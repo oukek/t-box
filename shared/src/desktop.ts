@@ -13,6 +13,8 @@ export interface ApplicationInstallation {
   kind: ApplicationKind
   uninstallable: boolean
   installationId?: string
+  status?: import('@t-box/app-contracts').InstallationStatus
+  error?: string | null
 }
 export interface DesktopApplication {
   manifest: ApplicationManifest

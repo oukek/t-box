@@ -52,7 +52,7 @@ export default antfu(
     },
   },
   {
-    files: ['**/*.{js,mjs}'],
+    files: ['**/*.{js,mjs,cjs}'],
     rules: {
       // typescript-eslint 8.71 misclassifies Espree value references as types.
       'unused-imports/no-unused-vars': 'off',
@@ -73,6 +73,8 @@ export default antfu(
       'packages/server-foundation/**/*.ts',
       'packages/*/test/**/*.mjs',
       'scripts/**/*.mjs',
+      'deploy/api/**/*.mjs',
+      'deploy/pm2/**/*.{mjs,cjs}',
       'capacitor/**/*.ts',
       'capacitor/scripts/**/*.mjs',
       '**/vite.config.ts',

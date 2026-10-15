@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import type { LedgerInput } from '@t-box/ledger-contracts'
-import {
-  backFromApplication,
-  navigation,
-  openApplication,
-  tabLabel,
-} from '@t-box/app-shell-sdk'
 import { AppIcon, BottomSheet, SheetSelect } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { requestApplicationAuthorization } from '../applicationAuthorization'
 import LedgerPage from '../bills/LedgerPage.vue'
 import LedgerTools from '../features/LedgerTools.vue'
+import {
+  backFromApplication,
+  navigation,
+  openApplication,
+  tabLabel,
+} from '../runtime'
 import { booksApi } from './booksApi'
 import BookSettings from './BookSettings.vue'
 import { bookState, loadBooks, selectBook, selectedBook } from './bookStore'

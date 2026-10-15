@@ -1,0 +1,51 @@
+@import '@t-box/ui-kit/base.css';
+@import './features/features.css';
+@import './bills/ledger.css';
+@import './books/books.css';
+@import './books/statistics.css';
+@import './books/settings.css';
+html,
+body,
+#app {
+  min-height: 100%;
+}
+.book-hub {
+  width: 100%;
+}
+.ledger-content.main-content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0 0 12px;
+}
+.ledger-content .page-header .eyebrow {
+  display: none;
+}
+.ledger-content .bill-row.target-bill {
+  background: #eef7ef;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 22px;
+  padding-right: 22px;
+  border-left: 3px solid #83ad95;
+}
+@media (max-width: 760px) {
+  .ledger-content.main-content {
+    padding: 0 0 5px;
+  }
+  .ledger-content .page-header {
+    margin-bottom: 26px;
+  }
+  .ledger-content .bill-row.target-bill {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+  .ledger-content .bill-row.target-bill .bill-actions {
+    right: 17px;
+  }
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}

@@ -1,0 +1,83 @@
+name: API PM2 package and upload
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-pm2-upload
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - uses: pnpm/action-setup@v6
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate upload settings and create release ID
+        id: release
+        env:
+          TARGET: ${{ vars.PM2_UPLOAD_DIR }}
+          TARGET_HOST: ${{ secrets.PM2_SSH_HOST }}
+          TARGET_USER: ${{ secrets.PM2_SSH_USER }}
+          TARGET_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
+          TARGET_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
+          TARGET_HOST_KEYS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$TARGET" && test -n "$TARGET_HOST" && test -n "$TARGET_USER" && test -n "$TARGET_HOST_KEYS" || { echo "Configure PM2 upload Variables and Secrets"; exit 1; }
+          test -n "$TARGET_PASSWORD" || test -n "$TARGET_KEY" || { echo "Configure PM2_SSH_PASSWORD or PM2_SSH_PRIVATE_KEY"; exit 1; }
+          printf 'id=sha-%s-run-%s-attempt-%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - name: PM2 packaging and upload regressions
+        run: node --test scripts/pm2-deployment.test.mjs
+      - name: Build and validate standalone production package
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: node scripts/pack-api-pm2.mjs "$RELEASE_ID" "$RUNNER_TEMP/pm2-package"
+      - name: Retain downloadable release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: pm2-${{ steps.release.outputs.id }}
+          path: ${{ runner.temp }}/pm2-package/
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Upload and verify new server directory
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+          PM2_UPLOAD_DIR: ${{ vars.PM2_UPLOAD_DIR }}
+          PM2_SSH_HOST: ${{ secrets.PM2_SSH_HOST }}
+          PM2_SSH_USER: ${{ secrets.PM2_SSH_USER }}
+          PM2_SSH_PORT: ${{ vars.PM2_SSH_PORT || '22' }}
+          PM2_SSH_PRIVATE_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
+          PM2_SSH_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
+          PM2_SSH_KNOWN_HOSTS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/tbox-ssh.XXXXXX")"
+          trap 'rm -rf -- "$ssh_dir"' EXIT
+          if [ -n "$PM2_SSH_PASSWORD" ]; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends sshpass
+          else
+            printf '%s\n' "$PM2_SSH_PRIVATE_KEY" > "$ssh_dir/key"
+            export PM2_SSH_KEY_FILE="$ssh_dir/key"
+          fi
+          printf '%s\n' "$PM2_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          export PM2_SSH_KNOWN_HOSTS_FILE="$ssh_dir/known_hosts"
+          bash deploy/pm2/upload-runtime.sh "$RELEASE_ID" "$RUNNER_TEMP/pm2-package"
+      - name: Manual startup reference
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+          TARGET: ${{ vars.PM2_UPLOAD_DIR }}
+        run: |
+          printf 'Verified release directory: %s/releases/%s\n\nNo database migration or PM2 startup was performed. Follow docs/api-pm2-deployment.md for manual startup.\n' "$TARGET" "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"

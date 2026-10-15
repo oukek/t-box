@@ -23,6 +23,9 @@ import { ApiError } from '@t-box/server-foundation/errors'
 import { registerTime } from '@t-box/time-server/routes'
 import Fastify from 'fastify'
 import { registerAdmin } from './admin/routes.js'
+import { ApplicationBuildImports } from './application-platform/build-import.js'
+import { registerApplicationBuildImports } from './application-platform/import-routes.js'
+import { ApplicationPublishing } from './application-platform/publishing.js'
 import { registerApplicationPlatform } from './application-platform/routes.js'
 import { registerBilling } from './billing/routes.js'
 import { ApplicationChatService as ChatService } from './bootstrap/chat.js'
@@ -105,6 +108,12 @@ export function createApp(deps: AppDependencies) {
 
   if (deps.administration) {
     registerAdmin(app, deps.administration, deps.platform)
+    if (deps.platform?.applications) {
+      registerApplicationBuildImports(app, new ApplicationBuildImports(
+        deps.administration.store.source,
+        new ApplicationPublishing(deps.administration.store.source, deps.platform.applications),
+      ))
+    }
   }
 
   app.register(cors, {

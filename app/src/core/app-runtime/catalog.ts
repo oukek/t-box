@@ -7,6 +7,7 @@ import {
 } from '../../applications/registry'
 import { request } from '../network'
 import { identity } from '../session'
+import { clearApplicationBindings } from './resourceBindings'
 
 export const appCatalog = reactive({
   entries: [] as MarketEntry[],
@@ -30,6 +31,11 @@ export async function refreshCatalog() {
       syncCatalogModules(result.data)
       appCatalog.entries = result.data
       appCatalog.revision++
+      for (const module of applicationModules) {
+        if (!isInstalled(module.manifest.id)) {
+          clearApplicationBindings(module.manifest.id)
+        }
+      }
     }
   } catch (e) {
     if (epoch === generation) {
@@ -45,6 +51,11 @@ export function isInstalled(appId: string) {
   return appCatalog.entries.some(
     (e) => e.release.appId === appId && e.installation?.status === 'active',
   )
+}
+export async function repairInstallation(appId: string) {
+  await request(`/app-market/${encodeURIComponent(appId)}/repair`, { method: 'POST', body: '{}' })
+  await refreshCatalog()
+  window.dispatchEvent(new Event('tbox:applications-changed'))
 }
 export async function changeInstallation(
   entry: DeepReadonly<MarketEntry>,

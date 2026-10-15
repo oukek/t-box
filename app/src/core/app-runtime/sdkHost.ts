@@ -12,6 +12,7 @@ import {
 import { watch } from 'vue'
 import { applicationModules } from '../../applications/registry'
 import { applicationMutation } from '../applicationMutation'
+import { createRequestId } from '../identifiers'
 import {
   backFromApplication,
   navigation,
@@ -20,7 +21,8 @@ import {
 import { chatWebSocketUrl, request } from '../network'
 import { identity } from '../session'
 import { appCatalog } from './catalog'
-import { validateApplicationRestPath } from './trustedPath'
+import { setApplicationBindings } from './resourceBindings'
+import { parseApplicationHttpRequest, validateApplicationRestPath } from './trustedPath'
 
 interface HostOptions {
   appId: string
@@ -208,6 +210,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
     )
     bound = {
       ...context,
+      hostUrl: location.origin + location.pathname,
       params: { ...(options.params ?? {}) },
       capabilities: [
         ...new Set([
@@ -398,6 +401,22 @@ export function createHostTransport(options: HostOptions): AppTransport {
         value = context
       } else if (method === 'auth.session') {
         value = session()
+      } else if (method === 'resources.bindings') {
+        setApplicationBindings(options.appId, a.bindings)
+      } else if (method === 'api.request') {
+        const http = parseApplicationHttpRequest(module?.sdk?.restPrefixes || [], a)
+        if (http.stable === true) {
+          value = await applicationMutation(http.path, http.method as 'POST' | 'PATCH' | 'DELETE', http.body)
+        } else {
+          value = await request(http.path, {
+            method: http.method || 'GET',
+            ...(http.body === undefined ? {} : { body: JSON.stringify(http.body) }),
+            signal: callOptions.signal,
+            timeoutMs,
+            redirect: 'error',
+            headers: { 'Idempotency-Key': callOptions.idempotencyKey || createRequestId() },
+          })
+        }
       } else if (method === 'api.invoke') {
         if (typeof a.method !== 'string') {
           throw new AppSdkError('INVALID_ARGUMENTS', '应用方法无效')
@@ -411,7 +430,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
               timeoutMs,
               headers: {
                 'Idempotency-Key':
-                  callOptions.idempotencyKey || crypto.randomUUID(),
+                  callOptions.idempotencyKey || createRequestId(),
               },
               body: JSON.stringify({
                 releaseId: context.releaseId,

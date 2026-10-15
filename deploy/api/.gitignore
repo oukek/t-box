@@ -1,0 +1,9 @@
+data/
+oss.env
+releases/
+*.lock
+current-release
+previous-release
+.current-release.tmp
+.env.*
+!.env.example

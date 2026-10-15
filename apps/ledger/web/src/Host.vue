@@ -1,23 +1,20 @@
 <script setup lang="ts">
-import { identity, openApplication } from '@t-box/app-shell-sdk'
 import { BottomSheet, Modal } from '@t-box/ui-kit'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { resolveApplicationAuthorization } from './applicationAuthorization'
 import ApplicationAuthorizationDialog from './AuthorizationDialog.vue'
 import { booksApi } from './books/booksApi'
-import { loadBooks, resetBooks, selectBook } from './books/bookStore'
+import { bookState, loadBooks, resetBooks, selectBook } from './books/bookStore'
 import { startBookLive } from './books/live'
 import { financialConsent, resolveFinancialConsent } from './financialConsent'
+import { identity, openApplication, runtime } from './runtime'
 
 let stopLive: (() => void) | undefined
 const invitation = ref('')
 const inviteError = ref('')
 const joining = ref(false)
 function readInvitation() {
-  const [path, query] = location.hash.slice(1).split('?')
-  if (path === '/join') {
-    invitation.value = new URLSearchParams(query).get('token') || ''
-  }
+  invitation.value = runtime.params.inviteToken || ''
 }
 async function join() {
   joining.value = true
@@ -41,9 +38,13 @@ watch(
   () => identity.user?.id,
   async (id) => {
     stopLive?.()
-    resetBooks()
+    if (!id) {
+      resetBooks()
+    }
     if (id) {
-      await loadBooks()
+      if (!bookState.books.length) {
+        await loadBooks()
+      }
       if (identity.user?.id !== id) {
         return
       }
@@ -55,14 +56,13 @@ watch(
 )
 onMounted(() => {
   readInvitation()
-  window.addEventListener('hashchange', readInvitation)
 })
+watch(() => runtime.params.inviteToken, readInvitation)
 onBeforeUnmount(() => {
   stopLive?.()
   resolveFinancialConsent(false)
   resolveApplicationAuthorization(false)
   resetBooks()
-  window.removeEventListener('hashchange', readInvitation)
 })
 </script>
 

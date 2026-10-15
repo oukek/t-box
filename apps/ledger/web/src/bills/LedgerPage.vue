@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { LedgerAccount } from '@t-box/ledger-contracts'
 import type { FormValues, LedgerFormField } from '../features/form'
-import { identity } from '@t-box/app-shell-sdk'
 import { AppIcon, BottomSheet, SheetSelect } from '@t-box/ui-kit'
 import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -11,6 +10,7 @@ import { featureApi, useFeatureAction } from '../features/api'
 import AttachmentPicker from '../features/AttachmentPicker.vue'
 import BillDetailSheet from '../features/BillDetailSheet.vue'
 import LedgerFormSheet from '../features/LedgerFormSheet.vue'
+import { identity } from '../runtime'
 import CategoryPicker from './CategoryPicker.vue'
 import { useLedger } from './useLedger'
 

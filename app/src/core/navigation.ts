@@ -43,6 +43,16 @@ let started = false
 function readHash() {
   const [path, query] = window.location.hash.replace(/^#/, '').split('?')
   const tab = primaryTabs.find((tab) => tab.hash === `#${path || '/'}`)
+  for (const module of applicationModules) {
+    const params = module.resolveLink?.(path || '', new URLSearchParams(query))
+    if (params) {
+      state.application = { appId: module.manifest.id, params: module.parseParams(params) }
+      state.screen = 'application'
+      state.backTo = 'applications'
+      state.revision++
+      return
+    }
+  }
   if (tab) {
     state.screen = tab.id
     state.backTo = tab.id

@@ -19,6 +19,10 @@ export function registerLedger(app: FastifyInstance, p: LedgerRuntimeServices) {
     return actor
   }
   registerLedgerFeatures(app, p, principal)
+  app.get('/api/v1/ledgers/session', async (req) => {
+    const { user } = await principal(req)
+    return { data: { id: user.id, username: user.username, nickname: user.nickname } }
+  })
   const id = (req: FastifyRequest) =>
     parseId((req.params as { id: string }).id)
   const key = (req: FastifyRequest) =>

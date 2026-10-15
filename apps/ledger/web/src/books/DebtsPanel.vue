@@ -5,7 +5,6 @@ import type {
   LedgerContact,
   Settlement,
 } from '@t-box/ledger-contracts'
-import { createRequestId, identity } from '@t-box/app-shell-sdk'
 import { BottomSheet, SheetSelect } from '@t-box/ui-kit'
 import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
@@ -13,6 +12,7 @@ import { formatMoney, localDate, normalizeAmount } from '../bills/format'
 import { featureApi } from '../features/api'
 import AttachmentButton from '../features/AttachmentButton.vue'
 import AttachmentPicker from '../features/AttachmentPicker.vue'
+import { createRequestId, identity } from '../runtime'
 import { booksApi } from './booksApi'
 import { bookState, invalidateBook } from './bookStore'
 

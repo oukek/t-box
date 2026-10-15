@@ -11,6 +11,7 @@ export interface ApplicationContext {
   platform: AppPlatform
   runtime: 'shell' | 'web'
   params: Readonly<Record<string, string>>
+  hostUrl?: string
   permissions: readonly string[]
   capabilities: readonly HostMethod[]
 }
@@ -24,6 +25,8 @@ export type HostMethod =
   | 'runtime.context' |
   'auth.session' |
   'api.invoke' |
+  'api.request' |
+  'resources.bindings' |
   'storage.get' |
   'storage.set' |
   'storage.remove' |
@@ -38,6 +41,9 @@ export interface ApplicationBridgeError {
 }
 export interface ApplicationBridgeEvent {
   type: 'event'
-  name: 'auth.changed' | 'runtime.closed' | 'app.event' | 'app.event.error'
+  name: 'auth.changed' | 'runtime.closed' | 'runtime.navigation' | 'runtime.interactions.cancelled' | 'app.event' | 'app.event.error'
   data: unknown
 }
+/** JSON attachments have a separate bounded transport budget; ordinary calls remain small. */
+export const APP_HTTP_MAX_BYTES = 15 * 1024 * 1024
+export const applicationPayloadLimit = (method: string) => method === 'api.request' ? APP_HTTP_MAX_BYTES : 64000

@@ -46,6 +46,6 @@ export const ledgerManifest = {
   description: '记录日常收支，了解每一笔花费。',
   icon: 'ledger',
   color: 'teal',
-  version: '1.0.0',
+  version: '1.1.0',
   skillIds: ['bookkeeping'],
 } as const satisfies ApplicationManifest

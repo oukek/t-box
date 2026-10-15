@@ -9,7 +9,9 @@ import {
   appCatalog,
   isInstalled,
   refreshCatalog,
+  repairInstallation,
 } from './core/app-runtime/catalog'
+import { clearApplicationBindings } from './core/app-runtime/resourceBindings'
 import { getApplication } from './core/applications'
 import {
   backFromApplication,
@@ -49,6 +51,24 @@ const currentView = computed(() =>
       )
     : null,
 )
+const currentInstallation = computed(() => appCatalog.entries.find((e) => e.release.appId === navigation.application?.appId)?.installation)
+const installationError = computed(() => appCatalog.error || currentInstallation.value?.error || '')
+async function retryCurrentApplication() {
+  const id = navigation.application?.appId
+  if (!id) {
+    return
+  }
+  try {
+    await repairInstallation(id)
+  } catch (cause) {
+    appCatalog.error = cause instanceof Error ? cause.message : '应用修复失败'
+  }
+}
+const catalogTimer = setInterval(() => {
+  if (identity.user && !appCatalog.loading && appCatalog.entries.some((e) => e.installation?.status === 'installing' || (e.release.kind === 'system' && e.installation?.status === 'failed'))) {
+    void refreshCatalog()
+  }
+}, 10_000)
 function hostCompatible(appId: string, version: string) {
   const entry = appCatalog.entries.find((e) => e.release.appId === appId)
   return (
@@ -74,6 +94,7 @@ watch(
   (id) => {
     stopChat()
     closeApplicationRuntimes()
+    clearApplicationBindings()
     void refreshCatalog()
     if (id) {
       startChat()
@@ -88,6 +109,7 @@ onMounted(() => {
   stopViewport = observeViewport()
 })
 onBeforeUnmount(() => {
+  clearInterval(catalogTimer)
   stopChat()
   stopViewport?.()
 })
@@ -175,30 +197,46 @@ onBeforeUnmount(() => {
         v-else-if="navigation.screen === 'application' && currentApplication"
         class="application-unavailable"
       >
-        <AppIcon name="apps" :size="28" />
-        <h2>
-          {{
-            appCatalog.loading
-              ? "正在读取应用…"
-              : !currentCompatible
-                ? "需要更新宿主应用"
-                : "此应用尚未安装"
-          }}
-        </h2>
-        <p v-if="!appCatalog.loading">
-          {{
-            !currentCompatible
-              ? "请刷新网页，或更新 T Box 应用后再打开。"
-              : "安装后可以继续使用，卸载前保存的数据仍然保留。"
-          }}
-        </p>
-        <button
-          v-if="!appCatalog.loading"
-          class="button button-primary"
-          @click="openApplication({ appId: 'market' })"
-        >
-          打开应用市场
-        </button>
+        <ApplicationHeader
+          :title="currentApplication.name"
+          :back-label="tabLabel(navigation.backTo)"
+          @back="backFromApplication"
+        />
+        <div class="application-unavailable-body">
+          <AppIcon name="apps" :size="28" />
+          <h2>
+            {{
+              appCatalog.loading
+                ? "正在读取应用…"
+                : !currentCompatible
+                  ? "需要更新宿主应用"
+                  : currentInstallation?.status === 'installing'
+                    ? "正在准备应用"
+                    : currentInstallation?.status === 'failed'
+                      ? "应用暂不可用"
+                      : "此应用尚未安装"
+            }}
+          </h2>
+          <p v-if="!appCatalog.loading">
+            {{
+              installationError || (!currentCompatible
+                ? "请刷新网页，或更新 T Box 应用后再打开。"
+                : "安装后可以继续使用，卸载前保存的数据仍然保留。")
+            }}
+          </p>
+          <button
+            v-if="currentInstallation && currentInstallation.status !== 'active'"
+            class="button button-primary"
+            @click="retryCurrentApplication"
+          >重试安装</button>
+          <button
+            v-if="!appCatalog.loading"
+            class="button button-primary"
+            @click="openApplication({ appId: 'market' })"
+          >
+            打开应用市场
+          </button>
+        </div>
       </section>
     </main>
     <nav
@@ -241,7 +279,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .application-unavailable {
-  margin: auto;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 1220px;
+}
+.application-unavailable-body {
   padding: 48px 20px;
   text-align: center;
   color: var(--muted);

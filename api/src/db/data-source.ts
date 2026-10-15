@@ -11,6 +11,8 @@ import { getConfig } from '../config.js'
 import { entities } from './entities.js'
 import { AgentWorkflow1791244823000 } from './migrations/AgentWorkflow.js'
 import { AnswerVersions1791244824000 } from './migrations/AnswerVersions.js'
+import { ApplicationImports1791244834000 } from './migrations/ApplicationImports.js'
+import { ApplicationInstallationHealth1791244835000 } from './migrations/ApplicationInstallationHealth.js'
 import { ApplicationLifecycleTime1791244821000 } from './migrations/ApplicationLifecycleTime.js'
 import { ApplicationPlatform1791244818000 } from './migrations/ApplicationPlatform.js'
 import { ApplicationPublicationTime1791244820000 } from './migrations/ApplicationPublicationTime.js'
@@ -91,6 +93,8 @@ export function createDataSource(config = getConfig().mysql) {
       LedgerRecordAttachments1791244831000,
       LedgerCategoryPresets1791244832000,
       LedgerCategoryIcons1791244833000,
+      ApplicationImports1791244834000,
+      ApplicationInstallationHealth1791244835000,
     ],
     migrationsTransactionMode: 'none',
     migrationsTableName: 'schema_migrations',

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { validateApplicationRestPath } from '../src/core/app-runtime/trustedPath'
+import { clearApplicationBindings, getApplicationBindings, setApplicationBindings } from '../src/core/app-runtime/resourceBindings'
+import { parseApplicationHttpRequest, validateApplicationRestPath } from '../src/core/app-runtime/trustedPath'
 
 test('trusted REST adapter accepts exact application roots, children and encoded queries', () => {
   for (const path of [
@@ -45,4 +46,30 @@ test('trusted REST adapter blocks literal, encoded and double-encoded traversal'
       path,
     )
   }
+})
+
+test('isolated HTTP validates methods and rejects caller credentials, redirects and foreign API scopes', () => {
+  assert.doesNotThrow(() => parseApplicationHttpRequest(['/ledgers'], { path: '/ledgers/book', method: 'PATCH', body: { name: 'test' }, stable: true }))
+  for (const value of [
+    { path: '/ledgers', headers: { Authorization: 'forged' } },
+    { path: '/ledgers', baseUrl: 'https://evil.invalid' },
+    { path: '/auth/me' },
+    { path: '/ledgers/../auth/me' },
+    { path: '/ledgers', method: 'TRACE' },
+    { path: '/ledgers', method: 'GET', body: {} },
+    { path: '/ledgers', method: 'GET', stable: true },
+  ]) {
+    assert.throws(() => parseApplicationHttpRequest(['/ledgers'], value))
+  }
+})
+
+test('application resource bindings cannot target another app and are cleared on account change', () => {
+  const ref = { appId: 'ledger', resourceType: 'book', resourceId: 'book-123' }
+  setApplicationBindings('ledger', [ref])
+  ref.resourceId = 'modified'
+  assert.equal(getApplicationBindings('ledger')[0]?.resourceId, 'book-123')
+  assert.throws(() => setApplicationBindings('calculator', [ref]))
+  assert.throws(() => setApplicationBindings('ledger', [{ ...ref, accessToken: 'hidden' }]))
+  clearApplicationBindings()
+  assert.deepEqual(getApplicationBindings('ledger'), [])
 })

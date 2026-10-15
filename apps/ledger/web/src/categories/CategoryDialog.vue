@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { BillCategory } from '@t-box/ledger-contracts'
-import { createRequestId } from '@t-box/app-shell-sdk'
 import { AppIcon, Modal } from '@t-box/ui-kit'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { featureApi, useFeatureAction } from '../features/api'
+import { createRequestId } from '../runtime'
 import CategoryIcon from './CategoryIcon.vue'
 import { defaultCategoryIcons } from './defaultIcons'
 import { categoryThumbnail } from './image'

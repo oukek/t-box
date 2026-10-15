@@ -17,6 +17,13 @@ export function registerApplicationPlatform(
     reply.header('Cache-Control', 'no-store')
     return { data: await service.catalog(a.user.id) }
   })
+  app.post<{ Params: { id: string } }>('/api/v1/app-market/:id/repair', async (req) => {
+    const a = await actor(req.headers.authorization)
+    if (!validId(req.params.id)) {
+      throw new ApiError(400, 'INVALID_APP_ID', '应用标识无效')
+    }
+    return { data: await service.repair(a.user.id, req.params.id) }
+  })
   app.post<{
     Params: { id: string }
     Body: {

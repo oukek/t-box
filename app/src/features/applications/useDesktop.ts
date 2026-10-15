@@ -3,6 +3,7 @@ import {
   systemApplicationManifests,
 } from '@t-box/shared'
 import { onScopeDispose, reactive, ref, watch } from 'vue'
+import { applicationModules } from '../../applications/registry'
 import { request, RequestError } from '../../core/network'
 import { identity } from '../../core/session'
 
@@ -11,8 +12,8 @@ export function useDesktop() {
   const defaults = (): DesktopApplication[] =>
     systemApplicationManifests.map((manifest) => ({
       manifest,
-      installation: { kind: 'system', uninstallable: false },
-      aiAvailable: manifest.skillIds.length > 0,
+      installation: { kind: applicationModules.find((m) => m.manifest.id === manifest.id)?.installation.kind || 'system', uninstallable: false, status: 'installing', error: null },
+      aiAvailable: false,
     }))
   const query = window.matchMedia('(max-width: 700px)')
   const device = ref<DesktopDevice>(query.matches ? 'mobile' : 'pc')
@@ -159,8 +160,14 @@ export function useDesktop() {
     void save()
   }
   const retry = () => (desired ? void save() : void load())
+  const refreshTimer = setInterval(() => {
+    if (identity.user && !state.loading && state.applications.some((app) => app.installation.status === 'installing' || (app.installation.kind === 'system' && app.installation.status === 'failed'))) {
+      void load()
+    }
+  }, 10_000)
   onScopeDispose(() => {
     epoch++
+    clearInterval(refreshTimer)
     controller.abort()
     query.removeEventListener('change', onResize)
     window.removeEventListener('tbox:applications-changed', changed)

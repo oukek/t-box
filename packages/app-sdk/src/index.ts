@@ -5,6 +5,7 @@ import type {
   ApplicationSession,
   HostMethod,
 } from '@t-box/app-contracts'
+import { createApplicationRequestId } from '@t-box/app-contracts'
 
 export type {
   ApplicationContext,
@@ -56,6 +57,8 @@ export function createAppClient(transport: AppTransport) {
   const requests = new Set<AbortController>()
   const authListeners = new Set<(session: ApplicationSession) => void>()
   const closeListeners = new Set<(reason: AppSdkError) => void>()
+  const interactionListeners = new Set<() => void>()
+  const navigationListeners = new Set<(params: Record<string, string>) => void>()
   const subscriptions = new Map<
     string,
     {
@@ -95,6 +98,14 @@ export function createAppClient(transport: AppTransport) {
       for (const listener of authListeners) {
         report(() => listener(event.data as ApplicationSession))
       }
+    } else if (event.name === 'runtime.navigation') {
+      for (const listener of navigationListeners) {
+        report(() => listener(event.data as Record<string, string>))
+      }
+    } else if (event.name === 'runtime.interactions.cancelled') {
+      for (const listener of interactionListeners) {
+        report(listener)
+      }
     } else if (event.name === 'runtime.closed') {
       dispose(AppSdkError.from(event.data))
     } else {
@@ -127,6 +138,8 @@ export function createAppClient(transport: AppTransport) {
     }
     authListeners.clear()
     closeListeners.clear()
+    interactionListeners.clear()
+    navigationListeners.clear()
     for (const subscription of subscriptions.values()) {
       subscription.stop()
     }
@@ -210,8 +223,19 @@ export function createAppClient(transport: AppTransport) {
       },
     },
     api: {
+      mutate<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', body: unknown) {
+        return call<T>('api.request', { path, method, body, stable: true })
+      },
+      request<T>(path: string, input: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT', body?: unknown } = {}, options?: RequestOptions) {
+        return call<T>('api.request', { path, ...input }, options)
+      },
       invoke<T>(method: string, args: unknown, options?: RequestOptions) {
         return call<T>('api.invoke', { method, arguments: args }, options)
+      },
+    },
+    resources: {
+      async setBindings(bindings: { appId: string, resourceType: string, resourceId: string }[]) {
+        await call('resources.bindings', { bindings })
       },
     },
     permissions: {
@@ -254,7 +278,7 @@ export function createAppClient(transport: AppTransport) {
           onError?: (error: AppSdkError) => void
         } = {},
       ) {
-        const subscriptionId = crypto.randomUUID()
+        const subscriptionId = createApplicationRequestId()
         let stopped = false
         const stop = () => {
           if (stopped) {
@@ -291,6 +315,14 @@ export function createAppClient(transport: AppTransport) {
       },
     },
     runtime: {
+      onNavigate(listener: (params: Record<string, string>) => void) {
+        navigationListeners.add(listener)
+        return () => navigationListeners.delete(listener)
+      },
+      onInteractionCancel(listener: () => void) {
+        interactionListeners.add(listener)
+        return () => interactionListeners.delete(listener)
+      },
       getContext: () => call<ApplicationContext>('runtime.context', {}),
       async supports(capability: HostMethod) {
         return (

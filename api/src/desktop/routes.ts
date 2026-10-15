@@ -25,7 +25,7 @@ export function registerDesktop(
           applications: (await service.applications(actor.user.id)).map(
             (entry) => ({
               ...entry,
-              aiAvailable: aiApplicationIds.has(entry.manifest.id),
+              aiAvailable: aiApplicationIds.has(entry.manifest.id) && (!entry.installation.status || entry.installation.status === 'active'),
             }),
           ),
         },

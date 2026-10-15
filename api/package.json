@@ -3,6 +3,9 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
@@ -16,6 +19,7 @@
     "test:model-retry": "tsx test/model-retry.integration.ts",
     "db:init": "tsx src/init-db.ts",
     "admin:init": "tsx src/admin/bootstrap.ts",
+    "apps:credential": "tsx src/application-platform/import-credential-cli.ts",
     "test:admin": "tsx test/admin.integration.ts",
     "test:categories": "tsx test/categories.integration.ts",
     "user:init": "tsx src/identity/bootstrap.ts",

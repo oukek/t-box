@@ -4,9 +4,9 @@ import type {
   LedgerInvite,
   LedgerMember,
 } from '@t-box/ledger-contracts'
-import { identity } from '@t-box/app-shell-sdk'
 import { AppIcon, BottomSheet, Modal, SheetSelect } from '@t-box/ui-kit'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { identity, runtime } from '../runtime'
 import { booksApi } from './booksApi'
 import { bookState, loadBooks } from './bookStore'
 import { formatTimestamp } from './format'
@@ -199,7 +199,7 @@ async function confirm() {
 async function makeInvite() {
   await run(async () => {
     const result = await booksApi.invite(props.book.id, invite)
-    link.value = `${location.origin}${location.pathname}#/join?token=${result.data.token}`
+    link.value = /^https?:/.test(runtime.hostUrl) ? `${runtime.hostUrl}#/join?token=${result.data.token}` : result.data.token
   }, '邀请已生成，仅此处展示完整链接')
 }
 async function copy() {

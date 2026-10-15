@@ -146,7 +146,8 @@ try {
     headers: { authorization: `Bearer ${session.token}` },
   })
   assert.equal(shellContext.statusCode, 200, shellContext.body)
-  assert.equal(shellContext.json().data.runtime, 'shell')
+  assert.equal(shellContext.json().data.runtime, 'web')
+  assert.ok(shellContext.json().data.capabilities.includes('api.request'))
   assert.equal(
     shellContext.json().data.subject,
     platform.applications.subject(user, 'ledger'),
@@ -269,7 +270,7 @@ try {
     'install',
     old.releaseId,
     randomUUID(),
-    [],
+    (await platform.applications.release(old.releaseId)).permissions,
   )
   assert.equal(restored.status, 'completed')
   const restoredBook = await app.inject({

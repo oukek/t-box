@@ -172,9 +172,9 @@ importers:
       '@t-box/device-reminders':
         specifier: workspace:*
         version: link:../packages/device-reminders
-      '@t-box/ledger-web':
+      '@t-box/ledger-shell':
         specifier: workspace:*
-        version: link:../apps/ledger/web
+        version: link:../apps/ledger/shell
       '@t-box/market-web':
         specifier: workspace:*
         version: link:../apps/market/web
@@ -490,7 +490,7 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
 
-  apps/ledger/web:
+  apps/ledger/shell:
     dependencies:
       '@t-box/app-contracts':
         specifier: workspace:*
@@ -498,6 +498,31 @@ importers:
       '@t-box/app-shell-sdk':
         specifier: workspace:*
         version: link:../../../packages/app-shell-sdk
+      '@t-box/ledger-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      vue:
+        specifier: 3.5.43
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vue-tsc:
+        specifier: ^3.2.5
+        version: 3.3.12(typescript@5.9.3)
+
+  apps/ledger/web:
+    dependencies:
+      '@t-box/app-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/app-contracts
+      '@t-box/app-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-sdk
+      '@t-box/app-web-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-web-sdk
       '@t-box/ledger-contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -511,9 +536,18 @@ importers:
         specifier: 3.5.43
         version: 3.5.43(typescript@5.9.3)
     devDependencies:
+      '@types/node':
+        specifier: ^24.10.0
+        version: 24.19.1
+      '@vitejs/plugin-vue':
+        specifier: 6.0.9
+        version: 6.0.9(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.43(typescript@5.9.3))
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
+      vite:
+        specifier: 8.3.2
+        version: 8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vue-tsc:
         specifier: ^3.2.5
         version: 3.3.12(typescript@5.9.3)

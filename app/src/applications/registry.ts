@@ -3,16 +3,25 @@ import type { ClientApplicationModule } from '@t-box/app-shell-sdk'
 import type { ResourceRef } from '@t-box/shared'
 import { createCalculatorShellModule } from '@t-box/calculator-shell'
 import { calendarModule } from '@t-box/calendar-web'
-import { ledgerModule } from '@t-box/ledger-web'
+import { createLedgerShellModule } from '@t-box/ledger-shell'
 import { marketModule } from '@t-box/market-web'
 import { profileModule } from '@t-box/settings-web'
 import { APPLICATION_CONTRACT_VERSION } from '@t-box/shared'
 import { timeModule } from '@t-box/time-web'
 import { defineAsyncComponent, shallowReactive } from 'vue'
+import { cancelApplicationInteractions, invokeDeclaredApplicationTool } from '../core/app-runtime/bridge'
+import { getApplicationBindings, setApplicationBindings } from '../core/app-runtime/resourceBindings'
+import { openApplication } from '../core/navigation'
 
 const calculatorModule = createCalculatorShellModule(
   () => import('../core/app-runtime/WebApplication.vue'),
 )
+const ledgerModule = createLedgerShellModule(() => import('../core/app-runtime/WebApplication.vue'), {
+  invoke: (tool, args) => invokeDeclaredApplicationTool('ledger', tool, args, openApplication),
+  bindings: () => getApplicationBindings('ledger'),
+  setBindings: (value) => setApplicationBindings('ledger', value),
+  cancel: () => cancelApplicationInteractions('ledger'),
+})
 /** Static first-party composition. Neither model output nor database config can import code. */
 export const applicationModules = shallowReactive<ClientApplicationModule[]>([
   ledgerModule,

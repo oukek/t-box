@@ -1,0 +1,66 @@
+name: t-box
+
+services:
+  api:
+    image: ${API_IMAGE:?Set API_IMAGE to an imported local image tag}
+    pull_policy: never
+    restart: unless-stopped
+    init: true
+    # Linux + host-installed MySQL/Redis/Nginx; no public port publishing.
+    network_mode: host
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      HOST: 127.0.0.1
+      PORT: ${API_PORT:-3000}
+    volumes:
+      - ./data/secrets:/opt/t-box/api/.secrets
+      - ./data/storage:/opt/t-box/api/.storage
+      - ./data/app-artifacts:/opt/t-box/output/app-artifacts
+      - ./data/app-deployments:/opt/t-box/apps:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  artifacts:
+    image: ${API_IMAGE:?Set API_IMAGE to an imported local image tag}
+    pull_policy: never
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    command: [node, /opt/t-box/scripts/serve-application-artifacts.mjs, '${ARTIFACT_PORT:-6176}', 127.0.0.1]
+    volumes:
+      - ./data/app-artifacts:/opt/t-box/output/app-artifacts:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      disable: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  prepare-apps:
+    profiles: [setup]
+    image: ${API_IMAGE:?Set API_IMAGE to an imported local image tag}
+    pull_policy: never
+    command: [node, /opt/t-box/scripts/prepare-apps.mjs]
+    network_mode: none
+    environment:
+      APP_ARTIFACT_ORIGIN: ${APP_ARTIFACT_ORIGIN:?Set a separate HTTPS application origin}
+    volumes:
+      - ./data/app-artifacts:/opt/t-box/output/app-artifacts
+      - ./data/app-deployments:/opt/t-box/apps
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

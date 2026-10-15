@@ -1,0 +1,87 @@
+name: API Docker OSS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-oss-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+      OSS_REGION: ${{ vars.OSS_REGION }}
+      OSS_PREFIX: ${{ vars.OSS_PREFIX || 't-box/api' }}
+      OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT || format('https://oss-{0}.aliyuncs.com', vars.OSS_REGION) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate configuration and create release ID
+        id: release
+        shell: bash
+        run: |
+          test -n "$OSS_BUCKET" || { echo "Set Actions variable OSS_BUCKET"; exit 1; }
+          test -n "$OSS_REGION" || { echo "Set Actions variable OSS_REGION"; exit 1; }
+          release="sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-attempt-$GITHUB_RUN_ATTEMPT"
+          printf 'id=%s\ntag=t-box-api:%s\n' "$release" "$release" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - name: Deployment script regressions
+        run: node --test scripts/api-deployment.test.mjs
+      - uses: docker/setup-buildx-action@v4
+      - name: Build release image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: api/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: ${{ steps.release.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Check isolated production runtime
+        env:
+          IMAGE: ${{ steps.release.outputs.tag }}
+        run: |
+          docker run --rm --entrypoint sh "$IMAGE" -c 'APP_ARTIFACT_ORIGIN=https://apps.example.invalid node /opt/t-box/scripts/prepare-apps.mjs && node check-image.mjs'
+      - name: Export compressed image and checksums
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: bash deploy/api/export-release.sh "$RELEASE_ID" "$RUNNER_TEMP/api-release"
+      - name: Install verified ossutil 2.4.0
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 180 \
+            https://gosspublic.alicdn.com/ossutil/v2/2.4.0/ossutil-2.4.0-linux-amd64.zip \
+            -o "$RUNNER_TEMP/ossutil.zip"
+          printf '85edf66b2fb7238f5c7e25cab820cf29312319fe4935b7c86a6b8485eb434f3c  %s\n' "$RUNNER_TEMP/ossutil.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/ossutil.zip" -d "$RUNNER_TEMP/ossutil"
+          mkdir -p "$RUNNER_TEMP/oss-bin"
+          install -m 755 "$RUNNER_TEMP/ossutil/ossutil-2.4.0-linux-amd64/ossutil" "$RUNNER_TEMP/oss-bin/ossutil"
+          printf '%s\n' "$RUNNER_TEMP/oss-bin" >> "$GITHUB_PATH"
+      - name: Upload complete release to private OSS
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_SESSION_TOKEN: ${{ secrets.OSS_SESSION_TOKEN }}
+        run: |
+          test -n "$OSS_ACCESS_KEY_ID" && test -n "$OSS_ACCESS_KEY_SECRET" || { echo "Configure OSS AccessKey secrets"; exit 1; }
+          bash deploy/api/upload-release.sh "$RELEASE_ID" "$RUNNER_TEMP/api-release"
+      - name: Deployment reference
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          printf 'Release: %s\n\nOSS: oss://%s/%s/releases/%s/\n\nServer: bash deploy-release.sh %s\n\nFirst install: bash deploy-release.sh %s --init\n' \
+            "$RELEASE_ID" "$OSS_BUCKET" "$OSS_PREFIX" "$RELEASE_ID" "$RELEASE_ID" "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"

@@ -1,8 +1,8 @@
 import type { Bill, BillCategory, BillInput, BillSummary, CategoryId } from '@t-box/ledger-contracts'
-import { createRequestId } from '@t-box/app-shell-sdk'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { bookState } from '../books/bookStore'
 import { featureApi } from '../features/api'
+import { createRequestId } from '../runtime'
 
 import { formatDate, formatMoney, localDate, normalizeAmount } from './format'
 import { createLedgerApi } from './ledgerApi'

@@ -114,7 +114,7 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-浏览器部署可将 `app/dist` 放在静态站点服务器下，将 `/api` 反向代理到 API 服务，并为 `/api/v1/chat/ws` 和 `/api/v1/ledgers/ws` 开启 WebSocket Upgrade 转发。API 构建产物位于 `api/dist`，生产启动命令为 `pnpm --filter @t-box/api start`。
+浏览器部署可将 `app/dist` 放在静态站点服务器下，将 `/api` 反向代理到 API 服务，并为 `/api/v1/chat/ws` 和 `/api/v1/ledgers/ws` 开启 WebSocket Upgrade 转发。API 构建产物位于 `api/dist`，生产启动命令为 `pnpm --filter @t-box/api start`。所有 GitHub 工作流均为手动触发。PM2 方式使用 [构建发布包并上传服务器说明](docs/api-pm2-deployment.md)：上传到独立版本目录，生产配置、数据库迁移和 PM2 启动由运维手动完成。可选的阿里云 / 宝塔 Docker 部署使用 [GitHub Actions → OSS 镜像归档 → Compose 部署说明](docs/api-docker-deployment.md)：Actions 导出镜像包、SHA-256 与发布清单并上传私有 OSS；服务器脚本校验、导入并部署本地镜像，无需镜像仓库。包含数据库迁移、健康检查、回滚、资源和密钥持久化以及 HTTPS/WSS 代理。
 
 ## iOS / Android 开发热更新
 
@@ -207,6 +207,8 @@ API 默认监听 `127.0.0.1`，跨域来源通过 `CORS_ORIGINS` 配置。公开
 
 ## 独立应用与市场
 
-计算器已迁至 `apps/calculator`，支持独立 Web 容器和前后端工具。记账是可卸载的用户应用，其余现有应用为可升级、不可卸载的系统应用。后台新增“应用发布”，支持构建目录上传、版本草稿、提交、发布与历史版本切换；记账目前仍随宿主构建，尚未迁移为独立 Web 产物。`pnpm dev` 同时启动计算器开发服务（5176）和静态产物服务（6176）；单独启动宿主时也要运行 `pnpm dev:apps`。首次拉取结构变更执行 `pnpm install && pnpm db:init`。详见 [独立应用平台](docs/application-platform.md)。
+独立应用支持手动 GitHub Actions 构建、上传私有 OSS、自动登记为已提交版本，管理员再手动上架。运行 `pnpm apps:workflow` 扫描 `apps/*/build.config.json` 并更新 Actions 应用下拉选项；生成结果需要提交到 Git。服务器配置、导入凭证与操作步骤见 [应用 Actions 发布](docs/application-actions-release.md)。
+
+计算器（`apps/calculator`）和记账（`apps/ledger`）支持独立 Web 容器与 Actions 发布。记账是可卸载的用户应用，其余现有应用为可升级、不可卸载的系统应用。后台“应用发布”支持构建目录上传、版本草稿、提交、发布与历史版本切换。`pnpm dev` 同时启动计算器（5176）、记账（5177）和静态产物服务（6176）；单独启动宿主时也要运行 `pnpm dev:apps`。首次拉取结构变更执行 `pnpm install && pnpm db:init`。详见 [独立应用平台](docs/application-platform.md)及[安装与故障隔离](docs/application-installation-health.md)。
 
 节假日同步、年度管理与缓存：[日历节假日数据](docs/calendar-holidays.md)。

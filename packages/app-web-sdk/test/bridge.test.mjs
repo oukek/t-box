@@ -21,7 +21,7 @@ const context = {
     'storage.remove',
   ],
 }
-function host(handler, sdkContext = context) {
+function host(handler, sdkContext = context, referrer = 'https://host.example/app') {
   const handlers = new Set()
   const parent = {}
   globalThis.window = {
@@ -35,8 +35,8 @@ function host(handler, sdkContext = context) {
       handlers.delete(callback)
     },
   }
-  globalThis.location = { hash: '#tbox-host=https%3A%2F%2Fhost.example' }
-  globalThis.document = { referrer: 'https://host.example/app' }
+  globalThis.location = { hash: '#tbox-host=https%3A%2F%2Fhost.example', origin: 'https://app.example' }
+  globalThis.document = { referrer }
   const channel = new MessageChannel()
   const messages = []
   channel.port1.onmessage = async ({ data }) => {
@@ -178,5 +178,43 @@ test('frontend tools keep their registration protocol alongside SDK calls', asyn
   } finally {
     connection?.client.dispose()
     h.close()
+  }
+})
+
+test('JSON attachment requests have a bounded larger budget without expanding ordinary tool calls', async () => {
+  const f = host(async (data, port) => {
+    port.postMessage({ type: 'response', id: data.id, ok: true, data: { accepted: true } })
+  })
+  const connected = await f.connect()
+  try {
+    assert.deepEqual(await connected.client.api.request('/ledgers/book/attachment-resources', {
+      method: 'POST',
+      body: { base64: 'a'.repeat(100_000) },
+    }), { accepted: true })
+    await assert.rejects(connected.client.api.invoke('ordinary', { padding: 'a'.repeat(64_001) }), /过大/)
+    await assert.rejects(connected.client.api.request('/ledgers/book/attachment-resources', {
+      method: 'POST',
+      body: { base64: 'a'.repeat(15 * 1024 * 1024) },
+    }), /过大/)
+  } finally {
+    connected.client.dispose()
+    f.close()
+  }
+})
+
+test('iframe self reload preserves its original host origin while foreign referrers are rejected', async () => {
+  const reloaded = host(undefined, context, 'https://app.example/')
+  try {
+    const connection = await reloaded.connect()
+    assert.equal(connection.context.subject, context.subject)
+    connection.client.dispose()
+  } finally {
+    reloaded.close()
+  }
+  const foreign = host(undefined, context, 'https://foreign.example/')
+  try {
+    await assert.rejects(connectAppClient(), /来源无效/)
+  } finally {
+    foreign.close()
   }
 })

@@ -8,3 +8,4 @@ export * from './features.js'
 export * from './ledger.js'
 
 export * from './manifest.js'
+export * from './navigation.js'

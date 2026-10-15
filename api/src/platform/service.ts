@@ -14,6 +14,7 @@ import { ResourceAccessRegistry } from '../agent/access.js'
 import {
   builtinKinds,
   deployedApplications,
+  deploymentIssues,
 } from '../application-platform/catalog.js'
 import { ApplicationPlatform } from '../application-platform/service.js'
 import { createApplicationResourceAdapters } from '../applications/registry.js'
@@ -59,6 +60,7 @@ export class PlatformService {
       source,
       deployedApplications,
       builtinKinds,
+      { shellMigrations: ['ledger'], deploymentIssues },
     )
     this.applications.bind('calculator', calculatorBackend)
     this.desktop = new DesktopService(source, this.applications)

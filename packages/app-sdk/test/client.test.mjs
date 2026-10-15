@@ -232,3 +232,27 @@ test('storage CRUD and capability detection use the same public protocol', async
   )
   f.client.dispose()
 })
+
+test('scoped HTTP, stable mutations and resource bindings share the authenticated host transport', async () => {
+  const f = fixture(async () => ({ data: { id: 'book' } }))
+  await f.client.api.request('/ledgers', { method: 'GET' })
+  await f.client.api.mutate('/ledgers/book', 'PATCH', { name: '新名称' })
+  await f.client.resources.setBindings([{ appId: 'ledger', resourceType: 'book', resourceId: 'book' }])
+  assert.equal(f.calls[0].method, 'api.request')
+  assert.deepEqual(f.calls[1].args, { path: '/ledgers/book', method: 'PATCH', body: { name: '新名称' }, stable: true })
+  assert.equal(f.calls[2].method, 'resources.bindings')
+  assert.ok(!JSON.stringify(f.calls.map((v) => v.args)).includes('Authorization'))
+  f.client.dispose()
+})
+
+test('navigation and interaction cancellation events stop on runtime disposal', () => {
+  const f = fixture()
+  const received = []
+  f.client.runtime.onNavigate((params) => received.push(params))
+  f.client.runtime.onInteractionCancel(() => received.push('cancelled'))
+  f.emit('runtime.navigation', { ledgerId: 'book' })
+  f.emit('runtime.interactions.cancelled', {})
+  f.client.dispose()
+  f.emit('runtime.navigation', { ledgerId: 'stale' })
+  assert.deepEqual(received, [{ ledgerId: 'book' }, 'cancelled'])
+})

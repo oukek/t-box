@@ -1,6 +1,6 @@
 import type { Ledger } from '@t-box/ledger-contracts'
-import { identity } from '@t-box/app-shell-sdk'
 import { computed, reactive, readonly } from 'vue'
+import { identity } from '../runtime'
 import { booksApi } from './booksApi'
 
 const state = reactive({

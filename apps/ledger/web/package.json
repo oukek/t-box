@@ -10,18 +10,24 @@
     "./*.css": "./src/*.css"
   },
   "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5177 --strictPort",
+    "build": "vue-tsc --noEmit && vite build && node ../../../scripts/build-application-artifact.mjs ledger",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@t-box/app-contracts": "workspace:*",
-    "@t-box/app-shell-sdk": "workspace:*",
+    "@t-box/app-sdk": "workspace:*",
+    "@t-box/app-web-sdk": "workspace:*",
     "@t-box/ledger-contracts": "workspace:*",
     "@t-box/shared": "workspace:*",
     "@t-box/ui-kit": "workspace:*",
     "vue": "3.5.43"
   },
   "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@vitejs/plugin-vue": "6.0.9",
     "typescript": "~5.9.3",
+    "vite": "8.3.2",
     "vue-tsc": "^3.2.5"
   }
 }

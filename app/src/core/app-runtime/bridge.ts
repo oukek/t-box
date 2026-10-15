@@ -2,6 +2,8 @@ import type { BridgeRequest, BridgeResponse, HostMethod, RuntimeDescriptor } fro
 import {
   APP_PROTOCOL,
   APP_SDK_VERSION,
+  applicationPayloadLimit,
+  createApplicationRequestId,
 } from '@t-box/app-contracts'
 import { AppSdkError } from '@t-box/app-sdk'
 import { request } from '../network'
@@ -11,6 +13,8 @@ import { createHostTransport } from './sdkHost'
 export interface AppConnection {
   invoke(name: string, args: unknown): Promise<unknown>
   close(): void
+  cancelInteractions(): void
+  navigate(params: Record<string, string>): void
 }
 // Vite may replace the module while an iframe remains mounted. Keep its live channel
 // available to the new tool dispatcher instead of creating a second empty registry.
@@ -60,7 +64,7 @@ export function connectFrame(
   params: Record<string, string>,
 ) {
   const channel = new MessageChannel()
-  const nonce = crypto.randomUUID()
+  const nonce = createApplicationRequestId()
   const userId = identity.user?.id
   const pending = new Map<
     string,
@@ -80,10 +84,11 @@ export function connectFrame(
   })
   // A failed load can reject before an AI tool waits for it. The page still displays the actual error.
   void promise.catch(() => {})
+  const currentParams = { ...params }
   const transport = createHostTransport({
     appId: runtime.appId,
     expected: runtime,
-    params,
+    params: currentParams,
   })
   const stopEvents = transport.listen((event) => {
     if (!closed) {
@@ -155,17 +160,25 @@ export function connectFrame(
       clearTimeout(timer)
       resolveReady({
         close: () => close(),
+        cancelInteractions: () => channel.port1.postMessage({ type: 'event', name: 'runtime.interactions.cancelled', data: {} }),
+        navigate: (params) => {
+          for (const key of Object.keys(currentParams)) {
+            delete currentParams[key]
+          }
+          Object.assign(currentParams, params)
+          channel.port1.postMessage({ type: 'event', name: 'runtime.navigation', data: params })
+        },
         invoke: async (name, args) => {
           await current()
           if (!runtime.clientTools.includes(name)) {
             throw new Error('未授权的应用工具')
           }
           return new Promise((resolve, reject) => {
-            const id = crypto.randomUUID()
+            const id = createApplicationRequestId()
             const timeout = setTimeout(() => {
               pending.delete(id)
               reject(new Error('应用工具执行超时'))
-            }, 15000)
+            }, 300_000)
             pending.set(id, { resolve, reject, timer: timeout })
             channel.port1.postMessage({
               type: 'request',
@@ -213,7 +226,7 @@ export function connectFrame(
     }
     const r = data as BridgeRequest
     try {
-      if (JSON.stringify(r.args).length > 64000) {
+      if (JSON.stringify(r.args).length > applicationPayloadLimit(r.method)) {
         throw new Error('应用请求内容过大')
       }
       const value = await transport.call(r.method as HostMethod, r.args, {
@@ -314,4 +327,12 @@ export function closeApplicationRuntimes() {
     connection.close()
   }
   connections.clear()
+}
+/** Trusted application adapters delegate interaction UI into their isolated application. */
+export async function invokeDeclaredApplicationTool(appId: string, tool: string, args: unknown, open: (value: unknown) => Promise<unknown>) {
+  const runtime = await descriptor(appId)
+  return invokeApplicationTool({ appId, releaseId: runtime.releaseId, generation: runtime.generation, tool, arguments: args }, open)
+}
+export function cancelApplicationInteractions(appId: string) {
+  void connections.get(appId)?.promise.then((connection) => connection.cancelInteractions()).catch(() => {})
 }

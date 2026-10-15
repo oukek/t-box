@@ -34,10 +34,12 @@ export interface AppInstallation {
   status: InstallationStatus
   operationId: string | null
   grants: string[]
+  error?: string | null
 }
 export interface MarketEntry {
   release: AppRelease
   installation: AppInstallation | null
+  issue?: string | null
 }
 export interface LifecycleRequest {
   operationId: string
@@ -148,5 +150,6 @@ export interface ApplicationPublicationEvent {
 
 export * from './capabilities.js'
 export * from './desktop-appearance.js'
+export * from './identifiers.js'
 export * from './resources.js'
 export * from './sdk.js'

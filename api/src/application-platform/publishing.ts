@@ -29,6 +29,12 @@ export const validVersion = (v: unknown): v is string =>
   /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?$/i.test(
     v,
   )
+export interface BuildImport {
+  sha256: string
+  objectUrl: string
+  source: { repository: string, commit: string, runId: string }
+  credentialId: string
+}
 export class ApplicationPublishing {
   readonly origin: string
   constructor(
@@ -166,7 +172,7 @@ export class ApplicationPublishing {
   }
 
   /** Draft data never supplies executable server bindings. Existing capability contracts are copied from trusted deployment. */
-  async save(input: unknown, actor: string, editingId?: string) {
+  async save(input: unknown, actor: string, editingId?: string, build?: BuildImport) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) {
       fail('版本内容无效')
     }
@@ -238,6 +244,18 @@ export class ApplicationPublishing {
       )
       if (application.kind !== b.kind) {
         fail('应用类型已固定，不能通过更新版本改变系统应用的卸载规则')
+      }
+      if (build) {
+        const [previous] = await db.query(
+          'SELECT i.bundle_sha256,r.release_id,r.revision,r.status FROM application_build_imports i JOIN application_releases r ON r.release_id=i.release_id WHERE i.app_id=? AND i.version=?',
+          [appId, b.version],
+        )
+        if (previous) {
+          if (previous.bundle_sha256 !== build.sha256) {
+            throw new ApiError(409, 'APP_BUILD_CONFLICT', '此版本已经提交其他构建，请使用新的版本号')
+          }
+          return { releaseId: previous.release_id as string, revision: Number(previous.revision), status: previous.status as string }
+        }
       }
       const all = await db.query(
         'SELECT * FROM application_releases WHERE app_id=? ORDER BY published DESC,created_at DESC',
@@ -313,6 +331,12 @@ export class ApplicationPublishing {
         defaultInstalled: base?.defaultInstalled ?? false,
       }
       validateRelease(release)
+      if (build) {
+        const readiness = await this.readiness(release)
+        if (!readiness.ready) {
+          fail(readiness.reason)
+        }
+      }
       if (old) {
         await db.query(
           'UPDATE application_releases SET definition=?,definition_hash=?,release_notes=?,revision=revision+1 WHERE release_id=?',
@@ -332,7 +356,18 @@ export class ApplicationPublishing {
         actor,
         { version: b.version, definitionHash: hash(release) },
       )
-      return { releaseId, revision: old ? Number(old.revision) + 1 : 1 }
+      if (build) {
+        await db.query(
+          'INSERT INTO application_build_imports(app_id,version,release_id,bundle_sha256,object_url,source,credential_id) VALUES(?,?,?,?,?,?,?)',
+          [appId, b.version, releaseId, build.sha256, build.objectUrl, JSON.stringify(build.source), build.credentialId],
+        )
+        await db.query(
+          'UPDATE application_releases SET status=\'submitted\',submitted_by=?,submitted_at=UTC_TIMESTAMP(3) WHERE release_id=?',
+          [actor, releaseId],
+        )
+        await this.audit(db, appId, releaseId, 'submit', actor, { ...build, origin: 'github_actions' })
+      }
+      return { releaseId, revision: old ? Number(old.revision) + 1 : 1, status: build ? 'submitted' : 'draft' }
     })
   }
 

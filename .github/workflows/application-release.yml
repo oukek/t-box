@@ -1,0 +1,81 @@
+name: Application OSS submission
+
+on:
+  workflow_dispatch:
+    inputs:
+      application:
+        description: Independently buildable application
+        type: choice
+        required: true
+        options:
+          # BEGIN GENERATED APPLICATIONS
+          - calculator
+          - ledger
+        # END GENERATED APPLICATIONS
+      version:
+        description: New version (e.g. 1.0.1; cannot replace an existing version)
+        type: string
+        required: true
+      release_notes:
+        description: Release notes shown in the administration panel
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-release-${{ inputs.application }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APPLICATION: ${{ inputs.application }}
+      VERSION: ${{ inputs.version }}
+      APP_RELEASE_NOTES: ${{ inputs.release_notes }}
+      APP_RELEASE_OUTPUT: ${{ runner.temp }}/application-releases
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - uses: pnpm/action-setup@v6
+      - name: Check generated application choices
+        run: node scripts/generate-application-workflow.mjs --check
+      - run: pnpm install --frozen-lockfile
+      - name: Release script regressions
+        run: node --test scripts/application-release.test.mjs
+      - name: Build selected application and package static bundle
+        run: node scripts/pack-application-release.mjs "$APPLICATION" "$VERSION"
+      - name: Install verified ossutil 2.4.0
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 180 \
+            https://gosspublic.alicdn.com/ossutil/v2/2.4.0/ossutil-2.4.0-linux-amd64.zip \
+            -o "$RUNNER_TEMP/ossutil.zip"
+          printf '85edf66b2fb7238f5c7e25cab820cf29312319fe4935b7c86a6b8485eb434f3c  %s\n' "$RUNNER_TEMP/ossutil.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/ossutil.zip" -d "$RUNNER_TEMP/ossutil"
+          mkdir -p "$RUNNER_TEMP/oss-bin"
+          install -m 755 "$RUNNER_TEMP/ossutil/ossutil-2.4.0-linux-amd64/ossutil" "$RUNNER_TEMP/oss-bin/ossutil"
+          printf '%s\n' "$RUNNER_TEMP/oss-bin" >> "$GITHUB_PATH"
+      - name: Upload to OSS and register submitted version (never publish)
+        env:
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_REGION: ${{ vars.OSS_REGION }}
+          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
+          APP_OSS_PREFIX: ${{ vars.APP_OSS_PREFIX || 't-box/apps' }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_SESSION_TOKEN: ${{ secrets.OSS_SESSION_TOKEN }}
+          APP_IMPORT_API_URL: ${{ vars.APP_IMPORT_API_URL }}
+          APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
+        run: node scripts/submit-application-release.mjs "$APPLICATION" "$VERSION"
+      - name: Submission reference
+        run: |
+          printf 'Application: %s\n\nVersion: %s\n\nBuild registered as submitted. Open the administration application page, review this version, then publish manually.\n' \
+            "$APPLICATION" "$VERSION" >> "$GITHUB_STEP_SUMMARY"

@@ -258,6 +258,7 @@ const eventNames: Record<string, string> = {
   edit_draft: '修改草稿',
   submit: '提交版本',
   publish: '发布版本',
+  migrate_runtime: '迁移为独立应用',
 }
 onMounted(load)
 </script>
@@ -606,8 +607,7 @@ onMounted(load)
     <p v-if="!events.length" class="muted">还没有后台发布操作。</p>
     <ol class="publication-events">
       <li v-for="event in events" :key="event.id">
-        <strong>{{ eventNames[event.action] || event.action }}</strong><time>{{ date(event.createdAt) }}</time><small>{{ event.releaseId }} · 管理员
-          {{ event.administratorId.slice(0, 8) }}</small>
+        <strong>{{ eventNames[event.action] || event.action }}</strong><time>{{ date(event.createdAt) }}</time><small>{{ event.releaseId }} · {{ event.administratorId === '00000000-0000-0000-0000-000000000000' ? '系统迁移' : `管理员 ${event.administratorId.slice(0, 8)}` }}</small>
       </li>
     </ol>
   </AdminDialog>
