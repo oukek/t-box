@@ -1,4 +1,5 @@
 import type { ApplicationClientInteraction, ApplicationManifest } from '@t-box/app-contracts'
+import { applicationIcon } from './icon.js'
 
 export type CalendarKind = 'event' | 'anniversary' | 'birthday' | 'task'
 export type CalendarFrequency =
@@ -65,8 +66,10 @@ export const calendarManifest = {
   name: '日历',
   description: '日程安排、重要纪念日与提醒。',
   icon: 'calendar',
+  iconAsset: applicationIcon,
+  iconVariant: 'calendar',
   color: 'orange',
-  version: '1.0.0',
+  version: '1.1.1',
   skillIds: ['calendar_planning'],
 } as const satisfies ApplicationManifest
 export const calendarClientInteractions = [

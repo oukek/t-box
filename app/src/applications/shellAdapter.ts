@@ -12,6 +12,7 @@ import {
 import { appInfo } from '../core/appInfo'
 import { applicationMutation } from '../core/applicationMutation'
 import { presentApplication } from '../core/applications'
+import { desktopAppearance, refreshDesktopAppearance, releaseWallpaperPreviews, saveDesktopWallpapers, uploadDesktopWallpaper } from '../core/desktopAppearance'
 import { createRequestId } from '../core/identifiers'
 import {
   backFromApplication,
@@ -42,6 +43,10 @@ export function initializeApplicationShell() {
     openAccountSettings,
     openProfile,
     setPreference,
+    refreshDesktopAppearance,
+    saveDesktopWallpapers,
+    uploadDesktopWallpaper,
+    releaseWallpaperPreviews,
     logout,
     updateNickname,
     refreshCatalog,
@@ -66,6 +71,7 @@ export function initializeApplicationShell() {
         },
         navigation: { backTo: navigation.backTo },
         preferences,
+        desktopAppearance,
         appInfo,
         appCatalog: { ...appCatalog },
       })

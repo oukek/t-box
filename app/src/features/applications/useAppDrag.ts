@@ -11,7 +11,7 @@ export function useAppDrag(
 ) {
   const drag = reactive({ appId: '', x: 0, y: 0 })
   let press:
-    | { id: number, appId: string, x: number, y: number, capture: HTMLElement } |
+    | { id: number, appId: string, x: number, y: number, capture: HTMLElement, held: boolean } |
     undefined
   let hold: ReturnType<typeof setTimeout> | undefined
   let before: string[] = []
@@ -22,12 +22,15 @@ export function useAppDrag(
     const previous = press
     press = undefined
     drag.appId = ''
+    if (previous?.held) {
+      blockedUntil = performance.now() + 500
+    }
     if (previous?.capture.hasPointerCapture(previous.id)) {
       previous.capture.releasePointerCapture(previous.id)
     }
   }
   const start = (event: PointerEvent, appId: string) => {
-    if (event.button !== 0 || !canEdit()) {
+    if (event.button !== 0 || event.isPrimary === false || !canEdit()) {
       return
     }
     reset()
@@ -45,13 +48,20 @@ export function useAppDrag(
       x: event.clientX,
       y: event.clientY,
       capture,
+      held: false,
     }
     moved = false
     before = [...order.value]
     if (!editing.value) {
       hold = setTimeout(() => {
+        if (!press || !canEdit()) {
+          reset()
+          return
+        }
         editing.value = true
-        blockedUntil = performance.now() + 600
+        press.held = true
+        blockedUntil = Number.POSITIVE_INFINITY
+        press.capture.setPointerCapture(press.id)
       }, 450)
     }
   }
@@ -116,6 +126,12 @@ export function useAppDrag(
       reset()
     }
   }
+  const touchMove = (event: TouchEvent) => {
+    // Keep normal scrolling before the hold; an activated hold owns this gesture.
+    if (editing.value && press && event.cancelable) {
+      event.preventDefault()
+    }
+  }
   onScopeDispose(reset)
-  return { drag, start, move, end, cancel, lost, leave, consumeClick }
+  return { drag, start, move, end, cancel, lost, leave, touchMove, consumeClick }
 }

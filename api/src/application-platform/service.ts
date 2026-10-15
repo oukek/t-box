@@ -744,6 +744,7 @@ export class ApplicationPlatform {
         'navigation.back',
         'navigation.open',
         ...(installation.grants.includes('api.request') ? ['api.request' as const] : []),
+        ...(installation.grants.includes('device.reminders') ? ['device.reminders' as const] : []),
         ...(installation.grants.includes('resources.bindings') ? ['resources.bindings' as const] : []),
         ...(release.backend.type !== 'none' ? ['api.invoke' as const] : []),
         ...(installation.grants.includes('storage')

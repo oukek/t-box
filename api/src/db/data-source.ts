@@ -26,6 +26,7 @@ import { ConversationPresentation1791244807000 } from './migrations/Conversation
 import { ConversationResources1791244802000 } from './migrations/ConversationResources.js'
 import { ConversationRevision1791244806000 } from './migrations/ConversationRevision.js'
 import { CustomerSupport1791244813000 } from './migrations/CustomerSupport.js'
+import { DesktopAppearance1791244836000 } from './migrations/DesktopAppearance.js'
 import { DesktopLayouts1791244817000 } from './migrations/DesktopLayouts.js'
 import { DurableTasks1791244804000 } from './migrations/DurableTasks.js'
 import { InitialSchema1791158400000 } from './migrations/InitialSchema.js'
@@ -95,6 +96,7 @@ export function createDataSource(config = getConfig().mysql) {
       LedgerCategoryIcons1791244833000,
       ApplicationImports1791244834000,
       ApplicationInstallationHealth1791244835000,
+      DesktopAppearance1791244836000,
     ],
     migrationsTransactionMode: 'none',
     migrationsTableName: 'schema_migrations',

@@ -6,6 +6,7 @@ import { defineAsyncComponent } from 'vue'
 export const marketModule: ClientApplicationModule = {
   contractVersion: APPLICATION_CONTRACT_VERSION,
   manifest: marketManifest,
+  shellCompatibility: { minimumVersion: '1.0.0' },
   navigation: 'shell',
   sdk: { restPrefixes: [], storage: true },
   installation: { kind: 'system' },

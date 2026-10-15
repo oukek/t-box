@@ -11,6 +11,7 @@ import { cleanupUsers } from './fixtures.js'
 const source = await createDataSource().initialize()
 const marker = randomUUID().slice(0, 8)
 const legacyId = 'test_migrate_' + marker
+const systemId = 'test_system_migrate_' + marker
 const brokenId = 'test_broken_' + marker
 const slowId = 'test_slow_' + marker
 const users: string[] = []
@@ -28,6 +29,7 @@ const fixture = (appId: string, kind: 'user' | 'system' = 'user'): AppRelease =>
   defaultInstalled: true,
 })
 const legacy = fixture(legacyId)
+const legacySystem = fixture(systemId, 'system')
 const broken = { ...fixture(brokenId, 'system'), backend: { type: 'local' as const, binding: brokenId } }
 let shouldReject = true
 let attempts = 0
@@ -55,7 +57,7 @@ try {
   const a = await identity.register({ username: 'health_a_' + marker, password: 'test123', nickname: '测试甲' }, 'health-fixture')
   const b = await identity.register({ username: 'health_b_' + marker, password: 'test123', nickname: '测试乙' }, 'health-fixture')
   users.push(a.user.id, b.user.id)
-  const original = bind(new ApplicationPlatform(source, [legacy, broken]))
+  const original = bind(new ApplicationPlatform(source, [legacy, broken, legacySystem]))
   await original.catalog(a.user.id)
   await original.catalog(b.user.id)
   const oldInstall = (await original.assertActive(a.user.id, legacyId)).installation
@@ -71,7 +73,13 @@ try {
     runtime: { type: 'web', entryUrl: 'http://localhost:5177/', integrity: 'sha256-' + '0'.repeat(64) },
     permissions: ['api.request', 'storage', 'resources.bindings'],
   }
-  const migrated = bind(new ApplicationPlatform(source, [upgraded, broken], {}, { shellMigrations: [legacyId] }))
+  const upgradedSystem: AppRelease = { ...legacySystem, releaseId: systemId + '-1.1.0-web', manifest: { ...legacySystem.manifest, version: '1.1.0' }, runtime: { type: 'web', entryUrl: 'http://localhost:5178/', integrity: 'sha256-' + '0'.repeat(64) }, permissions: ['api.request', 'storage', 'device.reminders'] }
+  const migrated = bind(new ApplicationPlatform(source, [upgraded, broken, upgradedSystem], {}, { shellMigrations: [legacyId, systemId] }))
+  const system = await migrated.assertActive(a.user.id, systemId)
+  assert.equal(system.release.runtime.type, 'web')
+  assert.deepEqual(system.installation.grants, upgradedSystem.permissions)
+  assert.ok((await migrated.context(a.user.id, systemId, 'web')).capabilities.includes('device.reminders'))
+  await assert.rejects(migrated.change(a.user.id, systemId, 'uninstall', upgradedSystem.releaseId, randomUUID(), []), /系统应用/)
   const current = await migrated.assertActive(a.user.id, legacyId)
   assert.equal(current.release.releaseId, upgraded.releaseId)
   assert.equal(current.installation.generation, oldInstall.generation + 1)
@@ -146,7 +154,7 @@ try {
   if (slowDone) {
     await slowDone
   }
-  for (const appId of [legacyId, brokenId, slowId]) {
+  for (const appId of [legacyId, brokenId, slowId, systemId]) {
     await source.query('DELETE FROM application_lifecycle_operations WHERE app_id=?', [appId])
     await source.query('DELETE FROM application_installations WHERE app_id=?', [appId])
     await source.query('DELETE FROM application_publication_events WHERE app_id=?', [appId])

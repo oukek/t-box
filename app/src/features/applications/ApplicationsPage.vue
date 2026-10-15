@@ -3,8 +3,9 @@ import type { DesktopApplication } from '@t-box/shared'
 import { desktopIconSizes } from '@t-box/app-contracts'
 import { moveDesktopApp } from '@t-box/shared'
 import { AppIcon, Modal } from '@t-box/ui-kit'
+import { useLauncherClock } from '@t-box/ui-kit/launcherClock'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { repairInstallation } from '../../core/app-runtime/catalog'
 import { getApplication, presentApplication } from '../../core/applications'
 import {
@@ -15,14 +16,14 @@ import { preferences } from '../../core/preferences'
 import { identity } from '../../core/session'
 import { useAppDrag } from './useAppDrag'
 import { useDesktop } from './useDesktop'
+import { useDesktopWallpaper } from './useDesktopWallpaper'
 
 const desktop = useDesktop()
+const wallpaperStyle = useDesktopWallpaper()
 const iconStyle = computed(() => {
   const size = desktopIconSizes[preferences.iconSize]
   return {
-    '--desktop-columns': size.columns,
-    '--desktop-icon-pc': `${size.pc}px`,
-    '--desktop-icon-mobile': `${size.mobile}px`,
+    '--desktop-icon-size': `${size.pixels}px`,
   }
 })
 const editing = ref(false)
@@ -43,11 +44,7 @@ async function repair(appId: string) {
     repairing.value = false
   }
 }
-const now = ref(new Date())
-const clockTimer = setInterval(() => {
-  now.value = new Date()
-}, 15000)
-onBeforeUnmount(() => clearInterval(clockTimer))
+const now = useLauncherClock(() => true)
 const time = computed(() =>
   now.value.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
@@ -55,6 +52,8 @@ const time = computed(() =>
     hour12: false,
   }),
 )
+const seconds = computed(() => String(now.value.getSeconds()).padStart(2, '0'))
+const fullTime = computed(() => `${time.value}:${seconds.value}`)
 const date = computed(() =>
   now.value.toLocaleDateString('zh-CN', {
     month: 'long',
@@ -109,6 +108,16 @@ function finish() {
   sort.cancel()
   editing.value = false
 }
+function beginEditing() {
+  if (desktop.state.ready) {
+    editing.value = true
+  }
+}
+function desktopClick(event: MouseEvent) {
+  if (editing.value && event.target instanceof Element && !event.target.closest('.desktop-grid, .desktop-control, dialog, .desktop-feedback')) {
+    finish()
+  }
+}
 function move(appId: string, direction: number) {
   const target = order.value[order.value.indexOf(appId) + direction]
   if (!target || !desktop.state.ready) {
@@ -118,6 +127,11 @@ function move(appId: string, direction: number) {
   desktop.reorder(order.value)
 }
 function keyboard(event: KeyboardEvent, appId: string) {
+  if (event.key === 'F2' || event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+    event.preventDefault()
+    beginEditing()
+    return
+  }
   if (!editing.value || !['ArrowLeft', 'ArrowRight'].includes(event.key)) {
     return
   }
@@ -140,28 +154,22 @@ const status = computed(() =>
     aria-label="OS 应用桌面"
     :class="{ 'is-editing': editing }"
     @keydown.esc="finish"
+    @click="desktopClick"
   >
-    <header class="desktop-statusbar">
-      <span class="desktop-brand"><span class="desktop-brand-dot" />T BOX <span>OS</span></span>
-      <button
-        v-if="editing"
-        class="desktop-control is-done"
-        @click="finish"
-      >
-        完成
-      </button>
-      <button
-        v-else
-        class="desktop-control"
-        :disabled="!desktop.state.ready"
-        @click="editing = true"
-      >
-        <AppIcon name="apps" :size="15" />整理
-      </button>
-    </header>
+    <div
+      class="desktop-wallpaper"
+      :style="wallpaperStyle"
+      aria-hidden="true"
+    />
+    <button
+      v-if="editing"
+      class="desktop-control is-done"
+      @click="finish"
+    >完成</button>
+    <p id="desktop-launch-help" class="sr-only">长按图标进入整理后可拖动排序；使用键盘时按 F2 进入整理，按 Esc 退出。</p>
     <div class="desktop-clock">
-      <time :datetime="now.toISOString()">{{ time }}</time>
       <p>{{ date }}</p>
+      <time :datetime="now.toISOString()" :aria-label="fullTime"><span>{{ time }}</span><span class="desktop-clock-seconds" aria-hidden="true">:{{ seconds }}</span></time>
     </div>
     <div
       v-if="desktop.state.error"
@@ -170,9 +178,6 @@ const status = computed(() =>
     >
       <AppIcon name="warning" :size="16" /><span>{{ desktop.state.error }}</span><button @click="desktop.retry">重试</button>
     </div>
-    <p class="desktop-sort-hint" aria-live="polite">
-      {{ status || (editing ? "拖动图标调整顺序，或点图标查看更多操作" : "") }}
-    </p>
     <div
       class="desktop-grid"
       role="list"
@@ -182,6 +187,7 @@ const status = computed(() =>
       @pointercancel="sort.cancel"
       @lostpointercapture="sort.lost"
       @pointerleave="sort.leave"
+      @touchmove="sort.touchMove"
     >
       <article
         v-for="app in apps"
@@ -198,16 +204,17 @@ const status = computed(() =>
               ? `整理${app.manifest.name}，左右方向键移动`
               : `打开${app.manifest.name}`
           "
-          :aria-describedby="editing ? 'desktop-sort-help' : undefined"
+          :aria-describedby="editing ? 'desktop-sort-help' : 'desktop-launch-help'"
           @pointerdown="sort.start($event, app.manifest.id)"
           @keydown="keyboard($event, app.manifest.id)"
           @click="launch(app)"
-          @contextmenu.prevent="info = app"
+          @contextmenu.prevent="beginEditing"
         >
           <LauncherIcon
             :app-id="app.manifest.id"
             :icon="app.manifest.icon"
-            :day="now.getDate()"
+            :icon-asset="app.manifest.iconAsset"
+            :icon-variant="app.manifest.iconVariant"
           />
           <span class="desktop-app-name">{{ app.manifest.name }}</span>
           <small v-if="app.installation.status && app.installation.status !== 'active'" class="desktop-app-state">{{ app.installation.status === 'installing' ? '准备中…' : '暂不可用' }}</small>
@@ -223,6 +230,13 @@ const status = computed(() =>
       </article>
     </div>
     <p
+      v-if="status || editing"
+      class="desktop-sort-hint"
+      aria-live="polite"
+    >
+      {{ status || "拖动图标调整顺序，或点图标查看更多操作" }}
+    </p>
+    <p
       v-if="editing"
       id="desktop-sort-help"
       class="desktop-footnote"
@@ -230,7 +244,6 @@ const status = computed(() =>
       {{ desktop.device.value === "mobile" ? "移动端" : "PC" }}桌面单独保存 ·
       系统应用不可卸载
     </p>
-    <p v-else class="desktop-footnote">长按图标整理桌面</p>
     <div
       v-if="draggedApp"
       class="desktop-drag-ghost"
@@ -243,7 +256,8 @@ const status = computed(() =>
       <LauncherIcon
         :app-id="draggedApp.manifest.id"
         :icon="draggedApp.manifest.icon"
-        :day="now.getDate()"
+        :icon-asset="draggedApp.manifest.iconAsset"
+        :icon-variant="draggedApp.manifest.iconVariant"
       /><span>{{ draggedApp.manifest.name }}</span>
     </div>
     <Modal
@@ -256,7 +270,8 @@ const status = computed(() =>
           <LauncherIcon
             :app-id="info.manifest.id"
             :icon="info.manifest.icon"
-            :day="now.getDate()"
+            :icon-asset="info.manifest.iconAsset"
+            :icon-variant="info.manifest.iconVariant"
           />
           <div>
             <strong>{{ info.manifest.name }}</strong>

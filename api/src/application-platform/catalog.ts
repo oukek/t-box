@@ -1,7 +1,9 @@
 import type { AppRelease } from '@t-box/app-contracts'
 import { calculatorRelease } from '@t-box/calculator-server'
+import { calendarRelease } from '@t-box/calendar-server'
 import { ledgerRelease } from '@t-box/ledger-server'
 import { systemApplicationManifests } from '@t-box/shared'
+import { timeRelease } from '@t-box/time-server'
 import { resolveWebDeployment } from './deployment.js'
 
 export const deploymentIssues: Record<string, string> = {}
@@ -22,11 +24,12 @@ export const builtinKinds: Readonly<Record<string, AppRelease['kind']>> = {
   profile: 'system',
   market: 'system',
 }
+const webReleases: Record<string, AppRelease> = { calculator: calculatorRelease, ledger: ledgerRelease, calendar: calendarRelease, time: timeRelease }
 /** Build-time composition of trusted deployments. Legacy apps remain shell modules until migrated. */
 export const deployedApplications: readonly AppRelease[] =
   systemApplicationManifests.map((manifest) =>
-    manifest.id === 'calculator' || manifest.id === 'ledger'
-      ? webRelease(manifest.id === 'calculator' ? calculatorRelease : ledgerRelease)
+    webReleases[manifest.id]
+      ? webRelease(webReleases[manifest.id]!)
       : {
           appId: manifest.id,
           releaseId: `${manifest.id}-${manifest.version}`,

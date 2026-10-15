@@ -1,7 +1,8 @@
-import type { DesktopIconSize, LifecycleAction, MarketEntry } from '@t-box/app-contracts'
+import type { DesktopAppearanceState, DesktopIconSize, DesktopWallpapers, LifecycleAction, MarketEntry, WallpaperSource } from '@t-box/app-contracts'
 import type { AppTransport } from '@t-box/app-sdk'
 import type { ApplicationManifest, AppUser } from '@t-box/shared'
 import type { DeepReadonly } from 'vue'
+import { defaultDesktopWallpapers } from '@t-box/app-contracts'
 import { createAppClient } from '@t-box/app-sdk'
 import { reactive, readonly } from 'vue'
 
@@ -35,6 +36,10 @@ export interface ShellServices {
   openAccountSettings(): void
   openProfile(): Promise<unknown>
   setPreference(key: 'iconSize', value: DesktopIconSize): void
+  refreshDesktopAppearance(): Promise<void>
+  saveDesktopWallpapers(value: DesktopWallpapers): Promise<void>
+  uploadDesktopWallpaper(file: File): Promise<WallpaperSource>
+  releaseWallpaperPreviews(): void
   logout(): Promise<void>
   updateNickname(value: string): Promise<void>
   changePassword(currentPassword: string, newPassword: string): Promise<void>
@@ -51,6 +56,7 @@ export interface ShellState {
   identity: { user: AppUser | null, ready: boolean, error: string }
   navigation: { backTo: string }
   preferences: { iconSize: DesktopIconSize }
+  desktopAppearance: DesktopAppearanceState
   appInfo: { name: string, version: string, description: string }
   appCatalog: {
     entries: MarketEntry[]
@@ -63,12 +69,14 @@ const state = reactive<ShellState>({
   identity: { user: null, ready: false, error: '' },
   navigation: { backTo: 'applications' },
   preferences: { iconSize: 'medium' },
+  desktopAppearance: { revision: 0, wallpapers: defaultDesktopWallpapers(), loading: false, saving: false, error: '', imageUrls: {} },
   appInfo: { name: '', version: '', description: '' },
   appCatalog: { entries: [], loading: false, error: '', revision: 0 },
 })
 export const identity = readonly(state.identity)
 export const navigation = readonly(state.navigation)
 export const preferences = readonly(state.preferences)
+export const desktopAppearance = readonly(state.desktopAppearance)
 export const appInfo = readonly(state.appInfo)
 export const appCatalog = readonly(state.appCatalog)
 let services: ShellServices | undefined
@@ -106,6 +114,10 @@ export const openAccountSettings = () => host().openAccountSettings()
 export const openProfile = () => host().openProfile()
 export const setPreference = (key: 'iconSize', value: DesktopIconSize) =>
   host().setPreference(key, value)
+export const refreshDesktopAppearance = () => host().refreshDesktopAppearance()
+export const saveDesktopWallpapers = (value: DesktopWallpapers) => host().saveDesktopWallpapers(value)
+export const uploadDesktopWallpaper = (file: File) => host().uploadDesktopWallpaper(file)
+export const releaseWallpaperPreviews = () => host().releaseWallpaperPreviews()
 export const logout = () => host().logout()
 export const updateNickname = (value: string) => host().updateNickname(value)
 export const changePassword = (currentPassword: string, newPassword: string) =>

@@ -68,3 +68,9 @@ export function planReminders(
     truncated: unique.length > 48,
   }
 }
+
+/** A failed source must neither erase its alarms nor prevent other apps from syncing. */
+export function mergeReminderSources(owner: string, sources: readonly { appId: string, items: readonly ReminderItem[] | null }[], memory: readonly ReminderItem[], previous: ReminderPlan): ReminderItem[] {
+  const backup = [...(previous.owner === owner ? previous.notifications : []), ...memory]
+  return [...new Map(sources.flatMap((source) => (source.items ?? backup.filter((item) => item.destination.appId === source.appId)).map((item) => [item.key, item] as const))).values()].sort((a, b) => a.at.localeCompare(b.at))
+}

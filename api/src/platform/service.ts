@@ -60,7 +60,7 @@ export class PlatformService {
       source,
       deployedApplications,
       builtinKinds,
-      { shellMigrations: ['ledger'], deploymentIssues },
+      { shellMigrations: ['ledger', 'calendar', 'time'], deploymentIssues },
     )
     this.applications.bind('calculator', calculatorBackend)
     this.desktop = new DesktopService(source, this.applications)

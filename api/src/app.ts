@@ -208,10 +208,16 @@ export function createApp(deps: AppDependencies) {
       )
     }
     registerPlatform(app, deps.platform)
-    registerCalendar(app, deps.platform.calendar, (token) =>
-      deps.platform!.identity.authenticate(token))
-    registerTime(app, deps.platform.time, (token) =>
-      deps.platform!.identity.authenticate(token))
+    registerCalendar(app, deps.platform.calendar, async (token) => {
+      const actor = await deps.platform!.identity.authenticate(token)
+      await deps.platform!.applications?.assertActive(actor.user.id, 'calendar')
+      return actor
+    })
+    registerTime(app, deps.platform.time, async (token) => {
+      const actor = await deps.platform!.identity.authenticate(token)
+      await deps.platform!.applications?.assertActive(actor.user.id, 'time')
+      return actor
+    })
     registerCalculator(app, async (token) => {
       const actor = await deps.platform!.identity.authenticate(token)
       await deps.platform!.applications?.assertActive(

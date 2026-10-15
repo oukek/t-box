@@ -1,0 +1,17 @@
+@import '@t-box/ui-kit/base.css';
+html,
+body,
+#app {
+  min-height: 100%;
+}
+.application-frame {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px 20px;
+}
+@media (max-width: 760px) {
+  .application-frame {
+    padding: 8px 12px;
+  }
+}

@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import ReminderHost from '@t-box/device-reminders/ReminderHost.vue'
 import AccountSettingsPage from '@t-box/settings-web/pages/AccountSettingsPage.vue'
 import { AppIcon } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { applicationModules } from './applications/registry'
+import ApplicationLaunch from './core/app-runtime/ApplicationLaunch.vue'
+import ApplicationView from './core/app-runtime/ApplicationView.vue'
 import { closeApplicationRuntimes } from './core/app-runtime/bridge'
 import {
   appCatalog,
@@ -11,6 +14,7 @@ import {
   refreshCatalog,
   repairInstallation,
 } from './core/app-runtime/catalog'
+import { shellVersionCompatible } from './core/app-runtime/compatibility'
 import { clearApplicationBindings } from './core/app-runtime/resourceBindings'
 import { getApplication } from './core/applications'
 import {
@@ -69,23 +73,21 @@ const catalogTimer = setInterval(() => {
     void refreshCatalog()
   }
 }, 10_000)
-function hostCompatible(appId: string, version: string) {
+function hostCompatible(appId: string) {
   const entry = appCatalog.entries.find((e) => e.release.appId === appId)
-  return (
-    entry?.release.runtime.type !== 'shell' ||
-    !entry.installation?.version ||
-    entry.installation.version === version
-  )
+  const module = applicationModules.find((m) => m.manifest.id === appId)
+  return entry?.release.runtime.type !== 'shell' || !entry.installation?.version || !!(module && shellVersionCompatible(entry.installation.version, module.manifest.version, module.shellCompatibility?.minimumVersion))
 }
 const currentCompatible = computed(
   () =>
     !currentView.value ||
-    hostCompatible(
-      currentView.value.manifest.id,
-      currentView.value.manifest.version,
-    ),
+    hostCompatible(currentView.value.manifest.id),
 )
 let stopViewport: (() => void) | undefined
+const isWebHost = !window.Capacitor?.isNativePlatform?.()
+function reloadHost() {
+  location.reload()
+}
 function focusWorkspace() {
   document.getElementById('workspace')?.focus()
 }
@@ -168,31 +170,14 @@ onBeforeUnmount(() => {
       <PricingPage v-if="navigation.screen === 'pricing'" />
       <ResourcesPage v-if="navigation.screen === 'resources'" />
       <AccountSettingsPage v-if="navigation.screen === 'account'" />
-      <section
-        v-if="
-          navigation.screen === 'application'
-            && currentApplication
-            && currentView
-            && isInstalled(currentApplication.id)
-            && currentCompatible
-        "
-        class="application-workspace"
-      >
-        <ApplicationHeader
-          v-if="currentView.navigation === 'shell'"
-          :title="currentApplication.name"
-          :back-label="tabLabel(navigation.backTo)"
-          @back="backFromApplication"
-        />
-        <component
-          :is="currentView.component"
-          v-bind="
-            currentView.props(navigation.application?.params || {}, {
-              openRevision: navigation.revision,
-            })
-          "
-        />
-      </section>
+      <ApplicationView
+        v-if="navigation.screen === 'application' && currentApplication && currentView && isInstalled(currentApplication.id) && currentCompatible"
+        :key="currentApplication.id"
+        :module="currentView"
+        :application="currentApplication"
+        :params="navigation.application?.params || {}"
+        :open-revision="navigation.revision"
+      />
       <section
         v-else-if="navigation.screen === 'application' && currentApplication"
         class="application-unavailable"
@@ -202,7 +187,12 @@ onBeforeUnmount(() => {
           :back-label="tabLabel(navigation.backTo)"
           @back="backFromApplication"
         />
-        <div class="application-unavailable-body">
+        <ApplicationLaunch
+          v-if="appCatalog.loading || currentInstallation?.status === 'installing'"
+          :application="currentApplication"
+          stage="resolving"
+        />
+        <div v-else class="application-unavailable-body">
           <AppIcon name="apps" :size="28" />
           <h2>
             {{
@@ -210,27 +200,30 @@ onBeforeUnmount(() => {
                 ? "正在读取应用…"
                 : !currentCompatible
                   ? "需要更新宿主应用"
-                  : currentInstallation?.status === 'installing'
-                    ? "正在准备应用"
-                    : currentInstallation?.status === 'failed'
-                      ? "应用暂不可用"
-                      : "此应用尚未安装"
+                  : currentInstallation?.status === 'failed'
+                    ? "应用暂不可用"
+                    : "此应用尚未安装"
             }}
           </h2>
           <p v-if="!appCatalog.loading">
             {{
               installationError || (!currentCompatible
-                ? "请刷新网页，或更新 T Box 应用后再打开。"
+                ? (isWebHost ? "请刷新网页后重试。" : "请更新 T Box 应用后再打开。")
                 : "安装后可以继续使用，卸载前保存的数据仍然保留。")
             }}
           </p>
+          <button
+            v-if="!currentCompatible && isWebHost"
+            class="button button-primary"
+            @click="reloadHost"
+          >刷新网页</button>
           <button
             v-if="currentInstallation && currentInstallation.status !== 'active'"
             class="button button-primary"
             @click="retryCurrentApplication"
           >重试安装</button>
           <button
-            v-if="!appCatalog.loading"
+            v-if="!appCatalog.loading && currentApplication.id !== 'market' && isInstalled('market') && hostCompatible('market')"
             class="button button-primary"
             @click="openApplication({ appId: 'market' })"
           >
@@ -264,13 +257,14 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </nav>
+    <ReminderHost />
     <template v-for="module in applicationModules" :key="module.manifest.id">
       <component
         :is="module.host"
         v-if="
           module.host
             && isInstalled(module.manifest.id)
-            && hostCompatible(module.manifest.id, module.manifest.version)
+            && hostCompatible(module.manifest.id)
         "
       />
     </template>

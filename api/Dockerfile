@@ -8,7 +8,7 @@ RUN --mount=type=cache,id=tbox-pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store
 RUN pnpm build:api
 # This independently hosted system application is required by the production catalog.
-RUN pnpm -r --filter "@t-box/calculator-web..." --filter "@t-box/ledger-web..." --if-present build
+RUN pnpm -r --filter "@t-box/calculator-web..." --filter "@t-box/calendar-web..." --filter "@t-box/time-web..." --filter "@t-box/ledger-web..." --if-present build
 # Keep the pnpm 11 legacy implementation pinned; workspace files[] includes compiled dist.
 RUN --mount=type=cache,id=tbox-pnpm,target=/pnpm/store \
     pnpm --filter @t-box/api deploy --legacy --prod /runtime --store-dir=/pnpm/store

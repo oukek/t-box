@@ -2,6 +2,7 @@ import type {
   ApplicationDestination,
   ApplicationManifest,
 } from '@t-box/shared'
+import { presentApplicationIcon } from '@t-box/shared'
 import { computed } from 'vue'
 import { applicationModules } from '../applications/registry'
 import { isInstalled } from './app-runtime/catalog'
@@ -16,6 +17,7 @@ export function presentApplication(
   const module = applicationModules.find(
     (module) => module.manifest.id === manifest.id,
   )
+  manifest = presentApplicationIcon(manifest)
   return module?.installation.kind === 'system' && module.presentation
     ? { ...manifest, ...module.presentation }
     : manifest

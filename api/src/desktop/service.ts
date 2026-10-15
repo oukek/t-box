@@ -7,6 +7,7 @@ import {
   reconcileDesktopOrder,
   systemApplicationManifests,
 } from '@t-box/shared'
+import { DesktopAppearanceService } from './appearance.js'
 
 export const desktopDevice = (value: unknown): DesktopDevice => {
   if (value !== 'mobile' && value !== 'pc') {
@@ -16,6 +17,7 @@ export const desktopDevice = (value: unknown): DesktopDevice => {
 }
 /** The client can reorder installed apps, never declare installation type or remove system apps. */
 export class DesktopService {
+  readonly appearance: DesktopAppearanceService
   readonly manifests = systemApplicationManifests
   readonly catalogRevision = createHash('sha256')
     .update(JSON.stringify(this.manifests.map((m) => m.id)))
@@ -24,7 +26,9 @@ export class DesktopService {
   constructor(
     private readonly source: DataSource,
     private readonly platform?: ApplicationPlatform,
-  ) {}
+  ) {
+    this.appearance = new DesktopAppearanceService(source)
+  }
 
   async applications(
     userId: string,

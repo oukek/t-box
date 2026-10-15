@@ -28,10 +28,10 @@ const run = (command, args, options = {}) => execFileSync(command, args, { cwd: 
 try {
   await mkdir(payload)
   run('pnpm', ['build:api'])
-  run('pnpm', ['-r', '--filter', '@t-box/calculator-web...', '--filter', '@t-box/ledger-web...', '--if-present', 'build'])
+  run('pnpm', ['-r', '--filter', '@t-box/calculator-web...', '--filter', '@t-box/calendar-web...', '--filter', '@t-box/time-web...', '--filter', '@t-box/ledger-web...', '--if-present', 'build'])
   run('pnpm', ['--filter', '@t-box/api', 'deploy', '--legacy', '--prod', join(payload, 'api')])
   await verifyDeploymentLinks(join(payload, 'api'))
-  for (const appId of ['calculator', 'ledger']) {
+  for (const appId of ['calculator', 'ledger', 'calendar', 'time']) {
     const metadataOutput = run('node', ['scripts/build-application-artifact.mjs', appId], { stdio: 'pipe', encoding: 'utf8' })
     const digest = new RegExp(appId + '/([a-f0-9]{64})').exec(metadataOutput)?.[1]
     if (!digest) {

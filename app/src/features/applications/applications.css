@@ -1,106 +1,104 @@
-/* OS desktop: a quiet blue-hour wallpaper, with the application icons as the visual focus. */
+/* The wallpaper is a viewport layer, so adding apps never stretches the landscape. */
 .workspace-plane.workspace-plane--desktop {
   --workspace-gutter: 0px;
   --workspace-top: 0px;
   padding-top: 0;
   min-height: 100dvh;
+  position: relative;
+  isolation: isolate;
+  background: #173448;
+}
+.desktop-wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background:
-    radial-gradient(ellipse at 5% 12%, #ddebf8 0%, transparent 52%),
-    radial-gradient(ellipse at 93% 95%, #d7dfed 0%, transparent 55%),
-    linear-gradient(150deg, #ecf1f8, #e9edf7 52%, #e4edf1);
+    linear-gradient(
+      rgb(6 18 31 / var(--desktop-wallpaper-shade, 0.12)),
+      rgb(6 18 31 / var(--desktop-wallpaper-shade, 0.12))
+    ),
+    var(--desktop-wallpaper-image, url('/wallpapers/lake-dusk.jpg')) center / cover no-repeat;
 }
 .os-desktop {
-  --icon-size: var(--desktop-icon-pc, 76px);
+  --icon-size: var(--desktop-icon-size, 56px);
   min-height: calc(100dvh - var(--navigation-space) - env(safe-area-inset-bottom));
   max-width: 1120px;
   margin: 0 auto;
-  padding: 28px 48px 36px;
-  color: #243950;
+  padding: 28px 24px 36px;
+  color: #fff;
   position: relative;
 }
-.desktop-statusbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  height: 38px;
-}
-.desktop-brand {
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 2px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.desktop-brand > span:last-child {
-  font-size: 10px;
-  letter-spacing: 0.5px;
-  color: #7e90a5;
-  font-weight: 500;
-  margin-left: 4px;
-}
-.desktop-brand-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #507a9d;
-  box-shadow: 0 0 0 4px #ffffff70;
-}
 .desktop-control {
+  position: absolute;
+  top: 28px;
+  right: 24px;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #ffffff65;
-  border: 1px solid #ffffffa0;
-  border-radius: 20px;
-  color: #53687e;
+  background: #ffffff14;
+  border: 1px solid #ffffff24;
+  border-radius: 12px;
+  color: #fff;
+  backdrop-filter: blur(16px);
   font-size: 12px;
   min-height: 36px;
   padding: 6px 14px;
   transition: background 0.15s;
 }
 .desktop-control:hover {
-  background: #ffffffb0;
+  background: #ffffff29;
 }
 .desktop-control:disabled {
   opacity: 0.5;
 }
 .desktop-control.is-done {
-  background: #344e69;
-  color: #fff;
-  border-color: #344e69;
+  background: #fff;
+  color: #284356;
+  border-color: #fff;
 }
 .desktop-clock {
-  margin: 45px 0 16px;
+  margin: 24px 4px 38px;
+  text-shadow: 0 2px 20px #00162d33;
 }
 .desktop-clock time {
   font:
-    400 56px/1.15 -apple-system,
+    400 68px/1.1 -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  letter-spacing: -2.8px;
+  letter-spacing: -2px;
   font-variant-numeric: tabular-nums;
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+.desktop-clock .desktop-clock-seconds {
+  font-size: 26px;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: #ffffffe0;
 }
 .desktop-clock p {
-  font-size: 13px;
-  color: #788b9f;
-  margin: 7px 0 0;
-  letter-spacing: 0.4px;
+  font-size: 14px;
+  color: #ffffffe0;
+  margin: 0 0 8px;
+  letter-spacing: 0.5px;
 }
 .desktop-sort-hint {
   font-size: 12px;
-  color: #7c8fa3;
-  margin: 0;
-  min-height: 24px;
+  color: #ffffffe0;
+  margin: 18px 0 0;
+  text-align: center;
   line-height: 24px;
 }
 .desktop-grid {
   display: grid;
-  grid-template-columns: repeat(var(--desktop-columns, 5), minmax(0, 1fr));
-  gap: 28px 30px;
+  /* Auto-fill retains empty tracks, so a short row cannot stretch the icons apart. */
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--icon-size) + 8px), 1fr));
+  gap: 24px clamp(8px, 1vw, 12px);
   margin-top: 28px;
   align-items: start;
 }
@@ -119,10 +117,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 13px;
+  gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 12px 8px 16px;
+  padding: 12px 4px 16px;
   border-radius: 18px;
   user-select: none;
   -webkit-user-select: none;
@@ -142,7 +140,15 @@
   font-weight: 500;
   line-height: 1.5;
   white-space: nowrap;
-  text-shadow: 0 1px 2px #ffffff80;
+  text-shadow:
+    0 1px 4px #001325b3,
+    0 0 16px #00132580;
+}
+.desktop-app-launch:focus-visible,
+.desktop-control:focus-visible,
+.desktop-app-info:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
 }
 .desktop-app-info {
   position: absolute;
@@ -178,8 +184,8 @@
 .desktop-footnote {
   text-align: center;
   font-size: 11px;
-  color: #899caf;
-  margin: 58px 0 0;
+  color: #ffffffbf;
+  margin: 8px 0 0;
   line-height: 1.7;
   letter-spacing: 0.2px;
 }
@@ -207,7 +213,7 @@
   padding: 5px;
 }
 .desktop-drag-ghost {
-  --icon-size: var(--desktop-icon-pc, 76px);
+  --icon-size: var(--desktop-icon-size, 56px);
   position: fixed;
   z-index: 100;
   transform: translate(-50%, -50%) scale(1.1);
@@ -220,7 +226,8 @@
 }
 .desktop-drag-ghost > span {
   font-size: 12px;
-  color: #243950;
+  color: #fff;
+  text-shadow: 0 1px 4px #001325b3;
 }
 .desktop-app-details {
   padding: 4px 0 2px;
@@ -275,7 +282,7 @@
   flex: 1;
 }
 .desktop-app-state {
-  color: var(--muted);
+  color: #ffffffd9;
   font-size: 10px;
   font-weight: 400;
   line-height: 1.3;
@@ -298,14 +305,6 @@
     transform: rotate(1deg);
   }
 }
-@media (max-width: 1000px) and (min-width: 701px) {
-  .desktop-grid {
-    gap: 24px 14px;
-  }
-  .os-desktop {
-    padding-inline: 32px;
-  }
-}
 @media (max-width: 700px) {
   .workspace-plane.workspace-plane--desktop {
     padding-left: 0;
@@ -313,41 +312,31 @@
     padding-top: env(safe-area-inset-top);
   }
   .os-desktop {
-    --icon-size: var(--desktop-icon-mobile, 50px);
-    padding: 18px 18px 30px;
+    padding: 18px 12px 30px;
     min-height: calc(100dvh - var(--navigation-space) - env(safe-area-inset-bottom) - env(safe-area-inset-top));
   }
-  .desktop-statusbar {
-    height: 32px;
-  }
-  .desktop-brand {
-    font-size: 11px;
-    letter-spacing: 1.7px;
-  }
   .desktop-control {
+    top: 18px;
+    right: 12px;
     min-height: 32px;
     font-size: 11px;
     padding: 5px 12px;
   }
   .desktop-clock {
-    margin: 39px 10px 15px;
+    margin: 26px 4px 34px;
   }
   .desktop-clock time {
-    font-size: 44px;
-    letter-spacing: -2.2px;
+    font-size: 60px;
   }
   .desktop-clock p {
-    font-size: 12px;
-    margin-top: 6px;
+    font-size: 13px;
   }
   .desktop-sort-hint {
     font-size: 10px;
-    padding-left: 10px;
-    min-height: 22px;
     line-height: 1.6;
   }
   .desktop-grid {
-    gap: 18px 3px;
+    row-gap: 18px;
     margin-top: 20px;
   }
   .desktop-app-launch {
@@ -355,7 +344,7 @@
     gap: 9px;
   }
   .desktop-app-name {
-    font-size: 11px;
+    font-size: 12px;
   }
   .desktop-app-info {
     width: 21px;
@@ -364,11 +353,7 @@
     right: calc(50% - var(--icon-size) / 2 - 5px);
   }
   .desktop-footnote {
-    margin-top: 50px;
     font-size: 10px;
-  }
-  .desktop-drag-ghost {
-    --icon-size: var(--desktop-icon-mobile, 50px);
   }
   .desktop-feedback {
     font-size: 11px;
@@ -376,11 +361,8 @@
   }
 }
 @media (max-width: 350px) {
-  .os-desktop {
-    padding-inline: 13px;
-  }
   .desktop-grid {
-    gap: 17px 2px;
+    row-gap: 17px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -216,9 +216,9 @@
 }
 .settings-icon-preview {
   display: grid;
-  grid-template-columns: repeat(var(--preview-columns), var(--preview-size));
+  grid-template-columns: repeat(3, var(--preview-size));
   gap: 3px;
-  height: 30px;
+  height: 40px;
   align-content: center;
   margin-bottom: 3px;
 }
@@ -228,6 +228,12 @@
   border-radius: 2px;
   background: currentColor;
   opacity: 0.55;
+}
+.settings-icon-hint {
+  margin: 14px 0 0;
+  font-size: 11px;
+  color: #839397;
+  line-height: 1.6;
 }
 .settings-device-note {
   margin: 10px 4px 0;

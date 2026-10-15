@@ -3,7 +3,7 @@ import { calculatorManifest } from '@t-box/calculator-contracts'
 
 export const calculatorRelease: AppRelease = {
   appId: 'calculator',
-  releaseId: 'calculator-1.0.0',
+  releaseId: `calculator-${calculatorManifest.version}`,
   manifest: calculatorManifest,
   protocol: 1,
   kind: 'system',

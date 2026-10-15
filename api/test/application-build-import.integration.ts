@@ -52,7 +52,7 @@ function build(notes = 'CI test') {
     artifact,
     files,
     releaseNotes: notes,
-    publication: { kind: 'user', name: 'CI fixture', description: 'Independent static fixture', icon: 'apps', color: 'blue' },
+    publication: { kind: 'user', name: 'CI fixture', description: 'Independent static fixture', icon: 'apps', iconAsset: 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>').toString('base64'), color: 'blue' },
   }))
   const sha256 = bundleHash(bytes)
   const path = '/t-box/apps/' + appId + '/1.0.1/' + sha256 + '.json'

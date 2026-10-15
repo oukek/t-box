@@ -10,7 +10,9 @@ on:
         options:
           # BEGIN GENERATED APPLICATIONS
           - calculator
+          - calendar
           - ledger
+          - time
         # END GENERATED APPLICATIONS
       version:
         description: New version (e.g. 1.0.1; cannot replace an existing version)

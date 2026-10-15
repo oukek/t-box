@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { Capacitor } from '@capacitor/core'
 import {
   enableDeviceReminders,
   reminderStatus,
   requestExactAlarms,
   syncDeviceReminders,
-} from './deviceReminders'
+} from './client'
 </script>
 
 <template>
   <details class="reminder-settings">
     <summary>提醒设置</summary>
-    <p v-if="!Capacitor.isNativePlatform()">
+    <p v-if="reminderStatus.platform === 'web'">
       网页版仅在页面打开时显示提醒；关闭页面后不会发出通知。App 可授权系统通知。
     </p>
     <template v-else>
@@ -31,7 +30,7 @@ import {
           reminderStatus.state === "granted" ? "检查提醒权限" : "启用系统通知"
         }}
       </button><button class="temporal-text-button" @click="syncDeviceReminders(true)"> 同步提醒</button><template
-        v-if="Capacitor.getPlatform() === 'android' && !reminderStatus.exact"
+        v-if="reminderStatus.platform === 'android' && !reminderStatus.exact"
       >
         <p>
           Android 尚未授权精确闹钟，后台提醒可能延迟；系统省电设置也会影响提醒。

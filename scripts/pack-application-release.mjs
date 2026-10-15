@@ -23,7 +23,7 @@ if (release?.appId !== appId || release.runtime?.type !== 'web') {
   throw new Error('Build declaration does not point to an independent Web release')
 }
 const collected = await collectBuildFiles(join(root, 'apps', appId, 'web/dist'))
-const { name, description, icon, color } = release.manifest
+const { name, description, icon, iconAsset, iconVariant, color } = release.manifest
 const notes = process.env.APP_RELEASE_NOTES || ''
 if (notes.length > 4000) {
   throw new Error('Release notes exceed 4000 characters')
@@ -33,7 +33,7 @@ const bundle = Buffer.from(JSON.stringify({
   appId,
   version,
   ...collected,
-  publication: { kind: release.kind, name, description, icon, color },
+  publication: { kind: release.kind, name, description, icon, iconAsset, iconVariant, color },
   releaseNotes: notes,
 }))
 if (bundle.length > 30 * 1024 * 1024) {

@@ -41,6 +41,9 @@ importers:
       '@t-box/shared':
         specifier: workspace:*
         version: link:../shared
+      '@t-box/ui-kit':
+        specifier: workspace:*
+        version: link:../packages/ui-kit
       vue:
         specifier: 3.5.43
         version: 3.5.43(typescript@5.9.3)
@@ -160,9 +163,9 @@ importers:
       '@t-box/calculator-shell':
         specifier: workspace:*
         version: link:../apps/calculator/shell
-      '@t-box/calendar-web':
+      '@t-box/calendar-shell':
         specifier: workspace:*
-        version: link:../apps/calendar/web
+        version: link:../apps/calendar/shell
       '@t-box/capacitor-native-scanner':
         specifier: workspace:*
         version: link:../capacitor-plugins/capacitor-native-scanner
@@ -187,9 +190,9 @@ importers:
       '@t-box/shared':
         specifier: workspace:*
         version: link:../shared
-      '@t-box/time-web':
+      '@t-box/time-shell':
         specifier: workspace:*
-        version: link:../apps/time/web
+        version: link:../apps/time/shell
       '@t-box/ui-kit':
         specifier: workspace:*
         version: link:../packages/ui-kit
@@ -378,7 +381,7 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
 
-  apps/calendar/web:
+  apps/calendar/shell:
     dependencies:
       '@t-box/app-contracts':
         specifier: workspace:*
@@ -386,6 +389,34 @@ importers:
       '@t-box/app-shell-sdk':
         specifier: workspace:*
         version: link:../../../packages/app-shell-sdk
+      '@t-box/calendar-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@t-box/device-reminders':
+        specifier: workspace:*
+        version: link:../../../packages/device-reminders
+      vue:
+        specifier: 3.5.43
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vue-tsc:
+        specifier: ^3.2.5
+        version: 3.3.12(typescript@5.9.3)
+
+  apps/calendar/web:
+    dependencies:
+      '@t-box/app-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/app-contracts
+      '@t-box/app-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-sdk
+      '@t-box/app-web-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-web-sdk
       '@t-box/calendar-contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -405,9 +436,15 @@ importers:
         specifier: 3.5.43
         version: 3.5.43(typescript@5.9.3)
     devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: 6.0.9
+        version: 6.0.9(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.43(typescript@5.9.3))
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
+      vite:
+        specifier: 8.3.2
+        version: 8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vue-tsc:
         specifier: ^3.2.5
         version: 3.3.12(typescript@5.9.3)
@@ -684,7 +721,7 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
 
-  apps/time/web:
+  apps/time/shell:
     dependencies:
       '@t-box/app-contracts':
         specifier: workspace:*
@@ -692,6 +729,34 @@ importers:
       '@t-box/app-shell-sdk':
         specifier: workspace:*
         version: link:../../../packages/app-shell-sdk
+      '@t-box/device-reminders':
+        specifier: workspace:*
+        version: link:../../../packages/device-reminders
+      '@t-box/time-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      vue:
+        specifier: 3.5.43
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vue-tsc:
+        specifier: ^3.2.5
+        version: 3.3.12(typescript@5.9.3)
+
+  apps/time/web:
+    dependencies:
+      '@t-box/app-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/app-contracts
+      '@t-box/app-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-sdk
+      '@t-box/app-web-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-web-sdk
       '@t-box/device-reminders':
         specifier: workspace:*
         version: link:../../../packages/device-reminders
@@ -708,9 +773,15 @@ importers:
         specifier: 3.5.43
         version: 3.5.43(typescript@5.9.3)
     devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: 6.0.9
+        version: 6.0.9(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.43(typescript@5.9.3))
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
+      vite:
+        specifier: 8.3.2
+        version: 8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vue-tsc:
         specifier: ^3.2.5
         version: 3.3.12(typescript@5.9.3)
@@ -849,6 +920,9 @@ importers:
       '@capacitor/local-notifications':
         specifier: ^8.3.1
         version: 8.3.1(@capacitor/core@8.5.2)
+      '@t-box/app-sdk':
+        specifier: workspace:*
+        version: link:../app-sdk
       '@t-box/app-shell-sdk':
         specifier: workspace:*
         version: link:../app-shell-sdk
@@ -4740,6 +4814,12 @@ snapshots:
       vite: 8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vue: 3.5.43(typescript@5.9.3)
 
+  '@vitejs/plugin-vue@6.0.9(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.43(typescript@5.9.3))':
+    dependencies:
+      '@rolldown/pluginutils': 1.0.1
+      vite: 8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vue: 3.5.43(typescript@5.9.3)
+
   '@vitest/eslint-plugin@1.6.27(@typescript-eslint/eslint-plugin@8.71.1(@typescript-eslint/parser@8.71.1(eslint@10.12.0(supports-color@10.2.2))(supports-color@10.2.2)(typescript@5.9.3))(eslint@10.12.0(supports-color@10.2.2))(supports-color@10.2.2)(typescript@5.9.3))(eslint@10.12.0(supports-color@10.2.2))(supports-color@10.2.2)(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/scope-manager': 8.71.1
@@ -6822,6 +6902,20 @@ snapshots:
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 24.19.1
+      esbuild: 0.28.2
+      fsevents: 2.3.3
+      tsx: 4.23.15
+      yaml: 2.9.1
+
+  vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1):
+    dependencies:
+      lightningcss: 1.33.0
+      picomatch: 4.0.7
+      postcss: 8.5.28
+      rolldown: 1.2.12
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 26.6.4
       esbuild: 0.28.2
       fsevents: 2.3.3
       tsx: 4.23.15

@@ -4,6 +4,7 @@ import { appInfo, backFromApplication, identity, navigation, openAccountSettings
 import { AppIcon, Modal } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, ref } from 'vue'
+import WallpaperSettings from './WallpaperSettings.vue'
 
 const aboutOpen = ref(false)
 const avatar = computed(() => [...(identity.user?.nickname || '我')][0])
@@ -81,19 +82,20 @@ function sizeKeydown(event: KeyboardEvent) {
             <span
               class="settings-icon-preview"
               :style="{
-                '--preview-columns': option.columns,
-                '--preview-size': `${20 - option.columns * 2}px`,
+                '--preview-size': `${option.pixels / 4}px`,
               }"
               aria-hidden="true"
             >
-              <i v-for="index in option.columns * 2" :key="index" />
+              <i v-for="index in 6" :key="index" />
             </span>
             <strong>{{ option.label }}</strong>
-            <small>每行 {{ option.columns }} 个</small>
+            <small>{{ option.description }}</small>
           </button>
         </div>
+        <p class="settings-icon-hint">图标大小固定，每行数量随屏幕宽度自动调整。</p>
       </div>
       <p class="settings-device-note">按账号保存，在当前设备生效。</p>
+      <WallpaperSettings />
     </div>
     <div class="settings-group">
       <h2>关于</h2>

@@ -4,7 +4,7 @@ import { ledgerManifest } from '@t-box/ledger-contracts'
 /** REST remains in the ledger domain; the host mediates only its declared interface scope. */
 export const ledgerRelease: AppRelease = {
   appId: 'ledger',
-  releaseId: 'ledger-1.1.0-web',
+  releaseId: `ledger-${ledgerManifest.version}-web`,
   manifest: ledgerManifest,
   protocol: 1,
   kind: 'user',

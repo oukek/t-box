@@ -632,18 +632,33 @@
 }
 
 .super-app:has(.workspace-plane--desktop) .bottom-navigation {
-  background: linear-gradient(0deg, #e4edf1 55%, #e4edf100);
+  padding: 0 0 env(safe-area-inset-bottom);
+  border-top: 1px solid #ffffff1f;
+  background: #0c24334d;
+  backdrop-filter: blur(24px);
 }
 .super-app:has(.workspace-plane--desktop) .bottom-navigation > div {
-  background: #ffffffbd;
-  backdrop-filter: blur(18px);
+  width: 100%;
+  max-width: 420px;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 12px 10px;
+  background: transparent;
+  box-shadow: none;
 }
-@media (max-width: 700px) {
-  .super-app:has(.workspace-plane--desktop) .bottom-navigation {
-    background: #ffffffbd;
-    backdrop-filter: blur(18px);
-  }
-  .super-app:has(.workspace-plane--desktop) .bottom-navigation > div {
-    background: transparent;
-  }
+.super-app:has(.workspace-plane--desktop) .bottom-navigation button {
+  flex-direction: column;
+  gap: 5px;
+  min-height: 54px;
+  padding: 8px 12px;
+  color: #ffffffa6;
+  font-size: 11px;
+}
+.super-app:has(.workspace-plane--desktop) .bottom-navigation button.active {
+  background: transparent;
+  color: #fff;
+}
+.super-app:has(.workspace-plane--desktop) .bottom-navigation button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
 }

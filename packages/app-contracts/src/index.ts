@@ -1,8 +1,14 @@
+import { validApplicationIcon } from './icons.js'
+
 export interface ApplicationManifest {
   id: string
   name: string
   description: string
   icon: string
+  /** Embedded PNG, JPEG, WebP, GIF or static SVG, at most 128 KiB. */
+  iconAsset?: string
+  /** Declarative live presentation; image uploads always use the image variant. */
+  iconVariant?: 'image' | 'calendar' | 'clock'
   color: string
   version: string
   skillIds: readonly string[]
@@ -92,6 +98,9 @@ export function validId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(value)
 }
 export function validateRelease(release: AppRelease): void {
+  if (release.manifest.iconVariant !== undefined && !['image', 'calendar', 'clock'].includes(release.manifest.iconVariant)) {
+    throw new Error('Invalid application icon presentation')
+  }
   if (
     !validId(release.appId) ||
     release.manifest.id !== release.appId ||
@@ -103,6 +112,9 @@ export function validateRelease(release: AppRelease): void {
       new Set(release.clientTools).size !== release.clientTools.length
   ) {
     throw new Error('Invalid application release')
+  }
+  if (release.manifest.iconAsset !== undefined && !validApplicationIcon(release.manifest.iconAsset)) {
+    throw new Error('Invalid application icon image')
   }
   if (release.runtime.type === 'web') {
     const url = new URL(release.runtime.entryUrl)
@@ -150,6 +162,8 @@ export interface ApplicationPublicationEvent {
 
 export * from './capabilities.js'
 export * from './desktop-appearance.js'
+export * from './icons.js'
 export * from './identifiers.js'
 export * from './resources.js'
 export * from './sdk.js'
+export * from './wallpapers.js'

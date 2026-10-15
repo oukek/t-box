@@ -15,6 +15,7 @@
   "dependencies": {
     "@capacitor/core": "8.5.2",
     "@capacitor/local-notifications": "^8.3.1",
+    "@t-box/app-sdk": "workspace:*",
     "@t-box/app-shell-sdk": "workspace:*",
     "@t-box/shared": "workspace:*",
     "@t-box/ui-kit": "workspace:*",

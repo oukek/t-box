@@ -1,4 +1,5 @@
 import type { ApplicationClientInteraction, ApplicationManifest } from '@t-box/app-contracts'
+import { applicationIcon } from './icon.js'
 /** Host callbacks are private UI interactions, never direct model tools. */
 export const ledgerClientInteractions = [
   {
@@ -45,7 +46,8 @@ export const ledgerManifest = {
   name: '记账',
   description: '记录日常收支，了解每一笔花费。',
   icon: 'ledger',
+  iconAsset: applicationIcon,
   color: 'teal',
-  version: '1.1.0',
+  version: '1.1.2',
   skillIds: ['bookkeeping'],
 } as const satisfies ApplicationManifest

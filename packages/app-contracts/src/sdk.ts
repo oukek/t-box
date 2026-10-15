@@ -22,7 +22,8 @@ export interface ApplicationSession {
   profile?: { nickname: string }
 }
 export type HostMethod =
-  | 'runtime.context' |
+  | 'device.reminders' |
+  'runtime.context' |
   'auth.session' |
   'api.invoke' |
   'api.request' |

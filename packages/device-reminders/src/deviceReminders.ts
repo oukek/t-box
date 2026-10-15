@@ -3,7 +3,7 @@ import type { ReminderPlan } from './planner'
 import { Capacitor } from '@capacitor/core'
 import { identity, request } from '@t-box/app-shell-sdk'
 import { reactive, ref, watch } from 'vue'
-import { planReminders } from './planner'
+import { mergeReminderSources, planReminders } from './planner'
 
 export const reminderStatus = reactive({
   state: 'foreground' as 'foreground' | 'granted' | 'denied' | 'unavailable',
@@ -145,7 +145,7 @@ export async function syncDeviceReminders(force = false): Promise<SyncResult> {
   const task = (async () => {
     const timezone =
       new Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'
-    const [calendar, time] = await Promise.all([
+    const [calendar, time] = await Promise.allSettled([
       request<{
         data: {
           reminders: ReminderItem[]
@@ -160,27 +160,37 @@ export async function syncDeviceReminders(force = false): Promise<SyncResult> {
     if (identity.user?.id !== uid || version !== revision) {
       return failed('account_changed')
     }
-    serverOffset = Date.parse(time.data.serverNow) - Date.now()
+    if (calendar.status === 'rejected' && time.status === 'rejected') {
+      throw new Error('提醒服务暂不可用，已保留上次计划')
+    }
+    const syncError = calendar.status === 'rejected' || time.status === 'rejected' ? '部分提醒同步失败，已保留上次计划' : ''
+    const serverNow = time.status === 'fulfilled' ? time.value.data.serverNow : calendar.status === 'fulfilled' ? calendar.value.data.serverNow : ''
+    serverOffset = Date.parse(serverNow) - Date.now()
     const now = Date.now() + serverOffset
-    const timers: ReminderItem[] = time.data.timers
-      .filter((t) => t.deadline && ['running', 'completed'].includes(t.status))
-      .map((t) => ({
-        key: `time:${t.id}:${t.deadline}`,
-        title: t.label,
-        body: '倒计时已结束',
-        at: t.deadline!,
-        destination: { appId: 'time', params: { tab: 'timers' } },
-      }))
-    items = [...calendar.data.reminders, ...timers].sort((a, b) =>
-      a.at.localeCompare(b.at),
-    )
-    reminderStatus.truncated = calendar.data.truncated
+    const timers: ReminderItem[] | null = time.status === 'fulfilled'
+      ? time.value.data.timers
+          .filter((t) => t.deadline && ['running', 'completed'].includes(t.status))
+          .map((t) => ({
+            key: `time:${t.id}:${t.deadline}`,
+            title: t.label,
+            body: '倒计时已结束',
+            at: t.deadline!,
+            destination: { appId: 'time', params: { tab: 'timers' } },
+          }))
+      : null
+    items = mergeReminderSources(uid, [
+      { appId: 'calendar', items: calendar.status === 'fulfilled' ? calendar.value.data.reminders : null },
+      { appId: 'time', items: timers },
+    ], items, readPlan())
+    if (calendar.status === 'fulfilled') {
+      reminderStatus.truncated = calendar.value.data.truncated
+    }
     if (!native()) {
       reminderStatus.state = 'foreground'
-      reminderStatus.error = ''
+      reminderStatus.error = syncError
       return {
-        synced: true,
-        state: 'foreground_only',
+        synced: !syncError,
+        state: syncError ? 'partial' : 'foreground_only',
         scheduled: 0,
         truncated: reminderStatus.truncated,
       }
@@ -226,7 +236,7 @@ export async function syncDeviceReminders(force = false): Promise<SyncResult> {
       }
       reminderStatus.scheduled = diff.plan.notifications.length
       reminderStatus.truncated ||= diff.truncated
-      reminderStatus.error = ''
+      reminderStatus.error = syncError
       if (Capacitor.getPlatform() === 'android') {
         try {
           reminderStatus.exact =
@@ -241,8 +251,8 @@ export async function syncDeviceReminders(force = false): Promise<SyncResult> {
       return failed('account_changed')
     }
     return {
-      synced: true,
-      state: reminderStatus.state,
+      synced: !syncError,
+      state: syncError ? 'partial' : reminderStatus.state,
       scheduled: reminderStatus.scheduled,
       truncated: reminderStatus.truncated,
     }

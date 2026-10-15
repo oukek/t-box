@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import type { RuntimeDescriptor } from '@t-box/app-contracts'
+import type { LaunchStage } from './launchState'
 import { AppIcon } from '@t-box/ui-kit'
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
+import { getApplication } from '../applications'
 import { backFromApplication } from '../navigation'
+import ApplicationLaunch from './ApplicationLaunch.vue'
 import { connectFrame, descriptor } from './bridge'
+import { launchStateKey } from './launchState'
 
 const props = defineProps<{
   appId: string
@@ -12,6 +16,14 @@ const props = defineProps<{
   initializeRuntime?: (runtime: RuntimeDescriptor) => Promise<void>
   persistentNavigation?: boolean
 }>()
+const launch = inject(launchStateKey, undefined)
+launch?.registerWebRuntime()
+const stage = ref<LaunchStage>('resolving')
+const application = computed(() => getApplication(props.appId))
+function updateStage(value: LaunchStage) {
+  stage.value = value
+  launch?.update(value)
+}
 const locationOrigin = location.origin
 const frame = ref<HTMLIFrameElement>()
 const runtime = ref<RuntimeDescriptor>()
@@ -25,14 +37,17 @@ async function load() {
   runtime.value = undefined
   loading.value = true
   error.value = ''
+  updateStage('resolving')
   try {
     const next = await descriptor(props.appId)
     await props.initializeRuntime?.(next)
     if (generation === epoch) {
+      updateStage('resources')
       runtime.value = next
     }
   } catch (e) {
     if (generation === epoch) {
+      updateStage('failed')
       error.value = e instanceof Error ? e.message : '应用打开失败'
       loading.value = false
     }
@@ -43,6 +58,8 @@ async function connected() {
     return
   }
   const generation = epoch
+  loading.value = true
+  updateStage('connecting')
   let attempt: ReturnType<typeof connectFrame> | undefined
   connection?.close()
   try {
@@ -51,12 +68,14 @@ async function connected() {
     await attempt.promise
     if (generation === epoch && connection === attempt) {
       loading.value = false
+      updateStage('ready')
     }
   } catch (e) {
     // A second iframe load replaces the channel without changing the runtime epoch.
     // Its predecessor's rejected handshake must not hide the newly connected frame.
     if (generation === epoch && (!attempt || connection === attempt)) {
       loading.value = false
+      updateStage('failed')
       error.value = e instanceof Error ? e.message : '应用连接失败'
     }
   }
@@ -79,12 +98,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="web-application">
-    <p
-      v-if="loading"
-      class="runtime-status"
-      role="status"
-    >正在打开应用…</p>
+  <section class="web-application" :aria-busy="loading">
+    <ApplicationLaunch
+      v-if="!launch && application"
+      :application="application"
+      :stage="stage"
+    />
     <div
       v-if="error"
       class="runtime-error"
@@ -103,7 +122,10 @@ onBeforeUnmount(() => {
       ref="frame"
       :key="`${runtime.appId}:${persistentNavigation ? runtime.generation : openRevision}`"
       :src="`${runtime.entryUrl}#tbox-host=${encodeURIComponent(locationOrigin)}`"
-      :title="appId === 'calculator' ? '数学计算器' : appId"
+      :title="application?.name || appId"
+      :class="{ 'runtime-frame--loading': loading }"
+      :aria-hidden="loading"
+      :inert="loading"
       sandbox="allow-scripts allow-same-origin allow-downloads"
       referrerpolicy="strict-origin-when-cross-origin"
       allow="clipboard-write"
@@ -127,14 +149,9 @@ iframe {
   min-height: 0;
   background: #f5f7fa;
 }
-.runtime-status {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 16px;
-  background: white;
-  z-index: 1;
+.runtime-frame--loading {
+  visibility: hidden;
+  pointer-events: none;
 }
 .runtime-error {
   position: relative;

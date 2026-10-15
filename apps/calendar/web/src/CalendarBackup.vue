@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { identity } from '@t-box/app-shell-sdk'
 import { calendarObject, parseCalendarEvent } from '@t-box/calendar-contracts'
-import { syncDeviceReminders } from '@t-box/device-reminders/deviceReminders'
+import { syncDeviceReminders } from '@t-box/device-reminders/client'
 import { timeSnapshot } from '@t-box/time-contracts'
 import { Modal } from '@t-box/ui-kit'
 import { onBeforeUnmount, ref } from 'vue'
 import { calendarApi } from './api'
+import { identity } from './runtime'
 
 const emit = defineEmits<{ changed: [] }>()
 let disposed = false

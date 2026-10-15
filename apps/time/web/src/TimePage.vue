@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { AppTimer, TimerAction } from '@t-box/time-contracts'
-import { identity } from '@t-box/app-shell-sdk'
-import { syncDeviceReminders } from '@t-box/device-reminders/deviceReminders'
+import { syncDeviceReminders } from '@t-box/device-reminders/client'
 import ReminderSettings from '@t-box/device-reminders/ReminderSettings.vue'
 import {
   commonTimezones,
@@ -12,6 +11,7 @@ import {
 import { AppIcon, Modal, SheetSelect } from '@t-box/ui-kit'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { timeApi } from './api'
+import { application, identity, preferences } from './runtime'
 import { durationLabel } from './stopwatch'
 import StopwatchPanel from './StopwatchPanel.vue'
 import TimeConversion from './TimeConversion.vue'
@@ -87,9 +87,7 @@ watch(
     ]
     if (id) {
       try {
-        const saved = JSON.parse(
-          localStorage.getItem(`tbox.time:${id}:clocks`) || 'null',
-        )
+        const saved = preferences.clocks
         if (
           Array.isArray(saved) &&
           saved.length <= 12 &&
@@ -117,10 +115,8 @@ watch(
       return
     }
     try {
-      localStorage.setItem(
-        `tbox.time:${preferenceOwner}:clocks`,
-        JSON.stringify(clocks.value),
-      )
+      preferences.clocks = [...clocks.value]
+      void application.client.storage.set('time.clocks.v1', clocks.value).catch(() => {})
     } catch {}
   },
   { deep: true },

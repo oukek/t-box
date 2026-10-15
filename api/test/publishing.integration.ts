@@ -59,6 +59,8 @@ const fixture = {
   name: '发布测试',
   description: '独立测试应用',
   icon: 'apps',
+  iconVariant: 'image',
+  iconAsset: 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12"/></svg>').toString('base64'),
   color: 'blue',
   runtime: 'web',
   artifact: '',
@@ -148,6 +150,7 @@ try {
     { ...fixture, backend: { binding: 'unknown' } },
     400,
   )
+  await call('POST', '/application-releases', { ...fixture, iconAsset: 'data:image/svg+xml;base64,' + Buffer.from('<svg onload="alert(1)"></svg>').toString('base64') }, 400)
   const first = await call('POST', '/application-releases', fixture, 201)
   await call('POST', '/application-releases', fixture, 409)
   assert.ok(
@@ -275,6 +278,8 @@ try {
     (r: any) => r.release.releaseId === first.releaseId,
   )
   assert.equal(retired.status, 'retired')
+  assert.equal(retired.release.manifest.iconAsset, fixture.iconAsset)
+  assert.equal(retired.release.manifest.iconVariant, fixture.iconVariant)
   await call('POST', `/application-releases/${first.releaseId}/transitions`, {
     action: 'publish',
     revision: retired.revision,

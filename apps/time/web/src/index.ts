@@ -1,1 +1,1 @@
-export { timeModule } from './module'
+export { parseTimeParams } from '@t-box/time-contracts'

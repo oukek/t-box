@@ -10,11 +10,14 @@
     "./*.css": "./src/*.css"
   },
   "scripts": {
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "dev": "vite --host 0.0.0.0 --port 5178 --strictPort",
+    "build": "vue-tsc --noEmit && vite build && node ../../../scripts/build-application-artifact.mjs calendar"
   },
   "dependencies": {
     "@t-box/app-contracts": "workspace:*",
-    "@t-box/app-shell-sdk": "workspace:*",
+    "@t-box/app-sdk": "workspace:*",
+    "@t-box/app-web-sdk": "workspace:*",
     "@t-box/calendar-contracts": "workspace:*",
     "@t-box/device-reminders": "workspace:*",
     "@t-box/shared": "workspace:*",
@@ -23,7 +26,9 @@
     "vue": "3.5.43"
   },
   "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.9",
     "typescript": "~5.9.3",
+    "vite": "8.3.2",
     "vue-tsc": "^3.2.5"
   }
 }

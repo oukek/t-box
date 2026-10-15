@@ -256,3 +256,11 @@ test('navigation and interaction cancellation events stop on runtime disposal', 
   f.emit('runtime.navigation', { ledgerId: 'stale' })
   assert.deepEqual(received, [{ ledgerId: 'book' }, 'cancelled'])
 })
+
+test('reminder SDK delegates fixed operations to the host without receiving native handles', async () => {
+  const f = fixture(async () => ({ platform: 'android', state: 'granted' }))
+  assert.deepEqual(await f.client.device.reminders('sync'), { platform: 'android', state: 'granted' })
+  assert.equal(f.calls[0].method, 'device.reminders')
+  assert.deepEqual(f.calls[0].args, { action: 'sync' })
+  f.client.dispose()
+})

@@ -113,7 +113,8 @@ onBeforeUnmount(() => clearInterval(poll))
           <LauncherIcon
             :app-id="entry.release.appId"
             :icon="display(entry).icon"
-            :day="new Date().getDate()"
+            :icon-asset="display(entry).iconAsset"
+            :icon-variant="display(entry).iconVariant"
           /><span><strong>{{ display(entry).name }}</strong><small>{{ display(entry).description }}</small><em>{{ entry.release.kind === "system" ? "系统应用" : "官方应用" }} ·
             v{{ entry.release.manifest.version
             }}<template v-if="entry.release.manifest.skillIds.length">

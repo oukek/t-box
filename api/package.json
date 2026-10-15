@@ -35,6 +35,7 @@
     "test:wechat": "tsx test/wechat.integration.ts",
     "test:calendar-time": "tsx test/calendar-time.integration.ts",
     "test:desktop": "tsx test/desktop.integration.ts",
+    "test:desktop-appearance": "tsx test/desktop-appearance.integration.ts",
     "test:holidays": "tsx test/holidays.integration.ts",
     "test:workflow": "tsx test/workflow.integration.ts",
     "test:context": "tsx test/context.integration.ts",

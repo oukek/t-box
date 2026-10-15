@@ -9,7 +9,7 @@ import {
   recurrenceOptions,
   solarToLunar,
 } from '@t-box/calendar-contracts'
-import { syncDeviceReminders } from '@t-box/device-reminders/deviceReminders'
+import { syncDeviceReminders } from '@t-box/device-reminders/client'
 import { commonTimezones, dayjs, validDate } from '@t-box/time-contracts'
 import { Modal, SheetSelect } from '@t-box/ui-kit'
 import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'

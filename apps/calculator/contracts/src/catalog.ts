@@ -5,6 +5,7 @@ import type {
   CalculatorKind,
   CalculatorOption,
 } from './types.js'
+import { applicationIcon } from './icon.js'
 import { CalculationError } from './types.js'
 
 const choices = (items: [string, string][]): CalculatorOption[] =>
@@ -300,8 +301,9 @@ export const calculatorManifest = {
   name: '计算器',
   description: '科学运算、方程求解与数学分析。',
   icon: 'calculator',
+  iconAsset: applicationIcon,
   color: 'blue',
-  version: '1.0.0',
+  version: '1.1.1',
   skillIds: ['calculation'],
 } as const satisfies ApplicationManifest
 export function getCalculatorDefinition(id: string): CalculatorDefinition {

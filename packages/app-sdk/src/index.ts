@@ -233,6 +233,11 @@ export function createAppClient(transport: AppTransport) {
         return call<T>('api.invoke', { method, arguments: args }, options)
       },
     },
+    device: {
+      reminders<T = unknown>(action: 'status' | 'sync' | 'enable' | 'exact') {
+        return call<T>('device.reminders', { action }, { timeoutMs: 120_000 })
+      },
+    },
     resources: {
       async setBindings(bindings: { appId: string, resourceType: string, resourceId: string }[]) {
         await call('resources.bindings', { bindings })

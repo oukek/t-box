@@ -9,6 +9,7 @@ const ready = () => import('./pages/SettingsPage.vue')
 export const profileModule: ClientApplicationModule = {
   contractVersion: APPLICATION_CONTRACT_VERSION,
   manifest: profileManifest,
+  shellCompatibility: { minimumVersion: '1.0.0' },
   presentation: {
     name: '设置',
     description: '账号、安全与使用偏好',

@@ -403,6 +403,11 @@ export function createHostTransport(options: HostOptions): AppTransport {
         value = session()
       } else if (method === 'resources.bindings') {
         setApplicationBindings(options.appId, a.bindings)
+      } else if (method === 'device.reminders') {
+        if (Object.keys(a).some((k) => k !== 'action') || !module?.sdk?.reminders) {
+          throw new AppSdkError('INVALID_ARGUMENTS', '提醒操作无效')
+        }
+        value = await module.sdk.reminders(a.action)
       } else if (method === 'api.request') {
         const http = parseApplicationHttpRequest(module?.sdk?.restPrefixes || [], a)
         if (http.stable === true) {
@@ -447,7 +452,21 @@ export function createHostTransport(options: HostOptions): AppTransport {
         }
         const key = `tbox.app.${options.appId}.${context.subject}.${a.key}`
         if (method === 'storage.get') {
-          value = JSON.parse(localStorage.getItem(key) || 'null')
+          const saved = localStorage.getItem(key)
+          const migrations = module?.sdk?.legacyStorageKeys
+          const legacyKey = migrations && Object.hasOwn(migrations, a.key) ? migrations[a.key]?.(identity.user!.id) : undefined
+          let serialized = saved
+          if (serialized === null && legacyKey) {
+            try {
+              const old = localStorage.getItem(legacyKey)
+              if (old !== null && old.length <= 64000) {
+                JSON.parse(old)
+                localStorage.setItem(key, old)
+                serialized = old
+              }
+            } catch { /* Invalid legacy preferences do not prevent opening the application. */ }
+          }
+          value = JSON.parse(serialized || 'null')
         } else if (method === 'storage.remove') {
           localStorage.removeItem(key)
         } else {

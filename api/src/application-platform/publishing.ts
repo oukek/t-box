@@ -3,6 +3,7 @@ import type { DataSource, EntityManager } from 'typeorm'
 import type { ApplicationPlatform } from './service.js'
 import { createHash, randomUUID } from 'node:crypto'
 import {
+  validApplicationIcon,
   validateRelease,
   validId,
 } from '@t-box/app-contracts'
@@ -187,6 +188,8 @@ export class ApplicationPublishing {
             'name',
             'description',
             'icon',
+            'iconAsset',
+            'iconVariant',
             'color',
             'releaseNotes',
             'artifact',
@@ -208,8 +211,14 @@ export class ApplicationPublishing {
     const appId = b.appId as string
     const name = text(b.name, '应用名称', 80)
     const description = text(b.description, '应用说明', 400)
-    const icon = text(b.icon, '图标', 40)
-    const color = text(b.color, '图标颜色', 30)
+    if (b.iconAsset !== undefined && b.iconAsset !== '' && !validApplicationIcon(b.iconAsset)) {
+      fail('图标需为 PNG、JPEG、WebP、GIF 或静态 SVG，最大 128 KB')
+    }
+    if (b.iconVariant !== undefined && !['image', 'calendar', 'clock'].includes(String(b.iconVariant))) {
+      fail('图标显示方式无效')
+    }
+    const icon = text(b.icon || 'apps', '图标', 40)
+    const color = text(b.color || 'blue', '图标颜色', 30)
     if (
       !/^[\w-]+$/.test(icon) ||
       ![
@@ -312,6 +321,8 @@ export class ApplicationPublishing {
           name,
           description,
           icon,
+          ...(b.iconAsset ? { iconAsset: b.iconAsset as string } : {}),
+          ...(b.iconVariant ? { iconVariant: b.iconVariant as 'image' | 'calendar' | 'clock' } : {}),
           color,
           version: b.version as string,
           skillIds: base?.manifest.skillIds || [],

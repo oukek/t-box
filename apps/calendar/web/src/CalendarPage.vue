@@ -9,7 +9,7 @@ import {
   lunarEventLabel,
   lunarLabel,
 } from '@t-box/calendar-contracts'
-import { syncDeviceReminders } from '@t-box/device-reminders/deviceReminders'
+import { syncDeviceReminders } from '@t-box/device-reminders/client'
 import ReminderSettings from '@t-box/device-reminders/ReminderSettings.vue'
 import { dayjs, timeSnapshot } from '@t-box/time-contracts'
 import { AppIcon, Modal, SheetSelect } from '@t-box/ui-kit'

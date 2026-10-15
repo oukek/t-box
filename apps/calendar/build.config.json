@@ -1,0 +1,7 @@
+{
+  "appId": "calendar",
+  "package": "@t-box/calendar-web",
+  "releasePackage": "@t-box/calendar-server",
+  "releaseModule": "server/dist/release.js",
+  "releaseExport": "calendarRelease"
+}

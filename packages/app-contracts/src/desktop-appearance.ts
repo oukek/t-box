@@ -1,8 +1,8 @@
 /** Shared by the settings picker, desktop grid and drag preview. */
 export const desktopIconSizes = {
-  small: { label: '小', columns: 6, pc: 64, mobile: 42 },
-  medium: { label: '中', columns: 5, pc: 76, mobile: 50 },
-  large: { label: '大', columns: 4, pc: 88, mobile: 62 },
+  small: { label: '小', description: '紧凑', pixels: 44 },
+  medium: { label: '中', description: '标准', pixels: 56 },
+  large: { label: '大', description: '醒目', pixels: 68 },
 } as const
 export type DesktopIconSize = keyof typeof desktopIconSizes
 export const iconSizeOptions = Object.entries(desktopIconSizes).map(

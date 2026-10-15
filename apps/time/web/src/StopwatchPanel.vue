@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { StopwatchState } from './stopwatch'
-import { identity } from '@t-box/app-shell-sdk'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { application, identity, preferences } from './runtime'
 import {
   durationLabel,
   parseStopwatch,
@@ -18,11 +18,7 @@ watch(
     stopwatch.value = { elapsed: 0, startedAt: null, laps: [] }
     if (id) {
       try {
-        stopwatch.value = parseStopwatch(
-          JSON.parse(
-            localStorage.getItem(`tbox.time:${id}:stopwatch`) || 'null',
-          ),
-        )
+        stopwatch.value = parseStopwatch(preferences.stopwatch)
       } catch {}
     }
   },
@@ -35,10 +31,8 @@ function persistStopwatch() {
     return
   }
   try {
-    localStorage.setItem(
-      `tbox.time:${preferenceOwner}:stopwatch`,
-      JSON.stringify(stopwatch.value),
-    )
+    preferences.stopwatch = JSON.parse(JSON.stringify(stopwatch.value))
+    void application.client.storage.set('time.stopwatch.v1', preferences.stopwatch).catch(() => {})
   } catch {}
 }
 function toggleStopwatch() {

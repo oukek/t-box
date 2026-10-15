@@ -12,7 +12,7 @@ import { BillEntity, CategoryEntity } from '@t-box/ledger-server/entities'
 import { ApplicationOperationEntity } from '@t-box/server-foundation/persistence/entities'
 import { TimerEntity } from '@t-box/time-server/entity'
 import { EntitySchema } from 'typeorm'
-import { DesktopLayoutEntity } from '../desktop/entity.js'
+import { DesktopAppearanceEntity, DesktopLayoutEntity } from '../desktop/entity.js'
 import { RechargeSettingsEntity } from '../payments/recharge.js'
 import { SupportSettingsEntity } from '../support/entity.js'
 import { platformEntities } from './platform-entities.js'
@@ -229,4 +229,5 @@ export const entities = [
   TimerEntity,
   ApplicationOperationEntity,
   DesktopLayoutEntity,
+  DesktopAppearanceEntity,
 ]

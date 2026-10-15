@@ -6,14 +6,17 @@ import {
   validDate,
   validTimezone,
 } from '@t-box/dayjs'
+import { applicationIcon } from './icon.js'
 
 export const timeManifest = {
   id: 'time',
   name: '时间',
   description: '世界时钟、倒计时、秒表与时间换算。',
   icon: 'clock',
+  iconAsset: applicationIcon,
+  iconVariant: 'clock',
   color: 'blue',
-  version: '1.0.0',
+  version: '1.1.1',
   skillIds: ['timekeeping'],
 } as const satisfies ApplicationManifest
 export const commonTimezones = [

@@ -1,24 +1,31 @@
 <script setup lang="ts">
-import { AppIcon } from '@t-box/ui-kit'
+import { computed, ref, watch } from 'vue'
+import AppIcon from './AppIcon.vue'
+import { clockHandAngles, useLauncherClock } from './launcherClock'
 
-defineProps<{ appId: string, icon: string, day?: number }>()
+const props = withDefaults(defineProps<{ appId?: string, icon: string, iconAsset?: string, iconVariant?: 'image' | 'calendar' | 'clock', day?: number, animate?: boolean }>(), { animate: true })
+const live = useLauncherClock(() => props.animate && (props.iconVariant === 'calendar' || props.iconVariant === 'clock'))
+const preview = new Date(2000, 0, 1, 10, 10, 0)
+const angles = computed(() => clockHandAngles(props.animate ? live.value : preview))
+const calendarDay = computed(() => props.day ?? (props.animate ? live.value.getDate() : new Date().getDate()))
+const failed = ref(false)
+watch(() => props.iconAsset, () => {
+  failed.value = false
+})
 </script>
 
 <template>
   <span
     class="launcher-icon"
-    :class="`launcher-icon--${appId}`"
+    :class="{ 'launcher-icon--image': iconAsset && !failed, 'launcher-icon--calendar': iconVariant === 'calendar', 'launcher-icon--clock': iconVariant === 'clock' }"
     aria-hidden="true"
   >
-    <template v-if="appId === 'calculator'">
-      <span class="calculator-screen">π + e</span>
-      <span class="calculator-keys"><i /><i /><i /><i /><i /><i /></span>
-    </template>
-    <template v-else-if="appId === 'calendar'">
-      <span class="calendar-icon-top">日历</span><span class="calendar-icon-day">{{ day }}</span>
+    <template v-if="iconVariant === 'calendar'">
+      <span class="calendar-icon-top">日历</span><span class="calendar-icon-day">{{ calendarDay }}</span>
     </template>
     <svg
-      v-else-if="appId === 'time'"
+      v-else-if="iconVariant === 'clock'"
+      class="live-clock"
       viewBox="0 0 64 64"
       fill="none"
     >
@@ -30,56 +37,41 @@ defineProps<{ appId: string, icon: string, day?: number }>()
         stroke-width="3"
       />
       <path
-        d="M32 17v16l11 7"
+        d="M32 32V19"
         stroke="currentColor"
         stroke-width="3.5"
         stroke-linecap="round"
+        :transform="`rotate(${angles.hour} 32 32)`"
+      />
+      <path
+        d="M32 32V14"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        :transform="`rotate(${angles.minute} 32 32)`"
+      />
+      <path
+        class="clock-second-hand"
+        d="M32 36V11"
+        stroke="#ffe0c6"
+        stroke-width="1.2"
+        stroke-linecap="round"
+        :transform="`rotate(${angles.second} 32 32)`"
       />
       <circle
         cx="32"
         cy="32"
-        r="3"
+        r="2.5"
         fill="currentColor"
       />
     </svg>
-    <svg
-      v-else-if="appId === 'ledger'"
-      viewBox="0 0 64 64"
-      fill="none"
+    <img
+      v-else-if="iconAsset && !failed"
+      :src="iconAsset"
+      alt=""
+      draggable="false"
+      @error="failed = true"
     >
-      <rect
-        x="15"
-        y="12"
-        width="35"
-        height="41"
-        rx="7"
-        fill="white"
-        fill-opacity=".95"
-      />
-      <path
-        d="M23 12v41"
-        stroke="#b9ece3"
-        stroke-width="2"
-      />
-      <path
-        d="M32 24h9M32 32h9M32 40h6"
-        stroke="#21897e"
-        stroke-width="3"
-        stroke-linecap="round"
-      />
-      <path
-        d="M18 20h-5M18 30h-5M18 40h-5"
-        stroke="white"
-        stroke-width="3"
-        stroke-linecap="round"
-      />
-    </svg>
-    <AppIcon
-      v-else-if="appId === 'profile'"
-      class="settings-launcher-glyph"
-      name="settings"
-      :size="36"
-    />
     <AppIcon
       v-else
       :name="icon"
@@ -105,49 +97,14 @@ defineProps<{ appId: string, icon: string, day?: number }>()
   overflow: hidden;
   flex-shrink: 0;
 }
-.launcher-icon svg {
-  width: 90%;
-  height: 90%;
+.launcher-icon--image {
+  background: transparent;
 }
-.launcher-icon--ledger {
-  background: linear-gradient(145deg, #48bda9, #168374);
-}
-.launcher-icon--calculator {
-  background: linear-gradient(155deg, #566174, #2d3748);
-  padding: calc(var(--icon-size, 68px) * 0.14) calc(var(--icon-size, 68px) * 0.17);
-  flex-direction: column;
-  gap: calc(var(--icon-size, 68px) * 0.07);
-}
-.calculator-screen {
-  background: #b9d3c5;
-  color: #314c43;
+.launcher-icon img {
+  display: block;
   width: 100%;
-  height: calc(var(--icon-size, 68px) * 0.23);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  border-radius: 4px;
-  font:
-    600 calc(var(--icon-size, 68px) * 0.145) ui-monospace,
-    monospace;
-  text-align: right;
-  padding: 2px calc(var(--icon-size, 68px) * 0.05);
-}
-.calculator-keys {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: calc(var(--icon-size, 68px) * 0.055);
-  width: 100%;
-  height: calc(var(--icon-size, 68px) * 0.31);
-  flex-shrink: 0;
-}
-.calculator-keys i {
-  background: #d1dae5;
-  border-radius: 3px;
-}
-.calculator-keys i:nth-child(3n) {
-  background: #e9ad72;
+  height: 100%;
+  object-fit: contain;
 }
 .launcher-icon--calendar {
   background: #fff;
@@ -180,14 +137,11 @@ defineProps<{ appId: string, icon: string, day?: number }>()
   width: 100%;
   padding-right: 2px;
 }
-.launcher-icon--time {
+.launcher-icon--clock {
   background: linear-gradient(145deg, #71a7ec, #4473c3);
 }
-.launcher-icon--profile {
-  background: linear-gradient(145deg, #8d9aaa, #56687f);
-}
-.launcher-icon .settings-launcher-glyph {
-  width: 58%;
-  height: 58%;
+.live-clock {
+  width: 90%;
+  height: 90%;
 }
 </style>

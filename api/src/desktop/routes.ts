@@ -10,6 +10,16 @@ export function registerDesktop(
   authenticate: (token: string) => Promise<Actor>,
   aiApplicationIds: ReadonlySet<string>,
 ) {
+  app.get('/api/v1/desktop/appearance', async (req, reply) => {
+    const actor = await authenticate(bearer(req.headers.authorization))
+    reply.header('Cache-Control', 'no-store')
+    return { data: await service.appearance.get(actor.user.id) }
+  })
+  app.put('/api/v1/desktop/appearance', async (req, reply) => {
+    const actor = await authenticate(bearer(req.headers.authorization))
+    reply.header('Cache-Control', 'no-store')
+    return { data: await service.appearance.save(actor.user.id, req.body) }
+  })
   app.get<{ Params: { device: string } }>(
     '/api/v1/desktop/:device',
     async (req, reply) => {

@@ -4,6 +4,9 @@ import type {
   ManagedApplication,
   ManagedRelease,
 } from '@t-box/app-contracts'
+import { validApplicationIcon } from '@t-box/app-contracts'
+import { presentApplicationIcon } from '@t-box/shared'
+import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import AdminDialog from '../components/AdminDialog.vue'
 import AdminIcon from '../components/AdminIcon.vue'
@@ -42,12 +45,42 @@ const form = reactive({
   name: '',
   description: '',
   icon: 'apps',
+  iconAsset: '',
+  iconVariant: 'image' as 'image' | 'calendar' | 'clock',
   color: 'blue',
   releaseNotes: '',
   artifact: '',
   runtime: 'web',
   revision: 1,
 })
+const iconOf = (entry?: ManagedRelease) => presentApplicationIcon({ id: entry?.release.appId || '', icon: entry?.release.manifest.icon || 'apps', iconAsset: entry?.release.manifest.iconAsset, iconVariant: entry?.release.manifest.iconVariant })
+async function uploadIcon(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) {
+    return
+  }
+  dialogError.value = ''
+  try {
+    if (file.size > 128 * 1024) {
+      throw new Error('图标最大 128 KB')
+    }
+    const extension = file.name.split('.').pop()?.toLowerCase()
+    const mime = ({ svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' } as Record<string, string>)[extension || '']
+    if (!mime) {
+      throw new Error('请选择 PNG、JPEG、WebP、GIF 或 SVG 图标')
+    }
+    const data = `data:${mime};base64,${btoa(Array.from(new Uint8Array(await file.arrayBuffer()), (b) => String.fromCharCode(b)).join(''))}`
+    if (!validApplicationIcon(data)) {
+      throw new Error('图标格式无效；SVG 仅支持静态矢量图形')
+    }
+    form.iconAsset = data
+    form.iconVariant = 'image'
+  } catch (e) {
+    dialogError.value = errorMessage(e)
+  }
+}
 const current = computed(() =>
   applications.value.find((a) => a.appId === selectedId.value),
 )
@@ -117,6 +150,7 @@ async function edit(entry?: ManagedRelease, createApplication = false) {
   dialogError.value = ''
   const base = entry || online.value || current.value?.releases[0]
   const r = createApplication ? undefined : base?.release
+  const appearance = r ? presentApplicationIcon(r.manifest) : undefined
   Object.assign(form, {
     appId: r?.appId || '',
     kind: createApplication ? 'user' : current.value?.kind || 'user',
@@ -128,6 +162,8 @@ async function edit(entry?: ManagedRelease, createApplication = false) {
     name: r?.manifest.name || '',
     description: r?.manifest.description || '',
     icon: r?.manifest.icon || 'apps',
+    iconAsset: appearance?.iconAsset || '',
+    iconVariant: appearance?.iconVariant || 'image',
     color: r?.manifest.color || 'blue',
     releaseNotes: entry?.releaseNotes || '',
     artifact: r?.runtime.type === 'web' ? r.runtime.integrity.slice(7) : '',
@@ -311,7 +347,13 @@ onMounted(load)
         :aria-pressed="item.appId === selectedId"
         @click="selectedId = item.appId"
       >
-        <span class="row-icon"><AdminIcon name="grid" :size="18" /></span><span><strong>{{
+        <LauncherIcon
+          class="catalog-icon"
+          :icon="item.releases[0]?.release.manifest.icon || 'apps'"
+          :icon-asset="iconOf(item.releases[0]).iconAsset"
+          :icon-variant="iconOf(item.releases[0]).iconVariant"
+          :animate="false"
+        /><span><strong>{{
           item.releases[0]?.release.manifest.name || item.appId
         }}</strong><small>{{
           item.kind === "system" ? "系统应用 · 不可卸载" : "用户应用 · 可卸载"
@@ -355,7 +397,13 @@ onMounted(load)
           class="release-row"
         >
           <div class="release-version">
-            <strong>v{{ entry.release.manifest.version }}</strong><span class="publication-status" :class="entry.status">{{
+            <LauncherIcon
+              class="version-icon"
+              :icon="entry.release.manifest.icon"
+              :icon-asset="iconOf(entry).iconAsset"
+              :icon-variant="iconOf(entry).iconVariant"
+              :animate="false"
+            /><strong>v{{ entry.release.manifest.version }}</strong><span class="publication-status" :class="entry.status">{{
               statusNames[entry.status]
             }}</span>
           </div>
@@ -483,20 +531,24 @@ onMounted(load)
                 description: '预装、不可卸载，支持更新',
               },
             ]"
-          /></label><label>图标颜色<AdminSelect
-            v-model="form.color"
-            label="图标颜色"
-            :options="[
-              { value: 'blue', label: '蓝色' },
-              { value: 'green', label: '绿色' },
-              { value: 'violet', label: '紫色' },
-              { value: 'orange', label: '橙色' },
-              { value: 'rose', label: '玫瑰色' },
-              { value: 'amber', label: '琥珀色' },
-              { value: 'cyan', label: '青色' },
-              { value: 'teal', label: '青绿色' },
-            ]"
           /></label>
+        </div>
+        <div class="application-icon-editor">
+          <LauncherIcon
+            :icon="form.icon"
+            :icon-asset="form.iconAsset"
+            :icon-variant="form.iconVariant"
+            :animate="false"
+          />
+          <div><strong>应用图标</strong><p>随版本保存。构建提交会自动读取应用图标，也可在草稿中替换。</p>
+            <label class="icon-upload">选择图片<input
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp,.gif,.svg"
+              aria-label="上传应用图标"
+              @change="uploadIcon"
+            ></label>
+            <small>PNG / SVG / JPEG / WebP / GIF · 最大 128 KB，建议正方形</small>
+          </div>
         </div>
         <label>更新说明<textarea
           v-model="form.releaseNotes"
@@ -614,6 +666,46 @@ onMounted(load)
 </template>
 
 <style scoped>
+.catalog-icon {
+  --icon-size: 38px;
+}
+.version-icon {
+  --icon-size: 30px;
+}
+.application-icon-editor {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  background: #f4f6fa;
+  border-radius: 12px;
+}
+.application-icon-editor strong {
+  font-size: 13px;
+}
+.application-icon-editor p,
+.application-icon-editor small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 4px 0 8px;
+}
+.icon-upload {
+  display: inline-flex;
+  position: relative;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+}
+.icon-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+
 .publication-workspace {
   display: grid;
   grid-template-columns: 238px minmax(0, 1fr);

@@ -1,1 +1,1 @@
-export { calendarModule } from './module'
+export { parseCalendarParams } from '@t-box/calendar-contracts'

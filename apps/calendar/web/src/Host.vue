@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ReminderHost from '@t-box/device-reminders/ReminderHost.vue'
 import { Modal } from '@t-box/ui-kit'
 import {
   calendarConfirmation,
@@ -8,7 +7,7 @@ import {
 </script>
 
 <template>
-  <ReminderHost /><Modal
+  <Modal
     :open="!!calendarConfirmation"
     :title="calendarConfirmation?.title || '确认操作'"
     @close="resolveCalendarConfirmation(false)"

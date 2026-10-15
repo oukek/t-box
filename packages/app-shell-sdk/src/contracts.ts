@@ -11,6 +11,10 @@ export interface ClientApplicationModule {
   sdk?: {
     restPrefixes?: readonly string[]
     storage?: boolean
+    /** One-way migration from app-owned legacy host keys into app-scoped SDK storage. */
+    legacyStorageKeys?: Readonly<Record<string, (userId: string) => string>>
+    /** Trusted native adapter; the Web app receives only a status snapshot. */
+    reminders?(action: unknown): Promise<unknown>
     events?: Record<
       string,
       {
@@ -22,6 +26,8 @@ export interface ClientApplicationModule {
   }
   contractVersion: ApplicationContractVersion
   manifest: ApplicationManifest
+  /** This bundled module can serve installed shell versions from minimumVersion through its own version. */
+  shellCompatibility?: { minimumVersion: string }
   /** Host-owned system labels can evolve without rewriting an immutable published release. */
   presentation?: Pick<ApplicationManifest, 'name' | 'description' | 'icon'>
   component: Component

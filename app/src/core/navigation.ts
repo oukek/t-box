@@ -139,9 +139,6 @@ export function navigateTab(screen: Tab) {
 
 export async function openApplication(value: unknown) {
   const args = parseOpenAppArguments(value)
-  await applicationModules
-    .find((module) => module.manifest.id === args.appId)
-    ?.prepare?.()
   if (state.screen !== 'application') {
     state.backTo =
       state.screen === 'capabilities'
@@ -167,6 +164,10 @@ export async function openApplication(value: unknown) {
   const query = params.size ? `?${params}` : ''
   history.pushState(null, '', `#/applications/${args.appId}${query}`)
   window.scrollTo({ top: 0 })
+  // Enter the launch view before a cold module download, while callers still await preparation.
+  await applicationModules
+    .find((module) => module.manifest.id === args.appId)
+    ?.prepare?.()
   await nextTick()
   // The root has rendered the registered feature before reporting tool success.
   await nextTick()
