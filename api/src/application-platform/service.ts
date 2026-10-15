@@ -279,7 +279,7 @@ export class ApplicationPlatform {
   async catalog(userId: string): Promise<MarketEntry[]> {
     await this.bootstrap(userId)
     const rows = await this.source.query(
-      `SELECT r.definition,a.kind,i.*,JSON_UNQUOTE(JSON_EXTRACT(installed.definition,'$.manifest.version')) AS installed_version FROM application_releases r JOIN application_registry a ON a.app_id=r.app_id LEFT JOIN application_installations i ON i.app_id=r.app_id AND i.user_id=? LEFT JOIN application_releases installed ON installed.release_id=i.release_id WHERE r.published=1 ORDER BY r.created_at,r.app_id`,
+      `SELECT r.definition,a.kind,i.*,JSON_UNQUOTE(JSON_EXTRACT(installed.definition,'$.manifest.version')) AS installed_version,r.release_notes AS latest_release_notes,JSON_EXTRACT(installed.definition,'$.updatePrompt') AS installed_update_prompt FROM application_releases r JOIN application_registry a ON a.app_id=r.app_id LEFT JOIN application_installations i ON i.app_id=r.app_id AND i.user_id=? LEFT JOIN application_releases installed ON installed.release_id=i.release_id WHERE r.published=1 ORDER BY r.created_at,r.app_id`,
       [userId],
     )
     return rows.map((r: Record<string, unknown>) => ({
@@ -287,6 +287,8 @@ export class ApplicationPlatform {
         ...json<AppRelease>(r.definition as string),
         kind: r.kind as AppRelease['kind'],
       },
+      releaseNotes: String(r.latest_release_notes || ''),
+      ...(r.installed_update_prompt ? { installedUpdatePrompt: json(r.installed_update_prompt as string) } : {}),
       installation: r.user_id ? this.installation(r) : null,
       issue: r.status === 'active' ? null : this.deploymentIssue(String(r.app_id)),
     }))
@@ -735,10 +737,15 @@ export class ApplicationPlatform {
       generation: installation.generation,
       subject: this.subject(userId, appId),
       platform,
+      updatePrompt: release.updatePrompt,
       runtime: release.runtime.type,
       params: {},
       permissions: installation.grants,
       capabilities: [
+        'updates.getAvailable',
+        'updates.openMarket',
+        'updates.presentation',
+        'updates.respond',
         'runtime.context',
         'auth.session',
         'navigation.back',

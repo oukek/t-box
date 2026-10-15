@@ -1,4 +1,4 @@
-import type { AppPlatform } from './index.js'
+import type { ApplicationUpdatePrompt, AppPlatform } from './index.js'
 
 /** Additive SDK protocol; executable release protocol remains unchanged. */
 export const APP_SDK_VERSION = 1 as const
@@ -11,7 +11,10 @@ export interface ApplicationContext {
   platform: AppPlatform
   runtime: 'shell' | 'web'
   params: Readonly<Record<string, string>>
+  /** Host can hide its legacy header after the app claims navigation at ready(). */
+  supportsAppNavigation?: boolean
   hostUrl?: string
+  updatePrompt?: ApplicationUpdatePrompt
   permissions: readonly string[]
   capabilities: readonly HostMethod[]
 }
@@ -22,7 +25,8 @@ export interface ApplicationSession {
   profile?: { nickname: string }
 }
 export type HostMethod =
-  | 'files.pick' | 'files.upload' | 'files.read' |
+  | 'updates.getAvailable' | 'updates.openMarket' | 'updates.presentation' | 'updates.respond' |
+  'files.pick' | 'files.upload' | 'files.read' |
   'device.reminders' |
   'runtime.context' |
   'auth.session' |
@@ -43,7 +47,7 @@ export interface ApplicationBridgeError {
 }
 export interface ApplicationBridgeEvent {
   type: 'event'
-  name: 'auth.changed' | 'runtime.closed' | 'runtime.navigation' | 'runtime.interactions.cancelled' | 'app.event' | 'app.event.error'
+  name: 'auth.changed' | 'runtime.closed' | 'runtime.navigation' | 'runtime.interactions.cancelled' | 'app.event' | 'app.event.error' | 'runtime.update'
   data: unknown
 }
 /** JSON attachments have a separate bounded transport budget; ordinary calls remain small. */

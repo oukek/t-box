@@ -15,6 +15,7 @@ import { application, identity, preferences } from './runtime'
 import { durationLabel } from './stopwatch'
 import StopwatchPanel from './StopwatchPanel.vue'
 import TimeConversion from './TimeConversion.vue'
+import { timezoneOptions } from './timezoneOptions'
 import '@t-box/ui-kit/temporal.css'
 import './time.css'
 
@@ -54,11 +55,14 @@ const liveTimers = computed(() =>
     ...timerState(t, now.value + offset.value),
   })),
 )
-const zoneOptions = computed(() =>
+const timezoneNow = computed(() => Math.floor((now.value + offset.value) / 60_000) * 60_000)
+const commonZoneOptions = computed(() => timezoneOptions(commonTimezones, timezoneNow.value))
+const zoneOptions = computed(() => timezoneOptions(
   commonTimezones.some((z) => z.value === zone.value)
     ? commonTimezones
     : [{ value: zone.value, label: zone.value }, ...commonTimezones],
-)
+  timezoneNow.value,
+))
 let tick: ReturnType<typeof setInterval> | undefined
 let poll: ReturnType<typeof setInterval> | undefined
 let loadId = 0
@@ -416,6 +420,7 @@ async function remove() {
       </p>
     </template><StopwatchPanel v-show="tab === 'stopwatch'" /><TimeConversion
       v-show="tab === 'convert'"
+      :now="timezoneNow"
     /><Modal
       :open="creating"
       title="新建倒计时"
@@ -511,12 +516,12 @@ async function remove() {
     >
       <div class="time-zone-picker">
         <button
-          v-for="option in commonTimezones"
+          v-for="option in commonZoneOptions"
           :key="option.value"
           :disabled="clocks.includes(option.value)"
           @click="addZone(option.value)"
         >
-          {{ option.label }}<small>{{ option.value }}</small>
+          <span class="time-zone-option-label">{{ option.label }}<span>{{ option.suffix }}</span></span><small>{{ option.value }}</small>
         </button>
       </div>
       <form class="temporal-inline" @submit.prevent="addZone(customZone)">

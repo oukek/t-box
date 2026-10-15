@@ -1,4 +1,5 @@
 @import '@t-box/ui-kit/base.css';
+@import '@t-box/ui-kit/application.css';
 @import './features/features.css';
 @import './bills/ledger.css';
 @import './books/books.css';
@@ -48,4 +49,8 @@ body,
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
+}
+
+.application-frame {
+  --application-content-width: 1220px;
 }

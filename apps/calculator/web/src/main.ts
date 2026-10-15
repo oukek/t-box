@@ -1,5 +1,6 @@
 import { connectAppClient } from '@t-box/app-web-sdk'
 import { parseCalculatorParams } from '@t-box/calculator-contracts'
+import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { createApp, h } from 'vue'
 import CalculatorPage from './CalculatorPage.vue'
 import { bindHistory, runtime } from './runtime'
@@ -34,16 +35,20 @@ connectAppClient({
     const params = parseCalculatorParams(connection.context.params)
     runtime.kind = params.kind || 'scientific'
     runtime.expression = params.expression || ''
+    const ownsNavigation = connection.context.supportsAppNavigation === true
     node.textContent = ''
     createApp({
       render: () =>
-        h(CalculatorPage, {
-          kind: runtime.kind,
-          expression: runtime.expression || undefined,
-          openRevision: runtime.revision,
-        }),
+        h('main', { class: 'application-frame' }, [
+          ...(ownsNavigation ? [h(ApplicationHeader, { title: '计算器', backLabel: 'OS', onBack: () => connection.client.navigation.back() })] : []),
+          h(CalculatorPage, {
+            kind: runtime.kind,
+            expression: runtime.expression || undefined,
+            openRevision: runtime.revision,
+          }),
+        ]),
     }).mount(node)
-    connection.ready()
+    connection.ready({ appNavigation: ownsNavigation })
     window.addEventListener('pagehide', () => connection.client.dispose(), {
       once: true,
     })

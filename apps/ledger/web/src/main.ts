@@ -61,7 +61,7 @@ connectAppClient({
   connection.client.runtime.onClose(cancel)
   const root = document.getElementById('app')!
   root.textContent = ''
-  createApp({ render: () => [h(BookHub, { ...runtime.params, openRevision: runtime.revision }), h(Host)] }).mount(root)
+  createApp({ render: () => h('main', { class: 'application-frame' }, [h(BookHub, { ...runtime.params, openRevision: runtime.revision }), h(Host)]) }).mount(root)
   connection.ready()
   window.addEventListener('pagehide', () => {
     cancel()

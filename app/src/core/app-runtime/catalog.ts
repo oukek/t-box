@@ -14,23 +14,44 @@ export const appCatalog = reactive({
   loading: false,
   error: '',
   revision: 0,
+  stale: false,
 })
 let generation = 0
-export async function refreshCatalog() {
+let catalogUser: string | undefined
+export async function refreshCatalog(options: { silent?: boolean } = {}) {
   const epoch = ++generation
   const user = identity.user?.id
+  const token = identity.token
+  if (catalogUser !== user) {
+    catalogUser = user
+    appCatalog.entries = []
+    appCatalog.error = ''
+    appCatalog.stale = false
+    appCatalog.revision++
+  }
   if (!user) {
     appCatalog.entries = []
+    appCatalog.loading = false
+    appCatalog.error = ''
+    appCatalog.stale = false
+    appCatalog.revision++
     return
   }
-  appCatalog.loading = true
-  appCatalog.error = ''
+  if (!options.silent) {
+    appCatalog.loading = true
+    appCatalog.error = ''
+  }
   try {
     const result = await request<{ data: MarketEntry[] }>('/app-market')
-    if (epoch === generation && identity.user?.id === user) {
-      syncCatalogModules(result.data)
-      appCatalog.entries = result.data
-      appCatalog.revision++
+    if (epoch === generation && identity.user?.id === user && identity.token === token) {
+      if (JSON.stringify(appCatalog.entries) !== JSON.stringify(result.data)) {
+        syncCatalogModules(result.data)
+        appCatalog.entries = result.data
+        appCatalog.revision++
+        window.dispatchEvent(new Event('tbox:applications-changed'))
+      }
+      appCatalog.error = ''
+      appCatalog.stale = false
       for (const module of applicationModules) {
         if (!isInstalled(module.manifest.id)) {
           clearApplicationBindings(module.manifest.id)
@@ -39,7 +60,10 @@ export async function refreshCatalog() {
     }
   } catch (e) {
     if (epoch === generation) {
-      appCatalog.error = e instanceof Error ? e.message : '应用市场读取失败'
+      appCatalog.stale = true
+      if (!options.silent || !appCatalog.entries.length) {
+        appCatalog.error = e instanceof Error ? e.message : '应用市场读取失败'
+      }
     }
   } finally {
     if (epoch === generation) {

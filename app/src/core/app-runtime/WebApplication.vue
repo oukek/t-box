@@ -8,6 +8,7 @@ import { backFromApplication } from '../navigation'
 import ApplicationLaunch from './ApplicationLaunch.vue'
 import { connectFrame, descriptor } from './bridge'
 import { launchStateKey } from './launchState'
+import { APPLICATION_FRAME_SANDBOX } from './sandbox'
 
 const props = defineProps<{
   appId: string
@@ -65,8 +66,11 @@ async function connected() {
   try {
     attempt = connectFrame(frame.value, runtime.value, props.params)
     connection = attempt
-    await attempt.promise
+    const client = await attempt.promise
     if (generation === epoch && connection === attempt) {
+      if (launch) {
+        launch.appNavigation.value = client.appNavigation
+      }
       loading.value = false
       updateStage('ready')
     }
@@ -126,7 +130,7 @@ onBeforeUnmount(() => {
       :class="{ 'runtime-frame--loading': loading }"
       :aria-hidden="loading"
       :inert="loading"
-      sandbox="allow-scripts allow-same-origin allow-downloads"
+      :sandbox="APPLICATION_FRAME_SANDBOX"
       referrerpolicy="strict-origin-when-cross-origin"
       allow="clipboard-write"
       @load="connected"

@@ -7,15 +7,15 @@ export const marketModule: ClientApplicationModule = {
   contractVersion: APPLICATION_CONTRACT_VERSION,
   manifest: marketManifest,
   shellCompatibility: { minimumVersion: '1.0.0' },
-  navigation: 'shell',
+  navigation: 'feature',
   sdk: { restPrefixes: [], storage: true },
   installation: { kind: 'system' },
   component: defineAsyncComponent(() => import('./MarketPage.vue')),
-  parseParams(value) {
-    if (!value || typeof value !== 'object' || Object.keys(value).length) {
-      throw new Error('应用市场不接受导航参数')
+  parseParams(value): Record<string, string> {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some((key) => key !== 'appId') || ('appId' in value && (typeof value.appId !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(value.appId)))) {
+      throw new Error('应用市场导航参数无效')
     }
-    return {}
+    return 'appId' in value ? { appId: value.appId as string } : {}
   },
-  props: () => ({}),
+  props: (params, { openRevision }) => ({ focusAppId: params.appId || '', openRevision }),
 }

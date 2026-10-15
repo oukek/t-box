@@ -5,6 +5,7 @@ import type {
   ApplicationFile,
   ApplicationFileContent,
   ApplicationSession,
+  ApplicationUpdateInfo,
   FilePickOptions,
   HostMethod,
 } from '@t-box/app-contracts'
@@ -13,6 +14,8 @@ import { APPLICATION_FILE_MAX_BYTES, createApplicationRequestId } from '@t-box/a
 export type {
   ApplicationContext,
   ApplicationSession,
+  ApplicationUpdateInfo,
+  ApplicationUpdatePrompt,
   HostMethod,
 } from '@t-box/app-contracts'
 
@@ -57,6 +60,8 @@ export interface AppTransport {
 export type AppClient = ReturnType<typeof createAppClient>
 export function createAppClient(transport: AppTransport) {
   let closed = false
+  let updateHandler: { id: string, show(update: ApplicationUpdateInfo, options: { signal: AbortSignal }): boolean | void | Promise<boolean | void> } | undefined
+  let updateAbort: AbortController | undefined
   const requests = new Set<AbortController>()
   const authListeners = new Set<(session: ApplicationSession) => void>()
   const closeListeners = new Set<(reason: AppSdkError) => void>()
@@ -86,7 +91,29 @@ export function createAppClient(transport: AppTransport) {
     if (closed) {
       return
     }
-    if (event.name === 'auth.changed') {
+    if (event.name === 'runtime.update') {
+      const data = event.data as { promptId: string, update: ApplicationUpdateInfo | null }
+      updateAbort?.abort()
+      updateAbort = undefined
+      if (!data.update || !updateHandler) {
+        return
+      }
+      const handler = updateHandler
+      const abort = new AbortController()
+      updateAbort = abort
+      void Promise.resolve().then(() => {
+        if (closed || abort.signal.aborted || updateHandler !== handler) {
+          return false
+        }
+        return handler.show(data.update!, { signal: abort.signal })
+      }).then((result) => result !== false, () => false).then((shown) => {
+        if (!closed && !abort.signal.aborted && updateHandler === handler) {
+          return call('updates.respond', { promptId: data.promptId, shown })
+        }
+      }).catch(() => {})
+    } else if (event.name === 'auth.changed') {
+      updateAbort?.abort()
+      updateHandler = undefined
       const reason = new AppSdkError(
         'SESSION_CHANGED',
         '登录状态已改变，请重新操作',
@@ -133,6 +160,8 @@ export function createAppClient(transport: AppTransport) {
       return
     }
     closed = true
+    updateAbort?.abort()
+    updateHandler = undefined
     abortRequests(reason)
     stopListening()
     transport.close()
@@ -267,6 +296,40 @@ export function createAppClient(transport: AppTransport) {
         const binary = atob(content.base64)
         const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
         return { file: content.file, blob: new Blob([bytes], { type: content.file.mimeType }) }
+      },
+    },
+    updates: {
+      getAvailable: () => call<ApplicationUpdateInfo | null>('updates.getAvailable', {}),
+      async openMarket() {
+        await call('updates.openMarket', {})
+      },
+      /**
+       * Return false or throw for the host fallback. Resolve only after custom UI is visible.
+       * Close custom UI when signal aborts (timeout, navigation or session change).
+       */
+      async registerPrompt(show: (update: ApplicationUpdateInfo, options: { signal: AbortSignal }) => boolean | void | Promise<boolean | void>) {
+        if (updateHandler) {
+          throw new AppSdkError('UPDATE_PROMPT_REGISTERED', '已注册更新提示处理器')
+        }
+        const handler = { id: createApplicationRequestId(), show }
+        updateHandler = handler
+        const stop = () => {
+          if (updateHandler !== handler) {
+            return
+          }
+          updateAbort?.abort()
+          updateHandler = undefined
+          if (!closed) {
+            void call('updates.presentation', { registrationId: handler.id, enabled: false }).catch(() => {})
+          }
+        }
+        try {
+          await call('updates.presentation', { registrationId: handler.id, enabled: true })
+          return stop
+        } catch (error) {
+          stop()
+          throw error
+        }
       },
     },
     permissions: {

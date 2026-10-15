@@ -1,416 +1,272 @@
 <script setup lang="ts">
-import type { MarketEntry } from '@t-box/app-contracts'
-import type { DeepReadonly } from 'vue'
-import {
-  appCatalog,
-  changeInstallation,
-  openApplication,
-  presentApplication,
-  refreshCatalog,
-} from '@t-box/app-shell-sdk'
+import type { MarketApp, MarketFilter } from './presentation'
+import { appCatalog, backFromApplication, changeInstallation, navigation, openApplication, refreshCatalog, tabLabel } from '@t-box/app-shell-sdk'
 import { AppIcon, Modal } from '@t-box/ui-kit'
+import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import MarketAppCard from './MarketAppCard.vue'
+import { displayApp, hasUpdate, installAction, isInstalled, isProcessing, matchesFilter, permissionLabel, stateLabel } from './presentation'
+import './market.css'
 
-const display = (entry: DeepReadonly<MarketEntry>) =>
-  presentApplication(entry.release.manifest)
+const props = defineProps<{ focusAppId?: string, openRevision?: number }>()
 const query = ref('')
-const selected = ref<DeepReadonly<MarketEntry> | null>(null)
+const filter = ref<MarketFilter>('all')
+const selectedId = ref<string | null>(null)
+const selected = computed(() => appCatalog.entries.find((entry) => entry.release.appId === selectedId.value) || null)
+const uninstallOpen = ref(false)
 const busy = ref(false)
 const error = ref('')
+const notice = ref('')
 const operationKey = ref(crypto.randomUUID())
-const entries = computed(() =>
-  appCatalog.entries.filter((e) =>
-    (display(e).name + display(e).description).includes(query.value.trim()),
-  ),
-)
-const installed = (e: DeepReadonly<MarketEntry>) =>
-  e.installation?.status === 'active'
-const updating = (e: DeepReadonly<MarketEntry>) =>
-  Boolean(e.installation?.operationId)
-const action = (e: DeepReadonly<MarketEntry>) =>
-  installed(e)
-    ? e.installation!.releaseId !== e.release.releaseId
-      ? 'update'
-      : 'uninstall'
-    : 'install'
-const label = (e: DeepReadonly<MarketEntry>) =>
-  updating(e)
-    ? '正在处理'
-    : installed(e)
-      ? e.installation!.releaseId !== e.release.releaseId
-        ? '更新'
-        : '打开'
-      : '安装'
-function show(entry: DeepReadonly<MarketEntry>) {
-  selected.value = entry
+const filters = computed(() => [
+  { id: 'all' as const, label: '全部', count: appCatalog.entries.length },
+  { id: 'installed' as const, label: '已安装', count: appCatalog.entries.filter(isInstalled).length },
+  { id: 'updates' as const, label: '可更新', count: appCatalog.entries.filter(hasUpdate).length },
+])
+const entries = computed(() => {
+  const keyword = query.value.trim().toLocaleLowerCase()
+  return appCatalog.entries.filter((entry) => {
+    const app = displayApp(entry)
+    return matchesFilter(entry, filter.value) && `${app.name} ${app.description}`.toLocaleLowerCase().includes(keyword)
+  })
+})
+const sections = computed(() => [
+  { id: 'user', title: '可选应用', caption: '按需安装，自由选择', entries: entries.value.filter((entry) => entry.release.kind === 'user') },
+  { id: 'system', title: '系统应用', caption: '系统内置，持续更新', entries: entries.value.filter((entry) => entry.release.kind === 'system') },
+].filter((section) => section.entries.length))
+const emptyTitle = computed(() => query.value.trim() ? '没有找到相关应用' : filter.value === 'updates' ? '当前没有可更新的应用' : filter.value === 'installed' ? '还没有已安装的应用' : '应用正在准备中')
+const emptyDescription = computed(() => query.value.trim() ? '试试应用名称或功能关键词。' : filter.value === 'updates' ? '新版本上架后，会出现在这里。' : '在全部应用中发现适合你的工具。')
+function show(entry: MarketApp) {
+  if (busy.value) {
+    return
+  }
+  selectedId.value = entry.release.appId
+  uninstallOpen.value = false
   error.value = ''
+  notice.value = ''
   operationKey.value = crypto.randomUUID()
 }
-const permissions: Record<string, string> = {
-  'calculator.calculate': '执行数学计算',
-  'storage': '保存应用偏好与本地记录',
+function closeDetails() {
+  if (busy.value) {
+    return
+  }
+  selectedId.value = null
+  error.value = ''
+  uninstallOpen.value = false
 }
-async function confirm() {
-  if (!selected.value) {
+async function activate(entry: MarketApp) {
+  if (busy.value || isProcessing(entry)) {
+    return
+  }
+  if (!isInstalled(entry) || hasUpdate(entry)) {
+    show(entry)
+    return
+  }
+  error.value = ''
+  try {
+    await openApplication({ appId: entry.release.appId })
+    closeDetails()
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '应用打开失败，请重试'
+  }
+}
+async function confirm(uninstall = false) {
+  const entry = selected.value
+  if (!entry || busy.value || isProcessing(entry) || (uninstall && entry.release.kind === 'system')) {
+    return
+  }
+  const action = uninstall ? 'uninstall' : installAction(entry)
+  // Opening an installed app is separate from an explicit uninstall confirmation.
+  if (!uninstall && action === 'uninstall') {
+    await activate(entry)
     return
   }
   busy.value = true
   error.value = ''
   try {
-    await changeInstallation(
-      selected.value,
-      action(selected.value),
-      operationKey.value,
-    )
-    selected.value = null
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '操作失败'
+    await changeInstallation(entry, action, operationKey.value)
+    notice.value = `${displayApp(entry).name}的${action === 'uninstall' ? '卸载' : action === 'update' ? '更新' : '安装'}请求已提交`
+    selectedId.value = null
+    uninstallOpen.value = false
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '操作失败，请重试'
   } finally {
     busy.value = false
   }
 }
-const poll = setInterval(() => {
-  if (appCatalog.entries.some((e) => e.installation?.operationId)) {
-    void refreshCatalog().then(() =>
-      window.dispatchEvent(new Event('tbox:applications-changed')),
-    )
+function requestUninstall() {
+  uninstallOpen.value = true
+  error.value = ''
+  operationKey.value = crypto.randomUUID()
+}
+function resetFilters() {
+  query.value = ''
+  filter.value = 'all'
+}
+let focusedRevision = ''
+watch(() => [props.focusAppId, props.openRevision, appCatalog.revision] as const, () => {
+  const focus = `${props.openRevision}:${props.focusAppId}`
+  if (!props.focusAppId || focusedRevision === focus) {
+    return
   }
-}, 5000)
-onMounted(() => void refreshCatalog())
-onBeforeUnmount(() => clearInterval(poll))
+  const entry = appCatalog.entries.find((entry) => entry.release.appId === props.focusAppId)
+  if (entry) {
+    focusedRevision = focus
+    show(entry)
+  }
+}, { immediate: true })
 </script>
 
 <template>
-  <section class="market-page">
-    <div class="market-intro">
-      <p class="market-eyebrow">为你的 OS 添加能力</p>
-      <h2>工具，随手可用。</h2>
-      <p>一个入口，打开你的日常应用。</p>
+  <section class="market-page" aria-label="应用市场">
+    <ApplicationHeader
+      title="应用市场"
+      :back-label="tabLabel(navigation.backTo)"
+      @back="backFromApplication"
+    >
+      <template #actions><button
+        class="market-refresh"
+        :disabled="appCatalog.loading || busy"
+        aria-label="刷新应用列表"
+        title="刷新应用列表"
+        @click="refreshCatalog()"
+      ><AppIcon
+        name="refresh"
+        :size="18"
+        :class="{ 'market-spinning': appCatalog.loading }"
+      /></button></template>
+    </ApplicationHeader>
+    <div class="market-toolbar">
+      <div class="market-search"><AppIcon name="search" :size="18" /><input
+        v-model="query"
+        type="search"
+        placeholder="搜索应用或功能"
+        aria-label="搜索应用"
+        autocomplete="off"
+      ><button
+        v-if="query"
+        aria-label="清空搜索"
+        @click="query = ''"
+      ><AppIcon name="close" :size="15" /></button></div>
+      <div
+        class="market-filters"
+        role="group"
+        aria-label="应用筛选"
+      ><button
+        v-for="item in filters"
+        :key="item.id"
+        :aria-pressed="filter === item.id"
+        @click="filter = item.id"
+      ><span>{{ item.label }}</span><small>{{ item.count }}</small></button></div>
     </div>
-    <label class="market-search"><AppIcon name="search" :size="18" /><input
-      v-model="query"
-      placeholder="搜索应用"
-      aria-label="搜索应用"
-    ></label>
-    <p v-if="appCatalog.error" role="alert">
-      {{ appCatalog.error }}
-      <button class="button button-secondary" @click="refreshCatalog">
-        重试
-      </button>
-    </p>
-    <div class="market-section-title">
-      <h3>全部应用</h3>
-      <span>{{ entries.length }} 个应用</span>
-    </div>
-    <div class="market-list">
-      <article
-        v-for="entry in entries"
-        :key="entry.release.appId"
-        class="market-row"
-      >
-        <button class="market-identity" @click="show(entry)">
-          <LauncherIcon
-            :app-id="entry.release.appId"
-            :icon="display(entry).icon"
-            :icon-asset="display(entry).iconAsset"
-            :icon-variant="display(entry).iconVariant"
-          /><span><strong>{{ display(entry).name }}</strong><small>{{ display(entry).description }}</small><em>{{ entry.release.kind === "system" ? "系统应用" : "官方应用" }} ·
-            v{{ entry.release.manifest.version
-            }}<template v-if="entry.release.manifest.skillIds.length">
-              · 支持 AI 工具</template></em></span>
-        </button><button
-          class="market-action"
-          :disabled="updating(entry) || busy"
-          @click="
-            installed(entry)
-              && entry.installation!.releaseId === entry.release.releaseId
-              ? openApplication({ appId: entry.release.appId })
-              : show(entry)
-          "
+    <p
+      v-if="appCatalog.error"
+      class="market-feedback market-feedback--error"
+      role="alert"
+    ><AppIcon name="warning" :size="16" /><span>{{ appCatalog.error }}</span><button :disabled="appCatalog.loading" @click="refreshCatalog()">重试</button></p>
+    <p
+      v-else-if="notice"
+      class="market-feedback"
+      role="status"
+    ><AppIcon name="check" :size="16" /><span>{{ notice }}</span><button aria-label="关闭操作提示" @click="notice = ''"><AppIcon name="close" :size="14" /></button></p>
+    <p
+      v-if="error && !selected"
+      class="market-feedback market-feedback--error"
+      role="alert"
+    >{{ error }}</p>
+    <div class="market-results" :aria-busy="appCatalog.loading">
+      <div
+        v-if="appCatalog.loading && !appCatalog.entries.length"
+        class="market-skeletons"
+        role="status"
+      ><span class="sr-only">正在加载应用…</span><div
+        v-for="item in 4"
+        :key="item"
+        class="market-skeleton"
+        aria-hidden="true"
+      ><i /><span><b /><em /></span></div></div>
+      <template v-else>
+        <section
+          v-for="section in sections"
+          :key="section.id"
+          class="market-section"
+          :aria-labelledby="`market-section-${section.id}`"
         >
-          {{ label(entry) }}
-        </button>
-      </article>
+          <header class="market-section-heading"><h2 :id="`market-section-${section.id}`">{{ section.title }}<span>{{ section.entries.length }}</span></h2><p>{{ section.caption }}</p></header>
+          <div class="market-grid" :class="{ 'market-grid--optional': section.id === 'user' }"><MarketAppCard
+            v-for="entry in section.entries"
+            :key="entry.release.appId"
+            :entry="entry"
+            :busy="busy"
+            @inspect="show"
+            @activate="activate"
+          /></div>
+        </section>
+        <div
+          v-if="!entries.length && !appCatalog.error"
+          class="market-empty"
+          role="status"
+        ><span class="market-empty-icon"><AppIcon :name="filter === 'updates' && !query.trim() ? 'check' : 'search'" :size="26" /></span><h2>{{ emptyTitle }}</h2><p>{{ emptyDescription }}</p><button v-if="query || filter !== 'all'" @click="resetFilters">查看全部应用<AppIcon name="right" :size="15" /></button></div>
+      </template>
     </div>
-    <p v-if="!entries.length && !appCatalog.loading" class="market-empty">
-      没有找到这个应用，换个关键词试试。
-    </p>
     <Modal
-      :open="Boolean(selected)"
-      :title="selected ? display(selected).name : '应用详情'"
+      :open="Boolean(selected) && !uninstallOpen"
+      title="应用详情"
       :busy="busy"
-      @close="!busy && (selected = null)"
+      @close="closeDetails"
     >
       <div v-if="selected" class="market-detail">
-        <p>{{ display(selected).description }}</p>
-        <dl>
-          <div>
-            <dt>版本</dt>
-            <dd>{{ selected.release.manifest.version }}</dd>
-          </div>
-          <div>
-            <dt>状态</dt>
-            <dd>
-              {{
-                updating(selected)
-                  ? "等待服务确认"
-                  : installed(selected)
-                    ? "已安装"
-                    : selected.installation?.status === "revoked"
-                      ? "已卸载"
-                      : "未安装"
-              }}
-            </dd>
-          </div>
-        </dl>
-        <template v-if="action(selected) !== 'uninstall'">
-          <h4>应用权限</h4>
-          <ul v-if="selected.release.permissions.length">
-            <li
-              v-for="permission in selected.release.permissions"
-              :key="permission"
-            >
-              {{ permissions[permission] || permission }}
-            </li>
-          </ul>
-          <p v-else>无需额外权限。</p>
-        </template>
-        <p v-else-if="selected.release.kind === 'user'">
-          卸载后停止提供 AI 工具，已有数据会保留。重新安装后可以继续使用。
-        </p>
+        <div class="market-detail-identity"><LauncherIcon
+          :app-id="selected.release.appId"
+          :icon="displayApp(selected).icon"
+          :icon-asset="displayApp(selected).iconAsset"
+          :icon-variant="displayApp(selected).iconVariant"
+        /><div><h3>{{ displayApp(selected).name }}</h3><p>{{ selected.release.kind === 'system' ? '系统应用' : '独立应用' }}<span v-if="selected.release.manifest.skillIds.length"> · 支持 AI 工具</span></p></div></div>
+        <p class="market-detail-description">{{ displayApp(selected).description }}</p>
+        <dl class="market-detail-facts"><div><dt>最新版本</dt><dd>v{{ selected.release.manifest.version }}</dd></div><div><dt>安装状态</dt><dd>{{ stateLabel(selected) }}</dd></div></dl>
+        <div v-if="selected.releaseNotes" class="market-release-notes"><h4>更新说明</h4><p>{{ selected.releaseNotes }}</p></div>
+        <p v-if="selected.issue || selected.installation?.error" class="market-detail-warning">{{ selected.issue || selected.installation?.error }}</p>
+        <div v-if="!isInstalled(selected) || hasUpdate(selected)" class="market-permissions"><h4>{{ hasUpdate(selected) ? '更新后的应用权限' : '安装后允许此应用' }}</h4><ul v-if="selected.release.permissions.length"><li v-for="permission in selected.release.permissions" :key="permission"><AppIcon name="check" :size="14" /><span>{{ permissionLabel(permission) }}</span></li></ul><p v-else>无需额外权限。</p></div>
+        <p v-if="selected.release.kind === 'system'" class="market-detail-note"><AppIcon name="lock" :size="13" />系统应用随 OS 提供，支持更新，不可卸载。</p>
         <p
           v-if="error"
+          class="market-detail-error"
           role="alert"
-          class="market-error"
-        >
-          {{ error }}
-        </p>
-        <button
-          v-if="
-            !updating(selected)
-              && (selected.release.kind === 'user'
-                || action(selected) !== 'uninstall')
-          "
-          class="button"
-          :class="
-            action(selected) === 'uninstall'
-              ? 'button-secondary'
-              : 'button-primary'
-          "
-          :disabled="busy"
-          @click="confirm"
-        >
-          {{
-            busy
-              ? "正在处理…"
-              : action(selected) === "uninstall"
-                ? "卸载应用"
-                : action(selected) === "update"
-                  ? "确认更新"
-                  : "同意权限并安装"
-          }}
-        </button>
-        <p v-else class="market-note">
-          {{
-            selected.release.kind === "system"
-              ? "系统应用不可卸载。"
-              : "正在核对服务结果，可以离开此页面。"
-          }}
-        </p>
+        >{{ error }}</p>
       </div>
+      <template #footer><div v-if="selected" class="market-detail-actions"><button
+        v-if="isInstalled(selected) && selected.release.kind === 'user' && !isProcessing(selected)"
+        class="market-uninstall-link"
+        :disabled="busy"
+        @click="requestUninstall"
+      ><AppIcon name="trash" :size="15" />卸载应用</button><button
+        class="market-detail-primary"
+        :disabled="busy || isProcessing(selected)"
+        @click="confirm()"
+      >{{ busy ? '正在提交…' : isProcessing(selected) ? '正在处理…' : hasUpdate(selected) ? '同意权限并更新' : isInstalled(selected) ? '打开应用' : '同意权限并安装' }}</button></div></template>
+    </Modal>
+    <Modal
+      :open="uninstallOpen && Boolean(selected)"
+      title="卸载这个应用？"
+      :busy="busy"
+      @close="!busy && (uninstallOpen = false)"
+    >
+      <p v-if="selected" class="market-uninstall-description">「{{ displayApp(selected).name }}」会从桌面移除，AI 将无法继续使用它的工具。已有数据会保留，重新安装后可继续使用。</p>
+      <p
+        v-if="error"
+        class="market-detail-error"
+        role="alert"
+      >{{ error }}</p>
+      <template #footer><button
+        class="button button-secondary"
+        :disabled="busy"
+        @click="uninstallOpen = false"
+      >取消</button><button
+        class="button button-danger"
+        :disabled="busy"
+        @click="confirm(true)"
+      >{{ busy ? '正在提交…' : '确认卸载' }}</button></template>
     </Modal>
   </section>
 </template>
-
-<style scoped>
-.market-page {
-  --market-ink: #233347;
-  --market-muted: #718092;
-  --market-blue: #386ce6;
-  --market-line: #e8edf4;
-  --market-paper: #fff;
-  max-width: 840px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 20px 18px 32px;
-  color: var(--market-ink);
-}
-.market-intro {
-  padding: 14px 0 26px;
-}
-.market-eyebrow {
-  color: var(--market-blue);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  margin: 0 0 10px;
-}
-.market-intro h2 {
-  font-size: 26px;
-  letter-spacing: -0.06em;
-  margin: 0 0 9px;
-  font-weight: 650;
-}
-.market-intro > p:last-child {
-  font-size: 13px;
-  color: var(--market-muted);
-  margin: 0;
-}
-.market-search {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  background: #edf2f8;
-  padding: 0 14px;
-  border-radius: 12px;
-  height: 42px;
-  color: var(--market-muted);
-}
-.market-search input {
-  border: 0 !important;
-  background: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  width: 100%;
-  min-width: 0;
-  font-size: 14px;
-  padding: 0;
-}
-.market-section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 25px 0 8px;
-}
-.market-section-title h3 {
-  font-size: 15px;
-  margin: 0;
-}
-.market-section-title span {
-  font-size: 12px;
-  color: var(--market-muted);
-}
-.market-list {
-  background: var(--market-paper);
-  border-radius: 16px;
-  padding: 0 14px;
-}
-.market-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--market-line);
-  padding: 18px 0;
-}
-.market-row:last-child {
-  border-bottom: 0;
-}
-.market-identity {
-  border: 0;
-  padding: 0;
-  text-align: left;
-  background: none;
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-}
-.market-identity :deep(.launcher-icon) {
-  --icon-size: 54px;
-}
-.market-identity > span {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-.market-identity strong {
-  font-size: 15px;
-  font-weight: 600;
-}
-.market-identity small {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--market-muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.market-identity em {
-  font-size: 10px;
-  font-style: normal;
-  color: #8797a9;
-}
-.market-action {
-  flex-shrink: 0;
-  border: 0;
-  border-radius: 24px;
-  background: #edf3ff;
-  color: var(--market-blue);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 8px 15px;
-  min-width: 60px;
-}
-.market-action:disabled {
-  opacity: 0.55;
-}
-.market-detail dl > div {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--market-line);
-  font-size: 13px;
-}
-.market-detail dd {
-  margin: 0;
-}
-.market-detail p,
-.market-detail li {
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--market-muted);
-}
-.market-detail h4 {
-  font-size: 14px;
-  margin: 20px 0 8px;
-}
-.market-detail .button {
-  width: 100%;
-  margin-top: 16px;
-}
-.market-error {
-  color: #b64c43 !important;
-}
-.market-empty {
-  text-align: center;
-  color: var(--market-muted);
-  font-size: 13px;
-  padding: 25px;
-}
-.market-note {
-  margin-bottom: 0;
-}
-@media (max-width: 600px) {
-  .market-page {
-    padding: 12px 12px 28px;
-  }
-  .market-intro {
-    padding: 9px 3px 21px;
-  }
-  .market-intro h2 {
-    font-size: 24px;
-  }
-  .market-list {
-    padding: 0 12px;
-  }
-  .market-identity {
-    gap: 11px;
-  }
-  .market-row {
-    gap: 8px;
-  }
-}
-</style>

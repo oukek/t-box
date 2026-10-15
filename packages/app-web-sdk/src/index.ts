@@ -29,7 +29,7 @@ export function connectApplication(
     options?: RequestOptions,
   ): Promise<T>
   listen(listener: (event: ApplicationBridgeEvent) => void): () => void
-  ready(): void
+  ready(options?: { appNavigation?: boolean }): void
   close(): void
 }> {
   return new Promise((resolve, reject) => {
@@ -148,10 +148,11 @@ export function connectApplication(
             listeners.delete(listener)
           }
         },
-        ready() {
+        ready(options = {}) {
           if (!closed) {
             port.postMessage({
               type: 'ready',
+              ...(options.appNavigation === undefined ? {} : { appNavigation: options.appNavigation }),
               nonce: event.data.nonce,
               tools: Object.keys(handlers),
             })
@@ -246,7 +247,7 @@ export async function connectAppClient(
     return {
       client,
       context: context as ApplicationContext,
-      ready: () => connection.ready(),
+      ready: (options?: { appNavigation?: boolean }) => connection.ready(options),
     }
   } catch (error) {
     client.dispose()

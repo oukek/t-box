@@ -8,6 +8,9 @@ import { SheetSelect } from '@t-box/ui-kit'
 import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
 import TimeSheetField from '@t-box/ui-kit/TimeSheetField.vue'
 import { computed, ref, watch } from 'vue'
+import { timezoneOptions } from './timezoneOptions'
+
+const props = defineProps<{ now?: number }>()
 
 const deviceZone =
   Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'
@@ -27,7 +30,7 @@ const stampUnit = ref('seconds')
 const amount = ref('1')
 const unit = ref('days')
 const result = ref<Record<string, unknown> | null>(null)
-const calculationZones = computed(() =>
+const calculationZones = computed(() => timezoneOptions(
   [
     ...new Set([
       ...commonTimezones.map((z) => z.value),
@@ -36,7 +39,8 @@ const calculationZones = computed(() =>
       target.value,
     ]),
   ].map((value) => ({ value, label: clockName(value) })),
-)
+  props.now ?? Date.now(),
+))
 function calculate() {
   error.value = ''
   result.value = null

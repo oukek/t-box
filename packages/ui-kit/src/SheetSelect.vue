@@ -9,6 +9,7 @@ const props = defineProps<{
     value: T
     label: string
     description?: string
+    suffix?: string
     disabled?: boolean
   }[]
   label: string
@@ -17,6 +18,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: T] }>()
 const open = ref(false)
+const hasSuffix = computed(() => props.options.some((option) => option.suffix))
 const selected = computed(() =>
   props.options.find((option) => option.value === props.modelValue),
 )
@@ -64,6 +66,7 @@ function move(event: KeyboardEvent) {
   >
     <div
       class="sheet-options"
+      :class="{ 'sheet-options--annotated': hasSuffix }"
       role="listbox"
       :aria-label="label"
       @keydown="move"
@@ -79,11 +82,15 @@ function move(event: KeyboardEvent) {
       >
         <span><strong>{{ option.label }}</strong><small v-if="option.description">{{
           option.description
-        }}</small></span><AppIcon
+        }}</small></span><span v-if="hasSuffix" class="sheet-option-suffix">{{ option.suffix }}</span><span
+          v-if="hasSuffix || option.value === modelValue"
+          class="sheet-option-check"
+          aria-hidden="true"
+        ><AppIcon
           v-if="option.value === modelValue"
           name="check"
           :size="20"
-        />
+        /></span>
       </button>
     </div>
   </BottomSheet>
@@ -153,6 +160,27 @@ function move(event: KeyboardEvent) {
   font-size: 11px;
   line-height: 1.7;
   color: #8a9b9e;
+}
+.sheet-option-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.sheet-options--annotated button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 20px;
+  gap: 12px;
+}
+.sheet-option-suffix {
+  color: var(--muted);
+  white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.sheet-options--annotated button > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .sheet-options button:hover:not(:disabled) {
   background: #f2f7f5;

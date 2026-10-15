@@ -419,13 +419,30 @@
   max-width: 1220px;
   margin: 0 auto;
 }
+/* An iframe is an app viewport, not page content. Gutters outside it would also
+   inset every sheet, backdrop and fixed element rendered by the isolated app. */
+.workspace-plane:has(> .application-workspace > .web-application) {
+  --workspace-top: 0px;
+  --navigation-space: 0px;
+  padding: 0;
+}
 .application-workspace:has(> .web-application) {
   display: flex;
   flex-direction: column;
-  height: calc(
-    var(--visible-height, 100dvh) - var(--workspace-top) - var(--navigation-space) - env(safe-area-inset-top) -
-      env(safe-area-inset-bottom)
-  );
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  height: var(--visible-height, 100dvh);
+}
+/* Old app releases still use a host header until the SDK claims navigation. */
+.application-workspace:has(> .web-application) > .application-page-header {
+  padding: 8px 20px 12px;
+  margin: 0;
+}
+@media (max-width: 760px) {
+  .application-workspace:has(> .web-application) > .application-page-header {
+    padding: 8px 12px 10px;
+  }
 }
 .toast-region {
   bottom: calc(96px + env(safe-area-inset-bottom));

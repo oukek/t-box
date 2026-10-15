@@ -11,9 +11,9 @@ import { closeApplicationRuntimes } from './core/app-runtime/bridge'
 import {
   appCatalog,
   isInstalled,
-  refreshCatalog,
   repairInstallation,
 } from './core/app-runtime/catalog'
+import { startCatalogSync } from './core/app-runtime/catalogSync'
 import { shellVersionCompatible } from './core/app-runtime/compatibility'
 import { clearApplicationBindings } from './core/app-runtime/resourceBindings'
 import { getApplication } from './core/applications'
@@ -69,11 +69,7 @@ async function retryCurrentApplication() {
     appCatalog.error = cause instanceof Error ? cause.message : '应用修复失败'
   }
 }
-const catalogTimer = setInterval(() => {
-  if (identity.user && !appCatalog.loading && appCatalog.entries.some((e) => e.installation?.status === 'installing' || (e.release.kind === 'system' && e.installation?.status === 'failed'))) {
-    void refreshCatalog()
-  }
-}, 10_000)
+const stopCatalogSync = startCatalogSync()
 function hostCompatible(appId: string) {
   const entry = appCatalog.entries.find((e) => e.release.appId === appId)
   const module = applicationModules.find((m) => m.manifest.id === appId)
@@ -98,7 +94,6 @@ watch(
     stopChat()
     closeApplicationRuntimes()
     clearApplicationBindings()
-    void refreshCatalog()
     if (id) {
       startChat()
       void recoverNativeCheckout()
@@ -112,7 +107,7 @@ onMounted(() => {
   stopViewport = observeViewport()
 })
 onBeforeUnmount(() => {
-  clearInterval(catalogTimer)
+  stopCatalogSync()
   stopChat()
   stopViewport?.()
 })

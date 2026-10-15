@@ -28,6 +28,7 @@ import { ApplicationBuildImports } from './application-platform/build-import.js'
 import { registerApplicationBuildImports } from './application-platform/import-routes.js'
 import { ApplicationPublishing } from './application-platform/publishing.js'
 import { registerApplicationPlatform } from './application-platform/routes.js'
+import { registerApplicationCatalogSocket } from './application-platform/socket.js'
 import { registerBilling } from './billing/routes.js'
 import { ApplicationChatService as ChatService } from './bootstrap/chat.js'
 import { UnconfiguredProvider } from './chat/provider.js'
@@ -131,6 +132,9 @@ export function createApp(deps: AppDependencies) {
   registerChatSocket(app, chat, deps.corsOrigins, (scope, allowed) => {
     if (deps.platform) {
       registerLedgerSocket(scope, deps.platform, allowed)
+      if (deps.platform.applicationCatalogUpdates) {
+        registerApplicationCatalogSocket(scope, deps.platform, allowed)
+      }
     }
   })
 

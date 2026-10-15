@@ -4,14 +4,17 @@ import { shallowRef } from 'vue'
 export type LaunchStage = 'resolving' | 'resources' | 'connecting' | 'ready' | 'failed'
 export function createLaunchState() {
   const stage = shallowRef<LaunchStage>('resolving')
+  const appNavigation = shallowRef(false)
   let webRuntime = false
   return {
     stage,
+    appNavigation,
     registerWebRuntime() {
       webRuntime = true
     },
     pending() {
       stage.value = 'resolving'
+      appNavigation.value = false
     },
     resolved() {
       if (!webRuntime && stage.value !== 'failed') {

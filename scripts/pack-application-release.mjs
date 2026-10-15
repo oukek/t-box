@@ -33,7 +33,7 @@ const bundle = Buffer.from(JSON.stringify({
   appId,
   version,
   ...collected,
-  publication: { kind: release.kind, name, description, icon, iconAsset, iconVariant, color },
+  publication: { kind: release.kind, name, description, icon, iconAsset, iconVariant, color, ...(release.updatePrompt ? { updatePrompt: release.updatePrompt } : {}) },
   releaseNotes: notes,
 }))
 if (bundle.length > 30 * 1024 * 1024) {

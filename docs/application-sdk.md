@@ -138,3 +138,64 @@ SDK 协议 `APP_SDK_VERSION` 与已有应用发布协议 `APP_PROTOCOL` 分开�
 - `pnpm test:app-sdk`：公共客户端生命周期、取消、错误、订阅及隔离通信适配器测试。
 - `pnpm test:app-platform`：安装、卸载、版本代次、授权、运行上下文和后端隔离集成测试。
 - `pnpm check:apps`：应用及公共包依赖边界检查。
+
+## 应用更新发现与提示
+
+宿主使用独立的 `/api/v1/app-market/ws` 平台连接同步应用目录，不依赖 AI socket。连接以消息提交现有登录凭证，服务端校验来源、登录有效性并定期复核会话。凭证不放在 URL。每个 API 进程在有订阅者时每 3 秒批量读取一次已发布目录、这些用户的安装记录与会话状态；指纹变化只推送 `catalog.changed` 和不透明 revision，客户端再读取鉴权目录。因此其他 API/worker 进程发布、安装完成也能被发现；草稿和仅提交审核的版本不会提示更新。通常约 3 秒内同步，属于近实时同步，非零延迟推送。
+
+前端只有一个目录同步器：静默读取不会清空列表或触发加载闪烁；断线以指数退避重连，重新连接、窗口聚焦、联网或切回前台会补查。socket 不可用时，仅在前台每 60 秒补查；安装进行中或系统应用安装失败时，前台每 10 秒静默补查处理进度和既有修复流程。通知后的目录读取若暂时失败，也会每 10 秒补查，避免相同 revision 不再推送而丢失更新。更新不会自动安装、重载或切换正在运行的版本。
+
+应用加载完成后，宿主检测其**已安装版本**与已发布版本是否不同（包括管理员回滚到旧版本），避开已打开的表单/密码弹窗后展示更新提示。点击「前往更新」进入 `#/applications/market?appId=<当前应用>`，自动打开应用详情和更新说明，用户确认权限后才更新。选择「稍后」后，同一用户、应用和目标版本在本标签页会话内不再打扰；新版本仍会提示。安装进行中、未安装或安装失败时不会弹版本更新提示。
+
+发布定义可选声明：
+
+```ts
+updatePrompt: {
+  mode: 'default', // 缺省使用系统弹窗；custom 使用 SDK 注册的应用弹窗
+  title: '发现新版本',
+  description: '新版本已上架，前往应用市场查看并更新。',
+  confirmText: '前往更新',
+  deferText: '稍后',
+}
+```
+
+管理后台的版本表单可以维护这些字段，定义会随版本入库；Actions 构建提交也会保留应用声明。文案都是纯文本，不接受 HTML 模板、脚本或远程组件。发布版本不可直接修改，需通过新草稿发布。**提示策略在对应版本安装后生效**，最新待安装版本无法替正在运行的旧版本开启尚不存在的自定义 UI。
+
+独立 Web 和内置应用都可使用公共 SDK：
+
+```ts
+// 在页面 ready() 前注册；已安装发布定义必须声明 mode: 'custom'。
+const stopUpdates = await client.updates.registerPrompt((update, { signal }) => {
+  const dialog = showMyUpdateDialog({
+    title: `${update.name}有新版本`,
+    version: update.version,
+    notes: update.releaseNotes,
+    onUpdate: () => client.updates.openMarket(),
+    onLater: () => dialog.close(),
+  })
+  signal.addEventListener('abort', () => dialog.close(), { once: true })
+  return true // UI 已显示才确认；不要等待用户点击后才返回
+})
+
+// 也可以按需查询，无需将版本信息或弹窗注册成 AI 工具。
+const available = await client.updates.getAvailable()
+// 页面释放时调用 stopUpdates()；client.dispose() 也会自动清理。
+```
+
+宿主留出 2 秒等待自定义处理器注册并确认显示。未注册、返回 false、抛错、超时或实例关闭时回退系统弹窗。超时、版本变化、离开应用或切换账号时 SDK 会取消旧提示；应用应按 AbortSignal 关闭自己的 UI，避免迟到弹窗与默认提示重叠。应答绑定应用实例和一次性 promptId，其他应用或旧请求不能隐藏当前提示。`updates.openMarket()` 只能由当前应用打开自身的市场详情，不接受跨应用 ID、任意 URL 或安装指令。
+
+## 独立应用布局
+
+宿主将独立应用 iframe 作为完整视口，移除外层页面 gutter、居中最大宽度和额外底部导航留白。应用正文自行排版；不要通过缩小 iframe 为正文留白，否则 iframe 内的 sheet、遮罩、固定元素也会一起缩进去。
+
+内置 UI 工具包提供 `@t-box/ui-kit/application.css`，导入后在正文根节点使用 `application-frame`：移动端单层 12px 左右留白，桌面端 20px，默认最大宽度 1080px，可通过 `--application-content-width` 调整，并兼顾安全区域。此容器只约束正文，不设置 transform、contain 或 overflow 来约束弹层。
+
+```ts
+import '@t-box/ui-kit/base.css'
+import '@t-box/ui-kit/application.css'
+// Vue 根页面：<main class="application-frame">标题与正文</main>
+```
+
+`BottomSheet` 已 Teleport 到应用自己的 body，并通过 dialog 顶层绘制；手机端铺满该视口宽度，桌面端保留 560px 面板宽度上限。Modal 和 SidePanel 同样以应用视口定位。应用应在自己的文档内展示标题栏并通过 SDK 返回，让弹层能覆盖标题区域，避免把业务标题留在 iframe 外。兼容原本使用宿主标题栏的应用时，先检查 `context.supportsAppNavigation`，支持才渲染自己的标题栏并调用 `ready({ appNavigation: true })`。宿主收到已验证的就绪消息后隐藏旧标题栏；旧版应用不声明时仍保留返回入口，旧宿主也不会因新版应用而出现双标题。
+
+应用 iframe 的统一沙箱策略允许 scripts、same-origin、forms 和 downloads；`allow-forms` 是 Vue `@submit.prevent` 等本地表单处理收到 submit 事件的必要条件，不能只因应用不使用原生 POST 就禁用它。应用仍使用独立来源，未开放顶层导航和弹出窗口；静态产物服务继续设置 CSP `form-action 'none'`，阻止未被拦截的原生表单跳转。

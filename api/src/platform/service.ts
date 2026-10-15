@@ -12,6 +12,7 @@ import { LedgerService } from '@t-box/ledger-server/ledgers/service'
 import { StatisticsService } from '@t-box/ledger-server/statistics/service'
 import { TimeService } from '@t-box/time-server/service'
 import { ResourceAccessRegistry } from '../agent/access.js'
+import { ApplicationCatalogMonitor } from '../application-platform/catalog-monitor.js'
 import {
   builtinKinds,
   deployedApplications,
@@ -38,6 +39,7 @@ import { CustomerSupportService } from '../support/service.js'
 import { TaskStore } from '../tasks/store.js'
 
 export class PlatformService {
+  readonly applicationCatalogUpdates: ApplicationCatalogMonitor
   readonly applications: ApplicationPlatform
   readonly desktop: DesktopService
   readonly calendar: CalendarService
@@ -69,6 +71,7 @@ export class PlatformService {
     readonly paymentConfiguration?: PaymentConfiguration,
     readonly wechatAuthorization?: WechatAuthorization,
   ) {
+    this.applicationCatalogUpdates = new ApplicationCatalogMonitor(source)
     this.applications = new ApplicationPlatform(
       source,
       deployedApplications,

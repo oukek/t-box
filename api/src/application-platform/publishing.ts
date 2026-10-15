@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import {
   validApplicationIcon,
   validateRelease,
+  validateUpdatePrompt,
   validId,
 } from '@t-box/app-contracts'
 import { ApiError } from '@t-box/server-foundation/errors'
@@ -192,6 +193,7 @@ export class ApplicationPublishing {
             'iconVariant',
             'color',
             'releaseNotes',
+            'updatePrompt',
             'artifact',
             'runtime',
             'revision',
@@ -238,6 +240,13 @@ export class ApplicationPublishing {
       typeof b.releaseNotes === 'string' && b.releaseNotes.length <= 4000
         ? b.releaseNotes.trim()
         : fail('更新说明最多 4000 个字符')
+    if (b.updatePrompt !== undefined) {
+      try {
+        validateUpdatePrompt(b.updatePrompt)
+      } catch {
+        fail('更新提示配置无效')
+      }
+    }
     if (b.runtime === 'web') {
       await this.artifacts.verify(appId, String(b.artifact || ''))
     }
@@ -339,6 +348,7 @@ export class ApplicationPublishing {
         backend: base?.backend || { type: 'none', binding: '' },
         permissions: base?.permissions || [],
         clientTools: base?.clientTools || [],
+        updatePrompt: (b.updatePrompt ?? base?.updatePrompt) as AppRelease['updatePrompt'],
         defaultInstalled: base?.defaultInstalled ?? false,
       }
       validateRelease(release)

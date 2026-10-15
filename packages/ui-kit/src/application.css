@@ -1,0 +1,16 @@
+/* The app viewport stays edge to edge. Only ordinary page content gets gutters.
+   Keep this wrapper free of transform/contain/overflow so top-layer dialogs and
+   teleported sheets can use the app's complete viewport. */
+.application-frame {
+  width: 100%;
+  max-width: var(--application-content-width, 1080px);
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+@media (max-width: 760px) {
+  .application-frame {
+    padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+}

@@ -5,6 +5,7 @@ import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { onErrorCaptured, provide, ref } from 'vue'
 import { backFromApplication, navigation, tabLabel } from '../navigation'
 import ApplicationLaunch from './ApplicationLaunch.vue'
+import ApplicationUpdatePrompt from './ApplicationUpdatePrompt.vue'
 import { createLaunchState, launchStateKey } from './launchState'
 
 defineProps<{ module: ClientApplicationModule, application: ApplicationManifest, params: Record<string, string>, openRevision: number }>()
@@ -30,7 +31,7 @@ function retry() {
 <template>
   <section class="application-workspace">
     <ApplicationHeader
-      v-if="module.navigation === 'shell'"
+      v-if="module.navigation === 'shell' && !launch.appNavigation.value"
       :title="application.name"
       :back-label="tabLabel(navigation.backTo)"
       @back="backFromApplication"
@@ -54,6 +55,7 @@ function retry() {
       <component :is="module.component" v-bind="module.props(params, { openRevision })" />
     </Suspense>
     <ApplicationLaunch :application="application" :stage="launch.stage.value" />
+    <ApplicationUpdatePrompt :app-id="application.id" :ready="launch.stage.value === 'ready'" />
   </section>
 </template>
 

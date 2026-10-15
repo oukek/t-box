@@ -152,7 +152,7 @@ export class ApplicationBuildImports {
     }
     const publication = bundle.publication as Record<string, unknown>
     if (!publication || typeof publication !== 'object' || Array.isArray(publication) ||
-      Object.keys(publication).some((k) => !['kind', 'name', 'description', 'icon', 'iconAsset', 'iconVariant', 'color'].includes(k))) {
+      Object.keys(publication).some((k) => !['kind', 'name', 'description', 'icon', 'iconAsset', 'iconVariant', 'color', 'updatePrompt'].includes(k))) {
       invalid('构建发布声明无效')
     }
     const artifact = await this.publishing.artifacts.upload(appId, { files: bundle.files })

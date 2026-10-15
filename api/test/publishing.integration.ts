@@ -65,6 +65,7 @@ const fixture = {
   runtime: 'web',
   artifact: '',
   releaseNotes: '首个版本',
+  updatePrompt: { mode: 'custom', title: '计算体验升级', confirmText: '查看新版本' },
   revision: 1,
 }
 try {
@@ -151,6 +152,7 @@ try {
     400,
   )
   await call('POST', '/application-releases', { ...fixture, iconAsset: 'data:image/svg+xml;base64,' + Buffer.from('<svg onload="alert(1)"></svg>').toString('base64') }, 400)
+  await call('POST', '/application-releases', { ...fixture, updatePrompt: { mode: 'custom', script: 'untrusted' } }, 400)
   const first = await call('POST', '/application-releases', fixture, 201)
   await call('POST', '/application-releases', fixture, 409)
   assert.ok(
@@ -278,6 +280,7 @@ try {
     (r: any) => r.release.releaseId === first.releaseId,
   )
   assert.equal(retired.status, 'retired')
+  assert.deepEqual(retired.release.updatePrompt, fixture.updatePrompt)
   assert.equal(retired.release.manifest.iconAsset, fixture.iconAsset)
   assert.equal(retired.release.manifest.iconVariant, fixture.iconVariant)
   await call('POST', `/application-releases/${first.releaseId}/transitions`, {

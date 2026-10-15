@@ -19,7 +19,9 @@ const expanded = ref(true)
 const items = computed(() =>
   [...(props.message.timeline || [])]
     .filter(
-      (item) => item.kind !== 'tool' || isVisibleConversationTool(item.tool),
+      (item) =>
+        (item.kind !== 'analysis' || item.label !== '结果核对') &&
+        (item.kind !== 'tool' || isVisibleConversationTool(item.tool)),
     )
     .sort((a, b) => a.sequence - b.sequence),
 )

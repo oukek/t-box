@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
+import { APPLICATION_FRAME_SANDBOX } from '../../app/src/core/app-runtime/sandbox'
 
 test('登录、OS、设备会话、恢复设置与资源容量在桌面和手机上可用', async ({ page, request }) => {
   if (!/^(?:t_box_ci|t_box_test_[a-z0-9_]+)$/.test(process.env.MYSQL_DATABASE || '')) {
@@ -45,4 +46,33 @@ test('登录、OS、设备会话、恢复设置与资源容量在桌面和手机
   expect(overflow, '页面不应横向溢出').toBe(false)
   await page.reload()
   await expect(page.getByText(/已用 .*个文件/)).toBeVisible()
+})
+
+test('独立应用沙箱允许本地表单 submit 事件，CSP 继续阻止原生表单导航', async ({ page }) => {
+  await page.goto('/')
+  const content = `<html><head><meta http-equiv="Content-Security-Policy" content="form-action 'none'"></head><body>
+    <form><label>数字<input aria-label="数字" value="1"></label><button type="submit">计算</button></form>
+    <output aria-label="提交结果">尚未计算</output>
+    <script>let count = 0; document.querySelector('form').addEventListener('submit', event => {
+      event.preventDefault(); document.querySelector('output').textContent = '已计算 ' + (++count) + ' 次';
+    });</script></body></html>`
+  await page.setContent('<iframe title="表单沙箱回归"></iframe>')
+  await page.locator('iframe').evaluate((frame, values) => {
+    const element = frame as HTMLIFrameElement
+    element.setAttribute('sandbox', values.sandbox)
+    element.srcdoc = values.content
+  }, { sandbox: APPLICATION_FRAME_SANDBOX, content })
+  const frame = page.frameLocator('iframe')
+  await frame.getByRole('button', { name: '计算', exact: true }).click()
+  await expect(frame.getByLabel('提交结果')).toHaveText('已计算 1 次')
+  await frame.getByLabel('数字').press('Enter')
+  await expect(frame.getByLabel('提交结果')).toHaveText('已计算 2 次')
+  // A non-intercepted native submission remains blocked by the artifact policy.
+  await frame.locator('form').evaluate((form) => {
+    const replacement = form.cloneNode(true)
+    form.replaceWith(replacement)
+  })
+  await frame.getByRole('button', { name: '计算', exact: true }).click()
+  await expect(frame.getByLabel('提交结果')).toHaveText('已计算 2 次')
+  await expect(frame.getByLabel('数字')).toBeVisible()
 })

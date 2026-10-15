@@ -53,3 +53,14 @@ test('estimated progress never completes on time alone or moves backward between
   assert.equal(advanceLaunchProgress(progress, 'failed'), progress)
   assert.equal(advanceLaunchProgress(progress, 'ready'), 1)
 })
+
+test('legacy app navigation remains with the host until claimed, and resets when reopening', () => {
+  const launch = createLaunchState()
+  launch.registerWebRuntime()
+  assert.equal(launch.appNavigation.value, false)
+  launch.appNavigation.value = true
+  launch.update('ready')
+  assert.equal(launch.appNavigation.value, true)
+  launch.pending()
+  assert.equal(launch.appNavigation.value, false)
+})

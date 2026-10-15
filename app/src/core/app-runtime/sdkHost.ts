@@ -24,6 +24,7 @@ import { appCatalog } from './catalog'
 import { chooseApplicationFiles, decodeApplicationFile, readApplicationFile, uploadApplicationFile } from './files'
 import { setApplicationBindings } from './resourceBindings'
 import { parseApplicationHttpRequest, validateApplicationRestPath } from './trustedPath'
+import { availableUpdate, updatePrompts } from './updatePrompts'
 
 interface HostOptions {
   appId: string
@@ -53,6 +54,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
   let epoch = 0
   let bound: ApplicationContext | undefined
   const lifetime = new AbortController()
+  const updateOwner = {}
   const listeners = new Set<(event: ApplicationBridgeEvent) => void>()
   const subscriptions = new Map<string, () => void>()
   const cancelledSubscriptions = new Set<string>()
@@ -98,6 +100,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
     lifetime.abort()
     epoch++
     stopSubscriptions()
+    updatePrompts.unregister(options.appId, updateOwner)
     // eslint-disable-next-line ts/no-use-before-define -- Watchers call close only after registration completes.
     stopIdentity()
     // eslint-disable-next-line ts/no-use-before-define -- Keep watcher registration and teardown order unchanged.
@@ -109,6 +112,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
     () => {
       const started = ++epoch
       bound = undefined
+      updatePrompts.unregister(options.appId, updateOwner)
       stopSubscriptions()
       emit({
         type: 'event',
@@ -214,6 +218,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
     bound = {
       ...context,
       hostUrl: location.origin + location.pathname,
+      supportsAppNavigation: true,
       params: { ...(options.params ?? {}) },
       capabilities: [
         ...new Set([
@@ -451,6 +456,35 @@ export function createHostTransport(options: HostOptions): AppTransport {
       let value: unknown
       if (method === 'runtime.context') {
         value = context
+      } else if (method === 'updates.getAvailable') {
+        value = availableUpdate(appCatalog.entries.find((entry) => entry.release.appId === options.appId))
+      } else if (method === 'updates.openMarket') {
+        if (navigation.screen !== 'application' || navigation.application?.appId !== options.appId) {
+          throw new AppSdkError('NAVIGATION_DENIED', '只有当前应用可以打开更新页面')
+        }
+        // Reply before navigating unmounts and closes the app's transport.
+        setTimeout(() => {
+          if (!closed && navigation.application?.appId === options.appId) {
+            void openApplication({ appId: 'market', params: { appId: options.appId } }).catch(() => {})
+          }
+        }, 0)
+      } else if (method === 'updates.presentation') {
+        if (typeof a.registrationId !== 'string' || !/^[\w-]{1,80}$/.test(a.registrationId) || typeof a.enabled !== 'boolean') {
+          throw new AppSdkError('INVALID_ARGUMENTS', '更新提示注册无效')
+        }
+        if (a.enabled) {
+          if (context.updatePrompt?.mode !== 'custom') {
+            throw new AppSdkError('CUSTOM_UPDATE_PROMPT_DISABLED', '此已安装版本使用系统更新提示')
+          }
+          updatePrompts.register(options.appId, updateOwner, a.registrationId, (data) => emit({ type: 'event', name: 'runtime.update', data }))
+        } else {
+          updatePrompts.unregister(options.appId, updateOwner, a.registrationId)
+        }
+      } else if (method === 'updates.respond') {
+        if (typeof a.promptId !== 'string' || typeof a.shown !== 'boolean') {
+          throw new AppSdkError('INVALID_ARGUMENTS', '更新提示确认无效')
+        }
+        value = updatePrompts.respond(options.appId, updateOwner, a.promptId, a.shown)
       } else if (method === 'auth.session') {
         value = session()
       } else if (method === 'resources.bindings') {

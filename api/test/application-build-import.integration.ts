@@ -52,7 +52,7 @@ function build(notes = 'CI test') {
     artifact,
     files,
     releaseNotes: notes,
-    publication: { kind: 'user', name: 'CI fixture', description: 'Independent static fixture', icon: 'apps', iconAsset: 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>').toString('base64'), color: 'blue' },
+    publication: { updatePrompt: { mode: 'custom', title: '新版本可用' }, kind: 'user', name: 'CI fixture', description: 'Independent static fixture', icon: 'apps', iconAsset: 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>').toString('base64'), color: 'blue' },
   }))
   const sha256 = bundleHash(bytes)
   const path = '/t-box/apps/' + appId + '/1.0.1/' + sha256 + '.json'
@@ -99,6 +99,7 @@ try {
   assert.ok(!provenance.object_url.includes('signature'))
   assert.equal((await call(credential.token, build('different notes'))).statusCode, 409)
   const old = JSON.parse(typeof stored.definition === 'string' ? stored.definition : JSON.stringify(stored.definition))
+  assert.deepEqual(old.updatePrompt, { mode: 'custom', title: '新版本可用' })
   await assert.rejects(publishing.save({
     appId,
     version: '1.0.2',

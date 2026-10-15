@@ -218,3 +218,28 @@ test('iframe self reload preserves its original host origin while foreign referr
     foreign.close()
   }
 })
+
+test('navigation ownership is an explicit optional ready declaration; legacy apps keep their host header', async () => {
+  for (const ownsHeader of [false, true]) {
+    const h = host(undefined, { ...context, supportsAppNavigation: true })
+    let connection
+    try {
+      connection = await h.connect()
+      if (ownsHeader) {
+        connection.ready({ appNavigation: true })
+      } else {
+        connection.ready()
+      }
+      for (let i = 0; i < 50 && !h.messages.some((message) => message.type === 'ready'); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1))
+      }
+      const ready = h.messages.find((message) => message.type === 'ready')
+      assert.ok(ready)
+      assert.equal(ready.appNavigation, ownsHeader ? true : undefined)
+      assert.equal(ready.nonce, 'nonce')
+    } finally {
+      connection?.client.dispose()
+      h.close()
+    }
+  }
+})

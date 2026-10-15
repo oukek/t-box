@@ -49,6 +49,7 @@ const form = reactive({
   iconVariant: 'image' as 'image' | 'calendar' | 'clock',
   color: 'blue',
   releaseNotes: '',
+  updatePrompt: { mode: 'default' as 'default' | 'custom', title: '', description: '', confirmText: '', deferText: '' },
   artifact: '',
   runtime: 'web',
   revision: 1,
@@ -166,6 +167,7 @@ async function edit(entry?: ManagedRelease, createApplication = false) {
     iconVariant: appearance?.iconVariant || 'image',
     color: r?.manifest.color || 'blue',
     releaseNotes: entry?.releaseNotes || '',
+    updatePrompt: { mode: 'default', title: '', description: '', confirmText: '', deferText: '', ...r?.updatePrompt },
     artifact: r?.runtime.type === 'web' ? r.runtime.integrity.slice(7) : '',
     runtime: r?.runtime.type || 'web',
     revision: entry?.revision || 1,
@@ -557,6 +559,35 @@ onMounted(load)
           placeholder="说明新增功能、修复内容和用户需要注意的变化"
         />
         </label>
+        <label>应用内更新提示<AdminSelect
+          v-model="form.updatePrompt.mode"
+          label="应用内更新提示"
+          :options="[{ value: 'default', label: '系统默认弹窗' }, { value: 'custom', label: '应用自定义弹窗（SDK）' }]"
+        /></label>
+        <p class="field-hint">此配置随版本安装后生效。自定义弹窗需要应用注册 SDK 处理器；缺失、异常或超时会使用系统提示。</p>
+        <div class="form-grid">
+          <label>弹窗标题<input
+            v-model="form.updatePrompt.title"
+            maxlength="60"
+            placeholder="发现新版本"
+          ></label>
+          <label>确认按钮<input
+            v-model="form.updatePrompt.confirmText"
+            maxlength="24"
+            placeholder="前往更新"
+          ></label>
+          <label>稍后按钮<input
+            v-model="form.updatePrompt.deferText"
+            maxlength="24"
+            placeholder="稍后"
+          ></label>
+        </div>
+        <label>提示说明<textarea
+          v-model="form.updatePrompt.description"
+          maxlength="400"
+          rows="2"
+          placeholder="新版本已上架，前往应用市场查看并更新。"
+        /></label>
         <div v-if="form.runtime === 'web'" class="artifact-picker">
           <div class="artifact-label">
             <strong>构建产物</strong><label

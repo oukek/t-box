@@ -284,3 +284,51 @@ test('file SDK transports bounded binary content and exposes no host file path o
   assert.equal(f.calls.length, 3)
   f.client.dispose()
 })
+
+test('custom update SDK acknowledges visibility, exposes only current-app market navigation, and cleans up', async () => {
+  const f = fixture(async (method) => method === 'updates.getAvailable' ? { appId: 'calculator', version: '2.0.0' } : null)
+  let signal
+  let received
+  const stop = await f.client.updates.registerPrompt((update, options) => {
+    received = update
+    signal = options.signal
+    return true
+  })
+  f.emit('runtime.update', { promptId: 'first', update: { appId: 'calculator', version: '2.0.0' } })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(received.version, '2.0.0')
+  assert.deepEqual(f.calls.find((call) => call.method === 'updates.respond').args, { promptId: 'first', shown: true })
+  assert.equal((await f.client.updates.getAvailable()).appId, 'calculator')
+  await f.client.updates.openMarket()
+  assert.deepEqual(f.calls.find((call) => call.method === 'updates.openMarket').args, {})
+  stop()
+  assert.equal(signal.aborted, true)
+  assert.equal(f.calls.at(-1).args.enabled, false)
+  f.client.dispose()
+})
+test('rejected custom UI requests fallback and a late UI is cancelled without acknowledgement', async () => {
+  const f = fixture()
+  let finish
+  let signal
+  const stop = await f.client.updates.registerPrompt(async (_, options) => {
+    signal = options.signal
+    return new Promise((resolve) => {
+      finish = resolve
+    })
+  })
+  f.emit('runtime.update', { promptId: 'slow', update: { appId: 'calculator' } })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  f.emit('runtime.update', { promptId: 'slow', update: null })
+  finish(true)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(signal.aborted, true)
+  assert.equal(f.calls.some((call) => call.method === 'updates.respond'), false)
+  stop()
+  await f.client.updates.registerPrompt(() => {
+    throw new Error('UI failed')
+  })
+  f.emit('runtime.update', { promptId: 'broken', update: { appId: 'calculator' } })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(f.calls.find((call) => call.method === 'updates.respond').args, { promptId: 'broken', shown: false })
+  f.client.dispose()
+})

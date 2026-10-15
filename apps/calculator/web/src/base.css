@@ -1,4 +1,5 @@
 @import '@t-box/ui-kit/base.css';
+@import '@t-box/ui-kit/application.css';
 :root {
   color-scheme: light;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;

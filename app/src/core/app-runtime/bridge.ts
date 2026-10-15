@@ -11,6 +11,7 @@ import { identity } from '../session'
 import { createHostTransport } from './sdkHost'
 
 export interface AppConnection {
+  readonly appNavigation: boolean
   invoke(name: string, args: unknown): Promise<unknown>
   close(): void
   cancelInteractions(): void
@@ -149,6 +150,7 @@ export function connectFrame(
       if (
         ready ||
         data.nonce !== nonce ||
+        (data.appNavigation !== undefined && typeof data.appNavigation !== 'boolean') ||
         !Array.isArray(data.tools) ||
         JSON.stringify([...data.tools].sort()) !==
         JSON.stringify([...runtime.clientTools].sort())
@@ -159,6 +161,7 @@ export function connectFrame(
       ready = true
       clearTimeout(timer)
       resolveReady({
+        appNavigation: data.appNavigation === true,
         close: () => close(),
         cancelInteractions: () => channel.port1.postMessage({ type: 'event', name: 'runtime.interactions.cancelled', data: {} }),
         navigate: (params) => {

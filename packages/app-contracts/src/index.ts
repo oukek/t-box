@@ -17,6 +17,38 @@ export const APP_PROTOCOL = 1 as const
 export type AppPlatform = 'web' | 'android' | 'ios'
 export type InstallationStatus = 'installing' | 'active' | 'revoked' | 'failed'
 export type LifecycleAction = 'install' | 'update' | 'uninstall'
+/** Declarative presentation only. Custom UI is registered through the app SDK. */
+export interface ApplicationUpdatePrompt {
+  mode: 'default' | 'custom'
+  title?: string
+  description?: string
+  confirmText?: string
+  deferText?: string
+}
+export interface ApplicationUpdateInfo {
+  appId: string
+  name: string
+  installedVersion: string
+  version: string
+  releaseId: string
+  releaseNotes: string
+  prompt: ApplicationUpdatePrompt
+}
+export function validateUpdatePrompt(value: unknown): asserts value is ApplicationUpdatePrompt {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid update prompt')
+  }
+  const config = value as Record<string, unknown>
+  const limits: Record<string, number> = { title: 60, description: 400, confirmText: 24, deferText: 24 }
+  if (!['default', 'custom'].includes(String(config.mode)) || Object.keys(config).some((key) => key !== 'mode' && !Object.hasOwn(limits, key))) {
+    throw new Error('Invalid update prompt')
+  }
+  for (const [key, limit] of Object.entries(limits)) {
+    if (config[key] !== undefined && (typeof config[key] !== 'string' || (config[key] as string).length > limit)) {
+      throw new Error('Invalid update prompt text')
+    }
+  }
+}
 export interface AppRelease {
   appId: string
   releaseId: string
@@ -29,6 +61,7 @@ export interface AppRelease {
   backend: { type: 'none' | 'local' | 'remote', binding: string }
   permissions: string[]
   clientTools: string[]
+  updatePrompt?: ApplicationUpdatePrompt
   defaultInstalled: boolean
 }
 export interface AppInstallation {
@@ -46,6 +79,9 @@ export interface MarketEntry {
   release: AppRelease
   installation: AppInstallation | null
   issue?: string | null
+  releaseNotes?: string
+  /** The running version owns presentation, not the newly published version. */
+  installedUpdatePrompt?: ApplicationUpdatePrompt
 }
 export interface LifecycleRequest {
   operationId: string
@@ -100,6 +136,9 @@ export function validId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(value)
 }
 export function validateRelease(release: AppRelease): void {
+  if (release.updatePrompt !== undefined) {
+    validateUpdatePrompt(release.updatePrompt)
+  }
   if (release.manifest.iconVariant !== undefined && !['image', 'calendar', 'clock'].includes(release.manifest.iconVariant)) {
     throw new Error('Invalid application icon presentation')
   }
