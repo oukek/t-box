@@ -8,18 +8,18 @@
 
 | 域名 | 指向 |
 | --- | --- |
-| `box.example.com` | 主前端 OSS Bucket |
-| `admin.example.com` | 后台 OSS Bucket |
-| `apps.example.com` | 子应用 OSS Bucket |
+| `box.example.com` | `tboxos`：主前端 |
+| `admin.example.com` | `tboxos-admin`：后台；可选 Docker 包放 `docker/releases/` |
+| `apps.example.com` | `tboxos-app`：子应用静态文件；构建 JSON 包放 `builds/` |
 | `api.example.com` | `8.163.69.101` |
 
 后台与 API 必须是同一主域名下的 HTTPS 子域名，浏览器才能可靠使用保留的 `SameSite=Strict` 登录 Cookie。不要使用 OSS 默认桶域名作为后台地址，也不要把后台和 API 分别放到两个无关主域名。
 
 在 OSS 控制台创建三个不同的标准存储 Bucket，允许公开读取静态对象，禁止公开写入。分别启用静态网站托管，默认首页 `index.html`，绑定域名、配置 CNAME 和 HTTPS。子应用站点需要支持子目录首页，例如 `/calculator/<摘要>/` 返回该目录的 `index.html`，不能配置将全部路径重写成同一个首页的 SPA 规则。
 
-另创建一个私有构建 Bucket，供应用版本 JSON 包和可选 Docker 归档使用。公开 Bucket 只保存构建后的网页；私有构建 Bucket 不绑定前端域名。
+只使用上述三个公开读、禁止公开写的 Bucket，不需要第四个或私有构建桶。子应用网页与构建 JSON 包共用 `tboxos-app`；可选 Docker 工作流将公开镜像包放到 `tboxos-admin/docker/releases/<发布ID>/`，与后台页面分目录保存。构建包不包含 `.env`、微信密钥或用户数据；Docker 包含可公开下载的服务端程序。
 
-建议四个 Bucket 使用同一地域。若使用 CDN，遵从对象的 Cache-Control，不缓存后台/API 请求，不改写 JS/HTML。更新主站后刷新 `index.html`、`tbox-offline.js`、`tbox-offline-sw.js`，保留旧摘要资源。发布脚本会先传依赖，再传 HTML、离线 worker 或应用清单，并通过公开 HTTPS 下载逐个核对 SHA-256；域名、证书或访问权限未就绪时发布失败。
+建议三个 Bucket 使用同一地域。若使用 CDN，遵从对象的 Cache-Control，不缓存后台/API 请求，不改写 JS/HTML。更新主站后刷新 `index.html`、`tbox-offline.js`、`tbox-offline-sw.js`，保留旧摘要资源。发布脚本会先传依赖，再传 HTML、离线 worker 或应用清单，并通过公开 HTTPS 下载逐个核对 SHA-256；域名、证书或访问权限未就绪时发布失败。后台发布只上传站点文件，不会清空 `docker/` 中的镜像包。
 
 OSS 配置见 [静态网站托管](https://help.aliyun.com/zh/oss/user-guide/hosting-static-websites)、[自定义域名 HTTPS](https://help.aliyun.com/zh/oss/user-guide/access-oss-by-https-protocol)。内地服务器和 Bucket 的域名按阿里云要求完成备案。
 
@@ -49,19 +49,19 @@ Variables：
 | 名称 | 示例 / 内容 |
 | --- | --- |
 | `OSS_REGION` | Bucket 地域，例如 `cn-hangzhou` |
-| `WEB_OSS_BUCKET` | 主前端 Bucket 名称 |
-| `ADMIN_OSS_BUCKET` | 后台 Bucket 名称 |
-| `APPS_OSS_BUCKET` | 子应用 Bucket 名称 |
-| `OSS_BUCKET` | 私有构建 Bucket 名称 |
+| `WEB_OSS_BUCKET` | 可不填，Actions 默认 `tboxos` |
+| `ADMIN_OSS_BUCKET` | 可不填，Actions 默认 `tboxos-admin`；Docker 也使用此桶 |
+| `APPS_OSS_BUCKET` | 可不填，Actions 默认 `tboxos-app`；应用构建包也使用此桶 |
 | `WEB_ORIGIN` | `https://box.example.com` |
 | `ADMIN_ORIGIN` | `https://admin.example.com` |
 | `APP_ARTIFACT_ORIGIN` | `https://apps.example.com` |
 | `API_BASE_URL` | `https://api.example.com/api/v1` |
 | `OSS_ENDPOINT` | 可选；默认 `https://oss-<OSS_REGION>.aliyuncs.com`，必须使用公网 endpoint |
-| `APP_OSS_PREFIX` | 可选，默认 `t-box/apps`；与服务器保持一致 |
+| `APP_OSS_PREFIX` | 可选，默认 `builds`；与服务器保持一致 |
+| `OSS_PREFIX` | 可选，仅 Docker 工作流使用，默认 `docker` |
 | `APP_IMPORT_API_URL` | 可选，默认从 `API_BASE_URL` 拼接 `/application-builds` |
 
-域名来源变量不带结尾 `/`。RAM 仅授权上述 Bucket 的必要对象前缀，上传需要 `oss:PutObject`；私有构建下载签名需要 `oss:GetObject`；私有对象 ACL 需要 `oss:PutObjectAcl`。按 ossutil 实际行为保留分片上传所需的 `oss:ListParts`、`oss:AbortMultipartUpload` 权限。无需阿里云主账号密钥。
+域名来源变量不带结尾 `/`。GitHub 不再需要 `OSS_BUCKET`，旧变量可以删除。RAM 仅授权上述 Bucket 的必要对象前缀，上传需要 `oss:PutObject`；应用构建包和 Docker 包显式设置公开读，需要 `oss:PutObjectAcl`。按 ossutil 实际行为保留分片上传所需的 `oss:ListParts`、`oss:AbortMultipartUpload` 权限。下载应用包不需要签名或 AccessKey。无需阿里云主账号密钥。
 
 ## 3. 服务器
 
@@ -77,11 +77,11 @@ ADMIN_ORIGINS=https://admin.example.com
 TRUSTED_PROXIES=127.0.0.1,::1
 APP_ARTIFACT_ORIGIN=https://apps.example.com
 APP_ARTIFACT_DELIVERY=oss
-APP_IMPORT_OSS_ORIGIN=https://私有构建Bucket.oss-cn-hangzhou.aliyuncs.com
-APP_IMPORT_OSS_PREFIX=t-box/apps
+APP_IMPORT_OSS_ORIGIN=https://tboxos-app.oss-cn-hangzhou.aliyuncs.com
+APP_IMPORT_OSS_PREFIX=builds
 ```
 
-`APP_IMPORT_OSS_ORIGIN` 使用私有构建桶的标准公网 HTTPS 域名，不带结尾 `/`，地域与桶一致。服务器不需要保存 OSS AccessKey，下载使用 Actions 生成的签名 URL。
+`APP_IMPORT_OSS_ORIGIN` 使用 `tboxos-app` 的标准公网 HTTPS 域名，不带结尾 `/`，将示例地域替换为实际地域。这里用于后端下载构建包；`APP_ARTIFACT_ORIGIN` 是浏览器访问网页的自定义域名，两者指向同一桶。服务器不需要保存 OSS AccessKey，也不需要签名 URL。
 
 宝塔只为 API 域名配置 HTTPS 站点，添加 `deploy/api/nginx-api.conf.example`，代理 `/api/` 到 127.0.0.1:3000，保留路径、WebSocket、原始通知 JSON 和 Wechatpay-* 请求头。后台 Cookie、登录响应和 API 响应不能经过公共缓存。不要公开部署根目录或 shared。
 
@@ -97,6 +97,8 @@ APP_IMPORT_OSS_PREFIX=t-box/apps
 
 ## 5. 后续更新子应用
 
+沿用 `tboxos-app` 即可，无须新建 Bucket。网页资源存放在 `<应用ID>/<产物摘要>/`，包含静态文件与发布元信息的 JSON 包存放在 `builds/<应用ID>/<版本>/<包SHA256>.json`，API 从同桶公开地址下载、校验并登记版本。首次随 PM2 发布的四个应用初始版本不需要导入凭证。
+
 在服务器执行：
 
 ```sh
@@ -106,7 +108,7 @@ node dist/application-platform/import-credential-cli.js create admin calculator,
 
 命令生成 `shared/secrets/app-build-<凭证ID>.txt`，将内容填入 GitHub Secret `APP_IMPORT_TOKEN`。默认有效 90 天，到期前轮换。
 
-运行 **Application OSS submission**，选择应用和未用过的版本号。工作流先将摘要目录的静态文件发布到公开子应用 Bucket，再上传私有 JSON 包、登记待发布版本。最后进入后台“应用发布”审核上架。OSS 模式隐藏后台本地 dist 上传入口，避免登记出无法从 OSS 访问的页面。
+运行 **Application OSS submission**，选择应用和未用过的版本号。工作流先将摘要目录的静态文件发布到 `tboxos-app`，再将公开 JSON 包上传到同桶 `builds/`、登记待发布版本。最后进入后台“应用发布”审核上架。OSS 模式隐藏后台本地 dist 上传入口，避免登记出无法从 OSS 访问的页面。构建文件可公开读取不等于版本已经上架，提交仍需受限凭证和后台审核。
 
 服务器仍保留经过校验的应用产物副本，供版本校验、备份和恢复使用；用户访问由 OSS 提供。后端能力变更先发布 API，再发布应用版本。设置和市场随主前端更新。
 

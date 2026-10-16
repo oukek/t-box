@@ -52,7 +52,7 @@ jobs:
         env:
           OSS_REGION: ${{ vars.OSS_REGION }}
           OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
-          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET }}
+          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
           APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
@@ -82,7 +82,7 @@ jobs:
         env:
           OSS_REGION: ${{ vars.OSS_REGION }}
           OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
-          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET }}
+          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
           APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}

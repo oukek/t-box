@@ -2,11 +2,12 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { bundleHash, bundleLimit, downloadBundle, importLocation } from '../src/application-platform/build-import.js'
 
-const origin = 'https://test-bucket.oss-cn-hangzhou.aliyuncs.com'
+const origin = 'https://tboxos-app.oss-cn-hangzhou.aliyuncs.com'
 const digest = 'a'.repeat(64)
-const path = '/t-box/apps/calculator/1.0.1/' + digest + '.json'
+const path = '/builds/calculator/1.0.1/' + digest + '.json'
 test('OSS import pins the exact bucket, directory, app, version and hash', () => {
-  assert.equal(importLocation(origin + path + '?signature=secret', 'calculator', '1.0.1', digest, origin, 't-box/apps').pathname, path)
+  assert.equal(importLocation(origin + path, 'calculator', '1.0.1', digest, origin, 'builds').href, origin + path)
+  assert.equal(importLocation(origin + path + '?signature=secret', 'calculator', '1.0.1', digest, origin, 'builds').pathname, path)
   for (const url of [
     'https://127.0.0.1' + path,
     'https://evil.example.com' + path,
@@ -14,11 +15,12 @@ test('OSS import pins the exact bucket, directory, app, version and hash', () =>
     origin + path.replace('calculator', 'ledger'),
     origin + path.replace('1.0.1', '1.0.2'),
     origin + path + '#fragment',
-    'https://user:pass@test-bucket.oss-cn-hangzhou.aliyuncs.com' + path,
+    'https://user:pass@tboxos-app.oss-cn-hangzhou.aliyuncs.com' + path,
+    'https://tboxos-admin.oss-cn-hangzhou.aliyuncs.com' + path,
   ]) {
-    assert.throws(() => importLocation(url, 'calculator', '1.0.1', digest, origin, 't-box/apps'))
+    assert.throws(() => importLocation(url, 'calculator', '1.0.1', digest, origin, 'builds'))
   }
-  assert.throws(() => importLocation(origin + path, 'calculator', '1.0.1', digest, 'https://evil.example.com', 't-box/apps'))
+  assert.throws(() => importLocation(origin + path, 'calculator', '1.0.1', digest, 'https://evil.example.com', 'builds'))
 })
 
 test('bounded download verifies SHA256 and disables redirects', async () => {

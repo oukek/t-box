@@ -20,7 +20,7 @@
 | Secret（可选） | PM2_SSH_PRIVATE_KEY | 仅使用私钥方式时填写；密码和私钥至少配置一个 |
 | Secret | PM2_SSH_KNOWN_HOSTS | 已核实的服务器 SSH 公钥，采用 known_hosts 格式 |
 
-密码认证使用上述两个 Secrets；当前工作流还需配置 OSS 上传凭据、APPS_OSS_BUCKET、OSS_REGION 和 APP_ARTIFACT_ORIGIN，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
+密码认证使用上述两个 Secrets；当前工作流还需配置 OSS 上传凭据、OSS_REGION 和 APP_ARTIFACT_ORIGIN，APPS_OSS_BUCKET 默认 tboxos-app，可不填，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
 
 不要把 MySQL 密码、服务商密钥、生产 .env 放入构建 Secrets。SSH 信息只用于校验设置及最后的上传步骤；不会进入发布包。
 

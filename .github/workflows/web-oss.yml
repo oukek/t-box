@@ -24,9 +24,9 @@ jobs:
       TARGET: ${{ inputs.target }}
       OSS_REGION: ${{ vars.OSS_REGION }}
       OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
-      WEB_OSS_BUCKET: ${{ vars.WEB_OSS_BUCKET }}
-      ADMIN_OSS_BUCKET: ${{ vars.ADMIN_OSS_BUCKET }}
-      APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET }}
+      WEB_OSS_BUCKET: ${{ vars.WEB_OSS_BUCKET || 'tboxos' }}
+      ADMIN_OSS_BUCKET: ${{ vars.ADMIN_OSS_BUCKET || 'tboxos-admin' }}
+      APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
       WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
       ADMIN_ORIGIN: ${{ vars.ADMIN_ORIGIN }}
       APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}

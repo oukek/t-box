@@ -15,9 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+      OSS_BUCKET: ${{ vars.ADMIN_OSS_BUCKET || 'tboxos-admin' }}
       OSS_REGION: ${{ vars.OSS_REGION }}
-      OSS_PREFIX: ${{ vars.OSS_PREFIX || 't-box/api' }}
+      OSS_PREFIX: ${{ vars.OSS_PREFIX || 'docker' }}
       OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT || format('https://oss-{0}.aliyuncs.com', vars.OSS_REGION) }}
     steps:
       - uses: actions/checkout@v7
@@ -27,7 +27,7 @@ jobs:
         id: release
         shell: bash
         run: |
-          test -n "$OSS_BUCKET" || { echo "Set Actions variable OSS_BUCKET"; exit 1; }
+          test -n "$OSS_BUCKET" || { echo "Set Actions variable ADMIN_OSS_BUCKET"; exit 1; }
           test -n "$OSS_REGION" || { echo "Set Actions variable OSS_REGION"; exit 1; }
           release="sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-attempt-$GITHUB_RUN_ATTEMPT"
           printf 'id=%s\ntag=t-box-api:%s\n' "$release" "$release" >> "$GITHUB_OUTPUT"
@@ -70,7 +70,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/oss-bin"
           install -m 755 "$RUNNER_TEMP/ossutil/ossutil-2.4.0-linux-amd64/ossutil" "$RUNNER_TEMP/oss-bin/ossutil"
           printf '%s\n' "$RUNNER_TEMP/oss-bin" >> "$GITHUB_PATH"
-      - name: Upload complete release to private OSS
+      - name: Upload public release to administration bucket Docker directory
         env:
           RELEASE_ID: ${{ steps.release.outputs.id }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}

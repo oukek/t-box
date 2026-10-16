@@ -30,8 +30,8 @@ const fetcher = (async (input, options) => {
   const value = objects.get(new URL(String(input)).pathname)
   return value ? new Response(new Uint8Array(value)) : new Response('missing', { status: 404 })
 }) as typeof fetch
-const origin = 'https://test-bucket.oss-cn-hangzhou.aliyuncs.com'
-const imports = new ApplicationBuildImports(source, publishing, origin, 't-box/apps', fetcher)
+const origin = 'https://tboxos-app.oss-cn-hangzhou.aliyuncs.com'
+const imports = new ApplicationBuildImports(source, publishing, origin, 'builds', fetcher)
 const app = Fastify()
 app.setErrorHandler((error, _r, reply) => {
   if (error instanceof ApiError) {
@@ -55,13 +55,13 @@ function build(notes = 'CI test') {
     publication: { updatePrompt: { mode: 'custom', title: '新版本可用' }, kind: 'user', name: 'CI fixture', description: 'Independent static fixture', icon: 'apps', iconAsset: 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>').toString('base64'), color: 'blue' },
   }))
   const sha256 = bundleHash(bytes)
-  const path = '/t-box/apps/' + appId + '/1.0.1/' + sha256 + '.json'
+  const path = '/builds/' + appId + '/1.0.1/' + sha256 + '.json'
   objects.set(path, bytes)
   return {
     appId,
     version: '1.0.1',
     sha256,
-    url: origin + path + '?signature=never-persist',
+    url: origin + path,
     source: { repository: 'test/repo', commit: 'a'.repeat(40), runId: '123' },
   }
 }
@@ -96,7 +96,13 @@ try {
   assert.equal(stored.revision, 1)
   assert.ok(!(await publishing.list()).find((a) => a.appId === appId)?.currentReleaseId)
   const [provenance] = await source.query('SELECT object_url,source FROM application_build_imports WHERE app_id=?', [appId])
-  assert.ok(!provenance.object_url.includes('signature'))
+  assert.equal(provenance.object_url, payload.url)
+  // Previously signed imports still resolve to the same immutable build without persisting query credentials.
+  const legacy = await call(credential.token, { ...payload, url: payload.url + '?signature=never-persist' })
+  assert.equal(legacy.statusCode, 201, legacy.body)
+  assert.equal(legacy.json().data.releaseId, releaseId)
+  const [afterLegacy] = await source.query('SELECT object_url FROM application_build_imports WHERE app_id=?', [appId])
+  assert.equal(afterLegacy.object_url, payload.url)
   assert.equal((await call(credential.token, build('different notes'))).statusCode, 409)
   const old = JSON.parse(typeof stored.definition === 'string' ? stored.definition : JSON.stringify(stored.definition))
   assert.deepEqual(old.updatePrompt, { mode: 'custom', title: '新版本可用' })

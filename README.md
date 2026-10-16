@@ -207,7 +207,7 @@ API 默认监听 `127.0.0.1`，跨域来源通过 `CORS_ORIGINS` 配置。公开
 
 ## 独立应用与市场
 
-独立应用支持手动 GitHub Actions 构建、上传私有 OSS、自动登记为已提交版本，管理员再手动上架。运行 `pnpm apps:workflow` 扫描 `apps/*/build.config.json` 并更新 Actions 应用下拉选项；生成结果需要提交到 Git。服务器配置、导入凭证与操作步骤见 [应用 Actions 发布](docs/application-actions-release.md)。
+独立应用支持手动 GitHub Actions 构建、上传到公开应用 Bucket `tboxos-app`、自动登记为已提交版本，管理员再手动上架。运行 `pnpm apps:workflow` 扫描 `apps/*/build.config.json` 并更新 Actions 应用下拉选项；生成结果需要提交到 Git。服务器配置、导入凭证与操作步骤见 [应用 Actions 发布](docs/application-actions-release.md)。
 
 计算器、记账、日历、时间（各自的 `apps/*` 目录）支持独立 Web 容器、安装与 Actions 发布。记账是可卸载的用户应用，其余现有应用为可升级、不可卸载的系统应用。后台“应用发布”支持构建目录上传、版本草稿、提交、发布与历史版本切换。`pnpm dev` 同时启动计算器（5176）、记账（5177）、日历（5178）、时间（5179）和静态产物服务（6176）；单独启动宿主时也要运行 `pnpm dev:apps`。首次拉取结构变更执行 `pnpm install && pnpm db:init`。详见 [独立应用平台](docs/application-platform.md)及[安装与故障隔离](docs/application-installation-health.md)。
 

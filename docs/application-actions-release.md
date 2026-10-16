@@ -1,8 +1,8 @@
 # 独立应用：Actions → OSS → 后台待发布
 
-首次上线按 [OSS + PM2 操作顺序](first-deployment.md) 执行。当前工作流先把可直接浏览的应用文件上传到 `APPS_OSS_BUCKET`，逐文件通过 `APP_ARTIFACT_ORIGIN` 校验，再将 JSON 包上传私有构建桶并登记待发布版本。OSS 模式不通过服务器提供公开静态文件；服务器保留校验及备份副本。
+首次上线按 [OSS + PM2 操作顺序](first-deployment.md) 执行。当前工作流先把可直接浏览的应用文件上传到 `APPS_OSS_BUCKET`（默认 `tboxos-app`），逐文件通过 `APP_ARTIFACT_ORIGIN` 校验，再将公开 JSON 包上传到同桶 `builds/` 并登记待发布版本。无需私有 Bucket 或签名下载 URL。OSS 模式不通过服务器提供公开静态文件；服务器保留校验及备份副本。
 
-新工作流 `.github/workflows/application-release.yml` 仅支持手动运行，旧 API Docker/PM2 工作流保持原有用途。选择应用，填写新版本号和更新说明后，工作流构建该应用及依赖、上传私有 OSS，通过服务器导入接口登记为 `submitted`（已提交、未上架）。后台“应用发布”可直接选中该版本并点击发布；已安装用户沿用原版本，按已有更新机制升级。
+工作流 `.github/workflows/application-release.yml` 仅支持手动运行，API Docker/PM2 工作流保持原有用途。选择应用，填写新版本号和更新说明后，工作流构建该应用及依赖、上传公开 OSS，通过服务器导入接口登记为 `submitted`（已提交、未上架）。后台“应用发布”可直接选中该版本并点击发布；已安装用户沿用原版本，按已有更新机制升级。
 
 ## 应用下拉列表
 
@@ -56,12 +56,12 @@ docker compose run --rm api node dist/init-db.js
 服务器 API 环境配置（PM2 的 shared/api.env，或 Docker 的部署 .env）：
 
 ```dotenv
-APP_IMPORT_OSS_ORIGIN=https://your-private-bucket.oss-cn-hangzhou.aliyuncs.com
-APP_IMPORT_OSS_PREFIX=t-box/apps
+APP_IMPORT_OSS_ORIGIN=https://tboxos-app.oss-cn-hangzhou.aliyuncs.com
+APP_IMPORT_OSS_PREFIX=builds
 APP_ARTIFACT_ORIGIN=https://apps.example.com
 ```
 
-`APP_IMPORT_OSS_ORIGIN` 必须精确匹配下载 URL 的 OSS 公网桶域名，不带结尾 `/`。目前支持标准阿里云 OSS 公网桶域名，不接受内网、自定义域名、HTTP、任意跳转。API 可联网下载签名文件，无须配置 OSS AccessKey。应用产物的线上地址仍由 `APP_ARTIFACT_ORIGIN` 与静态服务提供，OSS 只保存构建包，无需公开桶权限。原有 PM2 shared/output/app-artifacts 和 Docker data/app-artifacts 的持久化/静态服务可以直接复用。
+`APP_IMPORT_OSS_ORIGIN` 必须精确匹配 `tboxos-app` 的 OSS 公网桶域名，不带结尾 `/`，地域改为实际值。目前支持标准阿里云 OSS 公网桶域名，不接受内网、自定义域名、HTTP、任意跳转。API 直接下载公开 JSON，无须配置 OSS AccessKey。浏览器通过同桶的自定义域名 `APP_ARTIFACT_ORIGIN` 加载 `<应用ID>/<产物摘要>/` 中的网页。服务器仍需持久化 PM2 shared/output/app-artifacts 或 Docker data/app-artifacts 中的校验和备份副本。
 
 在服务器创建一个仅允许提交指定应用的导入凭证，管理员账号须已存在且启用：
 
@@ -88,26 +88,25 @@ Repository → Settings → Secrets and variables → Actions：
 
 | 类型 | 名称 | 示例 / 用途 |
 | --- | --- | --- |
-| Variable | `OSS_BUCKET` | 私有构建桶名称（可复用 API 镜像桶） |
 | Variable | `OSS_REGION` | `cn-hangzhou` |
-| Variable | `APPS_OSS_BUCKET` | 独立应用公开静态 Bucket，与私有构建桶分开 |
+| Variable | `APPS_OSS_BUCKET` | 可不填，默认 `tboxos-app`；网页与构建包共用 |
 | Variable | `APP_ARTIFACT_ORIGIN` | 独立应用静态站点的自定义 HTTPS 来源 |
 | Variable | `OSS_ENDPOINT` | 可选，`https://oss-cn-hangzhou.aliyuncs.com`，必须公网 endpoint |
-| Variable | `APP_OSS_PREFIX` | 可选，默认 `t-box/apps`，须与服务器匹配；独立于 API 的 `OSS_PREFIX` |
+| Variable | `APP_OSS_PREFIX` | 可选，默认 `builds`，须与服务器匹配；独立于 Docker 的 `OSS_PREFIX` |
 | Variable | `APP_IMPORT_API_URL` | `https://api.example.com/api/v1/application-builds` |
-| Secret | `OSS_ACCESS_KEY_ID` | 有该前缀上传及签名下载权限的 RAM AccessKey |
+| Secret | `OSS_ACCESS_KEY_ID` | 有应用静态目录和 `builds/` 上传及设置对象 ACL 权限的 RAM AccessKey |
 | Secret | `OSS_ACCESS_KEY_SECRET` | 对应 Secret |
 | Secret | `OSS_SESSION_TOKEN` | 可选，临时 STS 凭证使用 |
 | Secret | `APP_IMPORT_TOKEN` | 上述服务器生成的受限导入凭证 |
 
-RAM 需要目标前缀的 `oss:PutObject`、`oss:GetObject` 权限（上传与签名下载；单文件操作不需列举整个桶）。工作流固定 ossutil 2.4.0 并校验下载工具 SHA-256；下载签名有效 30 分钟。ossutil 的相关参数见 [阿里云签名 URL 文档](https://help.aliyun.com/zh/oss/developer-reference/presign-generate-presigned-url)。
+RAM 需要目标目录的 `oss:PutObject`、`oss:PutObjectAcl` 及客户端实际使用的分片上传权限。下载通过公开 HTTPS，不需要签名，也不依赖下载凭据。GitHub 的旧 `OSS_BUCKET` 变量不再使用。工作流固定 ossutil 2.4.0 并校验下载工具 SHA-256。
 
 手动运行 **Application OSS submission**：选择 `calculator`，填写未使用版本如 `1.0.1`、更新说明。不要直接在版本里填 shell 命令；输入由环境变量传递，构建脚本仍会严格校验应用和版本。
 
 ## 导入、重试与发布边界
 
-1. 上传 `oss://<bucket>/<prefix>/<appId>/<version>/<包SHA256>.json`，获取签名下载 URL。
-2. 工作流调用 `POST /api/v1/application-builds`，带 Bearer 导入凭证、应用、版本、摘要、URL 及 GitHub repository/commit/runId。URL 不会出现在公开日志；服务器仅保存不带签名参数的对象 URL。
+1. 将网页上传至 `oss://tboxos-app/<appId>/<产物摘要>/` 并验证公开访问，再将构建包公开上传至 `oss://tboxos-app/builds/<appId>/<version>/<包SHA256>.json`，使用标准 OSS HTTPS 地址下载。
+2. 工作流调用 `POST /api/v1/application-builds`，带 Bearer 导入凭证、应用、版本、摘要、公开 URL 及 GitHub repository/commit/runId。导入凭证不会写入 OSS 包或公开日志。
 3. 服务器验证凭证权限、受信桶/目录、60 秒下载超时与大小、包 SHA-256、路径及每文件摘要。静态产物使用临时目录原子写入持久目录。
 4. 同一个数据库事务登记构建来源、发布定义、提交状态与审计记录。`published=0`，当前线上版本不变。后端绑定、权限和工具契约继承服务器已有可信发布，不接受构建包任意声明。发布就绪检查不通过则不登记。
 5. 网络不确定或 5xx/429 最多尝试提交 5 次；同应用/版本/包摘要返回原版本（包括管理员随后已上架的情况）。并发重试共用应用行锁；同版本不同内容返回 409，需新版本号，不能覆盖旧版本。权限/校验/版本冲突等 4xx 不重试。

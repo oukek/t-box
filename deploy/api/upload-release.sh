@@ -11,7 +11,7 @@ load_oss_settings
 verify_archive "$folder" "$release_id"
 destination="oss://$OSS_BUCKET/$OSS_PREFIX/releases/$release_id"
 # release.json is uploaded LAST: its existence marks a complete release.
-ossutil cp "$folder/image.tar.gz" "$destination/image.tar.gz" --force
-ossutil cp "$folder/image.tar.gz.sha256" "$destination/image.tar.gz.sha256" --force
-ossutil cp "$folder/release.json" "$destination/release.json" --force
+ossutil cp "$folder/image.tar.gz" "$destination/image.tar.gz" --force --acl public-read
+ossutil cp "$folder/image.tar.gz.sha256" "$destination/image.tar.gz.sha256" --force --acl public-read
+ossutil cp "$folder/release.json" "$destination/release.json" --force --acl public-read
 printf 'Uploaded release: %s\n' "$destination"

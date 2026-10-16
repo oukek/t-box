@@ -54,8 +54,8 @@ function fixture(t) {
     FAKE_LOG: join(root, 'commands.jsonl'),
     FAKE_OSS_ROOT: join(root, 'oss'),
     FAKE_IMAGE_ID: imageId,
-    OSS_BUCKET: 'example-bucket',
-    OSS_PREFIX: 't-box/api',
+    OSS_BUCKET: '',
+    OSS_PREFIX: '',
     OSSUTIL_CONFIG_FILE: join(root, 'unused-config'),
     GITHUB_SHA: 'a'.repeat(40),
   }
@@ -66,7 +66,7 @@ function fixture(t) {
   const originalEnv = 'API_IMAGE=t-box-api:old\nMYSQL_PASSWORD=\'fixture$#\'\nAPP_ARTIFACT_ORIGIN=https://apps.example.invalid\n'
   writeFileSync(join(dir, '.env'), originalEnv)
   const output = join(root, 'export')
-  const remote = join(env.FAKE_OSS_ROOT, 't-box/api/releases', release)
+  const remote = join(env.FAKE_OSS_ROOT, 'docker/releases', release)
   const run = (script, args, extra = {}) => spawnSync('bash', [join(dir, script), ...args], { env: { ...env, ...extra }, encoding: 'utf8' })
   const ok = (result) => assert.equal(result.status, 0, result.stderr + result.stdout)
   const logs = () => existsSync(env.FAKE_LOG) ? readFileSync(env.FAKE_LOG, 'utf8').trim().split('\n').filter(Boolean).map((row) => JSON.parse(row)) : []
@@ -87,6 +87,10 @@ test('export creates a checked archive; publication marker is uploaded last', (t
   assert.equal(manifest.image.tag, 't-box-api:' + release)
   f.ok(f.run('upload-release.sh', [release, f.output]))
   assert.deepEqual(f.logs().filter((row) => row.tool === 'ossutil').map((row) => basename(row.args[1])), ['image.tar.gz', 'image.tar.gz.sha256', 'release.json'])
+  for (const { args } of f.logs().filter((row) => row.tool === 'ossutil')) {
+    assert.ok(args[2].startsWith(`oss://tboxos-admin/docker/releases/${release}/`))
+    assert.equal(args[args.indexOf('--acl') + 1], 'public-read')
+  }
 })
 
 test('failed archive upload never publishes a ready manifest', (t) => {

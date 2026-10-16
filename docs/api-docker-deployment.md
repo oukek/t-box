@@ -1,6 +1,6 @@
 # API：GitHub Actions → OSS 镜像包 → 宝塔 Compose
 
-链路：GitHub 源码 → Actions 构建和校验镜像 → docker save + gzip → 私有 OSS → 服务器下载并校验 → docker load → Compose 部署 → 宝塔 Nginx 提供 HTTPS/WSS。
+链路：GitHub 源码 → Actions 构建和校验镜像 → docker save + gzip → `tboxos-admin/docker/` 公开目录 → 服务器下载并校验 → docker load → Compose 部署 → 宝塔 Nginx 提供 HTTPS/WSS。当前正式方案使用 PM2，本页仅为可选 Docker 部署。
 
 不需要镜像仓库、docker login 或 docker pull。OSS 保存普通镜像归档文件；Compose 使用已经导入的本地镜像。Actions 不连接生产数据库，也不会自动 SSH 上线。前端和管理后台仍是独立静态站点，MySQL、Redis 继续使用服务器已有实例。
 
@@ -28,23 +28,23 @@
 
 ## 1. OSS 与 GitHub 配置
 
-创建私有 Bucket，地域尽量与 ECS 一致。不要开启公开读取或静态网站托管。镜像包会包含服务端程序，不适合匿名公开。
+复用后台的 `tboxos-admin` Bucket，镜像包放在 `docker/releases/`，不新建私有桶。此目录中的镜像包允许公开下载，包含服务端程序；构建上下文排除真实 `.env`、密钥、上传文件和数据库。后台网页位于同桶根目录，发布网页不会删除 Docker 子目录。
 
 GitHub 仓库 Settings → Secrets and variables → Actions：
 
 | 类型 | 名称 | 示例 / 用途 |
 | --- | --- | --- |
-| Variable | OSS_BUCKET | your-private-bucket，只填名称 |
+| Variable（可选） | ADMIN_OSS_BUCKET | 默认 tboxos-admin，与后台网页共用 |
 | Variable | OSS_REGION | cn-hangzhou，Bucket 实际地域 |
-| Variable（可选） | OSS_PREFIX | 默认 t-box/api；仅允许字母、数字、_、- 和分段 / |
+| Variable（可选） | OSS_PREFIX | 默认 docker；仅允许字母、数字、_、- 和分段 / |
 | Variable（可选） | OSS_ENDPOINT | 默认由 region 生成公网 HTTPS endpoint；GitHub 托管 runner 不使用 ECS 内网地址 |
 | Secret | OSS_ACCESS_KEY_ID | 用于上传的 RAM 用户 AccessKey ID |
 | Secret | OSS_ACCESS_KEY_SECRET | 对应 Secret |
 | Secret（可选） | OSS_SESSION_TOKEN | 使用 STS 临时凭据时提供；必须与 AK 配对且执行时未过期 |
 
-原 API_REGISTRY、API_IMAGE_NAME 和 Registry 登录 Secrets 不再使用，可以移除。
+原 OSS_BUCKET、API_REGISTRY、API_IMAGE_NAME 和 Registry 登录 Secrets 不再供 GitHub 工作流使用，可以移除。服务器 oss.env 中的 OSS_BUCKET 是下载脚本配置，保留为 tboxos-admin。
 
-RAM 凭据仅授权目标 Bucket 的发布前缀。CI 需要上传及客户端所需的读取/分片相关权限，例如 PutObject、GetObject、ListParts、AbortMultipartUpload；不要授予整个阿里云账户的管理权限。服务器使用另外的只读 RAM 凭据或 ECS RAM 角色，允许 GetObject 读取相同前缀。具体权限资源范围应按当前 ossutil 和实际分片行为核对。
+RAM 凭据仅授权目标 Bucket 的 docker/ 前缀。CI 需要 PutObject、PutObjectAcl 及客户端所需的读取/分片相关权限，例如 GetObject、ListParts、AbortMultipartUpload；不要授予整个阿里云账户的管理权限。包是公开读对象；服务器下载脚本沿用 ossutil，可使用只读 RAM 凭据或 ECS RAM 角色。具体权限资源范围应按当前 ossutil 和实际分片行为核对。
 
 工作流名称为 API Docker OSS，仅支持手动 Run workflow；所有工作流均无自动触发。每次生成独立 ID：
 
@@ -57,7 +57,7 @@ sha-完整40位提交SHA-run-GitHub运行编号-attempt-重跑次数
 OSS 文件布局：
 
 ```text
-oss://your-private-bucket/t-box/api/releases/<RELEASE_ID>/
+oss://tboxos-admin/docker/releases/<RELEASE_ID>/
   image.tar.gz
   image.tar.gz.sha256
   release.json
@@ -106,7 +106,7 @@ docker compose version
 
 密码包含 #、$ 等字符时使用单引号。不要提交真实 .env、oss.env 或上传备份。
 
-编辑 oss.env：填同一个 Bucket、前缀、地域；同地域 ECS 可使用 HTTPS 内网 endpoint。凭据通过部署账户自己的 ossutil profile 配置（ossutil config；配置文件 chmod 600），或通过其环境变量/ECS RAM 角色提供。使用 sudo 时确认实际执行账户的 profile。OSS 凭据不放在 API .env；Compose 也不加载 oss.env 到 API。
+编辑 oss.env：OSS_BUCKET=tboxos-admin、OSS_PREFIX=docker，填写实际地域；同地域 ECS 可使用 HTTPS 内网 endpoint。凭据通过部署账户自己的 ossutil profile 配置（ossutil config；配置文件 chmod 600），或通过其环境变量/ECS RAM 角色提供。使用 sudo 时确认实际执行账户的 profile。OSS 凭据不放在 API .env；Compose 也不加载 oss.env 到 API。
 
 oss.env 是运维人员管理的 shell 配置，不接受从 OSS 清单或模型输出生成的脚本内容。数据文件和 Docker 操作都由部署账户执行，账户需要 Docker 权限和部署目录写权限。
 

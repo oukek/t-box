@@ -47,7 +47,7 @@ export function importLocation(input: unknown, appId: string, version: string, d
 }
 
 export async function downloadBundle(url: URL, expectedHash: string, fetcher: typeof fetch = fetch) {
-  // No redirects; signed URLs are never logged or persisted. Bound both transfer size and duration.
+  // No redirects; optional URL credentials are never logged or persisted. Bound transfer size and duration.
   let response: Response
   const signal = AbortSignal.timeout(60_000)
   try {
@@ -86,7 +86,7 @@ export async function downloadBundle(url: URL, expectedHash: string, fetcher: ty
     if (error instanceof ApiError) {
       throw error
     }
-    throw new ApiError(502, 'APP_BUILD_DOWNLOAD_FAILED', 'OSS 下载失败、链接过期或构建超过 30 MB；请重新提交')
+    throw new ApiError(502, 'APP_BUILD_DOWNLOAD_FAILED', 'OSS 下载失败、对象不可读或构建超过 30 MB；请检查发布配置后重新提交')
   }
 }
 
@@ -95,7 +95,7 @@ export class ApplicationBuildImports {
     private readonly source: DataSource,
     private readonly publishing: ApplicationPublishing,
     private readonly origin = process.env.APP_IMPORT_OSS_ORIGIN || '',
-    private readonly prefix = process.env.APP_IMPORT_OSS_PREFIX || 't-box/apps',
+    private readonly prefix = process.env.APP_IMPORT_OSS_PREFIX || 'builds',
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 

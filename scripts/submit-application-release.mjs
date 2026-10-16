@@ -20,12 +20,11 @@ const bytes = await readFile(join(directory, release.file))
 if (sha256(bytes) !== release.sha256) {
   throw new Error('Release bundle checksum mismatch')
 }
-const bucket = process.env.OSS_BUCKET || ''
-const prefix = process.env.APP_OSS_PREFIX || 't-box/apps'
+const settings = ossSettings(process.env.APPS_OSS_BUCKET, process.env.APP_ARTIFACT_ORIGIN)
+const prefix = process.env.APP_OSS_PREFIX || 'builds'
 const region = process.env.OSS_REGION || ''
-const endpoint = process.env.OSS_ENDPOINT || `https://oss-${region}.aliyuncs.com`
-if (!/^[a-z0-9][a-z0-9-]+$/.test(bucket) || !/^[\w-]+(?:\/[\w-]+)*$/.test(prefix) || !/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(region) || endpoint !== `https://oss-${region}.aliyuncs.com`) {
-  throw new Error('Configure OSS_BUCKET, OSS_REGION and public OSS_ENDPOINT; APP_OSS_PREFIX defaults to t-box/apps')
+if (!/^[\w-]+(?:\/[\w-]+)*$/.test(prefix)) {
+  throw new Error('APP_OSS_PREFIX must contain only safe path segments; defaults to builds')
 }
 const token = process.env.APP_IMPORT_TOKEN || ''
 const api = new URL(process.env.APP_IMPORT_API_URL || (process.env.API_BASE_URL ? process.env.API_BASE_URL + '/application-builds' : ''))
@@ -36,34 +35,23 @@ const source = { repository: process.env.GITHUB_REPOSITORY, commit: process.env.
 if (!/^[\w.-]+\/[\w.-]+$/.test(source.repository || '') || !/^[a-f0-9]{40}$/.test(source.commit || '') || !/^\d{1,30}$/.test(source.runId || '')) {
   throw new Error('GitHub build provenance is required')
 }
-const object = `oss://${bucket}/${prefix}/${appId}/${version}/${release.file}`
+const path = `${prefix}/${appId}/${version}/${release.file}`
+const object = `oss://${settings.bucket}/${path}`
 const bundle = JSON.parse(bytes.toString('utf8'))
 if (bundle.protocol !== 1 || bundle.appId !== appId || bundle.version !== version || !Array.isArray(bundle.files) || bundle.artifact !== release.artifact) {
   throw new Error('Release static files do not match the registered build')
 }
 // Never register a version until the exact static files are publicly available on OSS.
-await publishArtifact(appId, bundle.artifact, bundle.files, ossSettings(process.env.APPS_OSS_BUCKET, process.env.APP_ARTIFACT_ORIGIN))
-const ossEnv = { ...process.env, OSS_ENDPOINT: endpoint }
-delete ossEnv.APP_IMPORT_TOKEN
+await publishArtifact(appId, bundle.artifact, bundle.files, settings)
 const run = (args) => {
-  const result = spawnSync('ossutil', args, { env: ossEnv, encoding: 'utf8', timeout: 180_000, maxBuffer: 1024 * 1024 })
+  const result = spawnSync('ossutil', args, { env: settings.environment, encoding: 'utf8', timeout: 180_000, maxBuffer: 1024 * 1024 })
   if (result.error || result.status !== 0) {
-    // CLI output can contain signed URLs or credentials; do not print it.
+    // CLI output can contain credentials; do not print it.
     throw new Error('OSS operation failed; check AccessKey permissions and bucket configuration')
   }
-  return result.stdout.trim()
 }
-run(['cp', join(directory, release.file), object, '--force', '--acl', 'private', '--content-type', 'application/json'])
-const signed = run(['presign', object, '--expires-duration', '30m'])
-let url
-try {
-  url = new URL(signed)
-} catch {
-  throw new Error('ossutil did not return a valid signed URL')
-}
-if (url.protocol !== 'https:' || url.origin !== `https://${bucket}.oss-${region}.aliyuncs.com` || url.pathname !== `/${prefix}/${appId}/${version}/${release.file}`) {
-  throw new Error('ossutil did not return the expected signed OSS URL')
-}
+run(['cp', join(directory, release.file), object, '--force', '--acl', 'public-read', '--content-type', 'application/json', '--cache-control', 'public,max-age=31536000,immutable'])
+const url = new URL(`https://${settings.bucket}.oss-${region}.aliyuncs.com/${path}`)
 const request = JSON.stringify({ appId, version, url: url.href, sha256: release.sha256, source })
 let data
 for (let attempt = 1; attempt <= 5; attempt++) {
