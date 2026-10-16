@@ -2,20 +2,17 @@
 import type {
   OperationsEvent,
   OperationsOverview,
-  OperationsTaskDetail,
 } from '@t-box/shared'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import AdminDialog from '../components/AdminDialog.vue'
 import { errorMessage, request } from '../core/api'
+import OperationsRecords from './OperationsRecords.vue'
 
 const overview = ref<OperationsOverview | null>(null)
 const events = ref<OperationsEvent[]>([])
-const task = ref<OperationsTaskDetail | null>(null)
+const records = ref<InstanceType<typeof OperationsRecords>>()
 const taskId = ref('')
 const error = ref('')
 const busy = ref(false)
-const inspecting = ref(false)
-const open = ref(false)
 let alive = true
 const labels: Record<string, string> = {
   queued: '排队',
@@ -71,27 +68,11 @@ async function load() {
   } finally {
     busy.value = false
   }
+  void records.value?.refresh()
 }
-async function inspect(id = taskId.value.trim()) {
-  if (!id || inspecting.value) {
-    return
-  }
-  inspecting.value = true
-  error.value = ''
-  try {
-    const value = await request<OperationsTaskDetail>(
-      `/operations/tasks/${encodeURIComponent(id)}`,
-    )
-    if (alive) {
-      task.value = value
-      open.value = true
-    }
-  } catch (e) {
-    if (alive) {
-      error.value = errorMessage(e)
-    }
-  } finally {
-    inspecting.value = false
+function inspect(id = taskId.value.trim()) {
+  if (id) {
+    void records.value?.inspectTask(id)
   }
 }
 const time = (value: string) =>
@@ -104,8 +85,8 @@ onBeforeUnmount(() => (alive = false))
   <header class="page-heading">
     <div>
       <p class="eyebrow">OPERATIONS</p>
-      <h1>运行概况</h1>
-      <p>查看任务、模型费用与需要人工核对的异常。</p>
+      <h1>任务与运行记录</h1>
+      <p>追踪任务、逐次模型请求、消耗与失败原因。</p>
     </div>
     <button :disabled="busy" @click="load">
       {{ busy ? '刷新中…' : '刷新' }}
@@ -148,8 +129,9 @@ onBeforeUnmount(() => (alive = false))
       v-model="taskId"
       placeholder="输入任务 ID"
       autocomplete="off"
-    ><button :disabled="!taskId.trim() || inspecting">查看执行记录</button>
+    ><button :disabled="!taskId.trim()">查看执行记录</button>
   </form>
+  <OperationsRecords ref="records" />
   <section class="panel">
     <div class="section-heading">
       <div>
@@ -186,7 +168,6 @@ onBeforeUnmount(() => (alive = false))
             <td>
               <button
                 v-if="event.taskId"
-                :disabled="inspecting"
                 @click="inspect(event.taskId)"
               >
                 查看任务
@@ -202,47 +183,6 @@ onBeforeUnmount(() => (alive = false))
       </table>
     </div>
   </section>
-  <AdminDialog
-    :open="open"
-    title="任务执行记录"
-    description="业务结果请到对应应用核对。此处仅提供执行与计费的关联信息。"
-    @close="open = false"
-  >
-    <div v-if="task" class="task-detail">
-      <dl>
-        <dt>任务 ID</dt>
-        <dd>{{ task.id }}</dd>
-        <dt>请求 ID</dt>
-        <dd>{{ task.requestId }}</dd>
-        <dt>状态</dt>
-        <dd>{{ labels[task.status] || task.status }}</dd>
-        <dt>最近更新</dt>
-        <dd>{{ time(task.updatedAt) }}</dd>
-        <dt>自动恢复</dt>
-        <dd>
-          已尝试 {{ task.recoveryAttempts }} 次{{
-            task.automaticRecovery ? ' · 等待恢复' : ''
-          }}
-        </dd>
-      </dl>
-      <p v-if="task.reason" class="alert">{{ task.reason }}</p>
-      <h3>工具操作 · {{ task.tools.length }}</h3>
-      <p v-if="!task.tools.length" class="muted">暂无工具操作。</p>
-      <ol>
-        <li v-for="tool in task.tools" :key="tool.callId">
-          <strong>{{ tool.name }}</strong><span>{{ tool.status }} · {{ tool.effect }}</span><code>{{ tool.callId }}</code>
-        </li>
-      </ol>
-      <h3>模型请求 · {{ task.usage.length }}</h3>
-      <p v-if="!task.usage.length" class="muted">暂无用量记录。</p>
-      <ol>
-        <li v-for="usage in task.usage" :key="usage.id">
-          <strong>{{ usage.purpose }} · {{ usage.status }}</strong><span>成本 ¥{{ usage.cost }} · 扣费 ¥{{ usage.charged }}</span><small>输入 {{ usage.inputTokens ?? '未知' }} / 输出
-            {{ usage.outputTokens ?? '未知' }} token</small><code>{{ usage.id }}</code>
-        </li>
-      </ol>
-    </div>
-  </AdminDialog>
 </template>
 
 <style scoped>
@@ -334,41 +274,9 @@ td small {
   color: var(--muted);
   font-size: 11px;
 }
-td code,
-dd,
-li code {
+td code {
   overflow-wrap: anywhere;
   font-size: 11px;
-}
-.task-detail dl {
-  display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
-  gap: 12px;
-  font-size: 13px;
-}
-dt {
-  color: var(--muted);
-}
-dd {
-  margin: 0;
-}
-.task-detail h3 {
-  font-size: 14px;
-  margin-top: 24px;
-}
-ol {
-  padding-left: 22px;
-}
-li {
-  margin-bottom: 14px;
-  font-size: 12px;
-}
-li span,
-li code,
-li small {
-  display: block;
-  margin-top: 5px;
-  color: var(--muted);
 }
 @media (max-width: 1100px) {
   .metrics {

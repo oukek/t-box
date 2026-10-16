@@ -23,10 +23,10 @@ import { errorMessage, request, save } from '../core/api'
 const providers = ref<AIProviderConfig[]>([])
 const models = ref<AIModelConfig[]>([])
 const options = ref<RemoteModel[]>([])
-const selected = ref('')
-const applied = ref('')
-const selectedImage = ref('')
-const appliedImage = ref('')
+const selected = ref<string[]>([])
+const applied = ref<string[]>([])
+const selectedImage = ref<string[]>([])
+const appliedImage = ref<string[]>([])
 const error = ref('')
 const dialogError = ref('')
 const notice = ref('')
@@ -58,6 +58,7 @@ const form = reactive({
   outputPrice: '0',
   imagePrice: '0',
   contextPolicy: resolveContextPolicy(),
+  maxConcurrency: 4,
 })
 const filteredModels = computed(() =>
   models.value.filter((m) =>
@@ -93,48 +94,17 @@ const remoteOptions = computed(() => {
   }
   return result
 })
-function runtimeOptions(purpose: 'conversation' | 'image', value: string) {
-  const result = [
-    {
-      value: '',
-      label: purpose === 'conversation' ? '未启用会话模型' : '暂不启用图片工具',
-      description:
-        purpose === 'conversation' ? '尚未接入 AI' : '普通会话仍可正常使用',
-      disabled: false,
-    },
-    ...models.value
-      .filter(
-        (m) =>
-          m.purpose === purpose &&
-          m.enabled &&
-          providers.value.some((p) => p.id === m.providerId && p.enabled),
-      )
-      .map((m) => ({
-        value: m.id,
-        label: m.name,
-        description: `${m.providerName} · ${m.modelId}`,
-        disabled: false,
-      })),
-  ]
-  if (value && !result.some((o) => o.value === value)) {
-    result.push({
-      value,
-      label: models.value.find((m) => m.id === value)?.name || '当前模型不可用',
-      description: '模型或服务商已停用，请选择可用配置',
-      disabled: true,
-    })
-  }
-  return result
+function poolOptions(purpose: 'conversation' | 'image') {
+  return models.value.filter((m) => m.purpose === purpose)
 }
-function modelName(id: string, fallback: string) {
-  return (
-    models.value.find((m) => m.id === id)?.name ||
-    (id ? '当前模型不可用' : fallback)
-  )
+function available(model: AIModelConfig) {
+  return model.enabled && providers.value.some((p) => p.id === model.providerId && p.enabled)
 }
-function providerName(id: string) {
-  const m = models.value.find((m) => m.id === id)
-  return m ? `${m.providerName} · ${m.modelId}` : ''
+function poolName(ids: string[], fallback: string) {
+  return ids.length ? `${ids.length} 个模型参与调度` : fallback
+}
+function poolSummary(ids: string[]) {
+  return ids.map((id) => models.value.find((m) => m.id === id)?.name || '模型不可用').join('、')
 }
 let controller: AbortController | undefined
 async function load() {
@@ -147,8 +117,8 @@ async function load() {
     ])
     providers.value = p
     models.value = m
-    applied.value = s.modelId || ''
-    appliedImage.value = s.imageModelId || ''
+    applied.value = s.modelIds ?? (s.modelId ? [s.modelId] : [])
+    appliedImage.value = s.imageModelIds ?? (s.imageModelId ? [s.imageModelId] : [])
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
@@ -211,6 +181,7 @@ function edit(model?: AIModelConfig) {
   form.outputPrice = model?.outputPrice ?? '0'
   form.imagePrice = model?.imagePrice ?? '0'
   form.contextPolicy = resolveContextPolicy(model?.contextPolicy)
+  form.maxConcurrency = model?.maxConcurrency ?? 4
   if (!changed) {
     void loadOptions()
   }
@@ -246,8 +217,8 @@ function closeEditor() {
   controller?.abort()
 }
 function configure() {
-  selected.value = applied.value
-  selectedImage.value = appliedImage.value
+  selected.value = [...applied.value]
+  selectedImage.value = [...appliedImage.value]
   dialogError.value = ''
   runtimeOpen.value = true
 }
@@ -294,8 +265,8 @@ async function select() {
         save(
           '/settings',
           {
-            modelId: selected.value || null,
-            imageModelId: selectedImage.value || null,
+            modelIds: selected.value,
+            imageModelIds: selectedImage.value,
           },
           'PATCH',
         ),
@@ -340,7 +311,7 @@ onBeforeUnmount(() => controller?.abort())
     <div>
       <p class="eyebrow">能力配置 / 模型</p>
       <h1>模型管理</h1>
-      <p>配置普通会话与图片工具，为应用选择合适的模型。</p>
+      <p>同一用途可配置多个模型，按负载自动分配新任务。</p>
     </div>
     <button
       class="primary"
@@ -372,13 +343,13 @@ onBeforeUnmount(() => controller?.abort())
         </button>
       </div>
       <h2>
-        {{ loading ? "正在读取…" : modelName(applied, "未启用会话模型") }}
+        {{ loading ? "正在读取…" : poolName(applied, "未启用会话模型") }}
       </h2>
       <p class="runtime-model">
-        {{ providerName(applied) || "配置并保存后启用 AI 对话" }}
+        {{ poolSummary(applied) || "配置并保存后启用 AI 对话" }}
       </p>
       <div class="runtime-caption">
-        <span class="status-dot" />用于日常对话与应用工具调用
+        <span class="status-dot" :class="{ neutral: !applied.length }" />用于日常对话与应用工具调用
       </div>
     </section>
     <section class="runtime-card">
@@ -387,12 +358,12 @@ onBeforeUnmount(() => controller?.abort())
           配置<AdminIcon name="arrow" :size="14" />
         </button>
       </div>
-      <h2>{{ loading ? "正在读取…" : modelName(appliedImage, "尚未启用") }}</h2>
+      <h2>{{ loading ? "正在读取…" : poolName(appliedImage, "尚未启用") }}</h2>
       <p class="runtime-model">
-        {{ providerName(appliedImage) || "配置图片模型后，可通过对话调用" }}
+        {{ poolSummary(appliedImage) || "配置图片模型后，可通过对话调用" }}
       </p>
       <div class="runtime-caption">
-        <span class="status-dot" :class="{ neutral: !appliedImage }" />按需调用，上传图片不会触发生成
+        <span class="status-dot" :class="{ neutral: !appliedImage.length }" />按需调用，上传图片不会触发生成
       </div>
     </section>
   </div>
@@ -427,7 +398,7 @@ onBeforeUnmount(() => controller?.abort())
             <th>服务商</th>
             <th>用途 / 调用方式</th>
             <th>价格（元）</th>
-            <th>状态</th>
+            <th>并发 / 状态</th>
             <th class="actions-heading">操作</th>
           </tr>
         </thead>
@@ -459,12 +430,13 @@ onBeforeUnmount(() => controller?.abort())
                 {{ m.imagePrice }} / 张</template>
             </td>
             <td>
+              <span class="cell-secondary">最多 {{ m.maxConcurrency ?? 4 }} 个请求</span>
               <span class="badge" :class="{ disabled: !m.enabled }">{{
                 m.enabled ? "已启用" : "已停用"
               }}</span><span
-                v-if="m.id === applied || m.id === appliedImage"
+                v-if="applied.includes(m.id) || appliedImage.includes(m.id)"
                 class="cell-secondary"
-              >当前使用</span>
+              >参与调度</span>
             </td>
             <td class="actions">
               <button :disabled="busy" @click="edit(m)">编辑</button><button
@@ -558,6 +530,13 @@ onBeforeUnmount(() => controller?.abort())
             maxlength="80"
             placeholder="例如：日常助手"
           ></label>
+          <label class="wide">模型并发上限<input
+            v-model.number="form.maxConcurrency"
+            type="number"
+            min="1"
+            max="128"
+            required
+          ><small>1–128；同时受服务商总并发上限约束，超限请求会排队。</small></label>
           <label class="wide">调用方式<AdminSelect
             v-model="form.invocationMode"
             label="调用方式"
@@ -731,8 +710,8 @@ onBeforeUnmount(() => controller?.abort())
   </AdminDialog>
   <AdminDialog
     :open="runtimeOpen"
-    title="配置使用模型"
-    description="保存后下一轮对话生效，正在处理的任务保持原配置。"
+    title="配置模型池"
+    description="按用途多选模型。新任务按负载与轮换调度，同一任务的工具循环和续办固定原模型。"
     :busy="busy"
     @close="runtimeOpen = false"
   >
@@ -749,19 +728,39 @@ onBeforeUnmount(() => controller?.abort())
       @submit.prevent="select"
     >
       <fieldset :disabled="busy">
-        <label>普通会话模型<AdminSelect
-          v-model="selected"
-          label="普通会话模型"
-          :options="runtimeOptions('conversation', selected)"
-          :disabled="busy"
-          searchable
-        /><small>用于普通对话、看图和多轮工具调用。</small></label><label>图片生成与编辑模型<AdminSelect
-          v-model="selectedImage"
-          label="图片生成与编辑模型"
-          :options="runtimeOptions('image', selectedImage)"
-          :disabled="busy"
-          searchable
-        /><small>与会话模型独立，按需处理生成和编辑任务。</small></label>
+        <section
+          v-for="purpose in (['conversation', 'image'] as const)"
+          :key="purpose"
+          class="pool-section"
+        >
+          <div class="pool-heading"><h3>{{ purpose === 'conversation' ? '普通会话' : '图片生成与编辑' }}</h3><span>{{ (purpose === 'conversation' ? selected : selectedImage).length }} / 32 已选</span></div>
+          <p>{{ purpose === 'conversation' ? '对话、分析、标题和工具循环；看图任务仅调度支持图片输入的模型。' : '独立调用 Images API，与会话模型分开调度。' }}</p>
+          <label
+            v-for="model in poolOptions(purpose)"
+            :key="model.id"
+            class="pool-choice"
+            :class="{ unavailable: !available(model) }"
+          >
+            <input
+              v-if="purpose === 'conversation'"
+              v-model="selected"
+              type="checkbox"
+              :value="model.id"
+              :disabled="!available(model) && !selected.includes(model.id)"
+            >
+            <input
+              v-else
+              v-model="selectedImage"
+              type="checkbox"
+              :value="model.id"
+              :disabled="!available(model) && !selectedImage.includes(model.id)"
+            >
+            <span><strong>{{ model.name }}</strong><small>{{ model.providerName }} · {{ model.modelId }}</small><small>{{ invocationLabel(model.invocationMode) }}{{ model.purpose === 'conversation' && model.supportsVision ? ' · 支持图片输入' : '' }}{{ available(model) ? '' : ' · 已停用' }}</small></span>
+            <b>{{ model.maxConcurrency ?? 4 }} 并发</b>
+          </label>
+          <p v-if="!poolOptions(purpose).length" class="muted">暂无模型，请先添加对应用途的模型。</p>
+        </section>
+        <p class="muted">未选任何模型会关闭对应用途。不同价格按实际调度模型计费；服务商报错会暂时冷却，排队与冷却参数可在平台配置调整。</p>
       </fieldset>
     </form>
     <template #footer>
@@ -803,3 +802,62 @@ onBeforeUnmount(() => controller?.abort())
     </template>
   </AdminDialog>
 </template>
+
+<style scoped>
+.pool-section + .pool-section {
+  margin-top: 24px;
+}
+.pool-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.pool-heading h3 {
+  font-size: 15px;
+  margin: 0;
+}
+.pool-heading span,
+.pool-section p {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.dialog-form .pool-choice {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.pool-choice:has(input:checked) {
+  background: #f0f7f5;
+  border-color: #98beb0;
+}
+.pool-choice.unavailable {
+  opacity: 0.65;
+}
+.pool-choice input {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.pool-choice > span {
+  flex: 1;
+  min-width: 0;
+}
+.pool-choice strong,
+.pool-choice small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.pool-choice b {
+  color: var(--muted);
+  font-size: 11px;
+  flex: none;
+}
+</style>

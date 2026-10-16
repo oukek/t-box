@@ -53,6 +53,9 @@ export function registerAdmin(
         })
         if (platform) {
           secure.get('/operations', async () => ({ data: await platform.operations.overview() }))
+          secure.get('/operations/tasks', async (r) => ({ data: await platform.operations.tasks(r.query) }))
+          secure.get('/operations/calls', async (r) => ({ data: await platform.operations.calls(r.query) }))
+          secure.get<{ Params: { id: string } }>('/operations/calls/:id', async (r) => ({ data: await platform.operations.call(parseId(r.params.id)) }))
           secure.get('/operations/events', async () => ({ data: await platform.operations.events() }))
           secure.get<{ Params: { id: string } }>('/operations/tasks/:id', async (r) => ({ data: await platform.operations.task(parseId(r.params.id)) }))
           registerLedgerCategoryAdministration(

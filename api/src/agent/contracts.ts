@@ -91,6 +91,7 @@ export interface TaskPort {
     reason?: string,
     execution?: import('@t-box/shared').MessageExecution,
     recoverAfterShutdown?: boolean,
+    result?: import('@t-box/shared').ChatMessage,
   ): Promise<void>
   get(
     actor: Actor,

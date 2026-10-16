@@ -22,6 +22,12 @@ export interface OperationsOverview {
   expiredPayments: number
 }
 export interface OperationsTaskDetail {
+  user: import('./model-operations.js').OperationsUser
+  modelCalls: import('./model-operations.js').OperationsModelCall[]
+  input: unknown
+  output: unknown
+  error: unknown
+  retryCount: number
   id: string
   userId: string
   conversationId: string

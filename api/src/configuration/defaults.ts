@@ -56,6 +56,9 @@ export const platformDefinitions: ConfigurationDefinition[] = [
   })),
   { ...number('ai.provider.concurrency', '每个服务商的请求并发上限', 8, 1, 128, '跨 API/恢复进程共享；普通会话和图片请求共用服务商额度。'), group: '成本与并发', effect: 'next_request' },
   { ...number('ai.provider.queueTimeoutMs', '服务商并发排队时限 / 毫秒', 30000, 1000, 120000, '并发已满时最多等待此时长；取消优先，排队期间不预留余额。'), group: '成本与并发', effect: 'next_request' },
+  { ...number('ai.routing.cooldownBaseMs', '模型故障初始冷却 / 毫秒', 5000, 1000, 300000, '模型请求失败后，新的任务暂时避开该模型；连续失败按指数延长。'), group: '成本与并发', effect: 'next_request' },
+  { ...number('ai.routing.cooldownMaxMs', '模型故障最大冷却 / 毫秒', 60000, 1000, 600000, '冷却不重放应用工具；进行中的任务保持模型与上下文绑定。'), group: '成本与并发', effect: 'next_request' },
+  { ...number('ai.audit.maxPayloadChars', '单次模型输入输出记录长度上限', 262144, 4096, 1048576, '管理后台专用；凭证与图片二进制脱敏，超出长度会明确标记截断。'), group: '调用记录', effect: 'next_request' },
   number('ai.worker.concurrency', '后台自动续办并发任务数', 2, 1, 32, '每个恢复进程的并发上限；新启动恢复任务时读取。模型失败和等待用户输入的任务不会自动续办。'),
   {
     key: 'ai.images.timeoutMs',

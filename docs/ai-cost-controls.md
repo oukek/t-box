@@ -9,6 +9,10 @@
 | ai.cost.platformDailyYuan | 1000 | 平台北京时间自然日成本 |
 | ai.provider.concurrency | 8 | 同一个服务商同时运行的模型/图片请求数 |
 | ai.provider.queueTimeoutMs | 30000 | 并发满时最多排队毫秒数 |
+| ai.routing.cooldownBaseMs | 5000 | 服务商失败后模型冷却起点 |
+| ai.routing.cooldownMaxMs | 60000 | 模型冷却上限 |
+
+服务商可单独设置总并发上限（0 跟随全局默认值），每个模型另设并发上限（默认 4），同时满足两层限制才发出请求。同用途模型池会按负载轮换分配新任务，详见 [模型池与任务审计](ai-model-pools.md)。
 
 恢复进程并发 `ai.worker.concurrency` 默认 2，限制单恢复进程；服务商槽位和成本预算由 MySQL 在所有 API/worker 进程之间共享，不能依靠每个进程自己的计数器。
 

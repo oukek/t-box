@@ -185,13 +185,15 @@ export class TaskStore implements TaskPort {
     reason?: string,
     execution?: import('@t-box/shared').MessageExecution,
     recoverAfterShutdown = false,
+    result?: import('@t-box/shared').ChatMessage,
   ) {
     const terminal = ['completed', 'cancelled'].includes(status)
     await this.source.query(
       `UPDATE agent_tasks t SET
       status=IF(EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),'needs_review',IF(cancel_requested,'cancelled',?)),
       active_key=IF((? OR cancel_requested) AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),NULL,active_key),
-      checkpoint_json=IF(? IS NULL,checkpoint_json,JSON_SET(checkpoint_json,'$.execution',JSON_EXTRACT(?,'$'))),
+      checkpoint_json=JSON_SET(IF(? IS NULL,checkpoint_json,JSON_SET(checkpoint_json,'$.execution',JSON_EXTRACT(?,'$'))),
+        '$.auditResult',JSON_EXTRACT(?,'$')),
       recovery_ready=? AND ?='paused' AND NOT cancel_requested AND recovery_auth_hash IS NOT NULL AND recovery_attempts<5
         AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),
       recovery_after=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 2 SECOND),recovery_claim=NULL,recovery_claim_until=NULL,
@@ -201,6 +203,7 @@ export class TaskStore implements TaskPort {
         terminal,
         execution ? JSON.stringify(execution) : null,
         execution ? JSON.stringify(execution) : null,
+        result ? JSON.stringify({ id: result.id, role: result.role, content: result.content, error: result.error, attachments: result.attachments?.map((r) => ({ id: r.id, name: r.name, mimeType: r.mimeType })) }) : 'null',
         recoverAfterShutdown,
         status,
         reason?.slice(0, 200) || null,

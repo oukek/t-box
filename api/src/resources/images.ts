@@ -10,6 +10,8 @@ import OpenAI, { toFile } from 'openai'
 import { money } from '../billing/money.js'
 import { publicRunError } from '../chat/errors.js'
 import { settingNumber, settingText } from '../configuration/defaults.js'
+import { ModelCallAudit } from '../models/audit.js'
+import { ModelRouting } from '../models/routing.js'
 import { imageOutput } from './image-output.js'
 
 export class ImageTools {
@@ -58,9 +60,25 @@ export class ImageTools {
     }
     const operation = async (value: unknown, edit = false) => {
       const { prompt, config, inputs } = await prepare(value, edit)
+      const operationId = randomUUID()
+      const audit = new ModelCallAudit(this.resources.source)
+      const routing = new ModelRouting(this.resources.source)
+      const metadata = { ...config, modelName: config.modelName || config.model, providerName: config.providerName || config.providerId, invocationMode: 'images' }
+      const limit = settingNumber(config.configuration, 'ai.audit.maxPayloadChars', 262144)
+      await audit.begin({ operationId, userId: principal.user.id, taskId, purpose: 'image' }, metadata, edit ? 'images.edit' : 'images.generate', { prompt, resourceIds: inputs.map((r) => r.id) }, limit)
+      let renewal: Promise<unknown> | undefined
+      const heartbeat = setInterval(() => {
+        renewal ??= audit.heartbeat(operationId).catch(() => {}).finally(() => {
+          renewal = undefined
+        })
+      }, 25000)
+      let auditError: unknown
+      let generated = false
+      let persisted: Awaited<ReturnType<ResourceService['create']>> | undefined
+      let imageUsage: { inputTokens?: number, outputTokens?: number, providerRequestId?: string } = {}
       const execute = async (signal: AbortSignal) => {
         signal.throwIfAborted()
-        const operationId = randomUUID()
+        await audit.running(operationId)
         await this.billing?.begin({
           id: operationId,
           userId: principal.user.id,
@@ -122,6 +140,7 @@ export class ImageTools {
                 { signal },
               )
         } catch (error) {
+          auditError = error
           await this.billing?.uncertain(principal.user.id, operationId)
           if (signal.aborted) {
             throw error
@@ -133,6 +152,9 @@ export class ImageTools {
           )
         }
         try {
+          generated = !!response?.data?.length
+          const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+          imageUsage = { inputTokens: count(response?.usage?.input_tokens), outputTokens: count(response?.usage?.output_tokens), providerRequestId: response?._request_id || undefined }
           const { bytes, mime } = await imageOutput(response?.data?.[0], signal)
           const extension =
             mime === 'image/jpeg'
@@ -146,6 +168,7 @@ export class ImageTools {
             bytes,
             'generated',
           )
+          persisted = resource
           await this.billing?.settle(principal.user.id, operationId, {
             images: 1,
           })
@@ -155,7 +178,23 @@ export class ImageTools {
           throw error
         }
       }
-      return this.concurrency ? this.concurrency.run(config.providerId, signal, await this.configuration!.configuration.snapshot(), execute) : execute(signal)
+      try {
+        const result = this.concurrency
+          ? await this.concurrency.run(config.providerId, signal, await this.configuration!.configuration.snapshot(), execute, { id: config.billingModelId, maxConcurrency: config.maxConcurrency || 4, providerConcurrency: config.providerConcurrency || 0 })
+          : await execute(signal)
+        await audit.finish(operationId, metadata, result, limit, { ...imageUsage, images: 1 }).catch(() => console.warn('MODEL_AUDIT_WRITE_FAILED', operationId))
+        await routing.success(config.billingModelId).catch(() => {})
+        return result
+      } catch (error) {
+        await audit.finish(operationId, metadata, { generated, persisted: !!persisted, resources: persisted ? [persisted] : [] }, limit, generated ? { ...imageUsage, images: 1 } : undefined, auditError || error, signal.aborted).catch(() => console.warn('MODEL_AUDIT_WRITE_FAILED', operationId))
+        if (!signal.aborted) {
+          await routing.failure(config.billingModelId, auditError || error, config.configuration).catch(() => {})
+        }
+        throw error
+      } finally {
+        clearInterval(heartbeat)
+        await renewal
+      }
     }
     return Object.assign(operation, { prepare })
   }

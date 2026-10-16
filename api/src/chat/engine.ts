@@ -369,7 +369,7 @@ export class ChatService {
               }
             }
             if (this.options.provider.forRun) {
-              session.mode = (await this.options.provider.forRun()).mode
+              session.mode = (await this.options.provider.forRun({ peek: true })).mode
             }
             if (closed) {
               return
@@ -490,7 +490,7 @@ export class ChatService {
             checkMessageRevision(current, event.expectedRevision)
             const pair = retryPair(current, messageId)
             const provider = this.options.provider.forRun
-              ? await this.options.provider.forRun()
+              ? await this.options.provider.forRun({ supportsVision: pair.messages.some((message) => message.attachments?.some((file) => file.mimeType.startsWith('image/'))) })
               : this.options.provider
             if (provider.mode === 'unconfigured') {
               throw new ApiError(
@@ -622,7 +622,7 @@ export class ChatService {
             }
           }
           const provider = this.options.provider.forRun
-            ? await this.options.provider.forRun()
+            ? await this.options.provider.forRun({ supportsVision: [...attachments, ...current.messages.flatMap((message) => message.attachments || [])].some((file) => file.mimeType.startsWith('image/')) })
             : this.options.provider
           if (closed || current.owner !== owner) {
             return

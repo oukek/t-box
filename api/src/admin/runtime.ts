@@ -2,12 +2,12 @@ import type { ProviderConcurrency } from '../billing/concurrency.js'
 import type { BillingService } from '../billing/service.js'
 import type { ChatProvider, ProviderInput } from '../chat/provider.js'
 import type { ConfigurationService } from './service.js'
-import { LimitedChatProvider } from '../billing/limited-provider.js'
 import { MeteredChatProvider } from '../billing/provider.js'
 import { createConversationProvider } from '../chat/provider-factory.js'
 import {
   UnconfiguredProvider,
 } from '../chat/provider.js'
+import { AuditedChatProvider } from '../models/provider.js'
 /** Resolve once per run, so configuration updates never split a tool loop. */
 export class DatabaseChatProvider implements ChatProvider {
   readonly mode = 'unconfigured'
@@ -17,8 +17,8 @@ export class DatabaseChatProvider implements ChatProvider {
     private readonly concurrency?: ProviderConcurrency,
   ) {}
 
-  async forRun(): Promise<ChatProvider> {
-    const config = await this.configuration.runtime()
+  async forRun(options?: Parameters<ConfigurationService['runtime']>[1]): Promise<ChatProvider> {
+    const config = await this.configuration.runtime('conversation', options)
     if (!config) {
       return Object.assign(new UnconfiguredProvider(), {
         configurationKey: 'unconfigured',
@@ -35,7 +35,7 @@ export class DatabaseChatProvider implements ChatProvider {
           config.prices,
         )
       : provider
-    return this.concurrency ? new LimitedChatProvider(metered, this.concurrency, config.providerId, this.configuration.configuration) : metered
+    return this.concurrency ? new AuditedChatProvider(metered, this.concurrency, config, this.configuration.configuration) : metered
   }
 
   async next(_input: ProviderInput): Promise<never> {

@@ -35,6 +35,7 @@ import { DurableTasks1791244804000 } from './migrations/DurableTasks.js'
 import { InitialSchema1791158400000 } from './migrations/InitialSchema.js'
 import { LedgerTimestamps1791244801000 } from './migrations/LedgerTimestamps.js'
 import { ModelInvocation1791244825000 } from './migrations/ModelInvocation.js'
+import { ModelPools1791244847000 } from './migrations/ModelPools.js'
 import { Notifications1791244846000 } from './migrations/Notifications.js'
 import { Operations1791244838000 } from './migrations/Operations.js'
 import { OperationsUtc1791244842000 } from './migrations/OperationsUtc.js'
@@ -117,6 +118,7 @@ export function createDataSource(config = getConfig().mysql) {
       AccountSecurity1791244844000,
       ResourceStorage1791244845000,
       Notifications1791244846000,
+      ModelPools1791244847000,
     ],
     migrationsTransactionMode: 'none',
     migrationsTableName: 'schema_migrations',

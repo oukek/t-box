@@ -176,7 +176,7 @@ export async function modelRequest<T>(
       const result = await invoke({
         ...input,
         execution: input.execution
-          ? { ...input.execution, operationId }
+          ? { ...input.execution, operationId, logicalRequestId: record.id, retryIndex: record.retries }
           : undefined,
         onUsage: async (usage) => {
           try {

@@ -27,10 +27,18 @@ export class BillingPricingService {
       inputPrice: string
       outputPrice: string
       imagePrice: string
+      minInputPrice: string
+      minOutputPrice: string
+      minImagePrice: string
     }[] = await this.source.query(`
-      SELECT m.purpose,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice
-      FROM ai_settings s JOIN ai_models m ON (m.id=s.model_id AND m.purpose='conversation') OR (m.id=s.image_model_id AND m.purpose='image')
-      JOIN ai_providers p ON p.id=m.provider_id WHERE s.id=1 AND m.enabled=1 AND p.enabled=1`)
+      SELECT m.purpose,MAX(m.input_price) AS inputPrice,MAX(m.output_price) AS outputPrice,MAX(m.image_price) AS imagePrice,
+        MIN(m.input_price) AS minInputPrice,MIN(m.output_price) AS minOutputPrice,MIN(m.image_price) AS minImagePrice
+      FROM ai_settings s JOIN ai_models m ON
+        (m.purpose='conversation' AND (m.id=s.model_id OR (EXISTS(SELECT 1 FROM ai_model_pool a WHERE a.purpose='conversation' AND a.model_id=s.model_id)
+          AND EXISTS(SELECT 1 FROM ai_model_pool b WHERE b.purpose='conversation' AND b.model_id=m.id)))) OR
+        (m.purpose='image' AND (m.id=s.image_model_id OR (EXISTS(SELECT 1 FROM ai_model_pool a WHERE a.purpose='image' AND a.model_id=s.image_model_id)
+          AND EXISTS(SELECT 1 FROM ai_model_pool b WHERE b.purpose='image' AND b.model_id=m.id))))
+      JOIN ai_providers p ON p.id=m.provider_id WHERE s.id=1 AND m.enabled=1 AND p.enabled=1 GROUP BY m.purpose`)
     const conversation = rows.find((r) => r.purpose === 'conversation')
     const image = rows.find((r) => r.purpose === 'image')
     return {
@@ -41,9 +49,11 @@ export class BillingPricingService {
         ? {
             inputPrice: prices(conversation).inputPrice,
             outputPrice: prices(conversation).outputPrice,
+            ...(conversation.minInputPrice != null && conversation.minInputPrice !== conversation.inputPrice ? { minInputPrice: prices({ inputPrice: conversation.minInputPrice }).inputPrice } : {}),
+            ...(conversation.minOutputPrice != null && conversation.minOutputPrice !== conversation.outputPrice ? { minOutputPrice: prices({ outputPrice: conversation.minOutputPrice }).outputPrice } : {}),
           }
         : null,
-      image: image ? { imagePrice: prices(image).imagePrice } : null,
+      image: image ? { imagePrice: prices(image).imagePrice, ...(image.minImagePrice != null && image.minImagePrice !== image.imagePrice ? { minImagePrice: prices({ imagePrice: image.minImagePrice }).imagePrice } : {}) } : null,
     }
   }
 }

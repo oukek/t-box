@@ -8,10 +8,25 @@ import { randomUUID } from 'node:crypto'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
 import { decimal } from '../billing/money.js'
+import { auditPayload } from '../models/audit.js'
+import { ModelOperations } from './model-calls.js'
+import { jsonValue } from './queries.js'
 
-/** Operational metadata only. Never retain prompts, tool arguments, resource contents or secrets. */
+/** Overview/events contain metadata only; authorized detail endpoints use sanitized model-call audits. */
 export class OperationsService {
   constructor(readonly source: DataSource) {}
+  tasks(query: unknown) {
+    return new ModelOperations(this.source).tasks(query)
+  }
+
+  calls(query: unknown) {
+    return new ModelOperations(this.source).calls(query)
+  }
+
+  call(id: string) {
+    return new ModelOperations(this.source).call(id)
+  }
+
   async record(event: Omit<OperationsEvent, 'id' | 'createdAt'>) {
     await this.source.query(
       `INSERT INTO operations_events
@@ -100,13 +115,13 @@ export class OperationsService {
 
   async task(id: string): Promise<OperationsTaskDetail> {
     const [task] = await this.source.query(
-      'SELECT id,user_id,conversation_id,request_id,status,agent_id,reason,recovery_attempts,recovery_ready,created_at,updated_at FROM agent_tasks WHERE id=?',
+      'SELECT t.*,u.username,u.nickname FROM agent_tasks t JOIN app_users u ON u.id=t.user_id WHERE t.id=?',
       [id],
     )
     if (!task) {
       throw new ApiError(404, 'TASK_NOT_FOUND', '任务不存在')
     }
-    const [tools, usage] = await Promise.all([
+    const [tools, usage, modelCalls] = await Promise.all([
       this.source.query(
         'SELECT call_id,name,agent_id,effect,status,updated_at FROM agent_task_tools WHERE task_id=? ORDER BY updated_at,call_id',
         [id],
@@ -115,9 +130,24 @@ export class OperationsService {
         'SELECT id,model_config_id,purpose,status,fee_micro,charged_micro,input_tokens,output_tokens,duration_ms,created_at FROM billing_usage WHERE task_id=? ORDER BY created_at,id',
         [id],
       ),
+      new ModelOperations(this.source).forTask(id),
     ])
+    const checkpoint = jsonValue(task.checkpoint_json)
+    const assistantId = checkpoint?.assistantId
+    const messages = checkpoint?.session?.messages || []
+    const index = messages.findIndex((m: any) => m.id === assistantId)
+    const assistant = checkpoint?.auditResult ?? (index >= 0 ? messages[index] : null)
+    const input = index >= 0 ? messages.slice(0, index).findLast((m: any) => m.role === 'user') : null
+    // Never serialize checkpoints: they also contain authentication and tool-resumption credentials.
+    const publicMessage = (message: any) => message ? JSON.parse(auditPayload({ id: message.id, role: message.role, content: message.content, attachments: message.attachments?.map((r: any) => ({ id: r.id, name: r.name, mimeType: r.mimeType })) })) : null
     return {
       id,
+      user: { id: task.user_id, username: task.username, nickname: task.nickname },
+      modelCalls,
+      input: publicMessage(input),
+      output: publicMessage(assistant),
+      error: assistant?.error ? JSON.parse(auditPayload(assistant.error)) : null,
+      retryCount: modelCalls.filter((call) => call.retryIndex > 0).length,
       userId: task.user_id,
       conversationId: task.conversation_id,
       requestId: task.request_id,

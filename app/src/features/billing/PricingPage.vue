@@ -15,6 +15,7 @@ import './recharge.css'
 const schedule = ref<AiFeeSchedule | null>(null)
 const loading = ref(true)
 const error = ref('')
+const rate = (max: string, min?: string) => min && min !== max ? `${fee(min)}–${fee(max)}` : fee(max)
 let controller: AbortController | undefined
 async function load() {
   controller?.abort()
@@ -80,7 +81,7 @@ onBeforeUnmount(() => controller?.abort())
           <div>
             <dt>输入</dt>
             <dd>
-              ¥{{ fee(schedule.conversation.inputPrice)
+              ¥{{ rate(schedule.conversation.inputPrice, schedule.conversation.minInputPrice)
               }}<small>
                 / {{ schedule.tokenUnit.toLocaleString() }} token</small>
             </dd>
@@ -88,7 +89,7 @@ onBeforeUnmount(() => controller?.abort())
           <div>
             <dt>输出</dt>
             <dd>
-              ¥{{ fee(schedule.conversation.outputPrice)
+              ¥{{ rate(schedule.conversation.outputPrice, schedule.conversation.minOutputPrice)
               }}<small>
                 / {{ schedule.tokenUnit.toLocaleString() }} token</small>
             </dd>
@@ -103,7 +104,7 @@ onBeforeUnmount(() => controller?.abort())
         <dl v-if="schedule.image">
           <div>
             <dt>每张图片</dt>
-            <dd>¥{{ fee(schedule.image.imagePrice) }}<small> / 张</small></dd>
+            <dd>¥{{ rate(schedule.image.imagePrice, schedule.image.minImagePrice) }}<small> / 张</small></dd>
           </div>
         </dl>
         <p v-else class="billing-card-note">图片功能尚未开放，暂未提供价格。</p>
@@ -121,7 +122,7 @@ onBeforeUnmount(() => controller?.abort())
         <p v-if="schedule.titleFree">
           会话标题生成免费。开启“仅记录费用”的账号会记录费用，不扣余额。
         </p>
-        <p>这里显示当前价格，每次请求按发起时的价格结算。</p>
+        <p>这里显示当前价格；多种单价时显示价格范围，每次请求按实际调度服务的单价快照结算。</p>
       </div>
     </template>
   </section>

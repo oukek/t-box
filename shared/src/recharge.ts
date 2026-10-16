@@ -21,8 +21,8 @@ export interface AdminRechargeConfiguration extends RechargeConfiguration {
 export interface AiFeeSchedule {
   currency: 'CNY'
   tokenUnit: number
-  conversation: { inputPrice: string, outputPrice: string } | null
-  image: { imagePrice: string } | null
+  conversation: { inputPrice: string, outputPrice: string, minInputPrice?: string, minOutputPrice?: string } | null
+  image: { imagePrice: string, minImagePrice?: string } | null
   titleFree: true
 }
 /** Integer cents for preview and validation; never trust client-computed bonuses. */

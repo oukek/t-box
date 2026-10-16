@@ -34,6 +34,8 @@ export interface ProviderInput {
     messageId?: string
     agentId?: string
     operationId: string
+    logicalRequestId?: string
+    retryIndex?: number
     purpose?: import('@t-box/shared').ModelCallPurpose
   }
   toolChoice?: 'auto' | 'none' | { type: 'function', name: string }
@@ -66,7 +68,7 @@ export interface ChatProvider {
   summarize?(input: ProviderInput): Promise<string>
   compact?(input: ProviderInput): Promise<ProviderItem[]>
   configurationKey?: string
-  forRun?: () => Promise<ChatProvider>
+  forRun?: (options?: { configurationKey?: string, supportsVision?: boolean, peek?: boolean }) => Promise<ChatProvider>
   next(input: ProviderInput): Promise<ProviderTurn>
   title?(input: {
     execution?: ProviderInput['execution']

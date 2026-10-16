@@ -21,6 +21,8 @@ export interface Administrator {
   createdAt: string
 }
 export interface AIProviderConfig {
+  /** 0 inherits the global provider concurrency setting. */
+  maxConcurrency?: number
   id: string
   name: string
   baseUrl: string
@@ -30,6 +32,7 @@ export interface AIProviderConfig {
 }
 export type ModelInvocationMode = 'responses' | 'chat_completions' | 'images'
 export interface AIModelConfig extends ModelPrices {
+  maxConcurrency?: number
   /** Legacy clients may omit this; the backend always returns the stored mode. */
   invocationMode?: ModelInvocationMode
   purpose: 'conversation' | 'image'
@@ -46,6 +49,8 @@ export interface AIModelConfig extends ModelPrices {
 export interface AISettings {
   modelId: string | null
   imageModelId: string | null
+  modelIds?: string[]
+  imageModelIds?: string[]
 }
 export interface RemoteModel {
   id: string

@@ -462,6 +462,9 @@ try {
     async runtime() {
       return {
         model: 'private-image',
+        providerId: modelId,
+        modelName: 'Fixture image model',
+        providerName: 'Local billing fixture',
         apiKey: 'fixture',
         baseURL: `http://127.0.0.1:${(remote.address() as { port: number }).port}/v1`,
         billingModelId: modelId,

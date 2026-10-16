@@ -19,7 +19,7 @@ import UsersPage from './features/UsersPage.vue'
 import WorkflowPage from './features/WorkflowPage.vue'
 
 const pages = {
-  'operations': { title: '运行概况', symbol: 'connection', component: OperationsPage },
+  'operations': { title: '任务与运行记录', symbol: 'connection', component: OperationsPage },
   'configuration': {
     title: '配置中心',
     symbol: 'model',

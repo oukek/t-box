@@ -87,7 +87,7 @@ export async function prepareTaskResume(
     await options.registry.access.inspect(principal, ref, 'read', '继续任务')
   }
   const provider = options.provider.forRun
-    ? await options.provider.forRun()
+    ? await options.provider.forRun({ configurationKey: checkpoint.session.configurationKey })
     : options.provider
   if (provider.mode === 'unconfigured') {
     throw new ApiError(

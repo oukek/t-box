@@ -20,6 +20,7 @@ const form = reactive({
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   enabled: true,
+  maxConcurrency: 0,
 })
 const filtered = computed(() =>
   providers.value.filter((p) =>
@@ -45,6 +46,7 @@ function edit(provider?: AIProviderConfig) {
     baseUrl: provider?.baseUrl || 'https://api.openai.com/v1',
     apiKey: '',
     enabled: provider?.enabled ?? true,
+    maxConcurrency: provider?.maxConcurrency ?? 0,
   })
   visible.value = true
   dialogError.value = ''
@@ -159,7 +161,7 @@ onMounted(load)
             <th>服务商</th>
             <th>API 地址</th>
             <th>密钥</th>
-            <th>状态</th>
+            <th>并发 / 状态</th>
             <th class="actions-heading">操作</th>
           </tr>
         </thead>
@@ -179,7 +181,7 @@ onMounted(load)
               }}</span>
             </td>
             <td>
-              <span class="badge" :class="{ disabled: !p.enabled }">{{
+              <span class="cell-secondary">{{ p.maxConcurrency ? `总计 ${p.maxConcurrency} 个请求` : "跟随全局并发上限" }}</span><span class="badge" :class="{ disabled: !p.enabled }">{{
                 p.enabled ? "已启用" : "已停用"
               }}</span>
             </td>
@@ -248,7 +250,13 @@ onMounted(load)
               ? '留空保留原密钥；修改地址时须重新填写'
               : '输入服务商密钥'
           "
-        ><small>只提交到后端加密保存，不会回显到浏览器。</small></label><label class="check"><input v-model="form.enabled" type="checkbox">启用此服务商</label>
+        ><small>只提交到后端加密保存，不会回显到浏览器。</small></label><label>服务商总并发上限<input
+          v-model.number="form.maxConcurrency"
+          type="number"
+          min="0"
+          max="128"
+          required
+        ><small>同一服务商的所有模型共享此上限。0 跟随平台配置，默认 8；可填 1–128。</small></label><label class="check"><input v-model="form.enabled" type="checkbox">启用此服务商</label>
       </fieldset>
     </form>
     <template #footer>

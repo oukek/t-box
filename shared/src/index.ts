@@ -16,6 +16,7 @@ export * from './configuration.js'
 export * from './desktop.js'
 
 export * from './identity.js'
+export * from './model-operations.js'
 export * from './operations.js'
 export * from './payments.js'
 export * from './recharge.js'

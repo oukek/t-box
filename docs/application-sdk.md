@@ -150,7 +150,7 @@ SDK 协议 `APP_SDK_VERSION` 与已有应用发布协议 `APP_PROTOCOL` 分开�
 发布定义可选声明：
 
 ```ts
-updatePrompt: {
+const updatePrompt = {
   mode: 'default', // 缺省使用系统弹窗；custom 使用 SDK 注册的应用弹窗
   title: '发现新版本',
   description: '新版本已上架，前往应用市场查看并更新。',

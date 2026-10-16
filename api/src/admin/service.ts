@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { ApiError } from '@t-box/server-foundation/errors'
 import OpenAI from 'openai'
 import { WorkflowConfigurationStore } from '../agent-workflow/configuration.js'
+import { ProviderConcurrency } from '../billing/concurrency.js'
 import { prices } from '../billing/money.js'
 import { publicRunError } from '../chat/errors.js'
 import {
@@ -15,6 +16,7 @@ import { createConversationProvider } from '../chat/provider-factory.js'
 import { ConfigurationCache } from '../configuration/cache.js'
 import { settingNumber } from '../configuration/defaults.js'
 import { ConfigurationStore } from '../configuration/store.js'
+import { ModelRouting } from '../models/routing.js'
 import { contextPolicy } from './context-policy.js'
 import { bad, baseUrl, body, enabled, text } from './validation.js'
 
@@ -46,7 +48,7 @@ export class ConfigurationService {
   }
 
   async saveProvider(value: unknown, id?: string) {
-    const input = body(value, ['name', 'baseUrl', 'apiKey', 'enabled'])
+    const input = body(value, ['name', 'baseUrl', 'apiKey', 'enabled', 'maxConcurrency'])
     const name = text(input.name, '名称')
     const url = baseUrl(input.baseUrl)
     const active = enabled(input.enabled)
@@ -59,6 +61,7 @@ export class ConfigurationService {
     const apiKey = typeof input.apiKey === 'string' ? input.apiKey.trim() : ''
     return this.store.configMutation(async (db, settings) => {
       const old = id ? await db.provider(id) : undefined
+      const maxConcurrency = concurrencyLimit(input.maxConcurrency, old?.maxConcurrency ?? 0, true)
       if (!apiKey && (!old || old.baseUrl !== url)) {
         bad('新增服务商或修改 API 地址时必须填写 API Key')
       }
@@ -66,23 +69,23 @@ export class ConfigurationService {
         !active &&
         (await db.models()).some(
           (m) =>
-            [settings.modelId, settings.imageModelId].includes(m.id) &&
+            [...(settings.modelIds || []), ...(settings.imageModelIds || [])].includes(m.id) &&
             m.providerId === id,
         )
       ) {
-        bad('请先切换当前对话模型，再停用服务商')
+        bad('请先将关联模型移出模型池，再停用服务商')
       }
       const target = id ?? randomUUID()
       const cipher = apiKey ? this.vault.encrypt(apiKey) : old!.keyCipher
       if (old) {
         await db.execute(
-          'UPDATE ai_providers SET name=?,base_url=?,key_cipher=?,enabled=?,revision=revision+1 WHERE id=?',
-          [name, url, cipher, active, target],
+          'UPDATE ai_providers SET name=?,base_url=?,key_cipher=?,enabled=?,max_concurrency=?,revision=revision+1 WHERE id=?',
+          [name, url, cipher, active, maxConcurrency, target],
         )
       } else {
         await db.execute(
-          'INSERT INTO ai_providers (id,name,base_url,key_cipher,enabled) VALUES (?,?,?,?,?)',
-          [target, name, url, cipher, active],
+          'INSERT INTO ai_providers (id,name,base_url,key_cipher,enabled,max_concurrency) VALUES (?,?,?,?,?,?)',
+          [target, name, url, cipher, active, maxConcurrency],
         )
       }
       return target
@@ -139,6 +142,7 @@ export class ConfigurationService {
       'outputPrice',
       'imagePrice',
       'contextPolicy',
+      'maxConcurrency',
     ])
     const providerId = text(input.providerId, '服务商', 36)
     const modelId = text(input.modelId, '模型标识', 200)
@@ -158,6 +162,7 @@ export class ConfigurationService {
         : enabled(input.supportsReasoning)
     const provider = await this.store.provider(providerId)
     const previous = id ? await this.store.model(id) : undefined
+    const maxConcurrency = concurrencyLimit(input.maxConcurrency, previous?.maxConcurrency ?? 4)
     const method = invocationMode(
       input.invocationMode ??
       (previous?.purpose === purpose ? previous.invocationMode : undefined),
@@ -198,15 +203,15 @@ export class ConfigurationService {
         bad('服务商配置已变更，请重新加载模型列表')
       }
       if (
-        [settings.modelId, settings.imageModelId].includes(id ?? '') &&
+        [...(settings.modelIds || []), ...(settings.imageModelIds || [])].includes(id ?? '') &&
         (!active || !currentProvider.enabled || previous?.purpose !== purpose)
       ) {
-        bad('请先切换当前对话模型，再停用')
+        bad('请先将模型移出模型池，再停用或修改用途')
       }
       const target = id ?? randomUUID()
       if (id) {
         await db.execute(
-          'UPDATE ai_models SET provider_id=?,model_id=?,name=?,enabled=?,purpose=?,supports_vision=?,supports_reasoning=?,invocation_mode=?,input_price=?,output_price=?,image_price=?,context_policy=? WHERE id=?',
+          'UPDATE ai_models SET provider_id=?,model_id=?,name=?,enabled=?,purpose=?,supports_vision=?,supports_reasoning=?,invocation_mode=?,input_price=?,output_price=?,image_price=?,context_policy=?,max_concurrency=? WHERE id=?',
           [
             providerId,
             modelId,
@@ -220,12 +225,13 @@ export class ConfigurationService {
             pricing.outputPrice,
             pricing.imagePrice,
             JSON.stringify(policy),
+            maxConcurrency,
             target,
           ],
         )
       } else {
         await db.execute(
-          'INSERT INTO ai_models (id,provider_id,model_id,name,enabled,purpose,supports_vision,supports_reasoning,invocation_mode,input_price,output_price,image_price,context_policy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+          'INSERT INTO ai_models (id,provider_id,model_id,name,enabled,purpose,supports_vision,supports_reasoning,invocation_mode,input_price,output_price,image_price,context_policy,max_concurrency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
           [
             target,
             providerId,
@@ -240,6 +246,7 @@ export class ConfigurationService {
             pricing.outputPrice,
             pricing.imagePrice,
             JSON.stringify(policy),
+            maxConcurrency,
           ],
         )
       }
@@ -248,29 +255,39 @@ export class ConfigurationService {
   }
 
   async selectModel(value: unknown) {
-    const input = body(value, ['modelId', 'imageModelId'])
+    const input = body(value, ['modelId', 'imageModelId', 'modelIds', 'imageModelIds'])
     return this.store.configMutation(async (db, settings) => {
-      for (const [field, purpose, column] of [
-        ['modelId', 'conversation', 'model_id'],
-        ['imageModelId', 'image', 'image_model_id'],
+      for (const [single, many, purpose, column] of [
+        ['modelId', 'modelIds', 'conversation', 'model_id'],
+        ['imageModelId', 'imageModelIds', 'image', 'image_model_id'],
       ] as const) {
-        if (input[field] === undefined) {
+        if (input[single] === undefined && input[many] === undefined) {
           continue
         }
-        const id =
-          input[field] === null ? null : text(input[field], '模型配置', 36)
-        if (id) {
+        const supplied = input[many] ?? (input[single] == null ? [] : [input[single]])
+        if (!Array.isArray(supplied) || supplied.length > 32) {
+          bad('每种用途最多选择 32 个模型')
+        }
+        const ids = (supplied as unknown[]).map((value) => text(value, '模型配置', 36))
+        if (new Set(ids).size !== ids.length) {
+          bad('模型配置不能重复')
+        }
+        if (input[many] !== undefined && input[single] !== undefined && (input[single] ?? null) !== (ids[0] ?? null)) {
+          bad('模型池与默认模型不一致')
+        }
+        for (const id of ids) {
           const model = await db.model(id)
-          if (
-            !model.enabled ||
-            !(await db.provider(model.providerId)).enabled ||
-            model.purpose !== purpose
-          ) {
+          if (!model.enabled || !(await db.provider(model.providerId)).enabled || model.purpose !== purpose) {
             bad('请选择对应用途的已启用模型和服务商')
           }
         }
-        await db.execute(`UPDATE ai_settings SET ${column}=? WHERE id=1`, [id])
-        settings[field] = id
+        await db.execute('DELETE FROM ai_model_pool WHERE purpose=?', [purpose])
+        for (const [position, id] of ids.entries()) {
+          await db.execute('INSERT INTO ai_model_pool(purpose,model_id,position) VALUES(?,?,?)', [purpose, id, position])
+        }
+        await db.execute(`UPDATE ai_settings SET ${column}=? WHERE id=1`, [ids[0] ?? null])
+        settings[single] = ids[0] ?? null
+        settings[many] = ids
       }
       return settings
     })
@@ -280,8 +297,8 @@ export class ConfigurationService {
     await this.store.configMutation(async (db, settings) => {
       if (kind === 'models') {
         await db.model(id)
-        if ([settings.modelId, settings.imageModelId].includes(id)) {
-          bad('当前模型正在使用，请先切换为其他模型或停用会话模型')
+        if ([...(settings.modelIds || []), ...(settings.imageModelIds || [])].includes(id)) {
+          bad('此模型仍在模型池中，请先移出后再删除')
         }
         await db.execute('DELETE FROM ai_models WHERE id=?', [id])
       } else {
@@ -294,60 +311,65 @@ export class ConfigurationService {
     })
   }
 
-  async runtime(purpose: 'conversation' | 'image' = 'conversation') {
+  async runtime(purpose: 'conversation' | 'image' = 'conversation', options: { configurationKey?: string, supportsVision?: boolean, peek?: boolean } = {}) {
     const column = purpose === 'image' ? 'image_model_id' : 'model_id'
-    // One statement gives a consistent snapshot of model, provider and selection.
-    const [state] = await this.store.rows<{ revision: number }>(
-      'SELECT ai_revision AS revision FROM platform_configuration_state WHERE id=1',
-    )
-    const [row] = await this.cache.read(
-      `ai-runtime-${purpose}`,
-      Number(state?.revision ?? 0),
-      () =>
-        this.store.rows<{
-          inputPrice: string
-          outputPrice: string
-          imagePrice: string
-          contextPolicy: unknown
-          modelId: string | null
-          remoteId: string
-          purpose: string
-          invocationMode: import('@t-box/shared').ModelInvocationMode
-          supportsVision: number
-          supportsReasoning: number
-          modelEnabled: number
-          providerEnabled: number
-          id: string
-          baseUrl: string
-          keyCipher: string
-          revision: number
-        }>(
-          `SELECT s.${column} AS modelId,m.model_id AS remoteId,m.purpose,m.invocation_mode AS invocationMode,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy,m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.enabled AS modelEnabled,p.enabled AS providerEnabled,p.id,p.base_url AS baseUrl,p.key_cipher AS keyCipher,p.revision FROM ai_settings s LEFT JOIN ai_models m ON m.id=s.${column} LEFT JOIN ai_providers p ON p.id=m.provider_id WHERE s.id=1`,
-        ),
-    )
-    if (!row) {
-      throw new ApiError(503, 'SCHEMA_REQUIRED', '请先初始化数据库')
-    }
-    if (!row.modelId) {
+    const [state] = await this.store.rows<{ revision: number }>('SELECT ai_revision AS revision FROM platform_configuration_state WHERE id=1')
+    const rows = await this.cache.read(`ai-runtime-pool-v1-${purpose}`, Number(state?.revision ?? 0), () => this.store.rows<{
+      inputPrice: string
+      outputPrice: string
+      imagePrice: string
+      contextPolicy: unknown
+      modelId: string
+      modelName: string
+      providerName: string
+      remoteId: string
+      purpose: string
+      invocationMode: import('@t-box/shared').ModelInvocationMode
+      supportsVision: number
+      supportsReasoning: number
+      modelEnabled: number
+      providerEnabled: number
+      id: string
+      baseUrl: string
+      keyCipher: string
+      revision: number
+      maxConcurrency: number
+      providerConcurrency: number
+    }>(`SELECT m.id AS modelId,m.name AS modelName,p.name AS providerName,m.model_id AS remoteId,m.purpose,m.invocation_mode AS invocationMode,
+      m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy,
+      m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.enabled AS modelEnabled,p.enabled AS providerEnabled,
+      m.max_concurrency AS maxConcurrency,p.max_concurrency AS providerConcurrency,p.id,p.base_url AS baseUrl,p.key_cipher AS keyCipher,p.revision
+      FROM ai_settings s JOIN ai_models m ON (m.id=s.${column} OR (
+        EXISTS(SELECT 1 FROM ai_model_pool a WHERE a.purpose=? AND a.model_id=s.${column}) AND
+        EXISTS(SELECT 1 FROM ai_model_pool b WHERE b.purpose=? AND b.model_id=m.id)))
+      JOIN ai_providers p ON p.id=m.provider_id WHERE s.id=1 AND s.${column} IS NOT NULL ORDER BY m.id`, [purpose, purpose]))
+    if (!rows.length) {
       return null
     }
-    if (row.purpose !== purpose) {
-      throw new ApiError(
-        503,
-        'MODEL_PURPOSE_MISMATCH',
-        '模型用途与运行选择不一致，请在后台重新选择模型',
-      )
+    if (rows.every((row) => row.purpose !== purpose)) {
+      throw new ApiError(503, 'MODEL_PURPOSE_MISMATCH', '模型用途与运行配置不匹配，请重新配置模型池')
     }
-    if (!row.modelEnabled || !row.providerEnabled) {
-      throw new ApiError(503, 'AI_DISABLED', '当前对话模型或服务商不可用')
+    const eligible = rows.filter((row) => row.purpose === purpose && row.modelEnabled && row.providerEnabled && (!options.supportsVision || row.supportsVision))
+    if (!eligible.length) {
+      throw new ApiError(503, options.supportsVision ? 'VISION_MODEL_REQUIRED' : 'AI_DISABLED', options.supportsVision ? '当前模型池没有可用的看图模型，请在后台配置' : '当前模型池或服务商不可用')
     }
+    const configuration = await this.configuration.snapshot()
+    const pinned = options.configurationKey ? eligible.find((row) => options.configurationKey!.startsWith(row.modelId + ':')) : undefined
+    if (options.configurationKey && !pinned) {
+      throw new ApiError(409, 'TASK_MODEL_CHANGED', '任务原模型已移出模型池或停用，请恢复原模型配置后继续')
+    }
+    const row = pinned ?? (options.peek ? eligible[0]! : await new ModelRouting(this.store.source).select(purpose, eligible, configuration))
     const method = invocationMode(row.invocationMode, purpose)
     const policy = invocationContextPolicy(
       method,
       contextPolicy(row.contextPolicy, Boolean(row.supportsReasoning)),
     )
     return {
-      configuration: await this.configuration.snapshot(),
+      configuration,
+      modelName: row.modelName,
+      providerName: row.providerName,
+      maxConcurrency: row.maxConcurrency,
+      providerConcurrency: row.providerConcurrency,
       invocationMode: method,
       billingModelId: row.modelId,
       providerId: row.id,
@@ -387,13 +409,14 @@ export class ConfigurationService {
         },
         await this.client(provider),
       )
-      const turn = await runtime.next({
+      const signal = AbortSignal.timeout(settingNumber(configuration, 'ai.provider.modelsTimeoutMs', 12_000))
+      const turn = await new ProviderConcurrency(this.store.source).run(provider.id, signal, configuration, (signal) => runtime.next({
         history: [
           { role: 'user', content: 'Call connection_check with no arguments.' },
         ],
         instructions: '这是连接测试，只调用 connection_check，不执行其他操作。',
         localDate: new Date().toISOString().slice(0, 10),
-        signal: AbortSignal.timeout(settingNumber(configuration, 'ai.provider.modelsTimeoutMs', 12_000)),
+        signal,
         onDelta() {},
         publicReasoning: false,
         tools: [
@@ -411,7 +434,7 @@ export class ConfigurationService {
           },
         ],
         toolChoice: { type: 'function', name: 'connection_check' },
-      })
+      }), { id: model.id, maxConcurrency: model.maxConcurrency ?? 4, providerConcurrency: provider.maxConcurrency ?? 0 })
       if (!turn.calls.some((item) => item.name === 'connection_check')) {
         throw new ApiError(
           502,
@@ -430,4 +453,14 @@ export class ConfigurationService {
       )
     }
   }
+}
+
+function concurrencyLimit(value: unknown, fallback: number, allowZero = false) {
+  if (value === undefined) {
+    return fallback
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < (allowZero ? 0 : 1) || value > 128) {
+    bad('并发上限需为 1–128 的整数，服务商可填 0 跟随全局配置')
+  }
+  return value as number
 }

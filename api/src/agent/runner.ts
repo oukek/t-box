@@ -123,8 +123,10 @@ export async function runConversation(
       provider.configurationKey &&
       session.configurationKey !== provider.configurationKey
     ) {
-      // Budget/prompt changes don't discard rolling memory. Opaque native memory cannot cross providers safely.
-      session.history = session.history.some(
+      // A newly routed model must receive portable history, including durable tool receipts,
+      // rather than opaque response IDs / native memory from another provider.
+      const differentModel = session.configurationKey?.slice(0, 36) !== provider.configurationKey.slice(0, 36)
+      session.history = differentModel || session.history.some(
         (item) => item.type === 'compaction',
       )
         ? rebuildConversationHistory(
@@ -521,6 +523,7 @@ export async function runConversation(
           reason,
           assistant.execution,
           run.abort.signal.reason === 'SERVER_SHUTDOWN',
+          assistant,
         )
         session.task = (await tasks.get(principal!, run.view.id)).summary
       } catch {

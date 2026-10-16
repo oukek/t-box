@@ -87,6 +87,7 @@ export const AdminSessionEntity = new EntitySchema<AdminSessionRow>({
   ],
 })
 export interface ProviderRow {
+  maxConcurrency: number
   id: string
   name: string
   baseUrl: string
@@ -99,6 +100,7 @@ export const ProviderEntity = new EntitySchema<ProviderRow>({
   name: 'AIProvider',
   tableName: 'ai_providers',
   columns: {
+    maxConcurrency: { type: Number, name: 'max_concurrency', default: 0 },
     id,
     name: { type: 'varchar', length: 80 },
     baseUrl: { type: 'varchar', length: 500, name: 'base_url' },
@@ -109,6 +111,7 @@ export const ProviderEntity = new EntitySchema<ProviderRow>({
   },
 })
 export interface ModelRow {
+  maxConcurrency: number
   invocationMode: import('@t-box/shared').ModelInvocationMode
   contextPolicy: import('@t-box/shared').ContextPolicy | null
   purpose: 'conversation' | 'image'
@@ -127,6 +130,7 @@ export const ModelEntity = new EntitySchema<ModelRow>({
   name: 'AIModel',
   tableName: 'ai_models',
   columns: {
+    maxConcurrency: { type: Number, name: 'max_concurrency', default: 4 },
     invocationMode: {
       type: 'enum',
       enum: ['responses', 'chat_completions', 'images'],
