@@ -18,7 +18,7 @@ t-box/
 └── scripts/      原生同步及开发调试脚本
 ```
 
-应用源码、公共包与宿主职责见 [应用目录与边界](docs/apps-layout.md)，应用接入方式见 [统一应用 SDK](docs/application-sdk.md)。目录独立与 iframe 运行隔离分别管理：计算器已使用独立 Web 产物，其余页面当前仍作为可信内置模块运行。
+应用源码、公共包与宿主职责见 [应用目录与边界](docs/apps-layout.md)，应用接入方式见 [统一应用 SDK](docs/application-sdk.md)。计算器、记账、日历、时间使用独立 Web 产物；设置和市场随宿主构建。首次上线按 [OSS 前端与 PM2 后端操作顺序](docs/first-deployment.md) 配置。
 
 ## 本地启动
 
@@ -94,7 +94,7 @@ pnpm dev
 
 在根目录运行 `pnpm lint` 检查整个项目，`pnpm lint:fix` 自动修复，`pnpm check` 同时检查应用边界和类型，`pnpm test:unit` 运行 API、前端、SDK 和原生脚本测试。可以用 `pnpm exec eslint apps/ledger --fix` 仅整理某个子应用。测试继续使用 `node:test`，ESLint 不修改 pnpm 安装策略。VS Code 的项目设置提供 ESLint 保存修复，CSS / HTML 的 Prettier 格式化由 ESLint 统一调用。
 
-提交与拉取请求的质量检查由 `.github/workflows/quality.yml` 执行。需要本地 MySQL 的集成测试按下列已有命令单独运行。
+质量检查由 `.github/workflows/quality.yml` 手动执行。需要本地 MySQL 的集成测试按下列已有命令单独运行。
 
 ```bash
 pnpm run pack        # 前端 → app/dist
@@ -114,7 +114,7 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-浏览器部署可将 `app/dist` 放在静态站点服务器下，将 `/api` 反向代理到 API 服务，并为 `/api/v1/chat/ws` 和 `/api/v1/ledgers/ws` 开启 WebSocket Upgrade 转发。API 构建产物位于 `api/dist`，生产启动命令为 `pnpm --filter @t-box/api start`。所有 GitHub 工作流均为手动触发。PM2 方式使用 [构建发布包并上传服务器说明](docs/api-pm2-deployment.md)：上传到独立版本目录，默认自动迁移、启动三个 PM2 进程并检查健康；生产配置由运维提前准备。也支持服务器拉取源码后运行 `pnpm deploy:pm2`，先在服务器构建独立版本，再复用同一启动脚本。可选的阿里云 / 宝塔 Docker 部署使用 [GitHub Actions → OSS 镜像归档 → Compose 部署说明](docs/api-docker-deployment.md)：Actions 导出镜像包、SHA-256 与发布清单并上传私有 OSS；服务器脚本校验、导入并部署本地镜像，无需镜像仓库。包含数据库迁移、健康检查、回滚、资源和密钥持久化以及 HTTPS/WSS 代理。
+生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：**Web OSS deployment** 发布主前端和后台，构建时写入 API_BASE_URL；后台通过精确 ADMIN_ORIGINS、跨来源 Cookie 和 CSRF 请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**API PM2 package and upload** 先将当前包的四个子应用静态种子上传 OSS，再上传、迁移并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**Application OSS submission** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Variables/Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
 
 ## iOS / Android 开发热更新
 

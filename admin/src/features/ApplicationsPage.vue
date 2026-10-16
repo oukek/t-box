@@ -31,6 +31,7 @@ const editing = ref<ManagedRelease | null>(null)
 const newApp = ref(false)
 const artifacts = ref<Artifact[]>([])
 const artifactOrigin = ref('')
+const artifactDelivery = ref('local')
 const historyOpen = ref(false)
 const events = ref<ApplicationPublicationEvent[]>([])
 const transition = ref<{
@@ -118,9 +119,11 @@ async function load() {
     const result = await request<{
       applications: ManagedApplication[]
       artifactOrigin: string
+      artifactDelivery?: string
     }>('/applications')
     applications.value = result.applications
     artifactOrigin.value = result.artifactOrigin
+    artifactDelivery.value = result.artifactDelivery || 'local'
     if (!current.value) {
       selectedId.value = applications.value[0]?.appId || ''
     }
@@ -591,6 +594,7 @@ onMounted(load)
         <div v-if="form.runtime === 'web'" class="artifact-picker">
           <div class="artifact-label">
             <strong>构建产物</strong><label
+              v-if="artifactDelivery !== 'oss'"
               class="upload-build"
               :class="{ disabled: !canUpload || busy }"
             ><AdminIcon name="plus" :size="14" />上传 dist 目录<input
@@ -608,7 +612,7 @@ onMounted(load)
             :options="artifactOptions"
             :disabled="!canUpload"
             placeholder="选择已上传的构建产物"
-            empty-text="还没有构建产物，请上传 dist 目录"
+            :empty-text="artifactDelivery === 'oss' ? '请先通过应用发布工作流上传构建' : '还没有构建产物，请上传 dist 目录'"
           /><small>应用使用相对资源路径（Vite base: './'）和应用
             SDK。上传不会自动上线。</small><small class="mono">产物服务：{{ artifactOrigin }}</small>
         </div>

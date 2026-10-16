@@ -17,14 +17,19 @@ export function registerAdmin(
   app: FastifyInstance,
   service: ConfigurationService,
   platform?: PlatformService,
+  origins: readonly string[] = [],
 ) {
   const auth = new AdminAuth(service.store)
   app.register(
     async (scope) => {
       scope.addHook('onRequest', async (request, reply) => {
         reply.header('Cache-Control', 'no-store')
+        const origin = request.headers.origin
+        if (origin && !origins.includes(origin) && origin !== `${request.protocol}://${request.host}`) {
+          throw new ApiError(403, 'ADMIN_ORIGIN_REJECTED', '此来源不允许访问管理后台')
+        }
         if (
-          !['GET', 'HEAD'].includes(request.method) &&
+          !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
           request.headers['x-admin-request'] !== '1'
         ) {
           throw new ApiError(403, 'CSRF_REJECTED', '管理请求校验失败')

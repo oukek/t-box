@@ -39,6 +39,7 @@ export interface BuildImport {
 }
 export class ApplicationPublishing {
   readonly origin: string
+  readonly delivery = process.env.APP_ARTIFACT_DELIVERY || 'local'
   constructor(
     private readonly source: DataSource,
     private readonly platform: ApplicationPlatform,

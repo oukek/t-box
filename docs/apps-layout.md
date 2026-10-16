@@ -4,15 +4,15 @@
 
 | 目录              | 应用类型                     | 内容                                                                                        | 当前前端运行方式  |
 | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------- | ----------------- |
-| `apps/ledger`     | 用户应用，可卸载             | contracts、web、server；账本、分类、账单、往来、统计、授权、REST、实时订阅、AI 工具与 Agent | 宿主内置模块      |
+| `apps/ledger`     | 用户应用，可卸载             | contracts、web、server；账本、分类、账单、往来、统计、授权、REST、实时订阅、AI 工具与 Agent | 独立来源 Web 容器 |
 | `apps/calculator` | 系统应用                     | contracts、独立 web、server、shell；数学计算、REST、AI 工具、发布定义与历史迁移             | 独立来源 Web 容器 |
-| `apps/calendar`   | 系统应用                     | contracts、web、server；日程/纪念日、重复规则、备份、提醒、权限与 AI 工具                   | 宿主内置模块      |
-| `apps/time`       | 系统应用                     | contracts、web、server；世界时钟、倒计时、秒表、时间计算与 AI 工具                          | 宿主内置模块      |
+| `apps/calendar`   | 系统应用                     | contracts、web、server；日程/纪念日、重复规则、备份、提醒、权限与 AI 工具                   | 独立来源 Web 容器 |
+| `apps/time`       | 系统应用                     | contracts、web、server；世界时钟、倒计时、秒表、时间计算与 AI 工具                          | 独立来源 Web 容器 |
 | `apps/settings`   | 系统应用，历史 ID 为 profile | contracts、web；账号页面、密码弹窗、关于和图标大小                                          | 宿主内置模块      |
 | `apps/market`     | 系统应用                     | contracts、web；目录、版本、安装/更新/卸载页面                                              | 宿主内置模块      |
 | `apps/images`     | AI 能力模块，无 OS 图标      | server；图片技能、工具和 Agent，接收图片处理服务端口                                        | 无独立页面        |
 
-每个包有自己的 package.json、tsconfig 和类型检查。contracts 与 server 编译到各自 dist；内置 web/shell 以源码包由宿主 Vite 编译，保留跨 workspace HMR。内置 web 没有独立 dev 端口或发行 dist，不能把目录独立理解为已经支持独立前端升级。记账等应用若要像计算器一样独立发布，下一步需要迁移到 app-web-sdk 消息桥，并为权限挑战、实时订阅、账号设置和原生通知约定相应的受控能力；不能直接把当前特权 shell SDK 放进第三方 iframe。
+每个包有自己的 package.json、tsconfig 和类型检查。contracts 与 server 编译到各自 dist；四个独立 Web 应用使用 app-web-sdk 消息桥，经主机转发受控业务与设备能力。设置、市场和宿主 shell 以源码包由宿主 Vite 编译，保留跨 workspace HMR。生产由 OSS 提供独立静态版本，后端能力仍随 API 部署；不能把特权 shell SDK 放进第三方 iframe。操作顺序见 [首次部署](first-deployment.md)。
 
 ## 公共包
 

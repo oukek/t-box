@@ -27,6 +27,10 @@ const origin = new URL(env.APP_ARTIFACT_ORIGIN || '')
 if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) {
   throw new Error('Configure a separate HTTPS APP_ARTIFACT_ORIGIN in shared/api.env')
 }
+if ((info.artifactOrigin && info.artifactOrigin !== origin.origin) ||
+  (info.artifactDelivery && info.artifactDelivery !== (env.APP_ARTIFACT_DELIVERY || 'local'))) {
+  throw new Error('shared/api.env artifact origin/delivery differs from the OSS deployment verified by Actions')
+}
 for (const folder of ['secrets', 'storage', 'app-artifacts', 'app-deployments', 'logs']) {
   await mkdir(join(shared, folder), { recursive: true, mode: 0o700 })
 }

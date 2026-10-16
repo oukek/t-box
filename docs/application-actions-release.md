@@ -1,5 +1,7 @@
 # 独立应用：Actions → OSS → 后台待发布
 
+首次上线按 [OSS + PM2 操作顺序](first-deployment.md) 执行。当前工作流先把可直接浏览的应用文件上传到 `APPS_OSS_BUCKET`，逐文件通过 `APP_ARTIFACT_ORIGIN` 校验，再将 JSON 包上传私有构建桶并登记待发布版本。OSS 模式不通过服务器提供公开静态文件；服务器保留校验及备份副本。
+
 新工作流 `.github/workflows/application-release.yml` 仅支持手动运行，旧 API Docker/PM2 工作流保持原有用途。选择应用，填写新版本号和更新说明后，工作流构建该应用及依赖、上传私有 OSS，通过服务器导入接口登记为 `submitted`（已提交、未上架）。后台“应用发布”可直接选中该版本并点击发布；已安装用户沿用原版本，按已有更新机制升级。
 
 ## 应用下拉列表
@@ -88,6 +90,8 @@ Repository → Settings → Secrets and variables → Actions：
 | --- | --- | --- |
 | Variable | `OSS_BUCKET` | 私有构建桶名称（可复用 API 镜像桶） |
 | Variable | `OSS_REGION` | `cn-hangzhou` |
+| Variable | `APPS_OSS_BUCKET` | 独立应用公开静态 Bucket，与私有构建桶分开 |
+| Variable | `APP_ARTIFACT_ORIGIN` | 独立应用静态站点的自定义 HTTPS 来源 |
 | Variable | `OSS_ENDPOINT` | 可选，`https://oss-cn-hangzhou.aliyuncs.com`，必须公网 endpoint |
 | Variable | `APP_OSS_PREFIX` | 可选，默认 `t-box/apps`，须与服务器匹配；独立于 API 的 `OSS_PREFIX` |
 | Variable | `APP_IMPORT_API_URL` | `https://api.example.com/api/v1/application-builds` |

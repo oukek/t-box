@@ -31,6 +31,15 @@ export async function startRelease({
   const envFile = join(shared, 'api.env')
   const { parse } = createRequire(join(api, 'package.json'))('dotenv')
   const settings = { ...parse(await readFile(envFile)), ...process.env }
+  const delivery = settings.APP_ARTIFACT_DELIVERY || 'local'
+  if (!['local', 'oss'].includes(delivery)) {
+    throw new Error('APP_ARTIFACT_DELIVERY must be local or oss')
+  }
+  if ((info.artifactDelivery && info.artifactDelivery !== delivery) ||
+    (info.artifactOrigin && info.artifactOrigin !== settings.APP_ARTIFACT_ORIGIN)) {
+    throw new Error('Effective artifact settings differ from the OSS deployment verified by Actions')
+  }
+  const activeNames = delivery === 'oss' ? names.slice(0, 2) : names
   const port = settings.PORT || '3000'
   if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
     throw new Error('Invalid API PORT')
@@ -42,6 +51,7 @@ export async function startRelease({
     NODE_ENV: 'production',
     PM2_NODE: process.execPath,
     ARTIFACT_PORT: settings.ARTIFACT_PORT || '6176',
+    APP_ARTIFACT_DELIVERY: delivery,
   }
   const command = (program, args, options = {}) => run(program, args, {
     cwd: release,
@@ -103,7 +113,7 @@ export async function startRelease({
     for (let attempt = 0; attempt < attempts; attempt++) {
       try {
         const list = processes()
-        const current = names.map((name) => list.find((entry) => entry.name === name))
+        const current = activeNames.map((name) => list.find((entry) => entry.name === name))
         if (!current.every((entry, index) => entry?.pm2_env?.status === 'online' && entry.pid > 0 && entry.pm2_env.pm_exec_path === scripts[index])) {
           throw new Error('Managed PM2 processes are not online at the new release paths')
         }

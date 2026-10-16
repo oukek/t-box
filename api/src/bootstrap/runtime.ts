@@ -48,6 +48,7 @@ export async function createRuntime(worker: boolean) {
     health: database.health,
     close: database.close,
     corsOrigins: config.corsOrigins,
+    adminOrigins: config.adminOrigins,
     chatProvider: new DatabaseChatProvider(
       administration,
       platform.billing,

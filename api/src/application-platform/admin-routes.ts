@@ -18,6 +18,7 @@ export function registerApplicationPublishing(
     data: {
       applications: await service.list(),
       artifactOrigin: service.origin,
+      artifactDelivery: service.delivery,
     },
   }))
   app.get<{ Params: { id: string } }>(
@@ -29,6 +30,9 @@ export function registerApplicationPublishing(
     { bodyLimit: 30 * 1024 * 1024 },
     async (r, reply) => {
       await actor(r)
+      if (service.delivery === 'oss') {
+        throw new ApiError(409, 'APP_USE_OSS_WORKFLOW', '当前使用 OSS 静态发布，请通过应用发布工作流上传，再在后台审核上架')
+      }
       return reply
         .code(201)
         .send({

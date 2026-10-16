@@ -24,6 +24,8 @@ const app = createApp({
   categories: createCategoryRepository(pool),
   health: async () => ({ mysql: 'up', redis: 'disabled' }),
   administration: service,
+  adminOrigins: ['https://admin.example.com'],
+  corsOrigins: ['http://localhost:5173', 'https://box.example.com'],
   chatProvider: new DatabaseChatProvider(service),
 })
 const marker = randomUUID()
@@ -204,6 +206,20 @@ try {
   assert.equal(login.statusCode, 200)
   cookie = String(login.headers['set-cookie']).split(';')[0]!
   assert.match(String(login.headers['set-cookie']), /HttpOnly/)
+  assert.match(String(login.headers['set-cookie']), /SameSite=Strict/)
+  const preflight = await app.inject({ method: 'OPTIONS', url: '/api/v1/admin/session', headers: { 'origin': 'https://admin.example.com', 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-admin-request' } })
+  assert.equal(preflight.statusCode, 204, preflight.body)
+  assert.equal(preflight.headers['access-control-allow-origin'], 'https://admin.example.com')
+  assert.equal(preflight.headers['access-control-allow-credentials'], 'true')
+  const crossSession = await app.inject({ method: 'GET', url: '/api/v1/admin/session', headers: { origin: 'https://admin.example.com', cookie } })
+  assert.equal(crossSession.statusCode, 200, crossSession.body)
+  assert.equal(crossSession.headers['access-control-allow-credentials'], 'true')
+  for (const origin of ['https://evil.example.com', 'https://box.example.com', 'null']) {
+    const denied = await app.inject({ method: 'POST', url: '/api/v1/admin/session', headers: { 'origin': origin, 'x-admin-request': '1' }, payload: { username, password } })
+    assert.equal(denied.statusCode, 403, denied.body)
+    assert.equal(denied.headers['set-cookie'], undefined)
+    assert.equal(denied.headers['access-control-allow-credentials'], undefined)
+  }
   const p = await call('POST', '/providers', {
     name: marker,
     baseUrl: `http://127.0.0.1:${port}/v1`,

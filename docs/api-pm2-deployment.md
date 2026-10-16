@@ -1,5 +1,7 @@
 # 手动触发、自动上传与 PM2 启动
 
+当前采用 OSS 主前端、后台和子应用静态站点，首次操作以 [OSS + PM2 部署手册](first-deployment.md) 为准。`APP_ARTIFACT_DELIVERY=oss` 时仅运行 API 和恢复 worker；下面提到的第三个本地产物服务适用于兼容的 `local` 模式。
+
 所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。新增 API PM2 package and upload，现有 Quality 和 API Docker OSS 保留为独立的手动工作流。
 
 本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 停止旧 API 与 worker → 数据库迁移 → 启动三个 PM2 进程 → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。`initialize_admin` 默认不勾选，只有首次安装需要创建管理员时才启用。
@@ -18,7 +20,7 @@
 | Secret（可选） | PM2_SSH_PRIVATE_KEY | 仅使用私钥方式时填写；密码和私钥至少配置一个 |
 | Secret | PM2_SSH_KNOWN_HOSTS | 已核实的服务器 SSH 公钥，采用 known_hosts 格式 |
 
-密码模式只需上述 `PM2_SSH_PASSWORD`、`PM2_SSH_KNOWN_HOSTS` 两个 Secrets；密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
+密码认证使用上述两个 Secrets；当前工作流还需配置 OSS 上传凭据、APPS_OSS_BUCKET、OSS_REGION 和 APP_ARTIFACT_ORIGIN，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
 
 不要把 MySQL 密码、服务商密钥、生产 .env 放入构建 Secrets。SSH 信息只用于校验设置及最后的上传步骤；不会进入发布包。
 
@@ -58,7 +60,7 @@ sha-<40位SHA>-run-<编号>-attempt-<次数>
 
 构建 runner 为 Linux x64，Node 24.21.0、pnpm 11.18.0。API 及 workspace 包先编译，再通过 pnpm deploy --legacy --prod 打包；node_modules 已包含第三方生产依赖及编译后的 workspace 包。服务器不需要 pnpm、源码或 TypeScript 编译器。
 
-计算器、记账、日历和时间的独立 Web 产物作为初始化种子额外构建，因为现有生产目录要求独立 HTTPS 应用来源。宿主前端和管理后台静态站点仍独立部署；已有应用绑定和已发布版本不会被种子覆盖。
+计算器、记账、日历和时间的独立 Web 产物作为初始化种子额外构建，输出 bootstrap-artifacts 并在 SSH 上传前发布至 OSS。发布包记录此来源和分发模式，服务器配置不一致时会在停止旧服务前拒绝启动。已有应用绑定和已发布版本不会被种子覆盖。主前端和后台使用 Web OSS deployment 独立部署。
 
 上传时核对本地 SHA-256、远端 SHA-256 和 Linux 架构。原有同名版本目录会拒绝覆盖。ARM 服务器需先改为同架构的 Linux 构建 runner，不能把当前 x64 产物直接用于 ARM。本机 macOS 打包仅适合检查流程，不能直接作为 Linux 发布包上传。
 
@@ -149,6 +151,8 @@ node "$release/control/start-release.mjs"
 API 日志自身对敏感字段脱敏，PM2 日志保存在 shared/logs。运行账户需要自行配置日志轮转和发布目录保留策略；保留当前版本、可回滚版本和必要备份，不删除共享数据。前端、后台静态产物及微信支付域名/回调仍需分别配置。
 
 ## 服务器 git pull 后部署
+
+此备用入口只构建并启动后端，不持有 OSS 上传凭据。OSS 模式的首次静态种子发布应使用上述 Actions；从源码首次部署时，需要先将该构建对应的 bootstrap-artifacts 发布到同一 APP_ARTIFACT_ORIGIN，不能只启动 API 就认为子应用资源已上线。
 
 也可以在服务器安装相同的 Node、pnpm 11.18.0 和 PM2，将完整 monorepo 克隆到 `/www/wwwroot/tbox/source`。API 依赖其他 workspace，不能只下载 api 子目录。私有仓库需为服务器配置只读 GitHub Deploy key 等仓库读取凭证；服务器 root 登录密码不用于 GitHub 克隆。源码目录是构建目录，PM2 仍运行独立 `releases/<releaseId>` 中的生产依赖与编译产物。
 

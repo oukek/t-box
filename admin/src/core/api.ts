@@ -6,13 +6,14 @@ export class RequestError extends Error {
     super(message)
   }
 }
+const apiBase = (import.meta.env.VITE_API_BASE_URL?.trim() || '/api/v1').replace(/\/+$/, '')
 export async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`/api/v1/admin${path}`, {
+  const response = await fetch(`${apiBase}/admin${path}`, {
     ...options,
-    credentials: 'same-origin',
+    credentials: 'include',
     signal: options.signal ?? AbortSignal.timeout(30_000),
     headers: {
       ...(options.body === undefined

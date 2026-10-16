@@ -80,20 +80,34 @@ test('upload registers a submitted build, retries an uncertain response and neve
   try {
     const releaseDir = join(directory, 'releases/calculator/1.2.3')
     await mkdir(releaseDir, { recursive: true })
-    const bundle = Buffer.from('{"test":true}')
+    const files = [{ path: 'index.html', content: Buffer.from('fixture').toString('base64') }]
+    const artifact = sha256(JSON.stringify({ 'index.html': sha256('fixture') }))
+    const bundle = Buffer.from(JSON.stringify({ protocol: 1, appId: 'calculator', version: '1.2.3', artifact, files }))
     const digest = sha256(bundle)
     await writeFile(join(releaseDir, digest + '.json'), bundle)
-    await writeFile(join(releaseDir, 'release.json'), JSON.stringify({ appId: 'calculator', version: '1.2.3', sha256: digest, file: digest + '.json' }))
+    await writeFile(join(releaseDir, 'release.json'), JSON.stringify({ appId: 'calculator', version: '1.2.3', artifact, sha256: digest, file: digest + '.json' }))
     const bin = join(directory, 'bin')
     await mkdir(bin)
     const oss = join(bin, 'ossutil')
-    await writeFile(oss, '#!/bin/sh\nif [ "$1" = presign ]; then printf "%s\\n" "$FAKE_SIGNED_URL"; fi\n', { mode: 0o755 })
+    await writeFile(oss, `#!/usr/bin/env node
+const fs = require('node:fs'), path = require('node:path')
+const args = process.argv.slice(2)
+if (args[0] === 'presign') process.stdout.write(process.env.FAKE_SIGNED_URL + '\\n')
+if (args[0] === 'cp' && args[2].startsWith('oss://public-apps/')) {
+  const target = path.join(process.env.FAKE_OSS_DIR, new URL(args[2]).pathname)
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  fs.copyFileSync(args[1], target)
+}
+`, { mode: 0o755 })
     const trace = join(directory, 'trace.json')
     const mock = join(directory, 'mock.mjs')
     await writeFile(mock, `
-import { writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 const calls = []
 globalThis.fetch = async (url, options) => {
+  if (options.method !== 'POST') return new Response(readFileSync(join(process.env.FAKE_OSS_DIR, new URL(url).pathname)))
+  if (!existsSync(join(process.env.FAKE_OSS_DIR, 'calculator', process.env.ARTIFACT, 'artifact.json'))) throw new Error('Submission before static publication')
   calls.push({ url: String(url), body: JSON.parse(options.body), method: options.method })
   writeFileSync(process.env.TRACE, JSON.stringify(calls))
   if (calls.length === 1) throw new Error('Connection lost after server commit')
@@ -108,6 +122,8 @@ globalThis.fetch = async (url, options) => {
         APP_RELEASE_OUTPUT: join(directory, 'releases'),
         OSS_BUCKET: 'test-bucket',
         OSS_REGION: 'cn-hangzhou',
+        OSS_ACCESS_KEY_ID: 'fixture-key-id',
+        OSS_ACCESS_KEY_SECRET: 'fixture-key-secret',
         OSS_ENDPOINT: '',
         APP_OSS_PREFIX: 't-box/apps',
         APP_IMPORT_TOKEN: 'tbox_build_' + 'a'.repeat(43),
@@ -117,6 +133,10 @@ globalThis.fetch = async (url, options) => {
         GITHUB_RUN_ID: '123',
         FAKE_SIGNED_URL: 'https://test-bucket.oss-cn-hangzhou.aliyuncs.com/t-box/apps/calculator/1.2.3/' + digest + '.json?signature=secret',
         TRACE: trace,
+        FAKE_OSS_DIR: join(directory, 'public'),
+        APPS_OSS_BUCKET: 'public-apps',
+        APP_ARTIFACT_ORIGIN: 'https://apps.example.com',
+        ARTIFACT: artifact,
       },
     })
     assert.equal(result.status, 0, result.stderr)

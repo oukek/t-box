@@ -58,6 +58,7 @@ export interface AppDependencies {
   health: () => Promise<DependencyHealth>
   close?: () => Promise<void>
   corsOrigins?: string[]
+  adminOrigins?: string[]
   logger?: FastifyServerOptions['logger']
   chatProvider?: ChatProvider
   chatSessions?: SessionRepository
@@ -72,6 +73,21 @@ export function createApp(deps: AppDependencies) {
     logger: deps.logger ?? false,
     bodyLimit: 16 * 1024,
     requestTimeout: 15_000,
+  })
+  app.register(cors, {
+    delegator: (request, callback) => {
+      const admin = /^\/api\/v1\/admin(?:\/|$)/.test(request.url.split('?')[0]!)
+      const origin = request.headers.origin
+      const allowed = admin
+        ? !!origin && ((deps.adminOrigins ?? []).includes(origin) || origin === `${request.protocol}://${request.host}`)
+        : !!origin && (deps.corsOrigins ?? []).includes(origin)
+      callback(null, {
+        origin: allowed ? origin : false,
+        credentials: admin && allowed,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        exposedHeaders: ['X-Request-Id'],
+      })
+    },
   })
   let recoveryTimer: ReturnType<typeof setInterval> | undefined
   if (deps.platform?.tasks) {
@@ -139,7 +155,7 @@ export function createApp(deps: AppDependencies) {
   })
 
   if (deps.administration) {
-    registerAdmin(app, deps.administration, deps.platform)
+    registerAdmin(app, deps.administration, deps.platform, deps.adminOrigins)
     if (deps.platform?.applications) {
       registerApplicationBuildImports(app, new ApplicationBuildImports(
         deps.administration.store.source,
@@ -147,11 +163,6 @@ export function createApp(deps: AppDependencies) {
       ))
     }
   }
-
-  app.register(cors, {
-    origin: deps.corsOrigins ?? [],
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  })
 
   app.setErrorHandler((error, request, reply) => {
     if ((error as { code?: string }).code === 'ER_DUP_ENTRY') {

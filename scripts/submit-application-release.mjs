@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sha256, validAppId, validVersion } from './application-builds.mjs'
+import { ossSettings, publishArtifact } from './oss-static.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const appId = process.argv[2]
@@ -15,18 +16,19 @@ const release = JSON.parse(await readFile(join(directory, 'release.json'), 'utf8
 if (release.appId !== appId || release.version !== version || !/^[a-f0-9]{64}$/.test(release.sha256) || release.file !== release.sha256 + '.json') {
   throw new Error('Release metadata is invalid')
 }
-if (sha256(await readFile(join(directory, release.file))) !== release.sha256) {
+const bytes = await readFile(join(directory, release.file))
+if (sha256(bytes) !== release.sha256) {
   throw new Error('Release bundle checksum mismatch')
 }
 const bucket = process.env.OSS_BUCKET || ''
 const prefix = process.env.APP_OSS_PREFIX || 't-box/apps'
 const region = process.env.OSS_REGION || ''
 const endpoint = process.env.OSS_ENDPOINT || `https://oss-${region}.aliyuncs.com`
-if (!/^[a-z0-9][a-z0-9-]+$/.test(bucket) || !/^[\w-]+(?:\/[\w-]+)*$/.test(prefix) || !/^cn-[a-z0-9-]+$/.test(region) || endpoint !== `https://oss-${region}.aliyuncs.com`) {
+if (!/^[a-z0-9][a-z0-9-]+$/.test(bucket) || !/^[\w-]+(?:\/[\w-]+)*$/.test(prefix) || !/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(region) || endpoint !== `https://oss-${region}.aliyuncs.com`) {
   throw new Error('Configure OSS_BUCKET, OSS_REGION and public OSS_ENDPOINT; APP_OSS_PREFIX defaults to t-box/apps')
 }
 const token = process.env.APP_IMPORT_TOKEN || ''
-const api = new URL(process.env.APP_IMPORT_API_URL || '')
+const api = new URL(process.env.APP_IMPORT_API_URL || (process.env.API_BASE_URL ? process.env.API_BASE_URL + '/application-builds' : ''))
 if (api.protocol !== 'https:' || api.username || api.password || api.search || api.hash || api.pathname !== '/api/v1/application-builds' || !/^tbox_build_[\w-]{43}$/.test(token)) {
   throw new Error('Configure HTTPS APP_IMPORT_API_URL ending in /api/v1/application-builds and scoped APP_IMPORT_TOKEN')
 }
@@ -35,6 +37,12 @@ if (!/^[\w.-]+\/[\w.-]+$/.test(source.repository || '') || !/^[a-f0-9]{40}$/.tes
   throw new Error('GitHub build provenance is required')
 }
 const object = `oss://${bucket}/${prefix}/${appId}/${version}/${release.file}`
+const bundle = JSON.parse(bytes.toString('utf8'))
+if (bundle.protocol !== 1 || bundle.appId !== appId || bundle.version !== version || !Array.isArray(bundle.files) || bundle.artifact !== release.artifact) {
+  throw new Error('Release static files do not match the registered build')
+}
+// Never register a version until the exact static files are publicly available on OSS.
+await publishArtifact(appId, bundle.artifact, bundle.files, ossSettings(process.env.APPS_OSS_BUCKET, process.env.APP_ARTIFACT_ORIGIN))
 const ossEnv = { ...process.env, OSS_ENDPOINT: endpoint }
 delete ossEnv.APP_IMPORT_TOKEN
 const run = (args) => {
@@ -45,7 +53,7 @@ const run = (args) => {
   }
   return result.stdout.trim()
 }
-run(['cp', join(directory, release.file), object, '--force'])
+run(['cp', join(directory, release.file), object, '--force', '--acl', 'private', '--content-type', 'application/json'])
 const signed = run(['presign', object, '--expires-duration', '30m'])
 let url
 try {

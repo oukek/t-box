@@ -96,9 +96,12 @@ process.exit(result.status===null ? 1 : result.status);
   return { root, server, packageDir, env, upload, uploaded, prepare }
 }
 
-function startupFixture(t, { migrationFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false } = {}) {
+function startupFixture(t, { migrationFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false, oss = false } = {}) {
   const f = fixture(t)
   assert.equal(f.upload().status, 0)
+  if (oss) {
+    writeFileSync(join(f.server, 'shared/api.env'), 'APP_ARTIFACT_ORIGIN=https://apps.example.invalid\nAPP_ARTIFACT_DELIVERY=oss\n')
+  }
   const commands = []
   const release = realpathSync(f.uploaded)
   const scripts = [join(release, 'api/dist/server.js'), join(release, 'api/dist/worker.js'), join(release, 'scripts/serve-application-artifacts.mjs')]
@@ -130,7 +133,8 @@ function startupFixture(t, { migrationFails = false, healthy = true, wrongScript
     if (args[0] === 'start') {
       assert.equal(options.env.NODE_ENV, 'production')
       assert.equal(options.env.PM2_NODE, process.execPath)
-      list.push(...['t-box-api', 't-box-worker', 't-box-artifacts'].map((name, index) => ({ name, pid: index + 10, pm2_env: { status: 'online', pm_exec_path: wrongScript ? '/old/script.js' : scripts[index], pm_uptime: 100 } })))
+      const names = options.env.APP_ARTIFACT_DELIVERY === 'oss' ? ['t-box-api', 't-box-worker'] : ['t-box-api', 't-box-worker', 't-box-artifacts']
+      list.push(...names.map((name, index) => ({ name, pid: index + 10, pm2_env: { status: 'online', pm_exec_path: wrongScript ? '/old/script.js' : scripts[index], pm_uptime: 100 } })))
     }
     return ''
   }
@@ -147,6 +151,36 @@ function startupFixture(t, { migrationFails = false, healthy = true, wrongScript
   const start = (extra = {}) => startRelease({ release: f.uploaded, run, request, pause: async () => {}, attempts: 4, ...extra })
   return { ...f, commands, start, processes: () => list, healthRequests: () => healthRequests }
 }
+
+test('OSS delivery starts only API and worker and removes an old local artifact process', async (t) => {
+  const f = startupFixture(t, { oss: true })
+  await f.start()
+  assert.deepEqual(f.processes().map((entry) => entry.name).sort(), ['other-service', 't-box-api', 't-box-worker'])
+  assert.ok(f.commands.some((args) => args.join(' ') === 'pm2 delete t-box-artifacts'))
+  assert.ok(f.commands.some((args) => args.join(' ') === 'pm2 save'))
+})
+
+test('effective settings cannot override the release OSS deployment contract', async (t) => {
+  const f = startupFixture(t, { oss: true })
+  const path = join(f.uploaded, 'release-info.json')
+  const info = JSON.parse(readFileSync(path, 'utf8'))
+  writeFileSync(path, JSON.stringify({ ...info, artifactDelivery: 'local' }))
+  await assert.rejects(f.start(), /Effective artifact settings/)
+  assert.equal(f.commands.length, 0)
+})
+
+test('server configuration must match the OSS origin and delivery recorded in the uploaded release', (t) => {
+  const f = fixture(t)
+  assert.equal(f.upload().status, 0)
+  const infoPath = join(f.uploaded, 'release-info.json')
+  const info = JSON.parse(readFileSync(infoPath, 'utf8'))
+  writeFileSync(infoPath, JSON.stringify({ ...info, artifactOrigin: 'https://other.example.invalid', artifactDelivery: 'oss' }))
+  assert.notEqual(f.prepare().status, 0)
+  writeFileSync(infoPath, JSON.stringify({ ...info, artifactOrigin: 'https://apps.example.invalid', artifactDelivery: 'oss' }))
+  assert.notEqual(f.prepare().status, 0)
+  writeFileSync(join(f.server, 'shared/api.env'), 'APP_ARTIFACT_ORIGIN=https://apps.example.invalid\nAPP_ARTIFACT_DELIVERY=oss\n')
+  assert.equal(f.prepare().status, 0)
+})
 
 function sourceFixture(t) {
   const f = fixture(t)

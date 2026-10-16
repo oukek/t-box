@@ -51,20 +51,11 @@ jobs:
         run: node scripts/generate-application-workflow.mjs --check
       - run: pnpm install --frozen-lockfile
       - name: Release script regressions
-        run: node --test scripts/application-release.test.mjs
+        run: node --test scripts/application-release.test.mjs scripts/oss-deployment.test.mjs
       - name: Build selected application and package static bundle
         run: node scripts/pack-application-release.mjs "$APPLICATION" "$VERSION"
       - name: Install verified ossutil 2.4.0
-        shell: bash
-        run: |
-          curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 180 \
-            https://gosspublic.alicdn.com/ossutil/v2/2.4.0/ossutil-2.4.0-linux-amd64.zip \
-            -o "$RUNNER_TEMP/ossutil.zip"
-          printf '85edf66b2fb7238f5c7e25cab820cf29312319fe4935b7c86a6b8485eb434f3c  %s\n' "$RUNNER_TEMP/ossutil.zip" | sha256sum --check
-          unzip -q "$RUNNER_TEMP/ossutil.zip" -d "$RUNNER_TEMP/ossutil"
-          mkdir -p "$RUNNER_TEMP/oss-bin"
-          install -m 755 "$RUNNER_TEMP/ossutil/ossutil-2.4.0-linux-amd64/ossutil" "$RUNNER_TEMP/oss-bin/ossutil"
-          printf '%s\n' "$RUNNER_TEMP/oss-bin" >> "$GITHUB_PATH"
+        run: bash deploy/oss/install-ossutil.sh
       - name: Upload to OSS and register submitted version (never publish)
         env:
           OSS_BUCKET: ${{ vars.OSS_BUCKET }}
@@ -75,6 +66,9 @@ jobs:
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
           OSS_SESSION_TOKEN: ${{ secrets.OSS_SESSION_TOKEN }}
           APP_IMPORT_API_URL: ${{ vars.APP_IMPORT_API_URL }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET }}
+          APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
           APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
         run: node scripts/submit-application-release.mjs "$APPLICATION" "$VERSION"
       - name: Submission reference

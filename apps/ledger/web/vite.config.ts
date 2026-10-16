@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import { verifiedOffline } from '../../../scripts/vite-offline.mjs'
 
 export default defineConfig({
-  plugins: [vue(), verifiedOffline()],
+  plugins: [vue(), verifiedOffline({ application: true })],
   base: './',
   server: {
     fs: {

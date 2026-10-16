@@ -55,6 +55,18 @@ export function getConfig() {
     ? address(process.env.REDIS_ADDR, 6379, 'REDIS_ADDR')
     : undefined
   return {
+    adminOrigins: (process.env.ADMIN_ORIGINS ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5175,http://127.0.0.1:5175'))
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+      .map((origin) => {
+        const url = new URL(origin)
+        if (url.origin !== origin || !['http:', 'https:'].includes(url.protocol) ||
+          (process.env.NODE_ENV === 'production' && url.protocol !== 'https:')) {
+          throw new Error('ADMIN_ORIGINS 必须是完整的 HTTPS 后台来源，不包含路径或通配符')
+        }
+        return origin
+      }),
     trustedProxies: (process.env.TRUSTED_PROXIES ?? '')
       .split(',')
       .map((v) => v.trim())

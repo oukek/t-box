@@ -61,6 +61,8 @@ try {
     architecture: process.arch,
     nodeVersion: process.versions.node,
     sourceCommit: process.env.GITHUB_SHA || releaseId.slice(4, 44),
+    artifactOrigin: process.env.APP_ARTIFACT_ORIGIN || undefined,
+    artifactDelivery: process.env.APP_ARTIFACT_DELIVERY || undefined,
   }
   await writeFile(join(payload, 'release-info.json'), JSON.stringify(info, null, 2) + '\n')
   // Validate a separate copy so placeholder deployment settings never enter the archive.
@@ -68,6 +70,8 @@ try {
   run('node', [join(validation, 'scripts/prepare-apps.mjs')], { env: { ...process.env, APP_ARTIFACT_ORIGIN: 'https://apps.example.invalid' } })
   run('node', [join(validation, 'api/check-runtime.mjs')], { env: { ...process.env, NODE_ENV: 'production' } })
   await mkdir(packageOutput)
+  // Public seeds are uploaded to OSS before this exact backend release is started.
+  await cp(join(payload, 'bootstrap/app-artifacts'), join(packageOutput, 'bootstrap-artifacts'), { recursive: true })
   const archive = join(packageOutput, 'runtime.tar.gz')
   run('tar', ['-czf', archive, '-C', payload, '.'])
   const hash = createHash('sha256')

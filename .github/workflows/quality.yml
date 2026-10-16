@@ -53,6 +53,8 @@ jobs:
       - run: pnpm build
       - run: pnpm test:unit
       - run: pnpm test:operations
+      - name: Backend deployment regressions
+        run: pnpm test:pm2-deployment && pnpm test:api-deployment
       - run: pnpm db:init
       - name: Install MySQL client for isolated backup drill
         run: sudo apt-get update && sudo apt-get install -y mysql-client

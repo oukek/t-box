@@ -3,7 +3,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { createOfflineWorker } from './offline-worker.mjs'
 
-export function verifiedOffline() {
+export function verifiedOffline({ application = false } = {}) {
   let outDir
   return {
     name: 'tbox-verified-static-cache',
@@ -13,7 +13,10 @@ export function verifiedOffline() {
       outDir = resolve(config.root, config.build.outDir)
     },
     transformIndexHtml() {
-      return [{ tag: 'script', attrs: { type: 'module', src: './tbox-offline.js' }, injectTo: 'body' }]
+      return [
+        ...(application ? [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', 'content': 'default-src \'none\'; script-src \'self\'; worker-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; connect-src \'self\'; font-src \'self\'; base-uri \'none\'; form-action \'none\'; frame-src \'none\'; object-src \'none\'' }, injectTo: 'head-prepend' }] : []),
+        { tag: 'script', attrs: { type: 'module', src: './tbox-offline.js' }, injectTo: 'body' },
+      ]
     },
     async closeBundle() {
       const registration = `if ('serviceWorker' in navigator && !window.Capacitor?.isNativePlatform?.()) { const base = new URL('./', import.meta.url); navigator.serviceWorker.register(new URL('tbox-offline-sw.js', base), {scope:base.pathname}).catch(()=>{}); }\n`

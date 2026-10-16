@@ -152,4 +152,4 @@ app/src/
 
 所有应用的领域实现已迁入 `apps`。记账、日历、时间拥有各自 contracts/web/server；设置和市场通过显式宿主端口使用平台 API，图片工具通过服务端口访问模型/资源。公共组件与通用服务抽出为 packages，宿主只组合和适配，依赖边界通过 `pnpm check:apps` 检查。详细目录与开发命令见 [应用代码目录](apps-layout.md)。
 
-计算器继续使用独立 Web 产物与受限 MessageChannel 容器。其他应用目前是可信内置 workspace 模块，独立发布 iframe 产物需要后续桥接迁移；这次代码迁移不会改变已有安装版本、发布定义或运行模式。完整发布/安装/撤权机制见 [独立应用平台](application-platform.md)。
+计算器、记账、日历和时间使用独立 Web 产物与受限 MessageChannel 容器；设置和市场随宿主编译。生产静态页面通过 OSS 发布，API 和恢复 worker 通过 PM2 运行，见 [首次部署](first-deployment.md)。完整发布/安装/撤权机制见 [独立应用平台](application-platform.md)。

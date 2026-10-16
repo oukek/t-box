@@ -8,7 +8,7 @@ test('登录、OS、设备会话、恢复设置与资源容量在桌面和手机
   }
   const username = `browser_${randomUUID().replaceAll('-', '').slice(0, 20)}`
   const password = 'test-only-123'
-  const registered = await request.post('/api/v1/auth/register', { data: { username, password, nickname: '浏览器验收' } })
+  const registered = await request.post(`http://127.0.0.1:${process.env.TBOX_TEST_API_PORT || '13000'}/api/v1/auth/register`, { data: { username, password, nickname: '浏览器验收' } })
   expect(registered.status()).toBe(201)
   await page.goto('/')
   await page.evaluate(async () => {

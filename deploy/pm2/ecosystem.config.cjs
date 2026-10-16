@@ -45,5 +45,5 @@ module.exports = {
       out_file: join(shared, 'logs/artifacts-out.log'),
       error_file: join(shared, 'logs/artifacts-error.log'),
     },
-  ],
+  ].filter(app => app.name !== 't-box-artifacts' || process.env.APP_ARTIFACT_DELIVERY !== 'oss'),
 }
