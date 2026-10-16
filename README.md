@@ -114,7 +114,7 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-浏览器部署可将 `app/dist` 放在静态站点服务器下，将 `/api` 反向代理到 API 服务，并为 `/api/v1/chat/ws` 和 `/api/v1/ledgers/ws` 开启 WebSocket Upgrade 转发。API 构建产物位于 `api/dist`，生产启动命令为 `pnpm --filter @t-box/api start`。所有 GitHub 工作流均为手动触发。PM2 方式使用 [构建发布包并上传服务器说明](docs/api-pm2-deployment.md)：上传到独立版本目录，生产配置、数据库迁移和 PM2 启动由运维手动完成。可选的阿里云 / 宝塔 Docker 部署使用 [GitHub Actions → OSS 镜像归档 → Compose 部署说明](docs/api-docker-deployment.md)：Actions 导出镜像包、SHA-256 与发布清单并上传私有 OSS；服务器脚本校验、导入并部署本地镜像，无需镜像仓库。包含数据库迁移、健康检查、回滚、资源和密钥持久化以及 HTTPS/WSS 代理。
+浏览器部署可将 `app/dist` 放在静态站点服务器下，将 `/api` 反向代理到 API 服务，并为 `/api/v1/chat/ws` 和 `/api/v1/ledgers/ws` 开启 WebSocket Upgrade 转发。API 构建产物位于 `api/dist`，生产启动命令为 `pnpm --filter @t-box/api start`。所有 GitHub 工作流均为手动触发。PM2 方式使用 [构建发布包并上传服务器说明](docs/api-pm2-deployment.md)：上传到独立版本目录，默认自动迁移、启动三个 PM2 进程并检查健康；生产配置由运维提前准备。也支持服务器拉取源码后运行 `pnpm deploy:pm2`，先在服务器构建独立版本，再复用同一启动脚本。可选的阿里云 / 宝塔 Docker 部署使用 [GitHub Actions → OSS 镜像归档 → Compose 部署说明](docs/api-docker-deployment.md)：Actions 导出镜像包、SHA-256 与发布清单并上传私有 OSS；服务器脚本校验、导入并部署本地镜像，无需镜像仓库。包含数据库迁移、健康检查、回滚、资源和密钥持久化以及 HTTPS/WSS 代理。
 
 ## iOS / Android 开发热更新
 
@@ -217,6 +217,6 @@ API 默认监听 `127.0.0.1`，跨域来源通过 `CORS_ORIGINS` 配置。公开
 
 ## 运行与验收基线
 
-本轮完善及验收范围见 [平台完善清单](docs/platform-hardening.md)。后端启动仍使用 `pnpm dev:api`；生产在迁移后通过 PM2 启动 API、独立恢复 worker 和静态产物服务。所有工作流保持手动触发，上传不自动启动服务。运行概况、备份和恢复步骤见 [运维手册](docs/operations-and-recovery.md)。
+本轮完善及验收范围见 [平台完善清单](docs/platform-hardening.md)。后端开发启动使用 `pnpm dev:api`；生产通过统一 PM2 发布入口迁移并启动 API、独立恢复 worker 和静态产物服务。所有工作流保持手动触发，PM2 发布默认在上传后自动启动，也可选择只上传。运行概况、备份和恢复步骤见 [运维手册](docs/operations-and-recovery.md)。
 
 [统一 SDK 与应用脚手架](docs/application-sdk.md)、[成本与并发](docs/ai-cost-controls.md)、[退款与渠道对账](docs/payment-refunds-and-reconciliation.md)、[账号、通知、离线与存储](docs/account-and-offline.md)说明各自的权限、故障与验收边界。

@@ -5,6 +5,11 @@ release="$1"
 package="$2"
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 [[ "$release" =~ ^sha-[a-f0-9]{40}-run-[1-9][0-9]*-attempt-[1-9][0-9]*$ ]] || fail 'Invalid release ID'
+start_services="${PM2_START_SERVICES:-false}"
+initialize_admin="${PM2_INIT_ADMIN:-false}"
+[[ "$start_services" == true || "$start_services" == false ]] || fail 'PM2_START_SERVICES must be true or false'
+[[ "$initialize_admin" == true || "$initialize_admin" == false ]] || fail 'PM2_INIT_ADMIN must be true or false'
+[[ "$initialize_admin" == false || "$start_services" == true ]] || fail 'Administrator initialization requires PM2_START_SERVICES=true'
 [[ "${PM2_SSH_HOST:-}" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || fail 'Configure PM2_SSH_HOST (hostname or IPv4)'
 [[ "${PM2_SSH_USER:-}" =~ ^[a-z_][a-z0-9_-]*$ ]] || fail 'Configure PM2_SSH_USER'
 port="${PM2_SSH_PORT:-22}"
@@ -51,10 +56,10 @@ mkdir -p "$root/incoming" "$root/releases"
 mkdir "$root/incoming/$release"
 REMOTE
 authenticate scp "${options[@]}" -P "$port" "$package/runtime.tar.gz" "$package/runtime.tar.gz.sha256" "$package/release.json" "$host:$directory/incoming/$release/"
-authenticate ssh "${options[@]}" -p "$port" "$host" bash -s -- "$directory" "$release" "$archive_sha" "$architecture" <<'REMOTE'
+authenticate ssh "${options[@]}" -p "$port" "$host" bash -s -- "$directory" "$release" "$archive_sha" "$architecture" "$start_services" "$initialize_admin" <<'REMOTE'
 set -Eeuo pipefail
 umask 077
-root="$1"; release="$2"; expected="$3"; architecture="$4"
+root="$1"; release="$2"; expected="$3"; architecture="$4"; start_services="$5"; initialize_admin="$6"
 test "$(uname -s)" = Linux
 case "$(uname -m)/$architecture" in x86_64/x64|aarch64/arm64|arm64/arm64) ;; *) echo 'Server architecture mismatch' >&2; exit 1 ;; esac
 cd "$root/incoming/$release"
@@ -78,4 +83,9 @@ test -f "$staging/release-info.json"
 cp release.json "$staging/release.json"
 mv "$staging" "$root/releases/$release"
 printf 'Uploaded and verified: %s/releases/%s\n' "$root" "$release"
+if [[ "$start_services" == true ]]; then
+  args=()
+  if [[ "$initialize_admin" == true ]]; then args+=(--init-admin); fi
+  node "$root/releases/$release/control/start-release.mjs" "${args[@]}"
+fi
 REMOTE

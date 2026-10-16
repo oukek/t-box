@@ -2,6 +2,15 @@ name: API PM2 package and upload
 
 on:
   workflow_dispatch:
+    inputs:
+      start_services:
+        description: Run migrations and start PM2 after upload
+        type: boolean
+        default: true
+      initialize_admin:
+        description: 'First install only: create administrator if none exists'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,29 +23,34 @@ jobs:
   package:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      PM2_UPLOAD_DIR: /www/wwwroot/tbox
+      PM2_SSH_HOST: 8.163.69.101
+      PM2_SSH_PORT: '22'
+      PM2_SSH_USER: root
+      PM2_START_SERVICES: ${{ inputs.start_services }}
+      PM2_INIT_ADMIN: ${{ inputs.initialize_admin }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Validate upload settings and create release ID
+        id: release
+        env:
+          PM2_SSH_PRIVATE_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
+          PM2_SSH_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
+          PM2_SSH_KNOWN_HOSTS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$PM2_SSH_KNOWN_HOSTS" || { echo "Configure repository Secret PM2_SSH_KNOWN_HOSTS"; exit 1; }
+          test -n "$PM2_SSH_PASSWORD" || test -n "$PM2_SSH_PRIVATE_KEY" || { echo "Configure repository Secret PM2_SSH_PASSWORD (or PM2_SSH_PRIVATE_KEY for key authentication)"; exit 1; }
+          test "$PM2_INIT_ADMIN" != true || test "$PM2_START_SERVICES" = true || { echo "Administrator initialization requires start_services"; exit 1; }
+          printf 'id=sha-%s-run-%s-attempt-%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7
         with:
           node-version: 24.21.0
       - uses: pnpm/action-setup@v6
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Validate upload settings and create release ID
-        id: release
-        env:
-          TARGET: ${{ vars.PM2_UPLOAD_DIR }}
-          TARGET_HOST: ${{ secrets.PM2_SSH_HOST }}
-          TARGET_USER: ${{ secrets.PM2_SSH_USER }}
-          TARGET_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
-          TARGET_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
-          TARGET_HOST_KEYS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
-        run: |
-          test -n "$TARGET" && test -n "$TARGET_HOST" && test -n "$TARGET_USER" && test -n "$TARGET_HOST_KEYS" || { echo "Configure PM2 upload Variables and Secrets"; exit 1; }
-          test -n "$TARGET_PASSWORD" || test -n "$TARGET_KEY" || { echo "Configure PM2_SSH_PASSWORD or PM2_SSH_PRIVATE_KEY"; exit 1; }
-          printf 'id=sha-%s-run-%s-attempt-%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
       - name: PM2 packaging and upload regressions
         run: node --test scripts/pm2-deployment.test.mjs
       - name: Build and validate standalone production package
@@ -51,13 +65,9 @@ jobs:
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
-      - name: Upload and verify new server directory
+      - name: Upload, verify and optionally start PM2
         env:
           RELEASE_ID: ${{ steps.release.outputs.id }}
-          PM2_UPLOAD_DIR: ${{ vars.PM2_UPLOAD_DIR }}
-          PM2_SSH_HOST: ${{ secrets.PM2_SSH_HOST }}
-          PM2_SSH_USER: ${{ secrets.PM2_SSH_USER }}
-          PM2_SSH_PORT: ${{ vars.PM2_SSH_PORT || '22' }}
           PM2_SSH_PRIVATE_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
           PM2_SSH_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
           PM2_SSH_KNOWN_HOSTS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
@@ -75,9 +85,13 @@ jobs:
           printf '%s\n' "$PM2_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
           export PM2_SSH_KNOWN_HOSTS_FILE="$ssh_dir/known_hosts"
           bash deploy/pm2/upload-runtime.sh "$RELEASE_ID" "$RUNNER_TEMP/pm2-package"
-      - name: Manual startup reference
+      - name: Deployment result
         env:
           RELEASE_ID: ${{ steps.release.outputs.id }}
-          TARGET: ${{ vars.PM2_UPLOAD_DIR }}
         run: |
-          printf 'Verified release directory: %s/releases/%s\n\nNo database migration or PM2 startup was performed. Follow docs/api-pm2-deployment.md for manual startup.\n' "$TARGET" "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Verified release directory: %s/releases/%s\n\n' "$PM2_UPLOAD_DIR" "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$PM2_START_SERVICES" = true ]; then
+            printf 'Database migrations, PM2 startup and health checks passed.\n' >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'Upload only. Run node control/start-release.mjs in the release directory to migrate and start PM2.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi

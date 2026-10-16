@@ -6,8 +6,9 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { verifyDeploymentLinks } from '../deploy/pm2/dependencies.mjs'
+import { startRelease } from '../deploy/pm2/start-release.mjs'
 
 const workspace = fileURLToPath(new URL('../', import.meta.url))
 const require = createRequire(join(workspace, 'api/package.json'))
@@ -95,6 +96,95 @@ process.exit(result.status===null ? 1 : result.status);
   return { root, server, packageDir, env, upload, uploaded, prepare }
 }
 
+function startupFixture(t, { migrationFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false } = {}) {
+  const f = fixture(t)
+  assert.equal(f.upload().status, 0)
+  const commands = []
+  const release = realpathSync(f.uploaded)
+  const scripts = [join(release, 'api/dist/server.js'), join(release, 'api/dist/worker.js'), join(release, 'scripts/serve-application-artifacts.mjs')]
+  let list = ['t-box-api', 't-box-worker', 't-box-artifacts', 'other-service'].map((name, index) => ({ name, pid: index + 1, pm2_env: { status: 'online', pm_exec_path: '/old/' + name, pm_uptime: 1 } }))
+  let healthRequests = 0
+  const run = (program, args, options) => {
+    commands.push([program === process.execPath ? 'node' : program, ...args])
+    if (program === process.execPath) {
+      if (args[0].endsWith('prepare-release.mjs')) {
+        return execPreparation()
+      }
+      if (migrationFails && args[0].endsWith('init-db.js')) {
+        throw new Error('fixture migration failure')
+      }
+      return ''
+    }
+    if (args[0] === 'jlist') {
+      if (restarts) {
+        list = list.map((entry) => entry.name === 'other-service' ? entry : { ...entry, pid: entry.pid + 1 })
+      }
+      return JSON.stringify(list)
+    }
+    if (args[0] === 'delete') {
+      list = list.filter((entry) => entry.name !== args[1])
+    }
+    if (args[0] === 'stop') {
+      list = list.map((entry) => entry.name === args[1] ? { ...entry, pm2_env: { ...entry.pm2_env, status: 'stopped' } } : entry)
+    }
+    if (args[0] === 'start') {
+      assert.equal(options.env.NODE_ENV, 'production')
+      assert.equal(options.env.PM2_NODE, process.execPath)
+      list.push(...['t-box-api', 't-box-worker', 't-box-artifacts'].map((name, index) => ({ name, pid: index + 10, pm2_env: { status: 'online', pm_exec_path: wrongScript ? '/old/script.js' : scripts[index], pm_uptime: 100 } })))
+    }
+    return ''
+  }
+  function execPreparation() {
+    const result = f.prepare()
+    assert.equal(result.status, 0, result.stderr)
+    return ''
+  }
+  const request = async (url) => {
+    healthRequests++
+    assert.equal(url.pathname, '/api/v1/health')
+    return new Response(JSON.stringify({ data: { status: healthy && !redisDown ? 'ok' : 'degraded', dependencies: { mysql: 'up', redis: redisDown ? 'down' : process.env.REDIS_ADDR ? 'up' : 'disabled' } } }))
+  }
+  const start = (extra = {}) => startRelease({ release: f.uploaded, run, request, pause: async () => {}, attempts: 4, ...extra })
+  return { ...f, commands, start, processes: () => list, healthRequests: () => healthRequests }
+}
+
+function sourceFixture(t) {
+  const f = fixture(t)
+  const source = join(f.server, 'source')
+  const trace = join(f.root, 'source.jsonl')
+  mkdirSync(join(source, 'deploy/pm2'), { recursive: true })
+  mkdirSync(join(source, 'scripts'))
+  copyFileSync(join(workspace, 'deploy/pm2/deploy-source.mjs'), join(source, 'deploy/pm2/deploy-source.mjs'))
+  writeFileSync(join(source, 'package.json'), '{"type":"module"}\n')
+  const record = `require('node:fs').appendFileSync(process.env.SOURCE_TRACE,JSON.stringify(process.argv.slice(2))+'\\n');`
+  writeFileSync(join(f.root, 'bin/pnpm'), `#!/usr/bin/env node\n${record}if(process.argv[2]==='install'&&process.env.CI!=='true')process.exit(9);if(process.env.FAIL_SOURCE_INSTALL==='1')process.exit(7);\n`, { mode: 0o755 })
+  writeFileSync(join(f.root, 'bin/pm2'), `#!/usr/bin/env node\n${record}\n`, { mode: 0o755 })
+  writeFileSync(join(source, 'scripts/pack-api-pm2.mjs'), `
+import {mkdirSync,writeFileSync,appendFileSync} from 'node:fs'
+import {join} from 'node:path'
+import {execFileSync} from 'node:child_process'
+appendFileSync(process.env.SOURCE_TRACE,JSON.stringify(['pack'])+'\\n')
+const output=process.argv[3],payload=join(output,'payload')
+mkdirSync(join(payload,'control'),{recursive:true})
+writeFileSync(join(payload,'control/start-release.mjs'),"import fs from 'node:fs';fs.appendFileSync(process.env.SOURCE_TRACE,JSON.stringify(['start',...process.argv.slice(2)])+'\\\\n')")
+execFileSync('tar',['-czf',join(output,'runtime.tar.gz'),'-C',payload,'.'])
+`)
+  const git = (args) => {
+    const result = spawnSync('git', args, { cwd: source, encoding: 'utf8' })
+    assert.equal(result.status, 0, result.stderr)
+  }
+  git(['init', '--quiet'])
+  git(['add', '.'])
+  git(['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgSign=false', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'fixture'])
+  const preload = join(f.root, 'linux-fixture.mjs')
+  writeFileSync(preload, 'Object.defineProperty(process, \'platform\', { value: \'linux\' })\n')
+  const deploy = (args = [], extra = {}) => spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(source, 'deploy/pm2/deploy-source.mjs'), ...args], {
+    env: { ...f.env, PM2_DEPLOY_ROOT: f.server, SOURCE_TRACE: trace, ...extra },
+    encoding: 'utf8',
+  })
+  return { ...f, source, deploy, calls: () => readFileSync(trace, 'utf8').trim().split('\n').map((line) => JSON.parse(line)) }
+}
+
 test('upload verifies/extracts a new directory without modifying shared data or current version', (t) => {
   const f = fixture(t)
   const result = f.upload()
@@ -159,6 +249,18 @@ test('unsafe upload paths and absent host keys fail before SSH', (t) => {
   assert.equal(existsSync(f.env.UPLOAD_LOG), false)
 })
 
+test('invalid startup options fail before any SSH connection', (t) => {
+  const f = fixture(t)
+  for (const options of [
+    { PM2_START_SERVICES: 'invalid' },
+    { PM2_INIT_ADMIN: 'invalid' },
+    { PM2_START_SERVICES: 'false', PM2_INIT_ADMIN: 'true' },
+  ]) {
+    assert.notEqual(f.upload(options).status, 0)
+  }
+  assert.equal(existsSync(f.env.UPLOAD_LOG), false)
+})
+
 test('manual preparation creates persistent links idempotently without resetting secrets', (t) => {
   const f = fixture(t)
   assert.equal(f.upload().status, 0)
@@ -195,4 +297,89 @@ test('a production dependency pointing outside the release is rejected', async (
   mkdirSync(join(api, 'node_modules'), { recursive: true })
   symlinkSync(join(f.root, 'payload'), join(api, 'node_modules/required'))
   await assert.rejects(verifyDeploymentLinks(api), /Nonportable/)
+})
+
+test('startup stops both writers before migration, replaces absolute paths and saves only a healthy release', async (t) => {
+  const f = startupFixture(t)
+  await f.start()
+  const migration = f.commands.findIndex((command) => command[1]?.endsWith('/dist/init-db.js'))
+  assert.ok(migration > f.commands.findIndex((command) => command[0] === 'pm2' && command[1] === 'stop' && command[2] === 't-box-api'))
+  assert.ok(migration > f.commands.findIndex((command) => command[0] === 'pm2' && command[1] === 'stop' && command[2] === 't-box-worker'))
+  assert.ok(f.commands.findIndex((command) => command[1] === 'start') > migration)
+  assert.equal(f.commands.some((command) => command[1]?.endsWith('/dist/admin/bootstrap.js')), false)
+  assert.deepEqual(f.commands.at(-1), ['pm2', 'save'])
+  assert.equal(f.healthRequests(), 3)
+  assert.equal(realpathSync(join(f.server, 'current')), realpathSync(f.uploaded))
+  assert.equal(existsSync(join(f.server, '.pm2-deploy.lock')), false)
+  assert.equal(f.processes().find((entry) => entry.name === 'other-service').pm2_env.status, 'online')
+})
+
+test('administrator initialization requires an explicit first-install option', async (t) => {
+  const f = startupFixture(t)
+  await f.start({ initializeAdmin: true })
+  const migration = f.commands.findIndex((command) => command[1]?.endsWith('/dist/init-db.js'))
+  const admin = f.commands.findIndex((command) => command[1]?.endsWith('/dist/admin/bootstrap.js'))
+  assert.ok(admin > migration)
+  assert.ok(admin < f.commands.findIndex((command) => command[1] === 'start'))
+})
+
+test('migration failure leaves writers stopped without starting, saving or changing current', async (t) => {
+  const f = startupFixture(t, { migrationFails: true })
+  await assert.rejects(f.start(), /fixture migration failure/)
+  assert.equal(f.commands.some((command) => ['start', 'save', 'delete'].includes(command[1])), false)
+  assert.ok(f.processes().filter((entry) => entry.name.startsWith('t-box-')).every((entry) => entry.pm2_env.status === 'stopped'))
+  assert.equal(existsSync(join(f.server, 'current')), false) // The original fixture link points at its old, absent release.
+  assert.equal(existsSync(join(f.server, '.pm2-deploy.lock')), false)
+})
+
+test('unhealthy dependencies, stale script paths and restart loops cannot publish a successful deployment', async (t) => {
+  for (const options of [{ healthy: false }, { redisDown: true }, { wrongScript: true }, { restarts: true }]) {
+    const f = startupFixture(t, options)
+    await assert.rejects(f.start(), /health checks/)
+    assert.equal(f.commands.some((command) => command[1] === 'save'), false)
+    assert.ok(f.processes().filter((entry) => entry.name.startsWith('t-box-')).every((entry) => entry.pm2_env.status === 'stopped'))
+    assert.equal(existsSync(join(f.server, '.pm2-deploy.lock')), false)
+  }
+})
+
+test('missing configuration and a deployment lock leave the running version untouched', async (t) => {
+  const f = startupFixture(t)
+  rmSync(join(f.server, 'shared/api.env'))
+  await assert.rejects(f.start(), /ENOENT/)
+  assert.deepEqual(f.commands, [])
+  writeFileSync(join(f.server, 'shared/api.env'), 'APP_ARTIFACT_ORIGIN=https://apps.example.invalid\n')
+  mkdirSync(join(f.server, '.pm2-deploy.lock'))
+  await assert.rejects(f.start(), /Another deployment/)
+  assert.deepEqual(f.commands, [])
+  assert.ok(existsSync(join(f.server, '.pm2-deploy.lock')))
+})
+
+test('source deployment builds with compilers, extracts a separate release and forwards first-install mode', (t) => {
+  const f = sourceFixture(t)
+  const result = f.deploy(['--init-admin'], { NODE_ENV: 'production' })
+  assert.equal(result.status, 0, result.stderr)
+  const calls = f.calls()
+  assert.ok(calls.some((args) => args.join(' ') === 'install --frozen-lockfile --prod=false'))
+  assert.ok(calls.findIndex((args) => args[0] === 'pack') < calls.findIndex((args) => args[0] === 'start'))
+  assert.deepEqual(calls.at(-1), ['start', '--init-admin'])
+  assert.equal(existsSync(join(f.server, '.pm2-build.lock')), false)
+  assert.match(readFileSync(join(f.server, 'shared/api.env'), 'utf8'), /fixture-secret/)
+})
+
+test('failed dependency installation cannot start PM2 or leave a source-build lock', (t) => {
+  const f = sourceFixture(t)
+  const result = f.deploy([], { FAIL_SOURCE_INSTALL: '1' })
+  assert.notEqual(result.status, 0)
+  assert.equal(f.calls().some((args) => ['pack', 'start'].includes(args[0])), false)
+  assert.equal(existsSync(join(f.server, '.pm2-build.lock')), false)
+})
+
+test('dirty source and missing production configuration fail before installing or stopping services', (t) => {
+  const f = sourceFixture(t)
+  writeFileSync(join(f.source, 'package.json'), '{"changed":true}\n')
+  assert.notEqual(f.deploy().status, 0)
+  assert.equal(f.calls().some((args) => ['install', 'start', 'stop'].includes(args[0])), false)
+  rmSync(join(f.server, 'shared/api.env'))
+  assert.notEqual(f.deploy().status, 0)
+  assert.equal(existsSync(join(f.server, '.pm2-build.lock')), false)
 })

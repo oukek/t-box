@@ -70,6 +70,7 @@
     "build:api": "pnpm -r --filter-prod \"@t-box/api...\" --if-present build",
     "test:api-deployment": "node --test scripts/api-deployment.test.mjs",
     "pack:api:pm2": "node scripts/pack-api-pm2.mjs",
+    "deploy:pm2": "node deploy/pm2/deploy-source.mjs",
     "test:pm2-deployment": "node --test scripts/pm2-deployment.test.mjs",
     "apps:icons": "node scripts/sync-application-icons.mjs",
     "test:integration": "node scripts/test-integration.mjs",

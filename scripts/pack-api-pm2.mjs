@@ -29,7 +29,13 @@ try {
   await mkdir(payload)
   run('pnpm', ['build:api'])
   run('pnpm', ['-r', '--filter', '@t-box/calculator-web...', '--filter', '@t-box/calendar-web...', '--filter', '@t-box/time-web...', '--filter', '@t-box/ledger-web...', '--if-present', 'build'])
-  run('pnpm', ['--filter', '@t-box/api', 'deploy', '--legacy', '--prod', join(payload, 'api')])
+  try {
+    run('pnpm', ['--filter', '@t-box/api', 'deploy', '--legacy', '--prod', join(payload, 'api')])
+  } finally {
+    // Legacy deploy records a filtered production state in the source workspace.
+    // Restore its full installed graph so later pnpm commands retain build tools.
+    run('pnpm', ['install', '--frozen-lockfile', '--prod=false', '--offline'])
+  }
   await verifyDeploymentLinks(join(payload, 'api'))
   for (const appId of ['calculator', 'ledger', 'calendar', 'time']) {
     const metadataOutput = run('node', ['scripts/build-application-artifact.mjs', appId], { stdio: 'pipe', encoding: 'utf8' })
@@ -44,7 +50,7 @@ try {
   await cp(join(workspace, 'scripts/serve-application-artifacts.mjs'), join(payload, 'scripts/serve-application-artifacts.mjs'))
   await cp(join(workspace, 'deploy/api/prepare-apps.mjs'), join(payload, 'scripts/prepare-apps.mjs'))
   await cp(join(workspace, 'deploy/api/check-image.mjs'), join(payload, 'api/check-runtime.mjs'))
-  for (const file of ['prepare-release.mjs', 'ecosystem.config.cjs', 'api.env.example']) {
+  for (const file of ['prepare-release.mjs', 'start-release.mjs', 'ecosystem.config.cjs', 'api.env.example']) {
     await cp(join(workspace, 'deploy/pm2', file), join(payload, 'control', file))
   }
   await cp(join(workspace, 'scripts/operations-backup.mjs'), join(payload, 'control/operations-backup.mjs'))
