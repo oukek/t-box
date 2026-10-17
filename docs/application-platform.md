@@ -106,7 +106,7 @@ Capacitor 仍把宿主 dist 复制到 www。独立应用通过受约束容器运
 5. 确认发布后成为线上版本；原线上版本变为历史版本。检查期望的线上 releaseId，避免并发覆盖。切换历史版本也经过同样校验与确认，并记录管理员审计。
 6. 发布不会改写已安装用户的版本；用户在应用市场确认更新。发布变化通过数据库指纹被各 API 工作进程识别，新系统应用会为已有用户自动预装。
 
-内置页面的应用不能靠填写版本号完成实际升级：新版本需先部署相应版本的宿主与 API。操作接口还检查客户端携带的已编译应用版本，客户端过旧时提示刷新网页或升级宿主。当前记账、日历、时间、设置、应用市场属于这种运行方式，完整独立更新仍需要迁移各自 Web 产物和交互契约。计算器已支持独立产物更新。
+内置页面的应用不能靠填写版本号完成实际升级：新版本需先部署相应版本的宿主与 API。操作接口还检查客户端携带的已编译应用版本，客户端过旧时提示刷新网页或升级宿主。当前设置、应用市场仍随宿主发布；计算器、日历、记账与时间已支持通过各自的独立 Web 产物更新。
 
 后台接口均在管理员会话及 CSRF 校验下：
 
@@ -114,6 +114,7 @@ Capacitor 仍把宿主 dist 复制到 www。独立应用通过受约束容器运
 - GET/POST `/api/v1/admin/applications/:id/artifacts`：查询/上传静态构建产物。
 - POST `/api/v1/admin/application-releases`：创建应用的版本草稿。
 - PATCH `/api/v1/admin/application-releases/:id`：带 revision 修改草稿。
+- PATCH `/api/v1/admin/application-releases/:id/metadata`：带 revision 修改待发布版本的更新说明与提示，版本号及构建保持锁定。
 - POST `/api/v1/admin/application-releases/:id/transitions`：submit / publish，带 revision 和 expectedCurrentReleaseId。
 - GET `/api/v1/admin/applications/:id/events`：管理员操作记录。
 

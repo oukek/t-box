@@ -5,6 +5,15 @@ import { join } from 'node:path'
 export const validAppId = (v) => typeof v === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(v)
 export const validVersion = (v) => typeof v === 'string' && v.length <= 48 && /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?$/i.test(v)
 export const sha256 = (v) => createHash('sha256').update(v).digest('hex')
+export const applicationChoice = (app) => `${app.title} (${app.appId})`
+
+export function selectApplication(applications, selection) {
+  const app = applications.find((app) => app.appId === selection || applicationChoice(app) === selection)
+  if (!app) {
+    throw new Error('Application is not independently buildable; select a generated application choice')
+  }
+  return app
+}
 
 export async function discoverApplications(root) {
   const applications = []
@@ -38,7 +47,12 @@ export async function discoverApplications(root) {
     if (pkg.name !== config.package || declaration.name !== config.releasePackage || !declaration.scripts?.build || !pkg.scripts?.build || !(await lstat(join(web, 'index.html'))).isFile()) {
       throw new Error(`Application has no standalone Web build: ${entry.name}`)
     }
-    applications.push(config)
+    const html = await readFile(join(web, 'index.html'), 'utf8')
+    const title = /<title>([^<>]+)<\/title>/i.exec(html)?.[1].trim()
+    if (!title || title.length > 80 || [...title].some((character) => character.charCodeAt(0) < 32)) {
+      throw new Error(`Application Web entry must have a plain title: ${entry.name}`)
+    }
+    applications.push({ ...config, title })
   }
   return applications.sort((a, b) => a.appId.localeCompare(b.appId))
 }
@@ -84,5 +98,5 @@ export function workflowOptions(contents, applications) {
   if (!pattern.test(contents)) {
     throw new Error('Workflow application markers are missing')
   }
-  return contents.replace(pattern, (_, begin, end) => begin + applications.map((a) => `          - ${a.appId}\n`).join('') + end)
+  return contents.replace(pattern, (_, begin, end) => begin + applications.map((a) => `          - '${applicationChoice(a).replaceAll('\'', '\'\'')}'\n`).join('') + end)
 }

@@ -6,7 +6,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { deploymentEnvironment } from '../deploy/settings.mjs'
-import { collectBuildFiles, discoverApplications, sha256, validVersion, workflowOptions } from './application-builds.mjs'
+import { applicationChoice, collectBuildFiles, discoverApplications, selectApplication, sha256, validVersion, workflowOptions } from './application-builds.mjs'
+import { packApplicationRelease } from './pack-application-release.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 test('only apps with validated independent Web builds appear in the generated choices', async () => {
@@ -15,8 +16,16 @@ test('only apps with validated independent Web builds appear in the generated ch
   assert.ok(applications.every((a) => a.appId && a.package && a.releaseModule))
   const workflow = await readFile(join(root, '.github/workflows/application-release.yml'), 'utf8')
   assert.equal(workflowOptions(workflow, applications), workflow)
-  const generated = workflowOptions(workflow, [...applications, { appId: 'test-app' }])
-  assert.ok(generated.includes('          - test-app\n'))
+  const generated = workflowOptions(workflow, [...applications, { appId: 'test-app', title: '测试应用' }])
+  assert.ok(generated.includes('          - \'测试应用 (test-app)\'\n'))
+  const ledger = applications.find((app) => app.appId === 'ledger')
+  assert.equal(applicationChoice(ledger), '记账 (ledger)')
+  assert.equal(selectApplication(applications, '记账 (ledger)'), ledger)
+  assert.equal(selectApplication(applications, 'ledger'), ledger)
+  assert.throws(() => selectApplication(applications, '计算器 (ledger)'))
+  assert.ok(!workflow.includes('inputs.version'))
+  assert.ok(!workflow.includes('inputs.release_notes'))
+  assert.ok(workflow.includes('"$APPLICATION_SELECTION"'))
   assert.throws(() => workflowOptions(workflow, []))
   assert.ok(!/^\s+(?:push|pull_request|schedule):/m.test(workflow))
   assert.ok(workflow.includes('workflow_dispatch:'))
@@ -58,10 +67,47 @@ test('discovery skips source-only apps and accepts a frontend-only release decla
     }))
     await writeFile(join(independent, 'web/package.json'), JSON.stringify({ name: '@t-box/example-web', scripts: { build: 'vite build' } }))
     await writeFile(join(independent, 'contracts/package.json'), JSON.stringify({ name: '@t-box/example-contracts', scripts: { build: 'tsc' } }))
-    await writeFile(join(independent, 'web/index.html'), '<html></html>')
+    await writeFile(join(independent, 'web/index.html'), '<html><title>示例应用</title></html>')
     assert.deepEqual((await discoverApplications(directory)).map((v) => v.appId), ['example'])
     await rm(join(independent, 'web/index.html'))
     await assert.rejects(discoverApplications(directory))
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('packaging resolves the Chinese choice, reads manifest.version and leaves release copy to administrators', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tbox-app-manifest-release-'))
+  try {
+    const app = join(directory, 'apps/example')
+    await mkdir(join(app, 'web/dist'), { recursive: true })
+    await mkdir(join(app, 'contracts/dist'), { recursive: true })
+    await mkdir(join(directory, 'bin'))
+    await writeFile(join(app, 'build.config.json'), JSON.stringify({ appId: 'example', package: '@t-box/example-web', releasePackage: '@t-box/example-contracts', releaseModule: 'contracts/dist/release.js', releaseExport: 'release' }))
+    await writeFile(join(app, 'web/package.json'), JSON.stringify({ name: '@t-box/example-web', scripts: { build: 'fixture' } }))
+    await writeFile(join(app, 'contracts/package.json'), JSON.stringify({ type: 'module', name: '@t-box/example-contracts', scripts: { build: 'fixture' } }))
+    await writeFile(join(app, 'web/index.html'), '<title>示例应用</title>')
+    await writeFile(join(app, 'web/dist/index.html'), '<title>Built application</title>')
+    const release = { appId: 'example', manifest: { id: 'example', version: '2.3.4-beta.1', name: '示例应用' }, runtime: { type: 'web' }, kind: 'user', updatePrompt: { mode: 'custom', title: 'Must be configured in admin' } }
+    await writeFile(join(app, 'contracts/dist/release.js'), `export const release = ${JSON.stringify(release)}\n`)
+    await writeFile(join(directory, 'bin/pnpm'), '#!/bin/sh\n[ "$1" = "-r" ] && [ "$3" = "@t-box/example-web..." ] && [ "$5" = "@t-box/example-contracts..." ]\n', { mode: 0o755 })
+    const envFile = join(directory, 'github.env')
+    const metadata = await packApplicationRelease(directory, '示例应用 (example)', {
+      ...process.env,
+      PATH: join(directory, 'bin') + ':' + process.env.PATH,
+      GITHUB_ENV: envFile,
+      APP_RELEASE_OUTPUT: join(directory, 'output/application-releases'),
+      APP_RELEASE_NOTES: 'Legacy build input must be ignored',
+    })
+    assert.equal(metadata.version, release.manifest.version)
+    const bundle = JSON.parse(await readFile(join(directory, 'output/application-releases/example', metadata.version, metadata.file), 'utf8'))
+    assert.equal(bundle.version, release.manifest.version)
+    assert.equal(bundle.releaseNotes, '')
+    assert.equal(bundle.publication.updatePrompt, undefined)
+    assert.equal(await readFile(envFile, 'utf8'), 'APPLICATION=example\nVERSION=2.3.4-beta.1\n')
+    const rejected = spawnSync(process.execPath, [join(root, 'scripts/pack-application-release.mjs'), 'example', '9.9.9'], { encoding: 'utf8' })
+    assert.notEqual(rejected.status, 0)
+    assert.match(rejected.stderr, /version is read from manifest.version/)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

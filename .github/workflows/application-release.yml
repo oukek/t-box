@@ -4,30 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       application:
-        description: Independently buildable application
+        description: 选择需要更新的子应用（版本号自动读取 manifest.version）
         type: choice
         required: true
         options:
+          # eslint-disable yaml/plain-scalar
           # BEGIN GENERATED APPLICATIONS
-          - calculator
-          - calendar
-          - ledger
-          - time
+          - '数学计算器 (calculator)'
+          - '日历 (calendar)'
+          - '记账 (ledger)'
+          - '时间 (time)'
         # END GENERATED APPLICATIONS
-      version:
-        description: New version (e.g. 1.0.1; cannot replace an existing version)
-        type: string
-        required: true
-      release_notes:
-        description: Release notes shown in the administration panel
-        type: string
-        required: false
+        # eslint-enable yaml/plain-scalar
 
 permissions:
   contents: read
 
 concurrency:
-  group: application-release-${{ inputs.application }}-${{ inputs.version }}
+  group: application-release-${{ inputs.application }}
   cancel-in-progress: false
 
 jobs:
@@ -37,9 +31,7 @@ jobs:
     env:
       DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
       OSS_REGION: ${{ vars.OSS_REGION }}
-      APPLICATION: ${{ inputs.application }}
-      VERSION: ${{ inputs.version }}
-      APP_RELEASE_NOTES: ${{ inputs.release_notes }}
+      APPLICATION_SELECTION: ${{ inputs.application }}
       APP_RELEASE_OUTPUT: ${{ runner.temp }}/application-releases
     steps:
       - uses: actions/checkout@v7
@@ -57,17 +49,17 @@ jobs:
       - name: Release script regressions
         run: node --test scripts/application-release.test.mjs scripts/oss-deployment.test.mjs
       - name: Build selected application and package static bundle
-        run: node scripts/pack-application-release.mjs "$APPLICATION" "$VERSION"
+        run: node scripts/pack-application-release.mjs "$APPLICATION_SELECTION"
       - name: Install verified ossutil 2.4.0
         run: bash deploy/oss/install-ossutil.sh
       - name: Upload to OSS and register submitted version (never publish)
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          # Configure once; the PM2 backend workflow synchronizes its hash automatically.
+          # 首次部署、更换 Token 或新增应用授权时先部署后端；已有应用平时可独立更新。
           APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
         run: node scripts/submit-application-release.mjs "$APPLICATION" "$VERSION"
       - name: Submission reference
         run: |
-          printf 'Application: %s\n\nVersion: %s\n\nBuild registered as submitted. Open the administration application page, review this version, then publish manually.\n' \
+          printf 'Application: %s\n\nVersion (from manifest): %s\n\nBuild registered as submitted. Edit release notes and update prompts in the administration application page, then publish manually.\n' \
             "$APPLICATION" "$VERSION" >> "$GITHUB_STEP_SUMMARY"

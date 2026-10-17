@@ -154,6 +154,8 @@ try {
   await call('POST', '/application-releases', { ...fixture, iconAsset: 'data:image/svg+xml;base64,' + Buffer.from('<svg onload="alert(1)"></svg>').toString('base64') }, 400)
   await call('POST', '/application-releases', { ...fixture, updatePrompt: { mode: 'custom', script: 'untrusted' } }, 400)
   const first = await call('POST', '/application-releases', fixture, 201)
+  const metadataPath = `/application-releases/${first.releaseId}/metadata`
+  await call('PATCH', metadataPath, { revision: 1, releaseNotes: '草稿仍使用草稿编辑入口' }, 409)
   await call('POST', '/application-releases', fixture, 409)
   assert.ok(
     !(await market()).some((e) => e.release.appId === appId),
@@ -194,12 +196,31 @@ try {
     !(await market()).some((e) => e.release.appId === appId),
     'submission is private',
   )
+  const metadata = { revision: 2, releaseNotes: ' 后台填写的更新说明 ', updatePrompt: fixture.updatePrompt }
+  await call('PATCH', metadataPath, metadata, 401, { cookie: '' })
+  await call('PATCH', metadataPath, metadata, 403, { 'x-admin-request': '' })
+  for (const forbidden of [{ version: '9.9.9' }, { artifact: '0'.repeat(64) }, { backend: { type: 'local', binding: 'ledger' } }]) {
+    await call('PATCH', metadataPath, { ...metadata, ...forbidden }, 400)
+  }
+  await call('PATCH', metadataPath, { ...metadata, releaseNotes: 'x'.repeat(4001) }, 400)
+  await call('PATCH', metadataPath, { ...metadata, updatePrompt: { mode: 'custom', script: 'untrusted' } }, 400)
+  const updated = await call('PATCH', metadataPath, metadata)
+  assert.equal(updated.revision, 3)
+  await call('PATCH', metadataPath, metadata, 409)
+  const prepared = (await call('GET', '/applications')).applications.find((a: any) => a.appId === appId).releases[0]
+  assert.equal(prepared.releaseNotes, metadata.releaseNotes.trim())
+  assert.equal(prepared.status, 'submitted')
+  assert.equal(prepared.release.manifest.version, fixture.version)
+  assert.equal(prepared.release.runtime.integrity, 'sha256-' + fixture.artifact)
+  await call('POST', `/application-releases/${first.releaseId}/transitions`, { action: 'publish', revision: 2, expectedCurrentReleaseId: null }, 409)
   await call('POST', `/application-releases/${first.releaseId}/transitions`, {
     action: 'publish',
-    revision: 2,
+    revision: 3,
     expectedCurrentReleaseId: null,
   })
   const entry = (await market()).find((e) => e.release.appId === appId)!
+  assert.equal(entry.releaseNotes, metadata.releaseNotes.trim())
+  await call('PATCH', metadataPath, { ...metadata, revision: 4 }, 409)
   assert.equal(entry.installation, null)
   await platform.applications.change(
     session.user.id,
@@ -295,6 +316,7 @@ try {
     'rollback does not rewrite pinned installs',
   )
   const history = await call('GET', `/applications/${appId}/events`)
+  assert.equal(history.filter((e: any) => e.action === 'edit_metadata').length, 1)
   assert.equal(history.filter((e: any) => e.action === 'publish').length, 3)
   assert.ok(history.every((e: any) => e.administratorId === administratorId))
   // A second API worker detects publication and bootstraps a newly introduced system app.

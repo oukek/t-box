@@ -29,6 +29,7 @@ const dialogError = ref('')
 const editorOpen = ref(false)
 const editing = ref<ManagedRelease | null>(null)
 const newApp = ref(false)
+const editingMetadata = computed(() => editing.value?.status === 'submitted')
 const artifacts = ref<Artifact[]>([])
 const artifactOrigin = ref('')
 const artifactDelivery = ref('local')
@@ -176,7 +177,9 @@ async function edit(entry?: ManagedRelease, createApplication = false) {
     revision: entry?.revision || 1,
   })
   editorOpen.value = true
-  await loadArtifacts()
+  if (!editingMetadata.value) {
+    await loadArtifacts()
+  }
 }
 async function upload(event: Event) {
   const element = event.target as HTMLInputElement
@@ -227,15 +230,19 @@ async function submitDraft() {
   dialogError.value = ''
   try {
     await save(
-      editing.value
-        ? `/application-releases/${editing.value.release.releaseId}`
-        : '/application-releases',
-      { ...form },
+      editingMetadata.value
+        ? `/application-releases/${editing.value!.release.releaseId}/metadata`
+        : editing.value
+          ? `/application-releases/${editing.value.release.releaseId}`
+          : '/application-releases',
+      editingMetadata.value
+        ? { revision: form.revision, releaseNotes: form.releaseNotes, updatePrompt: form.updatePrompt }
+        : { ...form },
       editing.value ? 'PATCH' : 'POST',
     )
     selectedId.value = form.appId
     editorOpen.value = false
-    notice.value = '版本草稿已保存，提交后可发布'
+    notice.value = editingMetadata.value ? '更新信息已保存，可审核发布' : '版本草稿已保存，提交后可发布'
     await load()
   } catch (e) {
     dialogError.value = errorMessage(e)
@@ -270,7 +277,7 @@ async function execute() {
     notice.value =
       t.action === 'publish'
         ? '版本已发布，用户可在应用市场更新'
-        : '版本已提交，内容已锁定'
+        : '版本已提交，仍可编辑更新说明与提示'
     transition.value = null
     await load()
   } catch (e) {
@@ -297,6 +304,7 @@ async function showHistory() {
 const eventNames: Record<string, string> = {
   create_draft: '创建草稿',
   edit_draft: '修改草稿',
+  edit_metadata: '修改更新信息',
   submit: '提交版本',
   publish: '发布版本',
   migrate_runtime: '迁移为独立应用',
@@ -446,6 +454,10 @@ onMounted(load)
                 :disabled="busy"
                 @click="edit(entry)"
               > 编辑草稿</button><button
+                v-if="entry.status === 'submitted'"
+                :disabled="busy"
+                @click="edit(entry)"
+              > 编辑更新信息</button><button
                 v-if="entry.status === 'draft'"
                 :disabled="busy || !entry.readiness.ready"
                 @click="prepare(entry, 'submit')"
@@ -473,8 +485,8 @@ onMounted(load)
   </p>
   <AdminDialog
     :open="editorOpen"
-    :title="editing ? '编辑版本草稿' : newApp ? '添加应用' : '新增版本'"
-    description="提交后内容锁定，修改需要创建新版本。"
+    :title="editingMetadata ? '编辑更新信息' : editing ? '编辑版本草稿' : newApp ? '添加应用' : '新增版本'"
+    description="提交后版本号和构建产物锁定；发布前可以编辑更新说明与提示。"
     :busy="busy"
     @close="editorOpen = false"
   >
@@ -491,70 +503,73 @@ onMounted(load)
       @submit.prevent="submitDraft"
     >
       <fieldset :disabled="busy">
-        <div class="form-grid">
-          <label>应用标识<input
-            v-model="form.appId"
-            :disabled="!newApp"
-            maxlength="64"
-            pattern="[a-z][a-z0-9_\-]{0,63}"
-            required
-            placeholder="例如 notes"
-            @change="loadArtifacts"
-          ></label><label>版本号<input
-            v-model="form.version"
-            required
-            maxlength="48"
-            placeholder="1.0.0"
-          ><small>使用三段版本号，例如 1.0.0、1.1.0。</small></label>
-        </div>
-        <label>应用名称<input
-          v-model="form.name"
-          maxlength="80"
-          required
-        ></label>
-        <label>应用说明<textarea
-          v-model="form.description"
-          rows="2"
-          maxlength="400"
-          required
-        />
-        </label>
-        <div class="form-grid">
-          <label>应用类型<AdminSelect
-            v-model="form.kind"
-            label="应用类型"
-            :disabled="!newApp"
-            :options="[
-              {
-                value: 'user',
-                label: '用户应用',
-                description: '用户可以安装与卸载',
-              },
-              {
-                value: 'system',
-                label: '系统应用',
-                description: '预装、不可卸载，支持更新',
-              },
-            ]"
-          /></label>
-        </div>
-        <div class="application-icon-editor">
-          <LauncherIcon
-            :icon="form.icon"
-            :icon-asset="form.iconAsset"
-            :icon-variant="form.iconVariant"
-            :animate="false"
-          />
-          <div><strong>应用图标</strong><p>随版本保存。构建提交会自动读取应用图标，也可在草稿中替换。</p>
-            <label class="icon-upload">选择图片<input
-              type="file"
-              accept=".png,.jpg,.jpeg,.webp,.gif,.svg"
-              aria-label="上传应用图标"
-              @change="uploadIcon"
-            ></label>
-            <small>PNG / SVG / JPEG / WebP / GIF · 最大 128 KB，建议正方形</small>
+        <p v-if="editingMetadata">{{ form.name }} · v{{ form.version }}</p>
+        <template v-else>
+          <div class="form-grid">
+            <label>应用标识<input
+              v-model="form.appId"
+              :disabled="!newApp"
+              maxlength="64"
+              pattern="[a-z][a-z0-9_\-]{0,63}"
+              required
+              placeholder="例如 notes"
+              @change="loadArtifacts"
+            ></label><label>版本号<input
+              v-model="form.version"
+              required
+              maxlength="48"
+              placeholder="1.0.0"
+            ><small>使用三段版本号，例如 1.0.0、1.1.0。</small></label>
           </div>
-        </div>
+          <label>应用名称<input
+            v-model="form.name"
+            maxlength="80"
+            required
+          ></label>
+          <label>应用说明<textarea
+            v-model="form.description"
+            rows="2"
+            maxlength="400"
+            required
+          />
+          </label>
+          <div class="form-grid">
+            <label>应用类型<AdminSelect
+              v-model="form.kind"
+              label="应用类型"
+              :disabled="!newApp"
+              :options="[
+                {
+                  value: 'user',
+                  label: '用户应用',
+                  description: '用户可以安装与卸载',
+                },
+                {
+                  value: 'system',
+                  label: '系统应用',
+                  description: '预装、不可卸载，支持更新',
+                },
+              ]"
+            /></label>
+          </div>
+          <div class="application-icon-editor">
+            <LauncherIcon
+              :icon="form.icon"
+              :icon-asset="form.iconAsset"
+              :icon-variant="form.iconVariant"
+              :animate="false"
+            />
+            <div><strong>应用图标</strong><p>随版本保存。构建提交会自动读取应用图标，也可在草稿中替换。</p>
+              <label class="icon-upload">选择图片<input
+                type="file"
+                accept=".png,.jpg,.jpeg,.webp,.gif,.svg"
+                aria-label="上传应用图标"
+                @change="uploadIcon"
+              ></label>
+              <small>PNG / SVG / JPEG / WebP / GIF · 最大 128 KB，建议正方形</small>
+            </div>
+          </div>
+        </template>
         <label>更新说明<textarea
           v-model="form.releaseNotes"
           rows="3"
@@ -591,7 +606,7 @@ onMounted(load)
           rows="2"
           placeholder="新版本已上架，前往应用市场查看并更新。"
         /></label>
-        <div v-if="form.runtime === 'web'" class="artifact-picker">
+        <div v-if="!editingMetadata && form.runtime === 'web'" class="artifact-picker">
           <div class="artifact-label">
             <strong>构建产物</strong><label
               v-if="artifactDelivery !== 'oss'"
@@ -616,7 +631,7 @@ onMounted(load)
           /><small>应用使用相对资源路径（Vite base: './'）和应用
             SDK。上传不会自动上线。</small><small class="mono">产物服务：{{ artifactOrigin }}</small>
         </div>
-        <p v-else class="shell-note">
+        <p v-else-if="!editingMetadata" class="shell-note">
           此应用当前随宿主构建。保存新版本草稿后，需要先部署对应版本的宿主和
           API，才能提交发布。
         </p>
@@ -629,7 +644,7 @@ onMounted(load)
         type="submit"
         :disabled="busy || (form.runtime === 'web' && !form.artifact)"
       >
-        {{ busy ? "正在保存…" : "保存草稿" }}
+        {{ busy ? "正在保存…" : editingMetadata ? "保存更新信息" : "保存草稿" }}
       </button>
     </template>
   </AdminDialog>
@@ -656,7 +671,7 @@ onMounted(load)
       <p class="muted">
         {{
           transition.action === "submit"
-            ? "提交后版本内容将锁定，仍不会出现在用户市场。"
+            ? "提交后版本号和构建产物锁定，仍可编辑更新信息；发布后才会出现在用户市场。"
             : "发布后，应用市场将提供此版本。已有安装保留原版本，用户确认更新后切换。"
         }}
       </p>

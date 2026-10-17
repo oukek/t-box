@@ -121,6 +121,14 @@ try {
   }, admin), /不支持/)
   assert.equal(old.backend.type, 'none')
   assert.deepEqual(old.permissions, [])
+  const edited = await publishing.updateMetadata(releaseId, { revision: 1, releaseNotes: '后台审核后的更新说明', updatePrompt: { mode: 'default', title: '后台配置的提示' } }, admin)
+  assert.equal(edited.revision, 2)
+  const retried = await call(credential.token)
+  assert.equal(retried.statusCode, 201)
+  assert.equal(retried.json().data.revision, 2)
+  const [afterRetry] = await source.query('SELECT definition,release_notes FROM application_releases WHERE release_id=?', [releaseId])
+  assert.equal(afterRetry.release_notes, '后台审核后的更新说明', 'build retry must preserve administrator copy')
+  assert.equal((typeof afterRetry.definition === 'string' ? JSON.parse(afterRetry.definition) : afterRetry.definition).updatePrompt.title, '后台配置的提示')
   // Only a separately authenticated administrator can publish; importer has no transition endpoint.
   const denied = await app.inject({
     method: 'POST',
@@ -129,7 +137,7 @@ try {
     payload: { action: 'publish', revision: 1, expectedCurrentReleaseId: null },
   })
   assert.equal(denied.statusCode, 404)
-  await publishing.transition(releaseId, { action: 'publish', revision: 1, expectedCurrentReleaseId: null }, admin)
+  await publishing.transition(releaseId, { action: 'publish', revision: 2, expectedCurrentReleaseId: null }, admin)
   const repeated = await call(credential.token)
   assert.equal(repeated.statusCode, 201)
   assert.equal(repeated.json().data.status, 'published')

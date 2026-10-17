@@ -407,6 +407,53 @@ export class ApplicationPublishing {
     })
   }
 
+  /** Submitted builds remain immutable; administrators may prepare their update copy before publication. */
+  async updateMetadata(id: string, input: unknown, actor: string) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      fail('更新信息无效')
+    }
+    const b = input as Record<string, unknown>
+    if (Object.keys(b).some((key) => !['revision', 'releaseNotes', 'updatePrompt'].includes(key)) ||
+      !Number.isSafeInteger(b.revision) || Number(b.revision) < 1 ||
+      typeof b.releaseNotes !== 'string' || b.releaseNotes.length > 4000) {
+      fail('仅支持修改更新说明和提示；更新说明最多 4000 个字符')
+    }
+    if (b.updatePrompt !== undefined) {
+      try {
+        validateUpdatePrompt(b.updatePrompt)
+      } catch {
+        fail('更新提示配置无效')
+      }
+    }
+    const notes = (b.releaseNotes as string).trim()
+    return this.source.transaction(async (db) => {
+      const [ref] = await db.query('SELECT app_id FROM application_releases WHERE release_id=?', [id])
+      if (!ref) {
+        throw new ApiError(404, 'APP_RELEASE_NOT_FOUND', '版本不存在')
+      }
+      // Serialize with publication and build import using the same registry lock order.
+      await db.query('SELECT app_id FROM application_registry WHERE app_id=? FOR UPDATE', [ref.app_id])
+      const [row] = await db.query('SELECT * FROM application_releases WHERE release_id=? FOR UPDATE', [id])
+      if (Number(row.revision) !== b.revision) {
+        throw new ApiError(409, 'APP_RELEASE_CHANGED', '版本状态已改变，请刷新')
+      }
+      if (row.status !== 'submitted') {
+        throw new ApiError(409, 'APP_RELEASE_LOCKED', '只有待发布版本可以编辑更新信息')
+      }
+      const release = json<AppRelease>(row.definition)
+      if (b.updatePrompt !== undefined) {
+        release.updatePrompt = b.updatePrompt as AppRelease['updatePrompt']
+      }
+      validateRelease(release)
+      await db.query(
+        'UPDATE application_releases SET definition=?,definition_hash=?,release_notes=?,revision=revision+1 WHERE release_id=?',
+        [JSON.stringify(release), hash(release), notes, id],
+      )
+      await this.audit(db, ref.app_id, id, 'edit_metadata', actor, { version: release.manifest.version, definitionHash: hash(release) })
+      return { releaseId: id, revision: Number(row.revision) + 1, status: 'submitted' }
+    })
+  }
+
   async transition(id: string, input: unknown, actor: string) {
     const b = input as {
       action?: string

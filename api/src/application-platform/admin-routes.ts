@@ -25,6 +25,12 @@ export function registerApplicationPublishing(
     '/applications/:id/artifacts',
     async (r) => ({ data: await service.artifactList(appId(r.params.id)) }),
   )
+  app.patch<{ Params: { id: string } }>(
+    '/application-releases/:id/metadata',
+    async (r) => ({
+      data: await service.updateMetadata(r.params.id, r.body, (await actor(r)).id),
+    }),
+  )
   app.post<{ Params: { id: string } }>(
     '/applications/:id/artifacts',
     { bodyLimit: 30 * 1024 * 1024 },
