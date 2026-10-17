@@ -161,11 +161,15 @@ test('wrong imported image ID prevents deployment', (t) => {
   assert.equal(f.logs().some((row) => row.args.includes('stop')), false)
 })
 
-test('cached archives are rechecked before reuse', (t) => {
+test('downloaded image archives are removed after import and every import is verified afresh', (t) => {
   const f = fixture(t)
   f.publish()
   f.ok(f.run('download-release.sh', [release]))
-  writeFileSync(join(f.dir, 'releases', release, 'image.tar.gz'), 'corrupt-cache')
+  const loaded = f.logs().find((row) => row.tool === 'docker' && row.args.includes('load'))
+  assert.ok(loaded)
+  assert.equal(existsSync(loaded.args[loaded.args.indexOf('--input') + 1]), false)
+  assert.equal(existsSync(join(f.dir, 'releases', release)), false)
+  writeFileSync(join(f.remote, 'image.tar.gz'), 'corrupt-remote')
   f.resetLogs()
   assert.notEqual(f.run('download-release.sh', [release]).status, 0)
   assert.equal(f.logs().some((row) => row.args.includes('load')), false)

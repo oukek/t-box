@@ -2,12 +2,13 @@ import type { Actor as Principal } from '@t-box/app-server-sdk'
 import type { Resource } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { ProviderItem } from '../chat/provider.js'
+import type { ResourceFileMetadata, ResourceStorageRegistry } from './storage.js'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
 import { parseId } from '@t-box/server-foundation/validation'
-import { LocalResourceStorage, ResourceStorageRegistry } from './storage.js'
+import { runtimeResourceStorage } from './runtime-storage.js'
 
 export const MAX_RESOURCE_SIZE = 10 * 1024 * 1024
 /** Never trust the extension or browser Content-Type for image display. */
@@ -43,13 +44,9 @@ export function detectMime(bytes: Buffer): string {
     '支持 PNG、JPEG、WebP、PDF 和 UTF-8 文本文件',
   )
 }
-const dto = (r: Resource): Resource => ({
-  ...r,
-  size: Number(r.size),
-  createdAt: isoTime(r.createdAt),
-})
+const dto = (r: Resource): Resource => ({ ...r, size: Number(r.size), createdAt: isoTime(r.createdAt) })
 const columns =
-  'id,name,mime_type AS mimeType,size,source,created_at AS createdAt'
+  'id,name,mime_type AS mimeType,size,source,object_path AS path,created_at AS createdAt'
 export class ResourceService {
   readonly storage: ResourceStorageRegistry
   constructor(
@@ -59,7 +56,11 @@ export class ResourceService {
     ),
     storage?: ResourceStorageRegistry,
   ) {
-    this.storage = storage || new ResourceStorageRegistry('local', [{ id: 'local', storage: new LocalResourceStorage(root) }])
+    this.storage = storage || runtimeResourceStorage(root)
+  }
+
+  get publicOrigin() {
+    return this.storage.get(this.storage.activeId).origin ?? null
   }
 
   async create(
@@ -94,7 +95,9 @@ export class ResourceService {
         .replace(/[\x00-\x1F]/g, '')
         .trim()
         .slice(0, 200) || '未命名文件'
-    await this.storage.get(this.storage.activeId).write(id, bytes)
+    const backend = this.storage.get(this.storage.activeId)
+    const path = backend.path?.(id) ?? id
+    await backend.write(path, bytes, { name, mimeType })
     try {
       await this.source.transaction(async (db) => {
         await db.query('SELECT id FROM app_users WHERE id=? FOR UPDATE', [
@@ -115,12 +118,12 @@ export class ResourceService {
           )
         }
         await db.query(
-          'INSERT INTO resources(id,user_id,name,mime_type,size,source,storage_backend) VALUES(?,?,?,?,?,?,?)',
-          [id, principal.user.id, name, mimeType, bytes.length, source, this.storage.activeId],
+          'INSERT INTO resources(id,user_id,name,mime_type,size,source,storage_backend,object_path) VALUES(?,?,?,?,?,?,?,?)',
+          [id, principal.user.id, name, mimeType, bytes.length, source, this.storage.activeId, path],
         )
       })
     } catch (cause) {
-      await this.storage.get(this.storage.activeId).remove(id).catch(() => {})
+      await backend.remove(path).catch(() => {})
       throw cause
     }
     return this.get(principal, id)
@@ -175,6 +178,22 @@ export class ResourceService {
       }
       throw new ApiError(404, 'RESOURCE_MISSING', '文件已不存在')
     }
+  }
+
+  /** Internal application-owned assets have their own quotas and authorization, such as ledger icons. */
+  async writeApplicationAsset(id: string, bytes: Buffer, file: ResourceFileMetadata) {
+    const backend = this.storage.get(this.storage.activeId)
+    const path = backend.path?.(parseId(id)) ?? id
+    await backend.write(path, bytes, file)
+    return { path, storageBackend: this.storage.activeId }
+  }
+
+  readApplicationAsset(location: { path: string, storageBackend: string }) {
+    return this.storage.get(location.storageBackend).read(location.path)
+  }
+
+  removeApplicationAsset(location: { path: string, storageBackend: string }) {
+    return this.storage.get(location.storageBackend).remove(location.path)
   }
 
   async list(principal: Principal, query: unknown) {
@@ -232,19 +251,19 @@ export class ResourceService {
   }
 
   private async readStored(id: string) {
-    const [row] = await this.source.query('SELECT storage_backend FROM resources WHERE id=? AND deleted_at IS NULL', [id])
+    const [row] = await this.source.query('SELECT storage_backend,object_path FROM resources WHERE id=? AND deleted_at IS NULL', [id])
     if (!row) {
       throw new ApiError(404, 'RESOURCE_NOT_FOUND', '文件不存在')
     }
-    return this.storage.get(row.storage_backend).read(id)
+    return this.storage.get(row.storage_backend).read(row.object_path || id)
   }
 
   private async purge(id: string) {
-    const [row] = await this.source.query('SELECT storage_backend FROM resources WHERE id=? AND deleted_at IS NOT NULL AND purged_at IS NULL', [id])
+    const [row] = await this.source.query('SELECT storage_backend,object_path FROM resources WHERE id=? AND deleted_at IS NOT NULL AND purged_at IS NULL', [id])
     if (!row) {
       return
     }
-    await this.storage.get(row.storage_backend).remove(id)
+    await this.storage.get(row.storage_backend).remove(row.object_path || id)
     await this.source.query('UPDATE resources SET purged_at=UTC_TIMESTAMP(3) WHERE id=? AND deleted_at IS NOT NULL', [id])
   }
 

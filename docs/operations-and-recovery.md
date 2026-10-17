@@ -20,9 +20,11 @@ pnpm test:operations
 
 ## 加密备份
 
-工具在源码的 `scripts/operations-backup.mjs`，也随 PM2 发布包放入 `control/operations-backup.mjs`。需要服务器上安装 MySQL 8 的 `mysqldump` 和 `tar`。备份包含 SQL（事务表一致性快照、存储过程、触发器、事件）、shared/api.env、secrets、storage、app-artifacts、app-deployments 和 release-info。日志与可重新获取的运行包不包含在备份中；需要另外保留对应版本的发布包。
+工具在源码的 `scripts/operations-backup.mjs`，也随 PM2 发布包放入 `control/operations-backup.mjs`。需要服务器上安装 MySQL 8 的 `mysqldump` 和 `tar`。备份包含 SQL（事务表一致性快照、存储过程、触发器、事件）、shared/api.env、secrets 和 release-info；旧版遗留 storage / app-artifacts / app-deployments 存在时也会纳入保护。日志与可重新获取的运行包不包含在备份中；需要另外保留对应版本的发布包。
 
-备份使用 AES-256-GCM 加密并认证，内部清单校验所有文件 SHA-256/大小。密钥与备份分开存放，不能把 provider.key 当作备份密钥，也不能把备份放到公开静态站点。
+业务文件现存 OSS `tboxos/uploads/resources/`，服务器备份不包含远端对象。必须另外保留该前缀的对象备份 / 版本，并与数据库的相对路径记录对应恢复；不要给该前缀配置自动过期规则。网站发布不会清空它。更换 Bucket / 地域需要迁移对象和数据库位置，不能只改环境变量；生产不再读取本地后端，旧文件须先迁移并校验 OSS；恢复旧备份后也先完成迁移，再开放业务。
+
+备份使用 AES-256-GCM 加密并认证，内部清单校验所有文件 SHA-256/大小。密钥与备份分开存放，不能把 provider.key 当作备份密钥，也不能把明文备份或备份密钥放到公开静态站点。加密后的归档放在 tboxos/uploads/resources/backups/，生产 create 命令要求使用 oss:// 输出地址，不在服务器保留归档。
 
 首次单独生成密钥（已有密钥不能覆盖）：
 
@@ -34,19 +36,22 @@ node -e "require('node:fs').writeFileSync('/root/t-box-backup.key',require('node
 
 ```sh
 pm2 stop t-box-api t-box-worker
-node "$release/control/operations-backup.mjs" create "$release" /private-backups/t-box-20261015.tbox /root/t-box-backup.key --quiesced
-node "$release/control/operations-backup.mjs" verify /private-backups/t-box-20261015.tbox /root/t-box-backup.key
+node "$release/control/operations-backup.mjs" create "$release" oss://tboxos/uploads/resources/backups/t-box-20261017.tbox /root/t-box-backup.key --quiesced
 pm2 start t-box-worker t-box-api
 ```
 
-输出文件不会覆盖已有文件；默认权限 600。命令行和清单不包含数据库密码；mysqldump 使用权限 600 的临时配置文件。创建完成后工具会自行解密验证一次。所有临时明文文件位于权限 700 的目录，正常退出/失败时清理；硬关机、SIGKILL 后须清理系统临时目录中的残留。建议使用加密磁盘，并定期做隔离恢复演练。
+OSS 对象不覆盖同名备份，每次使用唯一名称；上传附带 Content-MD5 供 OSS 校验。上传完成或失败均清理临时归档，失败不声称备份成功。命令行和清单不包含数据库密码；mysqldump 使用权限 600 的临时配置文件。创建完成后工具会自行解密验证一次。所有临时明文文件位于权限 700 的目录，正常退出/失败时清理；硬关机、SIGKILL 后须清理系统临时目录中的残留。建议使用加密磁盘，并定期做隔离恢复演练。
 
 ## 隔离恢复演练
 
 先在隔离机器或新目录验证，禁止直接覆盖运行环境：
 
 ```sh
-node "$release/control/operations-backup.mjs" stage /private-backups/t-box-20261015.tbox /root/t-box-backup.key /private-restore/t-box-drill
+restore_tmp="$(mktemp -d)"
+trap 'rm -rf -- "$restore_tmp"' EXIT
+# 将地域和文件名替换为实际值，只下载加密归档。
+curl -fL https://tboxos.oss-cn-hangzhou.aliyuncs.com/uploads/resources/backups/t-box-20261017.tbox -o "$restore_tmp/backup.tbox"
+node "$release/control/operations-backup.mjs" stage "$restore_tmp/backup.tbox" /root/t-box-backup.key "$restore_tmp/staged"
 ```
 
 stage 在认证通过之后才解包，拒绝符号链接和路径穿越，拒绝覆盖已有目标，核对文件清单。它不执行 SQL、不启动 PM2，也不会覆盖现有密钥或配置。

@@ -11,6 +11,8 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validId } from '@t-box/app-contracts'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { applicationSettings } from '../config.js'
+import { OssApplicationArtifacts } from './oss-artifacts.js'
 
 export const applicationArtifactRoot = fileURLToPath(
   new URL('../../../output/app-artifacts/', import.meta.url),
@@ -33,7 +35,18 @@ export interface ArtifactSummary {
 }
 /** Publisher uploads a static build directory. No archive extraction, shell execution or network fetch. */
 export class ApplicationArtifacts {
-  constructor(readonly root = applicationArtifactRoot) {}
+  readonly remote?: OssApplicationArtifacts
+  constructor(readonly root = applicationArtifactRoot, options: { delivery?: string, origin?: string, fetcher?: typeof fetch } = {}) {
+    const settings = applicationSettings()
+    const delivery = options.delivery || settings.delivery
+    if (process.env.NODE_ENV === 'production' && delivery !== 'oss') {
+      throw new Error('Production application files must be stored in OSS')
+    }
+    if (delivery === 'oss') {
+      this.remote = new OssApplicationArtifacts(options.origin || settings.origin, options.fetcher)
+    }
+  }
+
   async upload(appId: string, input: unknown): Promise<ArtifactSummary> {
     if (!validId(appId)) {
       bad('应用标识无效')
@@ -80,6 +93,9 @@ export class ApplicationArtifacts {
         .map(([p, v]) => [p, sha(v)]),
     )
     const digest = sha(JSON.stringify(files))
+    if (this.remote) {
+      return this.remote.verify(appId, digest)
+    }
     const parent = join(this.root, appId)
     const target = join(parent, digest)
     const temporary = join(parent, `.upload-${randomUUID()}`)
@@ -113,6 +129,9 @@ export class ApplicationArtifacts {
   }
 
   async verify(appId: string, digest: string): Promise<ArtifactSummary> {
+    if (this.remote) {
+      return this.remote.verify(appId, digest)
+    }
     if (!validId(appId) || !/^[a-f0-9]{64}$/.test(digest)) {
       bad('构建摘要无效')
     }
@@ -169,9 +188,12 @@ export class ApplicationArtifacts {
     return { digest, bytes, fileCount: scanned.size }
   }
 
-  async list(appId: string): Promise<ArtifactSummary[]> {
+  async list(appId: string, digests: readonly string[] = []): Promise<ArtifactSummary[]> {
     if (!validId(appId)) {
       bad('应用标识无效')
+    }
+    if (this.remote) {
+      return Promise.all([...new Set(digests)].map((digest) => this.remote!.verify(appId, digest)))
     }
     let entries: string[]
     try {

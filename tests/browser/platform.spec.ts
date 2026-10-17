@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import { APPLICATION_FRAME_SANDBOX } from '../../app/src/core/app-runtime/sandbox'
@@ -28,7 +29,11 @@ test('登录、OS、设备会话、恢复设置与资源容量在桌面和手机
   const navigation = page.getByRole('navigation', { name: '主要导航' })
   await navigation.getByRole('button', { name: 'OS', exact: true }).click()
   await expect(page.getByRole('region', { name: 'OS 应用桌面' })).toBeVisible()
-  await page.getByRole('button', { name: '打开设置', exact: true }).click()
+  const settings = page.getByRole('button', { name: '打开设置', exact: true })
+  await expect(settings).toBeVisible()
+  // First login installs system applications asynchronously; wait for the launchable state.
+  await expect(settings).not.toContainText(/准备中|暂不可用/, { timeout: 15_000 })
+  await settings.click()
   await expect(navigation).toBeHidden()
   await page.getByRole('button', { name: '查看账号信息与安全设置' }).click()
   await page.getByRole('button', { name: /登录设备/ }).click()
@@ -46,6 +51,45 @@ test('登录、OS、设备会话、恢复设置与资源容量在桌面和手机
   expect(overflow, '页面不应横向溢出').toBe(false)
   await page.reload()
   await expect(page.getByText(/已用 .*个文件/)).toBeVisible()
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=', 'base64')
+  const filename = 'OSS访问验收.png'
+  await page.getByLabel('上传资源文件').setInputFiles({ name: filename, mimeType: 'image/png', buffer: png })
+  // Existing local resources still use the authorized API content route.
+  await expect(page.getByRole('img', { name: filename })).toBeVisible()
+  let ossReads = 0
+  await page.route('https://tboxos.oss-cn-hangzhou.aliyuncs.com/uploads/resources/**', async (route) => {
+    const headers = route.request().headers()
+    expect(headers.authorization).toBeUndefined()
+    expect(headers.cookie).toBeUndefined()
+    expect(headers.referer).toBeUndefined()
+    expect(new URL(route.request().url()).search).toBe('')
+    ossReads++
+    await route.fulfill({ status: 200, contentType: 'image/png', headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' }, body: png })
+  })
+  let originsRead = 0
+  await page.route('**/api/v1/resources/storage', async (route) => {
+    expect(route.request().headers().authorization).toBeUndefined()
+    expect(route.request().headers().cookie).toBeUndefined()
+    originsRead++
+    await route.fulfill({ json: { data: { origin: 'https://tboxos.oss-cn-hangzhou.aliyuncs.com' } } })
+  })
+  await page.route('**/api/v1/resources?*', async (route) => {
+    const response = await route.fetch()
+    const payload = await response.json()
+    payload.data = payload.data.map((file: { id: string }) => ({ ...file, path: `uploads/resources/${file.id}` }))
+    await route.fulfill({ response, json: payload })
+  })
+  await page.route('**/api/v1/resources/*/access', async () => {
+    throw new Error('Public OSS downloads must not request a signature')
+  })
+  await page.reload()
+  await expect(page.getByRole('img', { name: filename })).toBeVisible()
+  expect(ossReads).toBeGreaterThan(0)
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: `下载 ${filename}`, exact: true }).click()
+  expect((await download).suggestedFilename()).toBe(filename)
+  expect(ossReads).toBeGreaterThan(1)
+  expect(originsRead).toBe(1)
 })
 
 test('独立应用沙箱允许本地表单 submit 事件，CSP 继续阻止原生表单导航', async ({ page }) => {

@@ -1,5 +1,6 @@
 import { CalendarHolidayYears1791244822000 } from '@t-box/calendar-server/holiday-migration'
 import { LedgerCategoryIcons1791244833000 } from '@t-box/ledger-server/categories/icon-migration'
+import { LedgerIconStorage1791244849000 } from '@t-box/ledger-server/categories/icon-storage-migration'
 import { LedgerCategoryPresets1791244832000 } from '@t-box/ledger-server/categories/migration'
 import {
   LedgerFeatureIntegrity1791244830000,
@@ -45,6 +46,7 @@ import { PaymentReconciliation1791244843000 } from './migrations/PaymentReconcil
 import { PaymentRefunds1791244841000 } from './migrations/PaymentRefunds.js'
 import { RechargeCatalog1791244815000 } from './migrations/RechargeCatalog.js'
 import { RechargeConfiguration1791244814000 } from './migrations/RechargeConfiguration.js'
+import { ResourceObjectPaths1791244848000 } from './migrations/ResourceObjectPaths.js'
 import { ResourceStorage1791244845000 } from './migrations/ResourceStorage.js'
 import { RetireApplicationConfiguration1791244828000 } from './migrations/RetireApplicationConfiguration.js'
 import { SharedLedgers1791244800000 } from './migrations/SharedLedgers.js'
@@ -119,6 +121,8 @@ export function createDataSource(config = getConfig().mysql) {
       ResourceStorage1791244845000,
       Notifications1791244846000,
       ModelPools1791244847000,
+      ResourceObjectPaths1791244848000,
+      LedgerIconStorage1791244849000,
     ],
     migrationsTransactionMode: 'none',
     migrationsTableName: 'schema_migrations',

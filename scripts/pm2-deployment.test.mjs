@@ -42,6 +42,7 @@ function fixture(t) {
   }
   writeFileSync(join(payload, 'api/dist/server.js'), 'process.stdout.write(\'fixture\');\n')
   writeFileSync(join(payload, 'api/package.json'), '{"type":"module"}\n')
+  writeFileSync(join(payload, 'api/bootstrap-applications.json'), JSON.stringify({ calculator: 'a'.repeat(64) }))
   cpSync(dirname(dirname(require.resolve('dotenv'))), join(payload, 'api/node_modules/dotenv'), { recursive: true })
   for (const file of ['prepare-release.mjs', 'ecosystem.config.cjs', 'api.env.example']) {
     copyFileSync(join(workspace, 'deploy/pm2', file), join(payload, 'control', file))
@@ -96,7 +97,7 @@ process.exit(result.status===null ? 1 : result.status);
   return { root, server, packageDir, env, upload, uploaded, prepare }
 }
 
-function startupFixture(t, { migrationFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false, oss = false } = {}) {
+function startupFixture(t, { migrationFails = false, storageFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false, oss = false } = {}) {
   const f = fixture(t)
   assert.equal(f.upload().status, 0)
   if (oss) {
@@ -110,6 +111,9 @@ function startupFixture(t, { migrationFails = false, healthy = true, wrongScript
   const run = (program, args, options) => {
     commands.push([program === process.execPath ? 'node' : program, ...args])
     if (program === process.execPath) {
+      if (storageFails && args[0] === '--input-type=module') {
+        throw new Error('业务文件 OSS 配置不完整')
+      }
       if (args[0].endsWith('prepare-release.mjs')) {
         return execPreparation()
       }
@@ -152,12 +156,32 @@ function startupFixture(t, { migrationFails = false, healthy = true, wrongScript
   return { ...f, commands, start, processes: () => list, healthRequests: () => healthRequests }
 }
 
+test('missing server OSS credentials fail before stopping existing PM2 services', async (t) => {
+  const f = startupFixture(t, { storageFails: true, oss: true })
+  await assert.rejects(f.start(), /OSS 配置不完整/)
+  assert.equal(f.commands.some((command) => command[0] === 'pm2' && command[1] === 'stop'), false)
+  assert.equal(f.commands.some((command) => command.some((value) => value.endsWith('init-db.js'))), false)
+  assert.equal(f.processes().find((entry) => entry.name === 't-box-api').pm2_env.status, 'online')
+})
+
 test('OSS delivery starts only API and worker and removes an old local artifact process', async (t) => {
   const f = startupFixture(t, { oss: true })
   await f.start()
   assert.deepEqual(f.processes().map((entry) => entry.name).sort(), ['other-service', 't-box-api', 't-box-worker'])
   assert.ok(f.commands.some((args) => args.join(' ') === 'pm2 delete t-box-artifacts'))
   assert.ok(f.commands.some((args) => args.join(' ') === 'pm2 save'))
+})
+
+test('Actions release metadata starts OSS services without duplicated application settings in api.env', async (t) => {
+  const f = startupFixture(t)
+  const path = join(f.uploaded, 'release-info.json')
+  const info = JSON.parse(readFileSync(path, 'utf8'))
+  writeFileSync(path, JSON.stringify({ ...info, artifactOrigin: 'https://apps.example.invalid', artifactDelivery: 'oss', artifactImportOrigin: 'https://tboxos-app.oss-cn-hangzhou.aliyuncs.com', artifactImportPrefix: 'builds' }))
+  writeFileSync(join(f.server, 'shared/api.env'), 'MYSQL_PASSWORD=\'fixture-secret\'\n')
+  await f.start()
+  assert.deepEqual(f.processes().map((entry) => entry.name).sort(), ['other-service', 't-box-api', 't-box-worker'])
+  assert.ok(readFileSync(join(f.server, 'shared/api.env'), 'utf8').includes('fixture-secret'))
+  assert.ok(!readFileSync(join(f.server, 'shared/api.env'), 'utf8').includes('APP_ARTIFACT'))
 })
 
 test('effective settings cannot override the release OSS deployment contract', async (t) => {
@@ -177,6 +201,7 @@ test('server configuration must match the OSS origin and delivery recorded in th
   writeFileSync(infoPath, JSON.stringify({ ...info, artifactOrigin: 'https://other.example.invalid', artifactDelivery: 'oss' }))
   assert.notEqual(f.prepare().status, 0)
   writeFileSync(infoPath, JSON.stringify({ ...info, artifactOrigin: 'https://apps.example.invalid', artifactDelivery: 'oss' }))
+  writeFileSync(join(f.server, 'shared/api.env'), 'APP_ARTIFACT_ORIGIN=https://apps.example.invalid\nAPP_ARTIFACT_DELIVERY=local\n')
   assert.notEqual(f.prepare().status, 0)
   writeFileSync(join(f.server, 'shared/api.env'), 'APP_ARTIFACT_ORIGIN=https://apps.example.invalid\nAPP_ARTIFACT_DELIVERY=oss\n')
   assert.equal(f.prepare().status, 0)
@@ -224,6 +249,7 @@ test('upload verifies/extracts a new directory without modifying shared data or 
   const result = f.upload()
   assert.equal(result.status, 0, result.stderr + result.stdout)
   assert.ok(existsSync(join(f.uploaded, 'api/dist/server.js')))
+  assert.equal(existsSync(join(f.server, 'incoming', releaseId)), false)
   assert.equal(existsSync(join(f.uploaded, 'api/.env')), false)
   assert.equal(existsSync(join(f.server, 'shared/logs')), false)
   assert.match(readFileSync(join(f.server, 'shared/api.env'), 'utf8'), /fixture-secret/)
@@ -245,7 +271,7 @@ test('password authentication needs no key, preserves host verification and does
   assert.equal(result.status, 0, result.stderr + result.stdout)
   const text = readFileSync(f.env.UPLOAD_LOG, 'utf8')
   const calls = text.trim().split('\n').map((line) => JSON.parse(line))
-  assert.equal(calls.filter((call) => call.tool === 'sshpass').length, 3)
+  assert.equal(calls.filter((call) => call.tool === 'sshpass').length, 4)
   for (const call of calls.filter((call) => call.tool === 'ssh' || call.tool === 'scp')) {
     assert.ok(call.args.includes('BatchMode=no'))
     assert.ok(call.args.includes('PubkeyAuthentication=no'))
@@ -266,6 +292,7 @@ test('server checksum failure never publishes an extracted release', (t) => {
   const f = fixture(t)
   assert.notEqual(f.upload({ CORRUPT_REMOTE: '1' }).status, 0)
   assert.equal(existsSync(f.uploaded), false)
+  assert.equal(existsSync(join(f.server, 'incoming', releaseId)), false)
 })
 
 test('existing version directories are never overwritten', (t) => {

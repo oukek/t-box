@@ -20,11 +20,9 @@ bash "$script_dir/download-release.sh" "$release_id"
 export API_IMAGE="t-box-api:$release_id"
 compose() { docker compose --project-directory "$script_dir" --env-file "$script_dir/.env" -f "$script_dir/compose.yaml" "$@"; }
 compose config --quiet
+compose run --rm --no-deps --pull never api node --input-type=module -e 'import("./dist/config.js").then(({resourceStorageSettings})=>resourceStorageSettings())'
 # No application downtime until archive verification/import and config validation succeed.
 compose stop api
-if [[ "$mode" == '--init' ]]; then
-  compose --profile setup run --rm --no-deps --pull never prepare-apps
-fi
 if [[ "$mode" != '--rollback' ]]; then
   compose run --rm --no-deps --pull never api node dist/init-db.js
 fi
@@ -32,7 +30,7 @@ if [[ "$mode" == '--init' ]]; then
   compose run --rm --no-deps --pull never api node dist/admin/bootstrap.js
 fi
 # Rollback only switches code. The operator must establish database compatibility first.
-compose up -d --pull never --wait --wait-timeout 120 api artifacts
+compose up -d --pull never --wait --wait-timeout 120 --remove-orphans api
 temporary_env="$(mktemp "$script_dir/.env.XXXXXX")"
 awk -v image="$API_IMAGE" '
   /^[[:space:]]*API_IMAGE[[:space:]]*=/ { if (!written++) print "API_IMAGE=" image; next }

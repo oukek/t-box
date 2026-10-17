@@ -7,7 +7,7 @@ import { ApiError } from '@t-box/server-foundation/errors'
 export function registerChatSocket(
   app: FastifyInstance,
   service: ChatService,
-  origins: string[] = [],
+  origins: string[] = ['*'],
   registerExtensions?: (scope: FastifyInstance, allowed: Set<string>) => void,
 ) {
   const allowed = new Set([
@@ -34,7 +34,7 @@ export function registerChatSocket(
       {
         websocket: true,
         preValidation: async (request) => {
-          if (!request.headers.origin || !allowed.has(request.headers.origin)) {
+          if (!allowed.has('*') && (!request.headers.origin || !allowed.has(request.headers.origin))) {
             throw new ApiError(
               403,
               'ORIGIN_NOT_ALLOWED',

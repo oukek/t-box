@@ -236,7 +236,7 @@ try {
     '1000.00',
   )
   const live = await app.injectWS('/api/v1/ledgers/ws', {
-    headers: { origin: 'http://localhost:5173' },
+    headers: { origin: 'https://new-ledger.example.org' },
   })
   const liveEvents: any[] = []
   live.on('message', (raw) => liveEvents.push(JSON.parse(raw.toString())))

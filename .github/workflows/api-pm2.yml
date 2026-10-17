@@ -67,6 +67,10 @@ jobs:
           RELEASE_ID: ${{ steps.release.outputs.id }}
           APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
           APP_ARTIFACT_DELIVERY: oss
+          OSS_REGION: ${{ vars.OSS_REGION }}
+          WEB_OSS_BUCKET: ${{ vars.WEB_OSS_BUCKET || 'tboxos' }}
+          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
+          APP_OSS_PREFIX: ${{ vars.APP_OSS_PREFIX || 'builds' }}
         run: node scripts/pack-api-pm2.mjs "$RELEASE_ID" "$RUNNER_TEMP/pm2-package"
       - name: Retain downloadable release package
         uses: actions/upload-artifact@v7

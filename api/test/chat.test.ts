@@ -708,10 +708,11 @@ test('OpenAI stream without completion fails and does not execute partially stre
   await assert.rejects(provider.next(input), /提前结束/)
 })
 
-test('WebSocket endpoint accepts emulator origin and rejects arbitrary external websites', async (t) => {
+test('an explicit WebSocket origin list still accepts the emulator and rejects other websites', async (t) => {
   const { repo } = fakeBills()
   const app = createApp({
     bills: repo,
+    corsOrigins: ['http://10.0.2.2:5173'],
     health: async () => ({ mysql: 'up', redis: 'up' }),
   })
   t.after(() => app.close())

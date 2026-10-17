@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { verifyDeploymentLinks } from '../deploy/pm2/dependencies.mjs'
+import { applicationBootstrap } from './application-bootstrap.mjs'
 
 const workspace = fileURLToPath(new URL('../', import.meta.url))
 const [releaseId, outputArgument] = process.argv.slice(2)
@@ -12,6 +13,18 @@ if (!/^sha-[a-f0-9]{40}-run-[1-9]\d*-attempt-[1-9]\d*$/.test(releaseId || '') ||
   throw new Error('Usage: node scripts/pack-api-pm2.mjs RELEASE_ID NEW_OUTPUT_DIRECTORY')
 }
 const output = resolve(outputArgument)
+const importRegion = process.env.OSS_REGION
+const importBucket = process.env.APPS_OSS_BUCKET || 'tboxos-app'
+const resourceBucket = process.env.WEB_OSS_BUCKET || 'tboxos'
+const importPrefix = process.env.APP_OSS_PREFIX || 'builds'
+const delivery = process.env.APP_ARTIFACT_DELIVERY || 'oss'
+if (delivery !== 'oss') {
+  throw new Error('PM2 production packages require OSS delivery')
+}
+if ((importRegion && (!/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(importRegion) || !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(importBucket))) ||
+  !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(resourceBucket) || !/^[\w-]+(?:\/[\w-]+)*$/.test(importPrefix)) {
+  throw new Error('Invalid applications OSS bucket, region or build prefix')
+}
 try {
   await lstat(output)
   throw new Error('Output directory already exists')
@@ -45,6 +58,7 @@ try {
     }
     await cp(join(workspace, 'output/app-artifacts', appId, digest), join(payload, 'bootstrap/app-artifacts', appId, digest), { recursive: true })
   }
+  await writeFile(join(payload, 'api/bootstrap-applications.json'), JSON.stringify(await applicationBootstrap(join(payload, 'bootstrap/app-artifacts')), null, 2) + '\n')
   await mkdir(join(payload, 'scripts'))
   await mkdir(join(payload, 'control'))
   await cp(join(workspace, 'scripts/serve-application-artifacts.mjs'), join(payload, 'scripts/serve-application-artifacts.mjs'))
@@ -62,16 +76,19 @@ try {
     nodeVersion: process.versions.node,
     sourceCommit: process.env.GITHUB_SHA || releaseId.slice(4, 44),
     artifactOrigin: process.env.APP_ARTIFACT_ORIGIN || undefined,
-    artifactDelivery: process.env.APP_ARTIFACT_DELIVERY || undefined,
+    artifactDelivery: delivery,
+    artifactImportOrigin: importRegion ? `https://${importBucket}.oss-${importRegion}.aliyuncs.com` : undefined,
+    artifactImportPrefix: importPrefix,
+    resourceRegion: importRegion,
+    resourceBucket,
   }
   await writeFile(join(payload, 'release-info.json'), JSON.stringify(info, null, 2) + '\n')
+  await mkdir(packageOutput)
+  await cp(join(payload, 'bootstrap/app-artifacts'), join(packageOutput, 'bootstrap-artifacts'), { recursive: true })
+  await rm(join(payload, 'bootstrap'), { recursive: true })
   // Validate a separate copy so placeholder deployment settings never enter the archive.
   await cp(payload, validation, { recursive: true, verbatimSymlinks: true })
-  run('node', [join(validation, 'scripts/prepare-apps.mjs')], { env: { ...process.env, APP_ARTIFACT_ORIGIN: 'https://apps.example.invalid' } })
-  run('node', [join(validation, 'api/check-runtime.mjs')], { env: { ...process.env, NODE_ENV: 'production' } })
-  await mkdir(packageOutput)
-  // Public seeds are uploaded to OSS before this exact backend release is started.
-  await cp(join(payload, 'bootstrap/app-artifacts'), join(packageOutput, 'bootstrap-artifacts'), { recursive: true })
+  run('node', [join(validation, 'api/check-runtime.mjs')], { env: { ...process.env, NODE_ENV: 'production', APP_ARTIFACT_ORIGIN: 'https://apps.example.invalid', APP_ARTIFACT_DELIVERY: 'oss' } })
   const archive = join(packageOutput, 'runtime.tar.gz')
   run('tar', ['-czf', archive, '-C', payload, '.'])
   const hash = createHash('sha256')

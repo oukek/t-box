@@ -13,10 +13,12 @@ import {
 import { createApp } from '../src/app.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { PlatformService } from '../src/platform/service.js'
+import { fixtureOss } from './oss-fixture.js'
 
 const source = createDataSource()
 await source.initialize()
-const p = new PlatformService(source)
+const oss = fixtureOss()
+const p = new PlatformService(source, undefined, undefined, undefined, undefined, oss.resources(source))
 const app = createApp({
   logger: { level: 'error' },
   platform: p,
@@ -832,6 +834,7 @@ try {
   )
   resources.push({ id: binaryResource.id, userId: owner.user.id })
   assert.equal(binaryResource.mimeType, 'application/octet-stream')
+  assert.deepEqual(oss.objects.get(binaryResource.path), binary)
   assert.equal(
     (
       await call(
@@ -870,6 +873,11 @@ try {
     200,
     categoryUploadKey,
   )
+  const [storedIcon] = await source.query('SELECT object_path,storage_backend,content FROM ledger_category_icons WHERE id=?', [uploadedIcon.id])
+  assert.equal(storedIcon.content, null)
+  assert.equal(storedIcon.object_path, `uploads/resources/${uploadedIcon.id}`)
+  assert.equal(storedIcon.storage_backend, oss.registry.activeId)
+  assert.equal(oss.objects.get(storedIcon.object_path)?.toString('base64'), png)
   assert.equal(
     (
       await call(

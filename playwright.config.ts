@@ -26,7 +26,7 @@ export default defineConfig({
     {
       command: 'pnpm --filter @t-box/api start',
       url: `http://127.0.0.1:${apiPort}/api/v1/health`,
-      env: { TASK_WORKER_MODE: 'disabled', HOST: '127.0.0.1', PORT: apiPort, ADMIN_ORIGINS: `http://127.0.0.1:${adminPort}`, CORS_ORIGINS: `http://127.0.0.1:${appPort}` },
+      env: { TASK_WORKER_MODE: 'disabled', HOST: '127.0.0.1', PORT: apiPort, ADMIN_ORIGINS: '*', CORS_ORIGINS: '*' },
       reuseExistingServer: false,
       gracefulShutdown: { signal: 'SIGTERM', timeout: 15_000 },
     },

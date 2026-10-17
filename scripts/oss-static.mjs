@@ -86,7 +86,7 @@ export async function publishFiles(files, settings, {
       const suffix = name.slice(name.lastIndexOf('-') + 1)
       const hashed = path.startsWith('assets/') && name.includes('-') && suffix.length >= 8 && /^[\w-]+$/.test(suffix)
       const cache = immutable || hashed ? 'public,max-age=31536000,immutable' : 'no-cache'
-      await run(['cp', source, `oss://${settings.bucket}/${prefix}${path}`, '--force', '--content-type', contentType(path), '--cache-control', cache], settings.environment)
+      await run(['cp', source, `oss://${settings.bucket}/${prefix}${path}`, '--force', '--acl', 'public-read', '--content-type', contentType(path), '--cache-control', cache], settings.environment)
       const url = new URL(`${settings.origin}/${prefix}${path}`)
       url.searchParams.set('tbox_sha256', sha256(bytes))
       const response = await request(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) })

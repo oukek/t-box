@@ -34,6 +34,7 @@ function storage({ corrupt = false, missing = false } = {}) {
         assert.equal(env.APP_IMPORT_TOKEN, undefined)
         assert.equal(env.PM2_SSH_PASSWORD, undefined)
         calls.push(args)
+        assert.equal(args[args.indexOf('--acl') + 1], 'public-read')
         objects.set(new URL(args[2]).pathname, await readFile(args[1]))
       },
       request: async (url, options) => {

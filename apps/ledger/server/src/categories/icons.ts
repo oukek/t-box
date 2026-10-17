@@ -1,7 +1,7 @@
 import type { EntityManager } from 'typeorm'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { parseId } from '../validation.js'
-// MySQL BLOB stores at most 65,535 bytes.
+// Preserve the existing thumbnail limit, including compatibility with legacy MySQL BLOBs.
 export const CATEGORY_ICON_MAX_BYTES = 64 * 1024 - 1
 /** Only bounded raster thumbnails are served inline. Never accept SVG or arbitrary URLs. */
 export function categoryIconBytes(value: unknown): Buffer {

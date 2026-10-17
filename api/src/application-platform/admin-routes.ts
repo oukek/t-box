@@ -23,7 +23,7 @@ export function registerApplicationPublishing(
   }))
   app.get<{ Params: { id: string } }>(
     '/applications/:id/artifacts',
-    async (r) => ({ data: await service.artifacts.list(appId(r.params.id)) }),
+    async (r) => ({ data: await service.artifactList(appId(r.params.id)) }),
   )
   app.post<{ Params: { id: string } }>(
     '/applications/:id/artifacts',

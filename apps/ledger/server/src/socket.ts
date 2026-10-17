@@ -15,7 +15,7 @@ export function registerLedgerSocket(
     {
       websocket: true,
       preValidation: async (req) => {
-        if (!req.headers.origin || !allowed.has(req.headers.origin)) {
+        if (!allowed.has('*') && (!req.headers.origin || !allowed.has(req.headers.origin))) {
           throw new ApiError(403, 'ORIGIN_NOT_ALLOWED', '此网页来源不允许连接')
         }
         if (scope.websocketServer.clients.size >= 200) {

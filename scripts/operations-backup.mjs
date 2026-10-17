@@ -9,6 +9,39 @@ import { fileURLToPath } from 'node:url'
 
 const magic = Buffer.from('TBOXBK01')
 const privateFolders = ['secrets', 'storage', 'app-artifacts', 'app-deployments']
+
+/** Only a verified encrypted archive may be published to the public business bucket. */
+export async function publishBackup(archive, destination, settings, client) {
+  const url = new URL(destination)
+  if (url.protocol !== 'oss:' || url.hostname !== settings.bucket || url.port || url.username || url.password || url.search || url.hash || !/^\/uploads\/resources\/backups\/[\w.-]+\.tbox$/.test(url.pathname)) {
+    throw new Error('Backup destination must be oss://<business-bucket>/uploads/resources/backups/<unique-name>.tbox')
+  }
+  const handle = await open(archive, 'r')
+  try {
+    const header = Buffer.alloc(magic.length)
+    await handle.read(header, 0, header.length, 0)
+    if (!header.equals(magic)) {
+      throw new Error('Refusing to upload an unencrypted backup')
+    }
+  } finally {
+    await handle.close()
+  }
+  const md5 = createHash('md5')
+  for await (const bytes of createReadStream(archive)) {
+    md5.update(bytes)
+  }
+  try {
+    await client.put(url.pathname.slice(1), archive, { mime: 'application/octet-stream', headers: {
+      'x-oss-object-acl': 'public-read',
+      'x-oss-forbid-overwrite': 'true',
+      'Content-MD5': md5.digest('base64'),
+      'Content-Disposition': 'attachment',
+      'Cache-Control': 'no-store',
+    } })
+  } catch {
+    throw new Error('Encrypted OSS backup upload failed; no local archive is retained')
+  }
+}
 async function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options })
@@ -175,16 +208,21 @@ async function createBackup(releaseArgument, outputArgument, keyPath, quiesced) 
   }
   const release = resolve(releaseArgument)
   const shared = join(dirname(dirname(release)), 'shared')
-  const output = resolve(outputArgument)
+  const remote = outputArgument.startsWith('oss://')
+  const output = remote ? undefined : resolve(outputArgument)
   const info = JSON.parse(await readFile(join(release, 'release-info.json'), 'utf8'))
   if (basename(dirname(release)) !== 'releases' || basename(release) !== info.releaseId || info.format !== 'tbox-pm2-v1') {
     throw new Error('Expected an unpacked PM2 release under deployment-root/releases/<releaseId>')
   }
-  if (!relative(shared, output).startsWith('..') || !relative(shared, resolve(keyPath)).startsWith('..')) {
+  if (!remote && (info.artifactDelivery === 'oss' || process.env.NODE_ENV === 'production')) {
+    throw new Error('Production backup output must be an OSS destination; server files are temporary only')
+  }
+  if ((output && !relative(shared, output).startsWith('..')) || !relative(shared, resolve(keyPath)).startsWith('..')) {
     throw new Error('Store backups and backup keys outside shared data')
   }
   const { createRequire } = await import('node:module')
-  const { parse } = createRequire(join(release, 'api/package.json'))('dotenv')
+  const require = createRequire(join(release, 'api/package.json'))
+  const { parse } = require('dotenv')
   const env = parse(await readFile(join(shared, 'api.env')))
   if (!/^\w+$/.test(env.MYSQL_DATABASE || '')) {
     throw new Error('Invalid MYSQL_DATABASE')
@@ -193,6 +231,7 @@ async function createBackup(releaseArgument, outputArgument, keyPath, quiesced) 
   const temp = await mkdtemp(join(tmpdir(), 'tbox-backup-create-'))
   await chmod(temp, 0o700)
   try {
+    const archive = output || join(temp, 'backup.tbox')
     const payload = join(temp, 'payload')
     await mkdir(join(payload, 'shared'), { recursive: true, mode: 0o700 })
     // Credentials live only in a private temporary option file, never process argv.
@@ -207,13 +246,32 @@ async function createBackup(releaseArgument, outputArgument, keyPath, quiesced) 
     }
     const { cp } = await import('node:fs/promises')
     for (const folder of privateFolders) {
-      await cp(join(shared, folder), join(payload, 'shared', folder), { recursive: true, dereference: false, verbatimSymlinks: true })
+      try {
+        await cp(join(shared, folder), join(payload, 'shared', folder), { recursive: true, dereference: false, verbatimSymlinks: true })
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          throw error
+        }
+      }
     }
     await copyFile(join(shared, 'api.env'), join(payload, 'shared/api.env'))
     await copyFile(join(release, 'release-info.json'), join(payload, 'release-info.json'))
-    await archiveBackup(payload, output, keyPath, { releaseId: info.releaseId, database: env.MYSQL_DATABASE, consistency: 'operator-quiesced' })
-    await stageBackup(output, keyPath)
-    process.stdout.write('Encrypted backup created and verified. Keep its key separately.\n')
+    await archiveBackup(payload, archive, keyPath, { releaseId: info.releaseId, database: env.MYSQL_DATABASE, consistency: 'operator-quiesced' })
+    await stageBackup(archive, keyPath)
+    if (remote) {
+      const settings = { ...env, ...process.env }
+      const region = (settings.OSS_REGION || info.resourceRegion || '').replace(/^oss-/, '')
+      const bucket = settings.OSS_RESOURCE_BUCKET || info.resourceBucket || 'tboxos'
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(region) || !settings.OSS_ACCESS_KEY_ID || !settings.OSS_ACCESS_KEY_SECRET) {
+        throw new Error('Configure server OSS credentials for the encrypted backup')
+      }
+      const OSS = require('ali-oss')
+      const client = new OSS({ region: `oss-${region}`, bucket, secure: true, authorizationV4: true, accessKeyId: settings.OSS_ACCESS_KEY_ID, accessKeySecret: settings.OSS_ACCESS_KEY_SECRET, stsToken: settings.OSS_SESSION_TOKEN || undefined })
+      await publishBackup(archive, outputArgument, { bucket }, client)
+      process.stdout.write('Encrypted backup verified and uploaded to OSS. Temporary archives removed; keep the encryption key separately.\n')
+    } else {
+      process.stdout.write('Encrypted backup created and verified. Keep its key separately.\n')
+    }
   } finally {
     await rm(temp, { recursive: true, force: true })
   }
@@ -227,6 +285,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } else if (command === 'stage' && args.length === 3) {
     console.log(await stageBackup(...args))
   } else {
-    throw new Error('Usage: operations-backup.mjs create RELEASE OUTPUT.tbox KEY --quiesced | verify BACKUP KEY | stage BACKUP KEY NEW_DIRECTORY')
+    throw new Error('Usage: operations-backup.mjs create RELEASE OSS_DESTINATION KEY --quiesced | verify BACKUP KEY | stage BACKUP KEY NEW_DIRECTORY')
   }
 }

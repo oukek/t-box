@@ -5,7 +5,7 @@ import type {
   ProviderInput,
   ProviderTurn,
 } from '../src/chat/provider.js'
-/** Real database, private files and a local fake Images API. No paid model calls. */
+/** Real database, public OSS fixture and a local fake Images API. No paid model calls. */
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -15,6 +15,7 @@ import { ApplicationChatService as ChatService } from '../src/bootstrap/chat.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { PlatformService } from '../src/platform/service.js'
 import { cleanupUsers } from './fixtures.js'
+import { fixtureOss } from './oss-fixture.js'
 
 const source = await createDataSource().initialize()
 const users: string[] = []
@@ -65,7 +66,8 @@ const configuration = {
     }
   },
 } as unknown as ConfigurationService
-const p = new PlatformService(source, configuration)
+const oss = fixtureOss()
+const p = new PlatformService(source, configuration, undefined, undefined, undefined, oss.resources(source))
 const app = createApp({
   platform: p,
   bills: createBillRepository(source),
@@ -138,6 +140,22 @@ try {
   assert.equal(upload.statusCode, 201, upload.body)
   const image = upload.json().data
   assert.equal(image.mimeType, 'image/png')
+  assert.equal(image.path, `uploads/resources/${image.id}`)
+  assert.deepEqual(oss.objects.get(image.path), png)
+  const [stored] = await source.query('SELECT object_path,storage_backend FROM resources WHERE id=?', [image.id])
+  assert.equal(stored.object_path, image.path)
+  assert.equal(stored.storage_backend, oss.registry.activeId)
+  const storage = await app.inject({ method: 'GET', url: '/api/v1/resources/storage' })
+  assert.equal(storage.statusCode, 200, 'The public OSS origin requires no session or download authorization')
+  assert.deepEqual(storage.json().data, { origin: 'https://tboxos.oss-cn-hangzhou.aliyuncs.com' })
+  assert.ok(!JSON.stringify(image).includes('aliyuncs.com'), 'Resource metadata and durable history keep only relative paths')
+  const metadata = await app.inject({ method: 'GET', url: `/api/v1/resources/${image.id}`, headers: { authorization: `Bearer ${first.token}` } })
+  assert.equal(metadata.statusCode, 200)
+  assert.equal(metadata.json().data.path, image.path)
+  assert.equal((await app.inject({ method: 'GET', url: `/api/v1/resources/${image.id}`, headers: { authorization: `Bearer ${second.token}` } })).statusCode, 404)
+  assert.equal((await app.inject({ method: 'GET', url: `/api/v1/resources/${image.id}` })).statusCode, 401)
+  assert.equal((await app.inject({ method: 'GET', url: `/api/v1/resources/${image.id}/access` })).statusCode, 404, 'Download signing was removed')
+  assert.equal(oss.metadata.get(image.path)?.mime, 'image/png')
   assert.equal(
     (
       await app.inject({
@@ -178,6 +196,12 @@ try {
     Buffer.from('附件文本'),
   )
   assert.equal(plain.mimeType, 'text/plain')
+  const existingObjects = oss.objects.size
+  oss.failWrites(true)
+  await assert.rejects(p.resources.create(actor, 'failed.txt', Buffer.from('must not persist')), { code: 'RESOURCE_STORAGE_UNAVAILABLE' })
+  oss.failWrites(false)
+  assert.equal(oss.objects.size, existingObjects)
+  assert.equal((await p.resources.quota(actor)).files, 2)
   await assert.rejects(
     p.resources.create(actor, 'bad.exe', Buffer.from([0, 1, 2, 3])),
     /支持/,
@@ -194,6 +218,7 @@ try {
     p.resources.create(actor, 'quota.txt', Buffer.from('x')),
     /资源空间已满/,
   )
+  assert.equal(oss.objects.size, existingObjects, 'A rolled-back quota check cleans up its uploaded OSS object')
   await source.query('UPDATE resources SET size=? WHERE id=?', [
     plain.size,
     plain.id,
@@ -203,6 +228,7 @@ try {
     new AbortController().signal,
   )({ prompt: '画一张图片' })
   assert.equal(generated.resources[0]!.source, 'generated')
+  assert.deepEqual(oss.objects.get(generated.resources[0]!.path!), png)
   const edited = await p.images.forRun(actor, new AbortController().signal)(
     { prompt: '修改颜色', resourceIds: [image.id] },
     true,
@@ -549,13 +575,15 @@ try {
     await write.service.close()
   }
   await p.resources.remove(actor, image.id)
+  assert.equal(oss.objects.has(image.path), false)
+  assert.equal((await app.inject({ method: 'GET', url: `/api/v1/resources/${image.id}`, headers: { authorization: `Bearer ${first.token}` } })).statusCode, 404)
   await assert.rejects(p.resources.get(actor, image.id), /不存在/)
   assert.equal(
     (await p.resources.list(actor, { source: 'generated' })).meta.total,
     3,
   )
   console.log(
-    'PASS: private uploads/downloads, MIME/quota boundaries, local Image API generate/edit, attachment model input, durable history/dedup/deletion, scoped 10-minute grants, forged ACK, password isolation and history ACL.',
+    'PASS: public OSS uploads and unsigned reads, scoped metadata/API downloads, MIME/quota boundaries, local Image API generate/edit, attachment model input, durable history/dedup/deletion, scoped 10-minute grants, forged ACK, password isolation and history ACL.',
   )
 } finally {
   for (const service of services) {

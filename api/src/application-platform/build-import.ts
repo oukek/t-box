@@ -3,6 +3,7 @@ import type { ApplicationPublishing, BuildImport } from './publishing.js'
 import { createHash } from 'node:crypto'
 import { validId } from '@t-box/app-contracts'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { applicationSettings } from '../config.js'
 import { validVersion } from './publishing.js'
 
 export const bundleLimit = 30 * 1024 * 1024
@@ -94,8 +95,8 @@ export class ApplicationBuildImports {
   constructor(
     private readonly source: DataSource,
     private readonly publishing: ApplicationPublishing,
-    private readonly origin = process.env.APP_IMPORT_OSS_ORIGIN || '',
-    private readonly prefix = process.env.APP_IMPORT_OSS_PREFIX || 'builds',
+    private readonly origin = applicationSettings().importOrigin,
+    private readonly prefix = applicationSettings().importPrefix,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 

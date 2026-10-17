@@ -23,18 +23,22 @@ const require = createRequire(join(release, 'api/package.json'))
 const { parse } = require('dotenv')
 // Read an existing private file. Do not invent credentials or overwrite operator configuration.
 const env = parse(await readFile(envFile))
-const origin = new URL(env.APP_ARTIFACT_ORIGIN || '')
+const origin = new URL(env.APP_ARTIFACT_ORIGIN || info.artifactOrigin || '')
 if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) {
-  throw new Error('Configure a separate HTTPS APP_ARTIFACT_ORIGIN in shared/api.env')
+  throw new Error('A separate HTTPS application origin is required in the Actions release or shared/api.env')
 }
 if ((info.artifactOrigin && info.artifactOrigin !== origin.origin) ||
-  (info.artifactDelivery && info.artifactDelivery !== (env.APP_ARTIFACT_DELIVERY || 'local'))) {
+  (info.artifactDelivery && info.artifactDelivery !== (env.APP_ARTIFACT_DELIVERY || info.artifactDelivery || 'local'))) {
   throw new Error('shared/api.env artifact origin/delivery differs from the OSS deployment verified by Actions')
 }
-for (const folder of ['secrets', 'storage', 'app-artifacts', 'app-deployments', 'logs']) {
+const delivery = env.APP_ARTIFACT_DELIVERY || info.artifactDelivery || 'local'
+const folders = delivery === 'oss' ? ['secrets', 'logs'] : ['secrets', 'storage', 'app-artifacts', 'app-deployments', 'logs']
+for (const folder of folders) {
   await mkdir(join(shared, folder), { recursive: true, mode: 0o700 })
 }
-await mkdir(join(release, 'output'), { recursive: true })
+if (delivery !== 'oss') {
+  await mkdir(join(release, 'output'), { recursive: true })
+}
 async function link(path, target) {
   try {
     const stat = await lstat(path)
@@ -50,11 +54,18 @@ async function link(path, target) {
 }
 await link(join(release, 'api/.env'), envFile)
 await link(join(release, 'api/.secrets'), join(shared, 'secrets'))
-await link(join(release, 'api/.storage'), join(shared, 'storage'))
-await link(join(release, 'output/app-artifacts'), join(shared, 'app-artifacts'))
-await link(join(release, 'apps'), join(shared, 'app-deployments'))
-execFileSync(process.execPath, [join(release, 'scripts/prepare-apps.mjs')], {
-  env: { ...process.env, APP_ARTIFACT_ORIGIN: origin.origin },
-  stdio: 'inherit',
-})
+if (delivery === 'oss') {
+  const bootstrap = JSON.parse(await readFile(join(release, 'api/bootstrap-applications.json'), 'utf8'))
+  if (!bootstrap || Array.isArray(bootstrap) || !Object.keys(bootstrap).length || Object.entries(bootstrap).some(([appId, digest]) => !/^[a-z][a-z0-9_-]{0,63}$/.test(appId) || !/^[a-f0-9]{64}$/.test(digest))) {
+    throw new Error('Invalid OSS bootstrap configuration')
+  }
+} else {
+  await link(join(release, 'api/.storage'), join(shared, 'storage'))
+  await link(join(release, 'output/app-artifacts'), join(shared, 'app-artifacts'))
+  await link(join(release, 'apps'), join(shared, 'app-deployments'))
+  execFileSync(process.execPath, [join(release, 'scripts/prepare-apps.mjs')], {
+    env: { ...process.env, APP_ARTIFACT_ORIGIN: origin.origin },
+    stdio: 'inherit',
+  })
+}
 process.stdout.write('Persistent paths prepared. Database migration and PM2 startup remain manual.\n')

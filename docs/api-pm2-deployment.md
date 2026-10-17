@@ -1,6 +1,6 @@
 # 手动触发、自动上传与 PM2 启动
 
-当前采用 OSS 主前端、后台和子应用静态站点，首次操作以 [OSS + PM2 部署手册](first-deployment.md) 为准。`APP_ARTIFACT_DELIVERY=oss` 时仅运行 API 和恢复 worker；下面提到的第三个本地产物服务适用于兼容的 `local` 模式。
+当前采用 OSS 主前端、后台和子应用静态站点，首次操作以 [OSS + PM2 部署手册](first-deployment.md) 为准。Actions 自动选择 OSS 模式，仅运行 API 和恢复 worker；下面提到的第三个本地产物服务适用于兼容的 `local` 模式。
 
 所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。新增 API PM2 package and upload，现有 Quality 和 API Docker OSS 保留为独立的手动工作流。
 
@@ -62,6 +62,8 @@ sha-<40位SHA>-run-<编号>-attempt-<次数>
 
 计算器、记账、日历和时间的独立 Web 产物作为初始化种子额外构建，输出 bootstrap-artifacts 并在 SSH 上传前发布至 OSS。发布包记录此来源和分发模式，服务器配置不一致时会在停止旧服务前拒绝启动。已有应用绑定和已发布版本不会被种子覆盖。主前端和后台使用 Web OSS deployment 独立部署。
 
+业务文件使用 `tboxos/uploads/resources/`，运行中的 API / worker 需要服务器 `shared/api.env` 内的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`；`OSS_REGION` 和业务 Bucket 从 Actions 发布包读取。GitHub 上传凭据不会自动进入服务器。账号授权及 Bucket 跨域设置按 [首次部署](first-deployment.md) 操作。PM2 在停止旧服务前校验业务文件配置完整性。
+
 上传时核对本地 SHA-256、远端 SHA-256 和 Linux 架构。原有同名版本目录会拒绝覆盖。ARM 服务器需先改为同架构的 Linux 构建 runner，不能把当前 x64 产物直接用于 ARM。本机 macOS 打包仅适合检查流程，不能直接作为 Linux 发布包上传。
 
 ## 服务器目录
@@ -79,7 +81,6 @@ sha-<40位SHA>-run-<编号>-attempt-<次数>
       package.json
       check-runtime.mjs
     scripts/
-    bootstrap/app-artifacts/
     control/
       ecosystem.config.cjs
       prepare-release.mjs
@@ -89,13 +90,10 @@ sha-<40位SHA>-run-<编号>-attempt-<次数>
   shared/                       # 由你手动准备
     api.env
     secrets/
-    storage/
-    app-artifacts/
-    app-deployments/
     logs/
 ```
 
-接收文件和解压目录默认私有，上传与运行最好使用同一账户。incoming 用于保留归档，releases 是解压的版本代码。上传中断可能留下 incoming 或隐藏的 staging 目录，运维核对后清理即可；工作流不清理正在运行的版本或 shared。
+接收文件和解压目录默认私有，上传与运行最好使用同一账户。incoming 仅临时接收归档，完成解压后清理；失败时也清理本次 incoming / staging，不保留安装压缩包。SSH 断开导致清理失败时工作流会报错，恢复后只清理提示的本次临时目录。releases 保留后端运行代码与可回滚版本，不含子应用静态文件。
 
 ## 首次配置与启动入口
 
@@ -111,11 +109,11 @@ cp "$release/control/api.env.example" shared/api.env
 chmod 600 shared/api.env
 ```
 
-编辑 shared/api.env，配置服务器 MySQL、Redis、前端/后台 CORS、反向代理地址，以及与宿主不同源的 APP_ARTIFACT_ORIGIN。建议宝塔预建数据库和专用用户。不要在升级时重复 cp 覆盖已有 api.env。
+编辑 shared/api.env，填写服务器 MySQL、业务文件 OSS AccessKey 和可选 Redis。Actions 包自动携带应用域名、OSS 模式、构建包桶地址与目录；跨域默认开放，默认信任本机 Nginx，PM2 自动设置独立恢复 worker。高级覆盖项见 [API 环境配置](api-environment.md)。源码部署没有 Actions 元信息时仍需提供独立应用域名。建议宝塔预建数据库和专用用户。不要在升级时重复 cp 覆盖已有 api.env。
 
-**迁移已有环境时**，在启动前恢复数据库，同时将旧 api/.secrets、api/.storage、output/app-artifacts、apps/<id>/deployment.local.json 分别迁移到 shared/secrets、shared/storage、shared/app-artifacts、shared/app-deployments/<id>/deployment.local.json。确保 PM2 运行账户有访问权限。必须保留 provider.key，不能让新环境生成另一把钥匙去解密旧数据库。
+**迁移已有环境时**，先恢复数据库与原 provider.key 到 shared/secrets，保持密钥与数据库配套。旧本地资源按 [迁移说明](api-environment.md) 上传并校验 OSS 后删除。不要继续挂载本地静态产物目录；确认历史版本在 OSS 齐全后再清理旧副本。
 
-配置完成后，通过发布包中的统一脚本准备持久路径、执行迁移并启动三个单实例进程：
+配置完成后，通过统一脚本准备运行配置、执行迁移并启动 API / worker 两个单实例进程：
 
 ```sh
 node "$release/control/start-release.mjs" --init-admin
@@ -123,21 +121,21 @@ pm2 status
 pm2 logs t-box-api --lines 100
 ```
 
-`--init-admin` 只在首次安装时使用。脚本先检查运行版本与配置、建立 api/.env、api/.secrets、api/.storage、应用发布目录等链接，创建共享日志目录并初始化缺失的应用种子；已有绑定、密钥与文件保留。之后停止旧 worker 和 API，运行 `api/dist/init-db.js`，按选项运行管理员初始化，再删除旧的三个 PM2 记录并用新版本的绝对路径启动。
+`--init-admin` 只在首次安装时使用。脚本先检查运行配置、OSS 和初始应用摘要，建立 api/.env、api/.secrets 链接及必要日志目录，不创建本地业务文件或静态产物目录。之后停止旧 worker 和 API，运行 `api/dist/init-db.js`，按选项运行管理员初始化，再用新版本的绝对路径启动 API / worker，并移除旧本地产物服务。
 
 初始管理员凭据保存在 shared/secrets/bootstrap-admin.txt；已有管理员不会重置。首次登录修改密码后删除该文件。
 
-启动成功要求 API 健康端点的 MySQL 正常、已配置 Redis 时 Redis 也正常，并且三个进程连续三次检查均 online、PID 稳定、运行路径属于新版本。仅 HTTP 200 或 PM2 显示短暂 online 不算成功。默认最多检查 60 次，每次 HTTP 请求最多 3 秒、检查间隔 1 秒。通过后更新 `current`，保留原链接为 `previous`，并运行 `pm2 save`。使用 root `.pm2-deploy.lock` 防止并发迁移；异常中断留下锁时，先核对其中 owner.json 的进程与部署状态，再清理确认失效的锁。
+启动成功要求 API 健康端点的 MySQL 正常、已配置 Redis 时 Redis 也正常，并且 API / worker 两个进程连续三次检查均 online、PID 稳定、运行路径属于新版本。仅 HTTP 200 或 PM2 显示短暂 online 不算成功。默认最多检查 60 次，每次 HTTP 请求最多 3 秒、检查间隔 1 秒。通过后更新 `current`，保留原链接为 `previous`，并运行 `pm2 save`。使用 root `.pm2-deploy.lock` 防止并发迁移；异常中断留下锁时，先核对其中 owner.json 的进程与部署状态，再清理确认失效的锁。
 
 ecosystem 使用绝对版本路径、fork 模式、单实例、关闭 watch，退出等待为 90 秒。不要直接开启 cluster 多实例：当前会话订阅、账本通知和部分限流仍需处理跨实例状态。
 
-应用产物服务默认监听 127.0.0.1:6176；需要更改时，在 shared/api.env 设置 ARTIFACT_PORT，Nginx upstream 也同步改。API 的 HOST/PORT 由 shared/api.env 配置。`prepare-release.mjs` 仍可单独执行，它只准备持久路径，不启动服务或迁移。
+不再启动本地应用产物服务，也不需要 ARTIFACT_PORT。API 的 HOST/PORT 可在 shared/api.env 覆盖。`prepare-release.mjs` 仍可单独执行，它只准备运行配置与必要目录，不启动服务或迁移。
 
 配置开机恢复时，以实际运行账户执行 pm2 startup，再按照其提示执行 systemd 安装命令，之后 pm2 save。升级 Node 后需重新检查 startup 的 Node 路径。
 
 ## 宝塔站点与手动升级
 
-宝塔宿主机 Nginx 将前端和后台的 /api/ 转发至 API，保留完整路径、开启 WebSocket Upgrade、关闭响应缓冲。可参考 deploy/api/nginx-api.conf.example。apps.example.com 独立 HTTPS 站点代理应用产物服务，参考 deploy/api/nginx-artifacts.conf.example。不要将整个项目根目录、shared、incoming 配成公开站点。
+宝塔宿主机 Nginx 只为 API 域名提供反向代理，保留 /api/、WebSocket Upgrade 并关闭响应缓冲，参考 deploy/api/nginx-api.conf.example。主站、后台、apps.example.com 均直接绑定各自 OSS Bucket；不再代理本地应用产物服务。不要将项目根目录、shared、incoming 配成公开站点。
 
 以后运行新的手动 workflow 默认完成上传和启动。若选择只上传，做好 MySQL/shared 备份后可以在服务器运行：
 

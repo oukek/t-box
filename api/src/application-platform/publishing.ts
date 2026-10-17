@@ -10,6 +10,7 @@ import {
 } from '@t-box/app-contracts'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
+import { applicationBootstrapArtifacts, applicationSettings } from '../config.js'
 import { ApplicationArtifacts } from './artifacts.js'
 
 const hash = (v: unknown) =>
@@ -39,12 +40,12 @@ export interface BuildImport {
 }
 export class ApplicationPublishing {
   readonly origin: string
-  readonly delivery = process.env.APP_ARTIFACT_DELIVERY || 'local'
+  readonly delivery = applicationSettings().delivery
   constructor(
     private readonly source: DataSource,
     private readonly platform: ApplicationPlatform,
     readonly artifacts = new ApplicationArtifacts(),
-    origin = process.env.APP_ARTIFACT_ORIGIN || 'http://localhost:6176',
+    origin = applicationSettings().origin,
   ) {
     const url = new URL(origin)
     if (
@@ -63,6 +64,19 @@ export class ApplicationPublishing {
       )
     }
     this.origin = url.origin
+  }
+
+  async artifactList(appId: string) {
+    if (!this.artifacts.remote) {
+      return this.artifacts.list(appId)
+    }
+    const rows = await this.source.query('SELECT definition FROM application_releases WHERE app_id=?', [appId])
+    const digests = rows.flatMap((row: { definition: AppRelease | string }) => {
+      const release = json<AppRelease>(row.definition)
+      return release.runtime.type === 'web' ? [release.runtime.integrity.slice(7)] : []
+    })
+    const bootstrap = applicationBootstrapArtifacts()[appId]
+    return this.artifacts.list(appId, bootstrap ? [...digests, bootstrap] : digests)
   }
 
   private async audit(

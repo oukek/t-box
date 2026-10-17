@@ -31,6 +31,8 @@ export async function startRelease({
   const envFile = join(shared, 'api.env')
   const { parse } = createRequire(join(api, 'package.json'))('dotenv')
   const settings = { ...parse(await readFile(envFile)), ...process.env }
+  settings.APP_ARTIFACT_ORIGIN ||= info.artifactOrigin
+  settings.APP_ARTIFACT_DELIVERY ||= info.artifactDelivery
   const delivery = settings.APP_ARTIFACT_DELIVERY || 'local'
   if (!['local', 'oss'].includes(delivery)) {
     throw new Error('APP_ARTIFACT_DELIVERY must be local or oss')
@@ -90,6 +92,7 @@ export async function startRelease({
     command('pm2', ['--version'], { stdio: 'ignore' })
     command(process.execPath, [join(release, 'control/prepare-release.mjs')])
     command(process.execPath, [join(api, 'check-runtime.mjs')])
+    command(process.execPath, ['--input-type=module', '-e', 'import(\'./dist/config.js\').then(({ resourceStorageSettings }) => resourceStorageSettings())'], { cwd: api })
     const existing = processes().filter((entry) => names.includes(entry.name))
     stopped = true
     // Stop the recovery worker before changing the database, as well as the HTTP API.

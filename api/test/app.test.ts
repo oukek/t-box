@@ -39,6 +39,23 @@ function setup(overrides: Partial<BillRepository> = {}) {
   return { app, rows }
 }
 
+test('default HTTP and chat connections accept arbitrary origins without enabling ordinary API cookies', async (t) => {
+  const { app } = setup()
+  t.after(() => app.close())
+  const origin = 'https://new-website.example.org'
+  const preflight = await app.inject({ method: 'OPTIONS', url: '/api/v1/bills', headers: { 'origin': origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'authorization,content-type' } })
+  assert.equal(preflight.statusCode, 204)
+  assert.equal(preflight.headers['access-control-allow-origin'], '*')
+  assert.equal(preflight.headers['access-control-allow-credentials'], undefined)
+  const response = await app.inject({ url: '/api/v1/health', headers: { origin } })
+  assert.equal(response.headers['access-control-allow-origin'], '*')
+  const socket = await app.injectWS('/api/v1/chat/ws', { headers: { origin } })
+  const received = new Promise<string>((resolve) => socket.once('message', (data) => resolve(data.toString())))
+  socket.send(JSON.stringify({ type: 'session.open' }))
+  assert.equal(JSON.parse(await received).type, 'session.ready')
+  socket.terminate()
+})
+
 test('REST lifecycle creates, reads, updates, deletes, and reports absent bills', async (t) => {
   const { app } = setup()
   t.after(() => app.close())

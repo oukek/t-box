@@ -51,6 +51,17 @@ export function registerResources(app: FastifyInstance, p: PlatformService) {
       reply.header('Cache-Control', 'no-store')
       return { data: await p.resources.quota(await p.identity.authenticate(bearer(req.headers.authorization))) }
     })
+    routes.get('/api/v1/resources/storage', async (_req, reply) => {
+      reply.header('Cache-Control', 'no-store')
+      return { data: { origin: p.resources.publicOrigin } }
+    })
+    routes.get<{ Params: { id: string } }>(
+      '/api/v1/resources/:id',
+      async (req, reply) => {
+        reply.header('Cache-Control', 'no-store')
+        return { data: await p.resources.get(await p.identity.authenticate(bearer(req.headers.authorization)), req.params.id) }
+      },
+    )
     routes.get<{ Params: { id: string } }>(
       '/api/v1/resources/:id/content',
       async (req, reply) => {

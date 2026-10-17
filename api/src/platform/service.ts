@@ -70,6 +70,7 @@ export class PlatformService {
     gateway?: PaymentGateway,
     readonly paymentConfiguration?: PaymentConfiguration,
     readonly wechatAuthorization?: WechatAuthorization,
+    resources?: ResourceService,
   ) {
     this.applicationCatalogUpdates = new ApplicationCatalogMonitor(source)
     this.applications = new ApplicationPlatform(
@@ -99,7 +100,7 @@ export class PlatformService {
     this.ledgers = new LedgerService(this.access)
     this.statistics = new StatisticsService(this.access)
     this.finance = new FinanceService(this.access, this.statistics)
-    this.resources = new ResourceService(source)
+    this.resources = resources ?? new ResourceService(source)
     this.conversations = new ConversationArchive(
       source,
       new ResourceAccessRegistry(createApplicationResourceAdapters(this)),

@@ -194,10 +194,19 @@ export function registerLedgerFeatures(
             )
           }
           const id = randomUUID()
-          await db.query(
-            'INSERT INTO ledger_category_icons(id,ledger_id,created_by,content) VALUES(?,?,?,?)',
-            [id, b, a.user.id, bytes],
-          )
+          if (!p.resources) {
+            throw new ApiError(503, 'RESOURCE_UNAVAILABLE', '资源服务不可用')
+          }
+          const location = await p.resources.writeApplicationAsset(id, bytes, { name: '分类图标.png', mimeType: 'image/png' })
+          try {
+            await db.query(
+              'INSERT INTO ledger_category_icons(id,ledger_id,created_by,object_path,storage_backend) VALUES(?,?,?,?,?)',
+              [id, b, a.user.id, location.path, location.storageBackend],
+            )
+          } catch (error) {
+            await p.resources.removeApplicationAsset(location).catch(() => {})
+            throw error
+          }
           return { id }
         },
       ),
@@ -206,7 +215,7 @@ export function registerLedgerFeatures(
   get('/category-icons/:subject', async (a, b, r) => {
     await p.access.check(a, b)
     const [row] = await p.access.source.query(
-      `SELECT content FROM ledger_category_icons i WHERE i.ledger_id=? AND i.id=?
+      `SELECT content,object_path AS path,storage_backend AS storageBackend FROM ledger_category_icons i WHERE i.ledger_id=? AND i.id=?
       AND (i.created_by=? OR EXISTS(SELECT 1 FROM bill_categories c WHERE c.ledger_id=? AND c.icon_id=i.id))`,
       [b, id(r), a.user.id, b],
     )
@@ -217,9 +226,13 @@ export function registerLedgerFeatures(
         '分类图标不存在或不可访问',
       )
     }
+    if (row.path && !p.resources) {
+      throw new ApiError(503, 'RESOURCE_UNAVAILABLE', '资源服务不可用')
+    }
+    const bytes = row.path ? await p.resources!.readApplicationAsset(row) : Buffer.from(row.content)
     return {
       mimeType: 'image/png',
-      base64: Buffer.from(row.content).toString('base64'),
+      base64: bytes.toString('base64'),
     }
   })
   // Upload first to personal resources; financial submission only links IDs in its own transaction.

@@ -87,7 +87,7 @@ AI 编排 → ChatProvider → MeteredChatProvider → createConversationProvide
 1. 商户号绑定服务号 AppID，并开通 Native、JSAPI；微信外网页另需申请 H5 支付，服务号支付权限不能代替 H5 权限。
 2. 商户平台配置 H5 支付域名、JSAPI 支付授权目录；公众号平台配置网页授权域名。授权回调在 API 域名，支付网页在前端域名，分别检查，不要只配置其中一个。
 3. 使用公网 HTTPS。填入 API 根地址后，通知为 `/api/v1/payments/webhooks/wechat`，授权回调为 `/api/v1/payments/wechat/oauth/callback`。通知地址不带查询参数，不重定向；反向代理保留 Wechatpay-* 请求头和原始 JSON 字节。
-4. 反向代理部署时设置 `TRUSTED_PROXIES` 为实际代理 IP / CIDR，如 `127.0.0.1,::1`；不要设为任意来源。API 以 Fastify request.ip 获取终端 IP，默认不信任用户自行传的 X-Forwarded-For。同时配置前端 API 地址和 API 的 CORS_ORIGINS。
+4. 默认信任本机回环地址的 Nginx，无须额外填写代理配置；其他拓扑才需设置 `TRUSTED_PROXIES` 为实际代理 IP / CIDR，不能信任任意来源。API 以 Fastify request.ip 获取终端 IP，只接受可信代理的 X-Forwarded-For。前端填写真实 API 地址；跨域默认开放。
 5. 完成配置后，在真实 PC、微信内浏览器、微信外浏览器分别做小额下单 / 取消 / 成功支付与余额核对，验证域名权限和服务号绑定。本地 localhost 不能代替这些微信侧联调条件。
 
 原生 Capacitor 微信 SDK 支付已接入，详见 [原生支付配置与真机联调](wechat-native-payments.md)。已实现全额原路退款、赠送额度回收和每日商户交易账单对账，见下文。部分退款、提现与发票尚未实现。资金流水不可通过删除或修改 paid 模拟退款。

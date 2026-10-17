@@ -220,6 +220,33 @@ try {
     assert.equal(denied.headers['set-cookie'], undefined)
     assert.equal(denied.headers['access-control-allow-credentials'], undefined)
   }
+  const openApp = createApp({
+    bills: createBillRepository(pool),
+    health: async () => ({ mysql: 'up', redis: 'disabled' }),
+    administration: service,
+  })
+  try {
+    for (const origin of ['https://new-admin.example.org', 'https://box.example.com', 'null']) {
+      const preflight = await openApp.inject({ method: 'OPTIONS', url: '/api/v1/admin/session', headers: { 'origin': origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-admin-request' } })
+      assert.equal(preflight.statusCode, 204, preflight.body)
+      assert.equal(preflight.headers['access-control-allow-origin'], origin)
+      assert.equal(preflight.headers['access-control-allow-credentials'], 'true')
+      const signedOut = await openApp.inject({ url: '/api/v1/admin/session', headers: { origin } })
+      assert.equal(signedOut.statusCode, 401)
+      const missingHeader = await openApp.inject({ method: 'POST', url: '/api/v1/admin/session', headers: { origin }, payload: { username, password } })
+      assert.equal(missingHeader.statusCode, 403)
+      const accepted = await openApp.inject({ method: 'POST', url: '/api/v1/admin/session', headers: { 'origin': origin, 'x-admin-request': '1' }, payload: { username, password } })
+      assert.equal(accepted.statusCode, 200, accepted.body)
+      const session = String(accepted.headers['set-cookie']).split(';')[0]!
+      const authenticated = await openApp.inject({ url: '/api/v1/admin/session', headers: { origin, cookie: session } })
+      assert.equal(authenticated.statusCode, 200)
+      assert.equal(authenticated.headers['access-control-allow-origin'], origin)
+      assert.equal(authenticated.headers['access-control-allow-credentials'], 'true')
+      await openApp.inject({ method: 'DELETE', url: '/api/v1/admin/session', headers: { 'origin': origin, 'cookie': session, 'x-admin-request': '1' } })
+    }
+  } finally {
+    await openApp.close()
+  }
   const p = await call('POST', '/providers', {
     name: marker,
     baseUrl: `http://127.0.0.1:${port}/v1`,

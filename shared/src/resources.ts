@@ -7,6 +7,8 @@ export interface Resource {
   size: number
   source: 'uploaded' | 'generated'
   createdAt: string
+  /** Object key relative to its storage root; never a provider, CDN or signed URL. */
+  path?: string
 }
 export interface ConversationSummary {
   id: string

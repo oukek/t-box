@@ -45,6 +45,10 @@ pnpm dev
 
 `db:init` 创建不存在的数据库并执行未运行的 TypeORM 迁移，保留已有数据，不插入演示账单。数据库密码只保存在 `api/.env`，该文件已经加入 `.gitignore`；前端环境变量中不要放数据库连接信息。
 
+本地配置 MySQL 和可选 Redis，使用 [api/.env.example](api/.env.example)；生产还需在 PM2 服务器填写业务文件 OSS AccessKey，地域和 Bucket 由 Actions 自动写入发布包。用户文件、AI 图片、记账附件及分类图标统一存 `tboxos/uploads/resources/`，数据库只保存相对路径。网站发布凭据和应用导入 Token 在 GitHub 配置，微信支付与 AI 密钥在后台填写。跨域默认开放；全部配置见 [API 环境配置](docs/api-environment.md)，生产按 [首次部署步骤](docs/first-deployment.md) 操作。
+
+OSS 文件均公开读，前端拼接 OSS 域名和相对路径直接访问，不申请下载签名；资源列表、上传、删除和账本接口仍需登录。拿到公开链接即可读取对应图片或附件。生产不保存业务文件或应用静态副本，临时下载 / 解压 / 备份用完清理；服务器仅保留后端程序、运行配置、密钥和必要日志。
+
 ## 首页、应用与记账
 
 底部两个入口：**AI** 保留会话窗口，顶部「AI 中心」侧栏提供余额、AI 费用说明、我的资源和任务记录；**OS** 是手机桌面式的应用入口。打开应用及详情页面后隐藏底部导航。「设置」（保留原 profile 应用 ID）提供个人账号、安全、当前设备的使用偏好和关于/版本信息。修改密码与退出登录放在账号信息内，退出前需要确认。长按图标或点击「整理」可拖动排序，后端按账号分别保存移动端和 PC 桌面；也支持方向键及按钮移动。记账为可卸载用户应用，其他现有应用为可升级、不可卸载的系统应用；应用不必提供 AI 工具。版本号从 `app/package.json` 读取。详细接口与扩展说明见 [OS 桌面](docs/desktop.md)。
@@ -114,7 +118,7 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：**Web OSS deployment** 发布主前端和后台，构建时写入 API_BASE_URL；后台通过精确 ADMIN_ORIGINS、跨来源 Cookie 和 CSRF 请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**API PM2 package and upload** 先将当前包的四个子应用静态种子上传 OSS，再上传、迁移并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**Application OSS submission** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Variables/Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
+生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：**Web OSS deployment** 发布主前端和后台，构建时写入 API_BASE_URL；跨域默认开放，后台通过回显来源、跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**API PM2 package and upload** 先将当前包的四个子应用静态种子上传 OSS，再上传、迁移并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**Application OSS submission** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Variables/Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
 
 ## iOS / Android 开发热更新
 
@@ -191,7 +195,7 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
 
 `api` / `shared` 采用原生 ESM + TypeScript NodeNext，`.ts` 源码相对导入写 `.js` 对应编译产物的扩展名，生产由 `node dist/server.js` 运行。若省略后缀，需要增加构建打包或模块解析重写；仅改 TypeScript 解析选项不会让 Node 支持无后缀相对导入。
 
-API 默认监听 `127.0.0.1`，跨域来源通过 `CORS_ORIGINS` 配置。公开部署使用 HTTPS/WSS。多实例部署还需共享对话会话、限流和账本通知，财务数据、幂等结果和 AI 任务/工具日志已在 MySQL 持久化，任务具备数据库租约和会话版本保护；这不替代其他服务的跨实例通知与限流。
+API 默认监听 `127.0.0.1`，HTTP 和 WebSocket 来源默认开放，后台回显来源以支持 Cookie；仅需限制来源时再设置高级选项。公开部署使用 HTTPS/WSS。多实例部署还需共享对话会话、限流和账本通知，财务数据、幂等结果和 AI 任务/工具日志已在 MySQL 持久化，任务具备数据库租约和会话版本保护；这不替代其他服务的跨实例通知与限流。
 
 图片会话、独立图片模型、历史、资源管理与 10 分钟账本授权的实现和接口见 [会话与资源架构](docs/conversations-resources.md)。后台「模型」分别选择普通会话与图片工具模型；普通模型需勾选看图能力。未配置真实模型时直接提示尚未接入 AI；附件仍可上传和保管，不进行本地识别或生成。新增链路可通过 `pnpm test:media` 验证，不产生真实模型调用费用。
 

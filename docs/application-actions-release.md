@@ -1,6 +1,6 @@
 # 独立应用：Actions → OSS → 后台待发布
 
-首次上线按 [OSS + PM2 操作顺序](first-deployment.md) 执行。当前工作流先把可直接浏览的应用文件上传到 `APPS_OSS_BUCKET`（默认 `tboxos-app`），逐文件通过 `APP_ARTIFACT_ORIGIN` 校验，再将公开 JSON 包上传到同桶 `builds/` 并登记待发布版本。无需私有 Bucket 或签名下载 URL。OSS 模式不通过服务器提供公开静态文件；服务器保留校验及备份副本。
+首次上线按 [OSS + PM2 操作顺序](first-deployment.md) 执行。当前工作流先把可直接浏览的应用文件上传到 `APPS_OSS_BUCKET`（默认 `tboxos-app`），逐文件通过 `APP_ARTIFACT_ORIGIN` 校验，再将公开 JSON 包上传到同桶 `builds/` 并登记待发布版本。无需私有 Bucket 或签名下载 URL。OSS 模式不通过服务器提供公开静态文件；服务器只在内存中读取与校验 OSS 文件，不保留应用文件副本。
 
 工作流 `.github/workflows/application-release.yml` 仅支持手动运行，API Docker/PM2 工作流保持原有用途。选择应用，填写新版本号和更新说明后，工作流构建该应用及依赖、上传公开 OSS，通过服务器导入接口登记为 `submitted`（已提交、未上架）。后台“应用发布”可直接选中该版本并点击发布；已安装用户沿用原版本，按已有更新机制升级。
 
@@ -53,7 +53,9 @@ docker compose run --rm api node dist/init-db.js
 
 新增 `application_import_credentials`（受限凭证，仅存 token 哈希）与 `application_build_imports`（构建来源与幂等记录）两张表；不会修改现有应用的线上版本。
 
-服务器 API 环境配置（PM2 的 shared/api.env，或 Docker 的部署 .env）：
+PM2 Actions 自动将应用域名、公开桶地址和目录写入后端发布包，服务器无需重复填写。首次先发布新后端包，再创建下方导入凭证；修改 GitHub Bucket、地域或目录后也先重新发布后端。
+
+源码或可选 Docker 部署没有 PM2 发布包元信息，需要手动配置以下高级选项：
 
 ```dotenv
 APP_IMPORT_OSS_ORIGIN=https://tboxos-app.oss-cn-hangzhou.aliyuncs.com

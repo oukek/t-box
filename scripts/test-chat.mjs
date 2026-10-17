@@ -102,7 +102,7 @@ async function rest(path, options = {}) {
   return { response, body }
 }
 
-async function checkOriginRejected(originValue) {
+async function checkOriginAccepted(originValue) {
   await new Promise((resolve, reject) => {
     const socket = new WebSocket(websocketUrl, {
       ...(originValue ? { headers: { Origin: originValue } } : {}),
@@ -110,28 +110,28 @@ async function checkOriginRejected(originValue) {
     })
     const timer = setTimeout(() => {
       socket.terminate()
-      reject(new Error('Origin rejection timed out.'))
+      reject(new Error('Open-origin authentication check timed out.'))
     }, 8_000)
     socket.once('open', () => {
+      socket.send(JSON.stringify({ type: 'session.open', authToken: 'invalid-origin-test-token' }))
+    })
+    socket.once('message', (data) => {
       clearTimeout(timer)
       socket.close()
-      reject(
-        new Error('The server accepted a missing or untrusted browser Origin.'),
-      )
+      try {
+        const event = JSON.parse(data.toString())
+        assert.equal(event.type, 'error')
+        assert.equal(event.code, 'UNAUTHENTICATED')
+        resolve()
+      } catch (error) {
+        reject(error)
+      }
     })
     socket.once('unexpected-response', (_request, response) => {
       clearTimeout(timer)
       response.resume()
       socket.terminate()
-      if (response.statusCode === 403) {
-        resolve()
-      } else {
-        reject(
-          new Error(
-            `Expected Origin rejection HTTP 403; got ${response.statusCode}.`,
-          ),
-        )
-      }
+      reject(new Error(`Expected an open-origin WebSocket upgrade; got HTTP ${response.statusCode}.`))
     })
     // Termination after unexpected-response also emits an error event.
     socket.on('error', () => {})
@@ -303,9 +303,9 @@ async function run() {
     200,
     'Start the API with its database available before testing.',
   )
-  await checkOriginRejected('https://untrusted.invalid')
-  await checkOriginRejected(undefined)
-  passed('Missing and untrusted WebSocket origins are rejected before upgrade')
+  await checkOriginAccepted('https://new-client.invalid')
+  await checkOriginAccepted(undefined)
+  passed('Arbitrary or missing WebSocket origins connect, but invalid account credentials remain rejected')
   const client = await new ChatConnection().connect()
   const ready = await client.exchange(
     { type: 'session.open' },

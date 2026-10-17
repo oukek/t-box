@@ -1,4 +1,4 @@
-import { readFile, realpath } from 'node:fs/promises'
+import { lstat, readFile, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -16,4 +16,22 @@ await import('./dist/db/data-source.js')
 await import('./dist/chat/provider.js')
 await import('./dist/resources/service.js')
 await import('./dist/app.js')
+const { applicationBootstrapArtifacts, applicationSettings } = await import('./dist/config.js')
+if (process.env.NODE_ENV === 'production' && applicationSettings().delivery === 'oss') {
+  const bootstrap = applicationBootstrapArtifacts()
+  if (['calculator', 'ledger', 'calendar', 'time'].some((appId) => !bootstrap[appId])) {
+    throw new Error('Production OSS bootstrap configuration is incomplete')
+  }
+  for (const path of [join(api, '.storage'), join(api, '../bootstrap/app-artifacts'), join(api, '../output/app-artifacts')]) {
+    try {
+      await lstat(path)
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        continue
+      }
+      throw error
+    }
+    throw new Error('Production package contains persistent application files: ' + path)
+  }
+}
 process.stdout.write('Production modules and isolated workspace dependencies verified.\n')

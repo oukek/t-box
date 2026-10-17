@@ -78,11 +78,13 @@ export function createApp(deps: AppDependencies) {
     delegator: (request, callback) => {
       const admin = /^\/api\/v1\/admin(?:\/|$)/.test(request.url.split('?')[0]!)
       const origin = request.headers.origin
+      const origins = (admin ? deps.adminOrigins : deps.corsOrigins) ?? ['*']
       const allowed = admin
-        ? !!origin && ((deps.adminOrigins ?? []).includes(origin) || origin === `${request.protocol}://${request.host}`)
-        : !!origin && (deps.corsOrigins ?? []).includes(origin)
+        ? !!origin && (origins.includes('*') || origins.includes(origin) || origin === `${request.protocol}://${request.host}`)
+        : !!origin && (origins.includes('*') || origins.includes(origin))
       callback(null, {
-        origin: allowed ? origin : false,
+        // Credentialed admin requests need an exact reflected origin, never a literal wildcard.
+        origin: !admin && origins.includes('*') ? '*' : allowed ? origin : false,
         credentials: admin && allowed,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         exposedHeaders: ['X-Request-Id'],

@@ -13,6 +13,9 @@ export interface LedgerRuntimeServices extends LedgerServices {
   ledgers: LedgerService
   identity: LedgerIdentityPort
   resources?: {
+    writeApplicationAsset(id: string, bytes: Buffer, file: { name: string, mimeType: string }): Promise<{ path: string, storageBackend: string }>
+    readApplicationAsset(location: { path: string, storageBackend: string }): Promise<Buffer>
+    removeApplicationAsset(location: { path: string, storageBackend: string }): Promise<void>
     createFile(
       actor: Principal,
       name: string,

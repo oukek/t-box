@@ -3,9 +3,15 @@ import { join } from 'node:path'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { parseId } from '@t-box/server-foundation/validation'
 
-/** Private object port. Implementations never return public URLs and deletion must be idempotent. */
+export interface ResourceFileMetadata {
+  name: string
+  mimeType: string
+}
+/** Object keys are persisted independently of the public origin; deletion must be idempotent. */
 export interface ResourceStorage {
-  write(id: string, bytes: Buffer): Promise<void>
+  readonly origin?: string
+  path?(id: string): string
+  write(id: string, bytes: Buffer, file?: ResourceFileMetadata): Promise<void>
   read(id: string): Promise<Buffer>
   remove(id: string): Promise<void>
 }

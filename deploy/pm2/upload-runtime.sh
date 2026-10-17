@@ -55,6 +55,20 @@ test ! -L "$root/releases/$release"
 mkdir -p "$root/incoming" "$root/releases"
 mkdir "$root/incoming/$release"
 REMOTE
+cleanup_upload() {
+  local status=$?
+  if ! authenticate ssh "${options[@]}" -p "$port" "$host" bash -s -- "$directory" "$release" <<'REMOTE'
+set -Eeuo pipefail
+root="$1"; release="$2"
+rm -rf -- "$root/incoming/$release" "$root/releases/.$release.staging"
+REMOTE
+  then
+    printf 'Could not remove temporary upload files for %s; clean this release incoming/staging directory after SSH recovers.\n' "$release" >&2
+    status=1
+  fi
+  exit "$status"
+}
+trap cleanup_upload EXIT
 authenticate scp "${options[@]}" -P "$port" "$package/runtime.tar.gz" "$package/runtime.tar.gz.sha256" "$package/release.json" "$host:$directory/incoming/$release/"
 authenticate ssh "${options[@]}" -p "$port" "$host" bash -s -- "$directory" "$release" "$archive_sha" "$architecture" "$start_services" "$initialize_admin" <<'REMOTE'
 set -Eeuo pipefail
