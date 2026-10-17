@@ -1,4 +1,4 @@
-name: API Docker OSS
+name: 后端镜像发布（Docker / OSS）
 
 on:
   workflow_dispatch:

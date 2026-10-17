@@ -2,7 +2,7 @@
 
 当前采用 OSS 主前端、后台和子应用静态站点，首次操作以 [OSS + PM2 部署手册](first-deployment.md) 为准。Actions 自动选择 OSS 模式，仅运行 API 和恢复 worker；下面提到的第三个本地产物服务适用于兼容的 `local` 模式。
 
-所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。新增 API PM2 package and upload，现有 Quality 和 API Docker OSS 保留为独立的手动工作流。
+所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。新增 后端部署（PM2），现有 代码检查与测试 和 后端镜像发布（Docker / OSS） 保留为独立的手动工作流。
 
 本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 停止旧 API 与 worker → 数据库迁移 → 确保管理员存在 → 自动同步应用提交凭证 → 启动 API 和 worker → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。初始化会保留已有管理员，无需在工作流中另选初始化开关。
 
@@ -42,7 +42,7 @@ SSH 文件权限、服务器目录属主按实际账户配置。上传失败会�
 
 ## 手动触发
 
-提交工作流到默认分支后，打开 GitHub Actions → API PM2 package and upload → Run workflow，选择需要构建的分支。`start_services` 控制上传后是否自动迁移、初始化所需管理员、同步应用凭证、启动与检查健康。构建完成后自动上传；摘要显示实际版本目录和启动结果。
+提交工作流到默认分支后，打开 GitHub Actions → 后端部署（PM2） → Run workflow，选择需要构建的分支。`start_services` 控制上传后是否自动迁移、初始化所需管理员、同步应用凭证、启动与检查健康。构建完成后自动上传；摘要显示实际版本目录和启动结果。
 
 服务器必须提前安装 Node 24.21.0（最低 24.15.0）和 PM2，SSH 非交互会话中也必须能找到 `node`、`pm2`。首次尚未准备 `shared/api.env` 时，可以先取消 `start_services` 上传，再按下节复制模板并填写实际配置。上传账户与 PM2 运行账户应一致，目前均为 root。
 
@@ -54,7 +54,7 @@ sha-<40位SHA>-run-<编号>-attempt-<次数>
 
 构建 runner 为 Linux x64，Node 24.21.0、pnpm 11.18.0。API 及 workspace 包先编译，再通过 pnpm deploy --legacy --prod 打包；node_modules 已包含第三方生产依赖及编译后的 workspace 包。服务器不需要 pnpm、源码或 TypeScript 编译器。
 
-计算器、记账、日历和时间的独立 Web 产物作为初始化种子额外构建，输出 bootstrap-artifacts 并在 SSH 上传前发布至 OSS。发布包记录此来源和分发模式，服务器配置不一致时会在停止旧服务前拒绝启动。已有应用绑定和已发布版本不会被种子覆盖。主前端和后台使用 Web OSS deployment 独立部署。
+计算器、记账、日历和时间的独立 Web 产物作为初始化种子额外构建，输出 bootstrap-artifacts 并在 SSH 上传前发布至 OSS。发布包记录此来源和分发模式，服务器配置不一致时会在停止旧服务前拒绝启动。已有应用绑定和已发布版本不会被种子覆盖。主前端和后台使用 前端与后台部署（OSS） 独立部署。
 
 业务文件使用 `tboxos/uploads/resources/`，运行中的 API / worker 需要服务器 `shared/api.env` 内的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`；`OSS_REGION` 和业务 Bucket 从 Actions 发布包读取。GitHub 上传凭据不会自动进入服务器。账号授权及 Bucket 跨域设置按 [首次部署](first-deployment.md) 操作。PM2 在停止旧服务前校验业务文件配置完整性。
 

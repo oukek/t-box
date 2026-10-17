@@ -92,19 +92,30 @@ test('packaging resolves the Chinese choice, reads manifest.version and leaves r
     await writeFile(join(app, 'contracts/dist/release.js'), `export const release = ${JSON.stringify(release)}\n`)
     await writeFile(join(directory, 'bin/pnpm'), '#!/bin/sh\n[ "$1" = "-r" ] && [ "$3" = "@t-box/example-web..." ] && [ "$5" = "@t-box/example-contracts..." ]\n', { mode: 0o755 })
     const envFile = join(directory, 'github.env')
+    const workflow = await readFile(join(root, '.github/workflows/application-release.yml'), 'utf8')
+    const initializeOutput = /^ {6}- name: 初始化应用发布输出目录\n {8}run: (.+)$/m.exec(workflow)?.[1]
+    assert.ok(initializeOutput)
+    const initialized = spawnSync('bash', ['-e', '-c', initializeOutput], {
+      encoding: 'utf8',
+      env: { ...process.env, RUNNER_TEMP: join(directory, 'runner temp'), GITHUB_ENV: envFile },
+    })
+    assert.equal(initialized.status, 0, initialized.stderr)
+    const exported = await readFile(envFile, 'utf8')
+    const runnerEnvironment = Object.fromEntries(exported.trim().split('\n').map((line) => line.split('=')))
+    assert.equal(runnerEnvironment.APP_RELEASE_OUTPUT, join(directory, 'runner temp/application-releases'))
     const metadata = await packApplicationRelease(directory, '示例应用 (example)', {
       ...process.env,
+      ...runnerEnvironment,
       PATH: join(directory, 'bin') + ':' + process.env.PATH,
       GITHUB_ENV: envFile,
-      APP_RELEASE_OUTPUT: join(directory, 'output/application-releases'),
       APP_RELEASE_NOTES: 'Legacy build input must be ignored',
     })
     assert.equal(metadata.version, release.manifest.version)
-    const bundle = JSON.parse(await readFile(join(directory, 'output/application-releases/example', metadata.version, metadata.file), 'utf8'))
+    const bundle = JSON.parse(await readFile(join(runnerEnvironment.APP_RELEASE_OUTPUT, 'example', metadata.version, metadata.file), 'utf8'))
     assert.equal(bundle.version, release.manifest.version)
     assert.equal(bundle.releaseNotes, '')
     assert.equal(bundle.publication.updatePrompt, undefined)
-    assert.equal(await readFile(envFile, 'utf8'), 'APPLICATION=example\nVERSION=2.3.4-beta.1\n')
+    assert.equal(await readFile(envFile, 'utf8'), exported + 'APPLICATION=example\nVERSION=2.3.4-beta.1\n')
     const rejected = spawnSync(process.execPath, [join(root, 'scripts/pack-application-release.mjs'), 'example', '9.9.9'], { encoding: 'utf8' })
     assert.notEqual(rejected.status, 0)
     assert.match(rejected.stderr, /version is read from manifest.version/)

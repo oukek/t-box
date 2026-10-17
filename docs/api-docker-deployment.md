@@ -14,7 +14,7 @@
 
 GitHub 配置 OSS_ACCESS_KEY_ID、OSS_ACCESS_KEY_SECRET（Secrets），以及 DEPLOY_DOMAIN、OSS_REGION（仅这两个 Variables）。`deploy/settings.mjs` 自动生成站点地址，固定使用 tboxos-admin/docker/ 存 Docker 包、tboxos-app 存应用文件，与 PM2 / 前端发布共用设置。首次准备按 [首次部署](first-deployment.md) 执行。
 
-API Docker OSS 工作流构建后端镜像，把子应用静态文件单独导出、上传并逐文件验证 OSS，再上传镜像归档、校验文件，最后发布 release.json。应用文件不会装进运行镜像；镜像只保留后端程序和 bootstrap-applications.json 初始摘要配置。
+后端镜像发布（Docker / OSS） 工作流构建后端镜像，把子应用静态文件单独导出、上传并逐文件验证 OSS，再上传镜像归档、校验文件，最后发布 release.json。应用文件不会装进运行镜像；镜像只保留后端程序和 bootstrap-applications.json 初始摘要配置。
 
 公开镜像布局为 `oss://tboxos-admin/docker/releases/<RELEASE_ID>/`，含 image.tar.gz、image.tar.gz.sha256、release.json。归档不含生产 env、密钥或用户文件。镜像本地标签为 t-box-api:<RELEASE_ID>，无需镜像仓库、docker login 或 docker pull。
 
@@ -44,7 +44,7 @@ Compose 使用宿主机网络，API 监听 127.0.0.1:3000，MySQL / Redis 使用
 
 ## 3. 发布和回滚
 
-先运行 GitHub 的 API Docker OSS，再把 Actions 摘要中的真实 ID 用于服务器命令：
+先运行 GitHub 的 后端镜像发布（Docker / OSS），再把 Actions 摘要中的真实 ID 用于服务器命令：
 
 ```sh
 bash deploy-release.sh RELEASE_ID --init

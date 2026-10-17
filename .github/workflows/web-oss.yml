@@ -1,10 +1,10 @@
-name: Web OSS deployment
+name: 前端与后台部署（OSS）
 
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: Website to deploy
+        description: 选择发布站点（all=全部，app=主前端，admin=管理后台）
         type: choice
         default: all
         options: [all, app, admin]

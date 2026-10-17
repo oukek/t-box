@@ -1,4 +1,4 @@
-name: Application OSS submission
+name: 子应用发布（OSS）
 
 on:
   workflow_dispatch:
@@ -32,7 +32,6 @@ jobs:
       DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
       OSS_REGION: ${{ vars.OSS_REGION }}
       APPLICATION_SELECTION: ${{ inputs.application }}
-      APP_RELEASE_OUTPUT: ${{ runner.temp }}/application-releases
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,6 +39,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.21.0
+      - name: 初始化应用发布输出目录
+        run: printf 'APP_RELEASE_OUTPUT=%s/application-releases\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Prepare fixed deployment settings
         run: node deploy/settings.mjs
       - uses: pnpm/action-setup@v6

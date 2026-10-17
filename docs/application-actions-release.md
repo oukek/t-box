@@ -51,7 +51,7 @@ pnpm test:application-release
 
 ## 后端自动接入
 
-先把下面的 GitHub 配置全部填好，再运行 **API PM2 package and upload**，保持 `start_services` 勾选。流程自动执行数据库迁移、确保管理员存在、同步应用提交凭证，再启动 API 和 worker。已有管理员账号不会被重置。
+先把下面的 GitHub 配置全部填好，再运行 **后端部署（PM2）**，保持 `start_services` 勾选。流程自动执行数据库迁移、确保管理员存在、同步应用提交凭证，再启动 API 和 worker。已有管理员账号不会被重置。
 
 这是首次接入、修改 Token 或新增应用授权时的依赖；后端和凭证已就绪后，已有子应用可以直接单独更新，无需每次先跑后端。主前端、后台、后端工作流也可分别运行；涉及新接口、数据库迁移或新权限契约时先部署相应后端。
 
@@ -85,7 +85,7 @@ Run workflow 只选择应用；版本来自代码，更新说明与提示在后�
 
 RAM 需要目标目录的 `oss:PutObject`、`oss:PutObjectAcl` 及客户端实际使用的分片上传权限。下载通过公开 HTTPS，不需要签名，也不依赖下载凭据。GitHub 的旧 `OSS_BUCKET` 变量不再使用。工作流固定 ossutil 2.4.0 并校验下载工具 SHA-256。
 
-手动运行 **Application OSS submission**：选择“数学计算器 (calculator)”即可。脚本严格匹配生成的应用选项，构建后校验 `manifest.version` 并传给上传步骤；Actions 摘要会展示实际版本号。
+手动运行 **子应用发布（OSS）**：选择“数学计算器 (calculator)”即可。脚本严格匹配生成的应用选项，构建后校验 `manifest.version` 并传给上传步骤；Actions 摘要会展示实际版本号。
 
 ## 导入、重试与发布边界
 

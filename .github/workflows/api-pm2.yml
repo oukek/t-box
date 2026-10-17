@@ -1,10 +1,10 @@
-name: API PM2 package and upload
+name: 后端部署（PM2）
 
 on:
   workflow_dispatch:
     inputs:
       start_services:
-        description: Run migrations and start PM2 after upload
+        description: 上传后执行数据库迁移并启动 PM2
         type: boolean
         default: true
 
