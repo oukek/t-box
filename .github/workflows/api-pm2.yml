@@ -37,9 +37,7 @@ jobs:
         env:
           PM2_SSH_PRIVATE_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
           PM2_SSH_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
-          PM2_SSH_KNOWN_HOSTS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
         run: |
-          test -n "$PM2_SSH_KNOWN_HOSTS" || { echo "Configure repository Secret PM2_SSH_KNOWN_HOSTS"; exit 1; }
           test -n "$PM2_SSH_PASSWORD" || test -n "$PM2_SSH_PRIVATE_KEY" || { echo "Configure repository Secret PM2_SSH_PASSWORD (or PM2_SSH_PRIVATE_KEY for key authentication)"; exit 1; }
           test "$PM2_INIT_ADMIN" != true || test "$PM2_START_SERVICES" = true || { echo "Administrator initialization requires start_services"; exit 1; }
           printf 'id=sha-%s-run-%s-attempt-%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
@@ -86,7 +84,6 @@ jobs:
           RELEASE_ID: ${{ steps.release.outputs.id }}
           PM2_SSH_PRIVATE_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
           PM2_SSH_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
-          PM2_SSH_KNOWN_HOSTS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
           APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
         run: |
           umask 077
@@ -102,8 +99,6 @@ jobs:
             printf '%s\n' "$PM2_SSH_PRIVATE_KEY" > "$ssh_dir/key"
             export PM2_SSH_KEY_FILE="$ssh_dir/key"
           fi
-          printf '%s\n' "$PM2_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
-          export PM2_SSH_KNOWN_HOSTS_FILE="$ssh_dir/known_hosts"
           bash deploy/pm2/upload-runtime.sh "$RELEASE_ID" "$RUNNER_TEMP/pm2-package"
       - name: Deployment result
         env:

@@ -9,7 +9,7 @@
 | 配置位置 | 要填写的内容 |
 | --- | --- |
 | GitHub Repository Variables | `DEPLOY_DOMAIN`、`OSS_REGION` |
-| GitHub Repository Secrets | `PM2_SSH_PASSWORD`、`PM2_SSH_KNOWN_HOSTS`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`APP_IMPORT_TOKEN` |
+| GitHub Repository Secrets | `PM2_SSH_PASSWORD`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`APP_IMPORT_TOKEN` |
 | 服务器 `/www/wwwroot/tbox/shared/api.env` | `MYSQL_HOST`、`MYSQL_USERNAME`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、服务器上传账号的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`；`REDIS_ADDR=` 保持空即可不用 Redis |
 | OSS / DNS / Nginx | 三个公开读 Bucket、四个 HTTPS 域名、网站托管、跨域及 API 反向代理，见第 1、3 步 |
 | 项目后台 AI 配置 | 服务商 API 地址、API Key、实际可用模型 |
@@ -51,23 +51,18 @@ GitHub 配置现在就全部填好。`APP_IMPORT_TOKEN` 由你设置一个 32–
 
 进入仓库 **Settings → Secrets and variables → Actions**，添加 **Repository** 配置。当前 Actions 没有绑定命名 Environment，不能只填在 Environment Secrets 里。
 
-**全部 5 个 Secrets 一次填好：**
+**全部 4 个 Secrets 一次填好：**
 
 | 名称 | 填什么 |
 | --- | --- |
 | `PM2_SSH_PASSWORD` | `8.163.69.101` 的 root SSH 密码 |
-| `PM2_SSH_KNOWN_HOSTS` | 下方命令输出的完整主机公钥行 |
 | `OSS_ACCESS_KEY_ID` | GitHub 发布 RAM 账号的 AccessKey ID |
 | `OSS_ACCESS_KEY_SECRET` | 该账号对应的 Secret |
 | `APP_IMPORT_TOKEN` | 你设置的长期应用提交凭证：32–128 位随机字母 / 数字 / `_` / `-`；推荐 64 位，后端与应用发布共用此 Secret |
 
 后端 Actions 会在 runner 计算 SHA-256，只通过 SSH 上传哈希，自动在数据库登记当前应用范围及启用的管理员身份，不设置自动到期。原始 Token 不上传 OSS、不进入可下载的后端包，也不写入服务器 `.env`。以后若需要更换，修改这个 GitHub Secret 并重新部署后端，旧的托管凭证自动撤销；子应用发布直接使用同一 Secret。
 
-从可信的服务器控制台执行下面命令，将完整输出填入 `PM2_SSH_KNOWN_HOSTS`：
-
-```sh
-awk '{print "8.163.69.101 " $1 " " $2}' /etc/ssh/ssh_host_ed25519_key.pub
-```
+当前按部署要求暂时关闭 SSH 主机公钥校验，无需配置 `PM2_SSH_KNOWN_HOSTS`，已配置的旧 Secret 可以删除。SSH 登录仍使用密码或私钥认证。
 
 **只需填写 2 个 Variables：**
 

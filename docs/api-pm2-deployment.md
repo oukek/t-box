@@ -18,10 +18,9 @@
 | --- | --- | --- |
 | Secret | PM2_SSH_PASSWORD | 服务器 root 登录密码；使用密码方式填写此项，无需私钥 |
 | Secret（可选） | PM2_SSH_PRIVATE_KEY | 仅使用私钥方式时填写；密码和私钥至少配置一个 |
-| Secret | PM2_SSH_KNOWN_HOSTS | 已核实的服务器 SSH 公钥，采用 known_hosts 格式 |
 | Secret | APP_IMPORT_TOKEN | 你设置的 32–128 位长期随机英文字母 / 数字 / `_` / `-`，推荐 64 位；与应用提交工作流共用 |
 
-密码认证使用上述两个 Secrets；另配置 OSS 上传账号的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`，普通 Variables 只填 `DEPLOY_DOMAIN`、`OSS_REGION`。`deploy/settings.mjs` 统一生成四个站点地址、三个固定 Bucket 和发布目录，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
+密码认证填写 `PM2_SSH_PASSWORD`，并配置应用提交凭证 `APP_IMPORT_TOKEN`、OSS 上传账号的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`，共 4 个必填 Secrets；普通 Variables 只填 `DEPLOY_DOMAIN`、`OSS_REGION`。`deploy/settings.mjs` 统一生成四个站点地址、三个固定 Bucket 和发布目录，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
 
 不要把 MySQL 密码、服务商密钥、生产 .env 放入构建 Secrets。SSH 信息只用于校验设置及最后的上传步骤；不会进入发布包。
 
@@ -29,15 +28,7 @@
 
 支持账号密码登录。配置 PM2_SSH_PASSWORD 后优先使用密码，不需要 PM2_SSH_PRIVATE_KEY；密码通过 sshpass 的文件描述符传递，不放在命令行参数、日志或发布包中。GitHub runner 会安装 sshpass，服务器不需要安装它。密码不支持换行；服务器必须已经允许该账户的密码/PAM 登录，这套流程不会修改 SSH 服务配置，也不处理需要另行输入动态验证码的登录。
 
-PM2_SSH_KNOWN_HOSTS 是服务器的公开身份信息，用于核实目标服务器；它不是你的登录私钥。密码方式也需要配置它。
-
-先通过服务器控制台等可信渠道核对 SSH host key 指纹，再保存 known_hosts。默认端口行形如 host ssh-ed25519 AAAA...，非默认端口用 [host]:端口。工作流启用 StrictHostKeyChecking，连接时不会动态接受未知主机指纹。
-
-对本服务器，可在阿里云或宝塔的可信服务器终端执行以下命令，将输出的完整一行保存为 `PM2_SSH_KNOWN_HOSTS`，无需提供任何私钥：
-
-```sh
-awk '{print "8.163.69.101 " $1 " " $2}' /etc/ssh/ssh_host_ed25519_key.pub
-```
+当前按部署要求暂时关闭 SSH 主机公钥校验，SSH / SCP 使用 `StrictHostKeyChecking=no`，不读取或保存用户及全局 known_hosts 文件，不再要求 `PM2_SSH_KNOWN_HOSTS`。SSH 仍加密传输并使用密码或私钥登录，但不会核验目标服务器身份。发布包的本地 / 远端 SHA-256、架构检查与启动健康检查继续执行。
 
 服务器需已允许 `root` 密码登录，阿里云安全组及系统/宝塔防火墙需允许 GitHub runner 访问 TCP 22。仓库的 Settings → Actions → General 中需启用 GitHub Actions，并允许工作流使用的 GitHub 官方 Actions 与 `pnpm/action-setup`；现有 `contents: read` 权限足以完成此上传流程，无需额外 PAT 或仓库写权限。
 
