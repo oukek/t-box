@@ -10,6 +10,53 @@ const identifier = (value: unknown) =>
   typeof value === 'string' && /^[\w.-]{1,80}$/.test(value)
     ? value
     : undefined
+// Provider-controlled code/param fields are untrusted too; a syntactically valid
+// identifier may still be a model name, endpoint or credential.
+const publicProviderCodes = new Set([
+  'unsupported_parameter',
+  'unsupported_value',
+  'invalid_request_error',
+  'invalid_api_key',
+  'model_not_found',
+  'context_length_exceeded',
+  'rate_limit_exceeded',
+  'rate_limit_error',
+  'insufficient_quota',
+  'content_filter',
+  'content_policy_violation',
+  'server_error',
+  'upstream_error',
+  'internal_error',
+  'service_unavailable',
+  'slow_down',
+])
+const publicProviderParameters = new Set([
+  'model',
+  'input',
+  'messages',
+  'tools',
+  'tool_choice',
+  'parallel_tool_calls',
+  'temperature',
+  'top_p',
+  'max_tokens',
+  'max_output_tokens',
+  'max_completion_tokens',
+  'reasoning',
+  'reasoning.effort',
+  'reasoning.summary',
+  'reasoning_effort',
+  'stream',
+  'stream_options',
+  'response_format',
+  'prompt_cache_key',
+  'include',
+  'store',
+  'size',
+  'quality',
+  'image',
+  'n',
+])
 /** Backend-only diagnostics: never serialize raw bodies, headers, stack traces or SQL. */
 export function runErrorDiagnostics(error: unknown) {
   const value =
@@ -106,6 +153,8 @@ export function publicRunError(
   const status = typeof value.status === 'number' ? value.status : undefined
   const code = identifier(value.code)
   const param = identifier(value.param)
+  const publicCode = code && publicProviderCodes.has(code) ? code : undefined
+  const publicParam = param && publicProviderParameters.has(param) ? param : undefined
   if (code === 'ER_LOCK_DEADLOCK' || code === 'ER_LOCK_WAIT_TIMEOUT') {
     return {
       code: 'TASK_STORAGE_BUSY',
@@ -200,8 +249,8 @@ export function publicRunError(
   ) {
     return {
       code: code ? 'PROVIDER_FAILED' : 'PROVIDER_INVALID_RESPONSE',
-      message: code
-        ? `模型响应失败（${code}）`
+      message: publicCode
+        ? `模型响应失败（${publicCode}）`
         : '模型服务返回了不兼容的响应格式',
       retryable: false,
     }
@@ -221,8 +270,8 @@ export function publicRunError(
   }
   if (status) {
     return {
-      code: code || `PROVIDER_HTTP_${status}`,
-      message: `${labels[status] || (status >= 500 ? '模型服务暂时异常' : '模型请求失败')}（${status}${code ? ` / ${code}` : ''}${param ? ` · ${param}` : ''}）`,
+      code: publicCode || `PROVIDER_HTTP_${status}`,
+      message: `${labels[status] || (status >= 500 ? '模型服务暂时异常' : '模型请求失败')}（${status}${publicCode ? ` / ${publicCode}` : ''}${publicParam ? ` · ${publicParam}` : ''}）`,
       retryable: status === 429 || status >= 500 || status === 408,
     }
   }

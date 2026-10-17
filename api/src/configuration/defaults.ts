@@ -2,6 +2,7 @@ import type {
   ConfigurationDefinition,
   ConfigurationSnapshot,
 } from '@t-box/shared'
+import { defaultSecurityGuidance } from '../ai-security/policy.js'
 import { memoryInstructions, titleInstructions } from './prompts.js'
 
 const number = (
@@ -154,6 +155,11 @@ export const platformDefinitions: ConfigurationDefinition[] = [
   ),
   prompt('ai.prompt.title', '会话标题', titleInstructions),
   prompt('ai.prompt.memory', '上下文事实摘要', memoryInstructions),
+  prompt('ai.prompt.discovery', '能力发现指导', '能力按需加载，当前目录只是本任务已发现的部分。需要应用操作或实时数据时先 capability_search 检索并加载有限候选，或 capability_load 按确切名称加载。按语义提炼简短检索词；无结果可换词，或用空 query 结合 appId、offset 分页浏览。不要因目录为空就拒绝任务，不编造工具名称。加载工具会启用其所属技能，不必重复启用整套技能。工具回执出现 truncated/resultRef 时用 tool_result_read 按路径分页读取，不据截断预览猜测遗漏信息。'),
+  {
+    ...prompt('ai.prompt.security', '安全与保密补充指导', defaultSecurityGuidance),
+    description: '补充对外回应方式；系统级内部信息保护始终生效，不可由此配置关闭。任务保存快照，使用数据库与 Redis 缓存。',
+  },
   number(
     'ai.input.maxLength',
     '用户消息最大字符数',
@@ -170,6 +176,15 @@ export const platformDefinitions: ConfigurationDefinition[] = [
     86400000,
     '当前单次执行窗口，超时暂停并保留检查点；不是后台 Worker。',
   ),
+  { ...number('ai.tools.maxLoaded', '单助手同时加载的业务工具数', 16, 1, 64, '按需加载，超出时淘汰较早定义；不会删除执行回执或取消授权检查。'), group: '能力与上下文' },
+  { ...number('ai.tools.maxSchemaBytes', '业务工具定义预算 / 字节', 32768, 4096, 262144, '同时加载的 JSON Schema 总预算；还会按模型有效输入预算收紧，不能突破模型窗口。'), group: '能力与上下文' },
+  { ...number('ai.tools.maxInstructionBytes', '活动技能指导预算 / 字节', 16384, 4096, 65536, '不截断安全/业务指导；超出时要求加载更少工具或由应用拆分技能。'), group: '能力与上下文' },
+  { ...number('ai.tools.searchPageSize', '能力检索每页候选数', 6, 1, 20, '仅检索已安装、可用且位于当前助手权限范围内的应用。'), group: '能力与上下文' },
+  { ...number('ai.tools.maxApplications', '当前能力目录最多应用数', 8, 1, 16, '只向模型展示本任务最近发现的应用，不注入整个市场目录。'), group: '能力与上下文' },
+  { ...number('ai.tools.discoveryRounds', '单助手能力检索及结果读取轮数', 12, 1, 40, '防止检索循环；任务总轮数仍同时生效。'), group: '能力与上下文' },
+  { ...number('ai.context.toolResultBytes', '模型单条工具回执预算 / 字节', 12288, 4096, 65536, '完整回执仍保存在后端；超出后返回引用，模型可按路径分页读取。'), group: '能力与上下文' },
+  { ...number('ai.context.summaryMaxParts', '单次摘要最多分段数', 8, 1, 32, '原子工具调用与回执成组整理；全部成功后才替换工作上下文。'), group: '能力与上下文' },
+  { key: 'ai.routing.conversationAffinity', title: '优先保持会话原模型', group: '模型池路由', type: 'boolean', defaultValue: true, effect: 'next_request', description: '新会话按负载分配；已有会话优先健康且有余量的原模型，停用、冷却或满载时允许新任务切换。执行中的任务保持原模型。' },
   number(
     'ai.run.agentRounds',
     '单 Agent 最大轮数',

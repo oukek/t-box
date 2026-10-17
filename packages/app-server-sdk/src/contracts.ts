@@ -89,6 +89,7 @@ export interface ApplicationToolRegistration<
   effect: ApplicationToolEffect
   /** Published by the host once dispatch begins; never exposed as model input. */
   preview?: ToolOutputPreview
+  /** Bypasses legacy skill activation; a deferred host still controls schema loading/budgets. */
   alwaysAvailable?: boolean
   /** Host bridge action for isolated web applications; the model still sees the application tool name. */
   clientAction?: string
@@ -98,7 +99,8 @@ export interface ApplicationToolRegistration<
   ): ResourceRequirement[] | Promise<ResourceRequirement[]>
   confirm?(value: unknown, context: Context): Promise<ClientInteraction>
   validate?(value: unknown, context: Context): Promise<void>
-  restoreState?(result: ToolResult, context: Context): void
+  /** Rehydrate configuration state from a durable receipt; the host awaits completion. */
+  restoreState?(result: ToolResult, context: Context): void | Promise<void>
   handler?(value: unknown, context: Context): Promise<unknown>
   normalizeClientArguments?(
     value: unknown,

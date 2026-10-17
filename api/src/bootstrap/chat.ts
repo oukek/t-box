@@ -49,6 +49,7 @@ export class ApplicationChatService extends ChatService {
       workflow,
       configuration,
       onRunError,
+      capabilityLoading,
     } = options
     const registry = createCapabilities(options)
     platform?.conversations?.setAccess?.(registry.access)
@@ -61,6 +62,7 @@ export class ApplicationChatService extends ChatService {
       workflow,
       configuration,
       onRunError,
+      capabilityLoading,
       registry,
       host: platform
         ? {

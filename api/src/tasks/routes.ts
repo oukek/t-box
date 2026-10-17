@@ -4,6 +4,7 @@ import type { CapabilityRegistry } from '../agent/registry.js'
 import type { PlatformService } from '../platform/service.js'
 import { parseId } from '@t-box/server-foundation/validation'
 import { bearer } from '../identity/service.js'
+import { publicTaskTool } from './presentation.js'
 
 export function registerTasks(
   app: FastifyInstance,
@@ -42,10 +43,7 @@ export function registerTasks(
     return {
       data: {
         ...task.summary,
-        tools: task.tools.map((tool) => ({
-          ...tool,
-          title: registry.tools[tool.name]?.title || '应用工具',
-        })),
+        tools: task.tools.map((tool) => publicTaskTool(tool, registry.tools[tool.name]?.title || '应用工具')),
         resourceRefs: access.references(checkpoint.session.messages),
       },
     }

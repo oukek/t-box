@@ -10,7 +10,9 @@ import type { AgentFrame, RunCheckpoint } from './checkpoint.js'
 import type { AgentRuntimeOptions, ToolContext } from './contracts.js'
 import { randomUUID } from 'node:crypto'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { resolveContextPolicy } from '@t-box/shared'
 import { settingNumber } from '../configuration/defaults.js'
+import { discoveryTools } from './capability-loading.js'
 import { receiptCompletion } from './completion.js'
 import { prepareContext } from './context.js'
 import { receiptEvidence } from './evidence.js'
@@ -18,6 +20,7 @@ import { executeTool, toolError } from './executor.js'
 import { modelRequest } from './model-retry.js'
 import { object } from './schema.js'
 import { MessageTimeline } from './timeline.js'
+import { boundedToolHistory, modelToolResult } from './tool-results.js'
 import {
   missingRequiredTools,
   phaseInstructions,
@@ -40,11 +43,11 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
       .finally(() => signal.removeEventListener('abort', abort))
   })
 }
-const output = (frame: AgentFrame, call: ModelCall, result: ToolResult) => {
+const output = (frame: AgentFrame, call: ModelCall, result: ToolResult, configuration?: import('@t-box/shared').ConfigurationSnapshot) => {
   frame.history.push({
     type: 'function_call_output',
     call_id: call.id,
-    output: JSON.stringify(result),
+    output: JSON.stringify(frame.capabilities ? modelToolResult(result, call.id, configuration) : result),
   })
   frame.calls.shift()
 }
@@ -72,11 +75,20 @@ export async function orchestrate(
     }
     const frame = state.frames.at(-1)!
     const scope = options.registry.agentScope(frame.agentId)
+    const contextPolicy = resolveContextPolicy(provider.contextPolicy)
+    const inputBudget = contextPolicy.contextWindowTokens
+      ? Math.min(contextPolicy.maxInputTokens, contextPolicy.contextWindowTokens - (provider.maxOutputTokens ?? 8192) - 1024)
+      : contextPolicy.maxInputTokens
     const current: ToolContext = {
       modulePins: state.modulePins,
       ...ctx,
       agentId: frame.agentId,
       skills: new Set(frame.skills),
+      capabilities: state.capabilityLoading === 'deferred'
+        ? (frame.capabilities ||= { loadedTools: [], applications: scope ? [scope.agent.moduleId] : state.applicationIds })
+        : undefined,
+      toolSchemaBudget: Math.max(1024, Math.floor(inputBudget / 4)),
+      capabilityAvailability: {},
       toolAllowlist: scope?.tools,
       skillAllowlist: scope?.skills,
       applicationAllowlist: scope?.applications,
@@ -119,7 +131,7 @@ export async function orchestrate(
           summary: frame.content || '专业 Agent 已完成处理，请以工具记录为准',
         },
       }
-      output(parent, call, result)
+      output(parent, call, result, state.configuration)
       ctx.session.calls.set(call.id, {
         fingerprint: `${call.name}:${call.arguments}`,
         result,
@@ -178,7 +190,7 @@ export async function orchestrate(
             if (prior.fingerprint !== `${call.name}:${call.arguments}`) {
               throw new ApiError(409, 'CALL_ID_CONFLICT', '工具调用标识冲突')
             }
-            output(frame, call, prior.result)
+            output(frame, call, prior.result, state.configuration)
             await save()
             continue
           }
@@ -216,10 +228,14 @@ export async function orchestrate(
             (history[0] as { content: string }).content,
             user.attachments || [],
           )
+          const childTools = frame.capabilities?.loadedTools.filter((name) => child.tools.has(name)) || []
           state.frames.push({
             agentId: child.agent.id,
             history,
-            skills: [...child.skills],
+            skills: state.capabilityLoading === 'deferred'
+              ? [...child.skills].filter((id) => options.registry.skills[id]!.tools.some((name) => childTools.includes(name)))
+              : [...child.skills],
+            capabilities: state.capabilityLoading === 'deferred' ? { loadedTools: childTools, applications: [child.agent.moduleId] } : undefined,
             rounds: 0,
             calls: [],
             content: '',
@@ -232,7 +248,7 @@ export async function orchestrate(
           if (state.frames.at(-1) !== frame) {
             throw error
           }
-          output(frame, call, toolError(error))
+          output(frame, call, toolError(error), state.configuration)
           await save()
           continue
         }
@@ -242,7 +258,7 @@ export async function orchestrate(
         clientTimeoutMs: options.clientToolTimeoutMs,
       })
       frame.skills = [...current.skills]
-      output(frame, call, result)
+      output(frame, call, result, state.configuration)
       state.writes = [...writes]
       await save()
       continue
@@ -285,15 +301,16 @@ export async function orchestrate(
           state.configuration,
           'ai.run.agentRounds',
           options.maxToolRounds ?? 8,
-        ) ||
-        state.totalRounds >=
-        settingNumber(state.configuration, 'ai.run.totalRounds', 24))
+        ))
     ) {
       throw new ApiError(
         409,
         'TOOL_ROUND_LIMIT',
         '任务调用轮数已达上限，请结束后新建任务',
       )
+    }
+    if (state.totalRounds >= settingNumber(state.configuration, 'ai.run.totalRounds', 24)) {
+      throw new ApiError(409, 'TOOL_ROUND_LIMIT', '任务调用轮数已达上限，请结束后新建任务')
     }
     // Checkpoint before provider work; incomplete streaming output is never replayed as a committed turn.
     await save()
@@ -415,6 +432,10 @@ export async function orchestrate(
         ? flow.phase
         : 'response'
     const modelInput: ProviderInput = {
+      confidentialInstructions: [
+        ...options.registry.confidentialInstructions(current),
+        ...Object.values(state.workflow?.prompts || {}),
+      ],
       configuration: state.configuration,
       execution: ctx.actor
         ? {
@@ -430,14 +451,14 @@ export async function orchestrate(
         ctx.actor && options.host?.attachments
           ? await options.host.attachments.modelHistory(
               ctx.actor,
-              frame.history,
+              boundedToolHistory(frame.history, current),
             )
-          : frame.history,
-      tools: flow ? phaseTools(flow.phase, businessTools) : businessTools,
+          : boundedToolHistory(frame.history, current),
+      tools: flow ? phaseTools(flow.phase, businessTools, state.capabilityLoading === 'deferred') : businessTools,
       toolChoice:
-        flow?.phase === 'analysis'
+        flow?.phase === 'analysis' && state.capabilityLoading !== 'deferred'
           ? { type: 'function', name: 'workflow_plan' }
-          : flow?.phase === 'review'
+          : flow?.phase === 'review' && state.capabilityLoading !== 'deferred'
             ? { type: 'function', name: 'workflow_review' }
             : flow?.phase === 'answer'
               ? 'none'
@@ -453,7 +474,7 @@ export async function orchestrate(
               result: receiptEvidence(receipt.result),
             })),
             resources: message.attachments || [],
-          })
+          }, state.capabilityLoading === 'deferred')
           : ''),
       localDate: state.localDate,
       signal: run.abort.signal,
@@ -754,6 +775,23 @@ export async function orchestrate(
     }
     // Provider receipts are temporary replay protection until this logical turn commits.
     delete frame.modelRequests
+    state.totalRounds++
+    if (flow && state.capabilityLoading === 'deferred' && turn.calls.length && ['dispatch', 'analysis', 'review'].includes(flow.phase)) {
+      const permitted = flow.phase === 'review' ? new Set(['tool_result_read', 'conversation_history_read']) : discoveryTools
+      if (turn.calls.every((call) => permitted.has(call.name))) {
+        frame.discoveryRounds = (frame.discoveryRounds || 0) + 1
+        if (frame.discoveryRounds > settingNumber(state.configuration, 'ai.tools.discoveryRounds', 12)) {
+          throw new ApiError(409, 'CAPABILITY_DISCOVERY_LIMIT', '能力检索次数已达上限，请明确需要使用的应用或缩小任务范围')
+        }
+        frame.history.push(...turn.output)
+        frame.calls = [...turn.calls]
+        if (rootReply) {
+          message.content = messageContentBeforeTurn
+        }
+        await save()
+        continue
+      }
+    }
     if (flow) {
       const phase = flow.phase
       if (
@@ -844,7 +882,6 @@ export async function orchestrate(
       }
     }
     frame.rounds++
-    state.totalRounds++
     if (!flow) {
       frame.content += turnContent
     }

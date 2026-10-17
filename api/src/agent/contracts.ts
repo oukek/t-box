@@ -30,6 +30,10 @@ export type {
 } from '../application-sdk/contracts.js'
 
 export interface ToolContext extends ApplicationToolContext {
+  capabilities?: import('./capability-loading.js').CapabilitySelection
+  toolSchemaBudget?: number
+  /** Fresh for one orchestration iteration, never cached across execution/grant checks. */
+  capabilityAvailability?: { promise?: Promise<Set<string>> }
   configurationSnapshot?: import('@t-box/shared').ConfigurationSnapshot
   answerRetry?: boolean
   registry: CapabilityRegistry
@@ -155,6 +159,8 @@ export interface AgentHost {
 }
 
 export interface AgentRuntimeOptions {
+  /** Composition roots opt in; old embedded hosts/checkpoints keep their protocol. */
+  capabilityLoading?: 'deferred' | 'legacy'
   configuration?: {
     snapshot(): Promise<import('@t-box/shared').ConfigurationSnapshot>
   }

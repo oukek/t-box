@@ -46,7 +46,8 @@ export async function executeTool(
   const tool = registry.tools[call.name]
   const allowed =
     (!ctx.toolAllowlist || ctx.toolAllowlist.has(call.name)) &&
-    registry.allowedTools(ctx.skills).some((t) => t.name === call.name)
+    registry.isToolLoaded(call.name, ctx) &&
+    (!!ctx.capabilities || registry.allowedTools(ctx.skills).some((t) => t.name === call.name))
   if (allowed) {
     try {
       await registry.requireTool(call.name, JSON.parse(call.arguments), ctx)
@@ -79,7 +80,7 @@ export async function executeTool(
   }
   if (prior && allowed) {
     if (prior.fingerprint === fingerprint) {
-      tool?.restoreState?.(prior.result, ctx)
+      await tool?.restoreState?.(prior.result, ctx)
     }
     return prior.fingerprint === fingerprint
       ? prior.result
@@ -101,7 +102,7 @@ export async function executeTool(
   }
   const durable = allowed ? await ctx.journal?.lookup(durableCall) : undefined
   if (durable) {
-    tool?.restoreState?.(durable, ctx)
+    await tool?.restoreState?.(durable, ctx)
     session.calls.set(call.id, { fingerprint, result: durable })
     let cachedView = message.toolCalls.find((v) => v.id === call.id)
     if (!cachedView) {
@@ -184,9 +185,10 @@ export async function executeTool(
     if (
       !tool ||
       (ctx.toolAllowlist && !ctx.toolAllowlist.has(call.name)) ||
-      !registry
+      (!ctx.capabilities && !registry
         .allowedTools(ctx.skills)
-        .some((entry) => entry.name === call.name)
+        .some((entry) => entry.name === call.name)) ||
+        !registry.isToolLoaded(call.name, ctx)
     ) {
       throw new ApiError(400, 'TOOL_NOT_ALLOWED', '工具未注册或尚未启用')
     }
@@ -227,7 +229,7 @@ export async function executeTool(
         },
       }
       if (result.ok) {
-        tool.restoreState?.(result, context)
+        await tool.restoreState?.(result, context)
       }
     } else if (tool.execution === 'client') {
       const normalized = await tool.normalizeClientArguments!(args, context)

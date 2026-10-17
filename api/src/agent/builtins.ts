@@ -1,5 +1,6 @@
 import type { ApplicationModule } from './contracts.js'
 import { invalid } from '@t-box/server-foundation/errors'
+import { createDiscoveryTools } from './capability-tools.js'
 import { definition, nullable, object } from './schema.js'
 /** Shell capabilities contain no application fields or handlers. */
 export function createShellModule(
@@ -12,6 +13,7 @@ export function createShellModule(
     id: 'shell',
     skills: {},
     tools: {
+      ...createDiscoveryTools(),
       ...(agents.length
         ? {
             agent_delegate: {
@@ -50,17 +52,25 @@ export function createShellModule(
         effect: 'configuration',
         alwaysAvailable: true,
         successSummary: '技能已启用',
-        restoreState(result, ctx) {
+        async restoreState(result, ctx) {
           if (!result.ok) {
             return
           }
-          const id = (result.data as { skillId?: unknown })?.skillId
+          const data = result.data as { skillId?: unknown, loaded?: boolean }
+          const id = data?.skillId
+          if (data?.loaded === false) {
+            return
+          }
           if (
             typeof id === 'string' &&
             Object.hasOwn(ctx.registry.skills, id) &&
             (!ctx.skillAllowlist || ctx.skillAllowlist.has(id))
           ) {
-            ctx.skills.add(id)
+            if (ctx.capabilities) {
+              await ctx.registry.loadTools(ctx.registry.skills[id]!.tools, ctx)
+            } else {
+              ctx.skills.add(id)
+            }
           }
         },
         async handler(value, ctx) {
@@ -72,10 +82,27 @@ export function createShellModule(
           ) {
             invalid('skillId', '技能未注册')
           }
+          const previousSkills = [...ctx.skills]
           ctx.skills.add(args.skillId)
+          const skill = ctx.registry.skills[args.skillId]!
+          if (ctx.capabilities) {
+            // Do not expand a large skill wholesale; exact tools can be searched/loaded.
+            try {
+              await ctx.registry.loadTools(skill.tools, ctx)
+            } catch (error) {
+              if (!(error && typeof error === 'object' && 'code' in error && ['TOOL_LOAD_LIMIT', 'TOOL_SCHEMA_LIMIT', 'TOOL_INSTRUCTIONS_LIMIT'].includes(String(error.code)))) {
+                throw error
+              }
+              ctx.skills.clear()
+              previousSkills.forEach((id) => ctx.skills.add(id))
+              return { skillId: args.skillId, title: skill.title, version: skill.version, loaded: false, note: '技能包含的工具超出预算，请使用 capability_search 或 capability_load 选择本次所需工具。' }
+            }
+          }
           return {
             skillId: args.skillId,
-            ...ctx.registry.skills[args.skillId]!,
+            title: skill.title,
+            version: skill.version,
+            tools: skill.tools,
           }
         },
       },

@@ -311,7 +311,7 @@ export class ConfigurationService {
     })
   }
 
-  async runtime(purpose: 'conversation' | 'image' = 'conversation', options: { configurationKey?: string, supportsVision?: boolean, peek?: boolean } = {}) {
+  async runtime(purpose: 'conversation' | 'image' = 'conversation', options: { configurationKey?: string, preferredConfigurationKey?: string, supportsVision?: boolean, peek?: boolean } = {}) {
     const column = purpose === 'image' ? 'image_model_id' : 'model_id'
     const [state] = await this.store.rows<{ revision: number }>('SELECT ai_revision AS revision FROM platform_configuration_state WHERE id=1')
     const rows = await this.cache.read(`ai-runtime-pool-v1-${purpose}`, Number(state?.revision ?? 0), () => this.store.rows<{
@@ -358,7 +358,10 @@ export class ConfigurationService {
     if (options.configurationKey && !pinned) {
       throw new ApiError(409, 'TASK_MODEL_CHANGED', '任务原模型已移出模型池或停用，请恢复原模型配置后继续')
     }
-    const row = pinned ?? (options.peek ? eligible[0]! : await new ModelRouting(this.store.source).select(purpose, eligible, configuration))
+    const preferred = configuration.values['ai.routing.conversationAffinity'] !== false
+      ? eligible.find((row) => options.preferredConfigurationKey?.startsWith(row.modelId + ':'))
+      : undefined
+    const row = pinned ?? (options.peek ? eligible[0]! : await new ModelRouting(this.store.source).select(purpose, eligible, configuration, preferred?.modelId))
     const method = invocationMode(row.invocationMode, purpose)
     const policy = invocationContextPolicy(
       method,

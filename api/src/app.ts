@@ -118,6 +118,7 @@ export function createApp(deps: AppDependencies) {
     modules: deps.applicationModules,
     workflow: deps.administration?.workflow,
     configuration: deps.administration?.configuration,
+    capabilityLoading: 'deferred',
     onRunError: (error) => {
       app.log.warn(error, 'Agent run interrupted')
       if (!['SERVER_SHUTDOWN', 'CLIENT_REQUIRED', 'RUN_CANCELLED'].includes(error.code)) {

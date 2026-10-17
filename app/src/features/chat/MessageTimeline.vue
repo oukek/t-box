@@ -71,7 +71,7 @@ const progressLabel = computed(() => {
     return `正在${last.tool.title}…`
   }
   if (last?.kind === 'analysis' && last.status === 'streaming') {
-    return '正在分析…'
+    return last.label === '整理上下文' ? '正在整理上下文…' : '正在分析…'
   }
   if (last?.kind === 'answer' && last.status === 'streaming') {
     return '正在生成回答…'

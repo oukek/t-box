@@ -15,7 +15,7 @@ export interface RoutingCandidate {
 export class ModelRouting {
   constructor(readonly source: DataSource) {}
 
-  async select<T extends RoutingCandidate>(purpose: string, candidates: T[], configuration?: ConfigurationSnapshot): Promise<T> {
+  async select<T extends RoutingCandidate>(purpose: string, candidates: T[], configuration?: ConfigurationSnapshot, preferredModelId?: string): Promise<T> {
     if (!candidates.length) {
       throw new ApiError(503, 'MODEL_POOL_UNAVAILABLE', '模型池没有可用模型')
     }
@@ -43,7 +43,8 @@ export class ModelRouting {
       )
       const available = candidates.filter((item) => !Number(states.get(item.modelId)?.cooling))
       available.sort((a, b) => score(a) - score(b) || Number(states.get(a.modelId)?.last_selected || 0) - Number(states.get(b.modelId)?.last_selected || 0) || a.modelId.localeCompare(b.modelId))
-      const chosen = available[0]
+      const preferred = available.find((item) => item.modelId === preferredModelId && score(item) < 1)
+      const chosen = preferred || available[0]
       if (!chosen) {
         throw new ApiError(503, 'MODEL_POOL_UNAVAILABLE', '模型服务暂时不可用，请稍后重试；已完成的操作仍保留')
       }

@@ -2,6 +2,7 @@ import type { ProviderConcurrency } from '../billing/concurrency.js'
 import type { BillingService } from '../billing/service.js'
 import type { ChatProvider, ProviderInput } from '../chat/provider.js'
 import type { ConfigurationService } from './service.js'
+import { ProtectedChatProvider } from '../ai-security/provider.js'
 import { MeteredChatProvider } from '../billing/provider.js'
 import { createConversationProvider } from '../chat/provider-factory.js'
 import {
@@ -35,7 +36,8 @@ export class DatabaseChatProvider implements ChatProvider {
           config.prices,
         )
       : provider
-    return this.concurrency ? new AuditedChatProvider(metered, this.concurrency, config, this.configuration.configuration) : metered
+    const audited = this.concurrency ? new AuditedChatProvider(metered, this.concurrency, config, this.configuration.configuration) : metered
+    return new ProtectedChatProvider(audited, config)
   }
 
   async next(_input: ProviderInput): Promise<never> {

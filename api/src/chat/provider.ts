@@ -27,6 +27,8 @@ export interface ProviderTurn {
   calls: ModelCall[]
 }
 export interface ProviderInput {
+  /** Static private instructions only, for the host disclosure gate; never user facts or receipts. */
+  confidentialInstructions?: string[]
   configuration?: import('@t-box/shared').ConfigurationSnapshot
   execution?: {
     userId: string
@@ -68,7 +70,7 @@ export interface ChatProvider {
   summarize?(input: ProviderInput): Promise<string>
   compact?(input: ProviderInput): Promise<ProviderItem[]>
   configurationKey?: string
-  forRun?: (options?: { configurationKey?: string, supportsVision?: boolean, peek?: boolean }) => Promise<ChatProvider>
+  forRun?: (options?: { configurationKey?: string, preferredConfigurationKey?: string, supportsVision?: boolean, peek?: boolean }) => Promise<ChatProvider>
   next(input: ProviderInput): Promise<ProviderTurn>
   title?(input: {
     execution?: ProviderInput['execution']

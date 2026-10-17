@@ -565,7 +565,7 @@ test('strict tool schemas require all declared fields, registry gates skills, an
     allowedTools(new Set())
       .map((tool) => tool.name)
       .sort(),
-    ['agent_delegate', 'app_open', 'skill_activate', 'time_now'],
+    ['agent_delegate', 'app_open', 'capability_load', 'capability_search', 'conversation_history_read', 'skill_activate', 'time_now', 'tool_result_read'],
   )
   const skills = new Set<string>()
   const { repo } = fakeBills()

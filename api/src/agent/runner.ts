@@ -24,7 +24,7 @@ import {
   finishExecution,
   startExecution,
 } from './execution-time.js'
-import { rebuildConversationHistory } from './history.js'
+import { portableHistory, rebuildConversationHistory } from './history.js'
 import { requestClient } from './interaction.js'
 import { orchestrate } from './orchestrator.js'
 import { authorizedSnapshot } from './snapshot.js'
@@ -125,17 +125,13 @@ export async function runConversation(
     ) {
       // A newly routed model must receive portable history, including durable tool receipts,
       // rather than opaque response IDs / native memory from another provider.
-      const differentModel = session.configurationKey?.slice(0, 36) !== provider.configurationKey.slice(0, 36)
-      session.history = differentModel || session.history.some(
-        (item) => item.type === 'compaction',
+      const portable = portableHistory(session.history)
+      session.history = portable ?? rebuildConversationHistory(
+        session,
+        options.registry,
+        options.host?.attachments,
       )
-        ? rebuildConversationHistory(
-            session,
-            options.registry,
-            options.host?.attachments,
-          )
-        : session.history.filter((item) => item.type !== 'reasoning')
-      session.contextState = {}
+      session.contextState = portable ? { ...session.contextState, lastAfterTokens: undefined } : {}
       session.configurationKey = provider.configurationKey
     }
   }
@@ -157,6 +153,7 @@ export async function runConversation(
   session.active = run
   const initialAgent = options.registry.agentForApplications(applicationIds)
   const state: RunCheckpoint = input.resume || {
+    capabilityLoading: options.capabilityLoading === 'deferred' ? 'deferred' : undefined,
     retry: input.retry,
     workflowEntry: 'adaptive',
     version: 1,
@@ -172,13 +169,16 @@ export async function runConversation(
     delegations: 0,
     frames: [
       {
+        capabilities: options.capabilityLoading === 'deferred' ? { loadedTools: [], applications: applicationIds } : undefined,
         agentId: initialAgent,
         history: session.history,
         contextState: (session.contextState ||= {}),
-        skills: [
-          ...(options.registry.agentScope(initialAgent)?.skills ||
-            options.registry.initialSkills(applicationIds)),
-        ],
+        skills: options.capabilityLoading === 'deferred'
+          ? []
+          : [
+              ...(options.registry.agentScope(initialAgent)?.skills ||
+                options.registry.initialSkills(applicationIds)),
+            ],
         rounds: 0,
         calls: [],
         content: '',

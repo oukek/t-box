@@ -128,8 +128,12 @@ try {
   assert.equal(vision?.billingModelId, b)
   const pinned = await service.runtime('conversation', { configurationKey: routing[0]!.configurationKey })
   assert.equal(pinned?.configurationKey, routing[0]!.configurationKey)
+  for (let index = 0; index < 3; index++) {
+    assert.equal((await service.runtime('conversation', { preferredConfigurationKey: pinned!.configurationKey }))?.billingModelId, pinned!.billingModelId, 'Healthy conversations retain model/cache affinity')
+  }
   await service.selectModel({ modelIds: [b, c] })
   await assert.rejects(service.runtime('conversation', { configurationKey: `${a}:old` }), { code: 'TASK_MODEL_CHANGED' })
+  assert.notEqual((await service.runtime('conversation', { preferredConfigurationKey: `${a}:old` }))?.billingModelId, a, 'A new task can leave an unavailable preferred model without weakening strict resume pinning')
   await service.selectModel({ modelIds: [a, b, c] })
   const price = await new BillingPricingService(source).schedule()
   assert.deepEqual(price.conversation, { inputPrice: '3.000000', outputPrice: '2.000000', minInputPrice: '1.000000' })
@@ -164,7 +168,7 @@ try {
     await new Promise<void>((resolve) => release = resolve)
   }, { id: a, maxConcurrency: 1 })
   await started
-  const balanced = await service.runtime()
+  const balanced = await service.runtime('conversation', { preferredConfigurationKey: `${a}:old` })
   assert.notEqual(balanced?.billingModelId, a, 'Busy model is not assigned while idle alternatives exist')
   const abort = new AbortController()
   const queued = limits[1]!.run(providers[0]!, abort.signal, snapshot, async () => assert.fail('Cancelled model queue must not execute'), { id: a, maxConcurrency: 1 })
@@ -287,7 +291,8 @@ try {
   await billing.settle(actor.user.id, extra, { inputTokens: 10, outputTokens: 1 })
   assert.equal((await operations.tasks({ taskId })).items[0]!.calls, 5, 'Two conversation calls, two image calls and one historical billing row')
 
-  // End-to-end socket protocol: fresh turns rotate models while keeping portable user/answer history.
+  // End-to-end socket protocol: a conversation stays on its healthy model;
+  // an explicit pool change switches the next task without losing portable history.
   await service.selectModel({ modelIds: [a, b] })
   chat = new ApplicationChatService({ platform, provider: database, bills: createBillRepository(source) })
   const events: any[] = []
@@ -313,8 +318,16 @@ try {
   }
   const socketModels = await Promise.all(socketTasks.map((id) => operations.forTask(id)))
   assert.ok(socketModels.every((rows) => rows.some((row) => row.status === 'succeeded')))
-  assert.notEqual(socketModels[0]![0]!.id, socketModels[1]![0]!.id)
-  assert.ok(chatBodies.some((body) => body.messages.filter((message: any) => message.role === 'user').length >= 2 && body.messages.some((message: any) => message.role === 'assistant' && message.content === '2')), 'Newly routed model retains the earlier answer and questions')
+  assert.equal(socketModels[0]![0]!.id, socketModels[1]![0]!.id, 'The same conversation keeps its model and cached prefix')
+  const alternative = socketModels[0]![0]!.id === a ? b : a
+  await service.selectModel({ modelIds: [alternative] })
+  const switchedId = randomUUID()
+  await connection.receive({ type: 'message.send', requestId: switchedId, text: 'Continue after changing the model pool', localDate: '2026-10-15' })
+  await until(() => events.some((event) => event.type === 'run.finished' && events.some((started) => started.type === 'run.started' && started.run.id === event.runId && started.run.requestId === switchedId)))
+  const switchedTask = events.find((event) => event.type === 'run.started' && event.run.requestId === switchedId).run.id
+  socketTasks.push(switchedTask)
+  assert.equal((await operations.forTask(switchedTask))[0]!.id, alternative)
+  assert.ok(chatBodies.some((body) => body.messages.filter((message: any) => message.role === 'user').length >= 3 && body.messages.some((message: any) => message.role === 'assistant' && message.content === '2')), 'A switched model retains the earlier answers and questions')
   for (const id of socketTasks) {
     assert.equal((await platform.operations.task(id)).status, 'completed')
   }
