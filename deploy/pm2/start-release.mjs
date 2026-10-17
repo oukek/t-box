@@ -14,6 +14,7 @@ export async function startRelease({
   request = globalThis.fetch,
   pause = setTimeout,
   attempts = 60,
+  processEnvironment = process.env,
 } = {}) {
   release = await realpath(release)
   if (!Number.isInteger(attempts) || attempts < 3) {
@@ -22,6 +23,22 @@ export async function startRelease({
   const root = dirname(dirname(release))
   const shared = join(root, 'shared')
   const api = join(release, 'api')
+  const importHashFile = join(release, 'control/app-import.sha256')
+  let importHash
+  try {
+    const info = await lstat(importHashFile)
+    if (!info.isFile() || info.size > 65) {
+      throw new Error('Invalid managed application import credential hash file')
+    }
+    importHash = (await readFile(importHashFile, 'utf8')).trim()
+    if (!/^[a-f0-9]{64}$/.test(importHash)) {
+      throw new Error('Invalid managed application import credential SHA-256')
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw error
+    }
+  }
   const info = JSON.parse(await readFile(join(release, 'release-info.json'), 'utf8'))
   if (dirname(release) !== join(root, 'releases') ||
     !/^sha-[a-f0-9]{40}-run-[1-9]\d*-attempt-[1-9]\d*$/.test(info.releaseId) ||
@@ -30,7 +47,7 @@ export async function startRelease({
   }
   const envFile = join(shared, 'api.env')
   const { parse } = createRequire(join(api, 'package.json'))('dotenv')
-  const settings = { ...parse(await readFile(envFile)), ...process.env }
+  const settings = { ...parse(await readFile(envFile)), ...processEnvironment }
   settings.APP_ARTIFACT_ORIGIN ||= info.artifactOrigin
   settings.APP_ARTIFACT_DELIVERY ||= info.artifactDelivery
   const delivery = settings.APP_ARTIFACT_DELIVERY || 'local'
@@ -49,7 +66,7 @@ export async function startRelease({
   const host = !settings.HOST || ['0.0.0.0', '::'].includes(settings.HOST) ? '127.0.0.1' : settings.HOST
   const healthUrl = new URL(`http://${host.includes(':') ? `[${host}]` : host}:${port}/api/v1/health`)
   const environment = {
-    ...process.env,
+    ...processEnvironment,
     NODE_ENV: 'production',
     PM2_NODE: process.execPath,
     ARTIFACT_PORT: settings.ARTIFACT_PORT || '6176',
@@ -104,6 +121,12 @@ export async function startRelease({
     command(process.execPath, [join(api, 'dist/init-db.js')])
     if (initializeAdmin) {
       command(process.execPath, [join(api, 'dist/admin/bootstrap.js')])
+    }
+    if (importHash) {
+      command(process.execPath, [join(api, 'dist/application-platform/import-credential-cli.js'), 'sync'], {
+        input: importHash,
+        stdio: ['pipe', 'inherit', 'inherit'],
+      })
     }
     // A different absolute release path must replace the old PM2 process definition.
     for (const entry of existing) {

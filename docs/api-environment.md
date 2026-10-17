@@ -16,7 +16,7 @@ API 先读取进程环境，再读取 `api/.env`；进程环境优先。PM2 的 
 | `OSS_ACCESS_KEY_ID` | 无；生产必填，后端上传用户文件、AI 图片及记账附件 / 分类图标 | 服务器专用 RAM AccessKey ID；只填 GitHub Secrets 不会提供给 API |
 | `OSS_ACCESS_KEY_SECRET` | 无；生产必填 | 上述 RAM 用户对应的 Secret |
 | `OSS_REGION` | PM2 Actions 包内的 GitHub `OSS_REGION` | 源码 / Docker 生产部署或本地连接 OSS 时填 `cn-hangzhou` 等实际地域 |
-| `OSS_RESOURCE_BUCKET` | PM2 Actions 使用 `WEB_OSS_BUCKET`；其余默认 `tboxos` | 只有改变业务文件 Bucket 时才覆盖，已有对象不能靠改变量迁移 |
+| `OSS_RESOURCE_BUCKET` | PM2 Actions 在 `deploy/settings.mjs` 固定使用 `tboxos`；其余默认同名 | 只有改变业务文件 Bucket 时才覆盖，已有对象不能靠改变量迁移 |
 | `OSS_SESSION_TOKEN` | 无 | 使用临时 STS 凭据时；过期前必须更新，当前不提供自动续期 |
 | `HOST` | `127.0.0.1` | 修改 API 监听地址时 |
 | `PORT` | `3000` | 修改 API 端口时，同时调整 Nginx |
@@ -27,8 +27,8 @@ API 先读取进程环境，再读取 `api/.env`；进程环境优先。PM2 的 
 | `TASK_WORKER_MODE` | 本地 `embedded`；PM2 自动注入 `external` 并运行独立 worker | 手动拆分 worker 或恢复演练时 |
 | `APP_ARTIFACT_DELIVERY` | 生产固定使用 `oss`，生产显式设为 `local` 会拒绝启动；本地开发默认 `local` | 仅开发调试切换交付方式时 |
 | `APP_ARTIFACT_ORIGIN` | Actions 包内的应用域名；本地 `http://localhost:6176` | 源码或可选 Docker 手工部署时，需要独立 HTTPS 应用域名 |
-| `APP_IMPORT_OSS_ORIGIN` | Actions 按 `OSS_REGION` 和 `APPS_OSS_BUCKET` 写入标准公网桶地址 | 非 Actions 部署需要独立应用导入时；显式留空可禁用导入 |
-| `APP_IMPORT_OSS_PREFIX` | Actions 的 `APP_OSS_PREFIX`，默认 `builds` | 自定义构建包目录时 |
+| `APP_IMPORT_OSS_ORIGIN` | Actions 按实际地域和固定 `tboxos-app` 写入标准公网桶地址 | 非 Actions 部署需要独立应用导入时；显式留空可禁用导入 |
+| `APP_IMPORT_OSS_PREFIX` | Actions 在 `deploy/settings.mjs` 固定为 `builds` | 非 Actions 部署自定义构建包目录时 |
 
 普通 HTTP 开放跨域时不启用 Cookie 凭据；后台必须回显具体来源，不能将 `Access-Control-Allow-Origin: *` 与 Cookie 凭据一起使用。后台来源开放会允许更多网页发起携带凭据的请求，后台仍校验会话和管理请求头。`HttpOnly`、生产 `Secure` 和 `SameSite=Strict` Cookie 保留，因此后台与 API 仍需使用同一主域名下的 HTTPS 子域名；开放 CORS 不会改变浏览器的 Cookie 规则。
 
@@ -36,7 +36,7 @@ API 先读取进程环境，再读取 `api/.env`；进程环境优先。PM2 的 
 
 `SameSite=Strict` 不隔离同主域的子应用；后台来源开放后，同站子应用也能发起携带管理员 Cookie 的请求。如果之后需要接入不可信的应用代码，应使用 `ADMIN_ORIGINS` 限定后台来源。
 
-PM2 Actions 自动打包应用公开配置，不包含数据库密码或 OSS AccessKey。初始应用资源依旧先上传、逐文件校验，再启动后端；应用构建导入仍限制到包内指定的 OSS 桶、版本目录和 SHA-256，不允许任意网址下载。若已有环境显式设置的应用地址/模式与发布包不一致，部署在停止旧服务之前拒绝继续。改变 GitHub 应用域名、Bucket、地域或构建目录后，先重新发布后端包，再提交子应用版本。
+PM2 Actions 自动打包应用公开配置，不包含数据库密码或 OSS AccessKey。GitHub 普通变量只需 `DEPLOY_DOMAIN`、`OSS_REGION`，其余由 `deploy/settings.mjs` 生成。初始应用资源依旧先上传、逐文件校验，再启动后端；应用构建导入仍限制到包内指定的 OSS 桶、版本目录和 SHA-256，不允许任意网址下载。若已有环境显式设置的应用地址/模式与发布包不一致，部署在停止旧服务之前拒绝继续。改变主域名、地域或脚本中的公共设置后，先重新发布后端包，再提交子应用版本。
 
 `TASK_WORKER_MODE=disabled` 仅关闭 API 内置恢复器，不会停止独立 worker。源码部署缺少 Actions 元信息时，需要手填应用地址及所需的导入配置。可选 Docker 的 `API_IMAGE`、`API_PORT`、`ARTIFACT_PORT` 是部署工具参数，使用其独立模板。
 
@@ -52,4 +52,4 @@ PM2 Actions 自动打包应用公开配置，不包含数据库密码或 OSS Acc
 
 服务器 RAM 账号只需对 `acs:oss:*:*:tboxos/uploads/resources/*` 授予 `oss:PutObject`、`oss:PutObjectAcl`、`oss:GetObject`、`oss:DeleteObject`；无需整桶写权限。配置步骤见 [首次部署](first-deployment.md)。这些服务器凭据不会放入 Actions 构建包；GitHub 的上传账号负责静态发布，两个账号可分别授权。
 
-微信 AppID、AppSecret、商户号、API v3 密钥和商户私钥在项目后台的微信支付配置填写；AI 服务商和模型也由后台管理。Actions 上传凭据和应用导入 Token 在 GitHub 配置。加密主密钥首次启动自动创建，PM2 持久化到 `shared/secrets/provider.key`，须与数据库一起备份。公众号消息发送尚未接入，添加环境变量不会启用它。
+微信 AppID、AppSecret、商户号、API v3 密钥和商户私钥在项目后台的微信支付配置填写；AI 服务商和模型也由后台管理。Actions 上传凭据和长期 `APP_IMPORT_TOKEN` 在 GitHub 一次配置好；PM2 部署自动同步 Token 的哈希到服务器和数据库，无需在 API 环境变量重复填写，也没有 90 天续期要求。加密主密钥首次启动自动创建，PM2 持久化到 `shared/secrets/provider.key`，须与数据库一起备份。公众号消息发送尚未接入，添加环境变量不会启用它。

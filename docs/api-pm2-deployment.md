@@ -4,7 +4,7 @@
 
 所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。新增 API PM2 package and upload，现有 Quality 和 API Docker OSS 保留为独立的手动工作流。
 
-本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 停止旧 API 与 worker → 数据库迁移 → 启动三个 PM2 进程 → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。`initialize_admin` 默认不勾选，只有首次安装需要创建管理员时才启用。
+本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 停止旧 API 与 worker → 数据库迁移 → 确保管理员存在 → 自动同步应用提交凭证 → 启动 API 和 worker → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。初始化会保留已有管理员，无需在工作流中另选初始化开关。
 
 生产配置和已有数据必须事先准备好。迁移会更新数据库结构，发布前按 [运行与恢复](operations-and-recovery.md) 做好备份。启动失败会停止受管理的进程并使 Actions 失败，不自动回滚数据库或用旧代码继续连接已迁移的库。
 
@@ -19,10 +19,13 @@
 | Secret | PM2_SSH_PASSWORD | 服务器 root 登录密码；使用密码方式填写此项，无需私钥 |
 | Secret（可选） | PM2_SSH_PRIVATE_KEY | 仅使用私钥方式时填写；密码和私钥至少配置一个 |
 | Secret | PM2_SSH_KNOWN_HOSTS | 已核实的服务器 SSH 公钥，采用 known_hosts 格式 |
+| Secret | APP_IMPORT_TOKEN | 你设置的 32–128 位长期随机英文字母 / 数字 / `_` / `-`，推荐 64 位；与应用提交工作流共用 |
 
-密码认证使用上述两个 Secrets；当前工作流还需配置 OSS 上传凭据、OSS_REGION 和 APP_ARTIFACT_ORIGIN，APPS_OSS_BUCKET 默认 tboxos-app，可不填，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
+密码认证使用上述两个 Secrets；另配置 OSS 上传账号的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`，普通 Variables 只填 `DEPLOY_DOMAIN`、`OSS_REGION`。`deploy/settings.mjs` 统一生成四个站点地址、三个固定 Bucket 和发布目录，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
 
 不要把 MySQL 密码、服务商密钥、生产 .env 放入构建 Secrets。SSH 信息只用于校验设置及最后的上传步骤；不会进入发布包。
+
+`APP_IMPORT_TOKEN` 在 GitHub 一次配置好。runner 只计算并通过 SSH 上传 SHA-256，原始 Token 不进入发布包、OSS、日志或服务器环境。哈希保存为版本目录 `control/app-import.sha256`，启动流程迁移数据库并确保管理员存在后自动登记为无自动到期的受限凭证。重复部署复用同值；修改 Secret 并重新部署后端会原子撤销旧的托管凭证。上传但不启动时保留哈希，之后启动该版本再同步，无需手工生成或 90 天续期。
 
 支持账号密码登录。配置 PM2_SSH_PASSWORD 后优先使用密码，不需要 PM2_SSH_PRIVATE_KEY；密码通过 sshpass 的文件描述符传递，不放在命令行参数、日志或发布包中。GitHub runner 会安装 sshpass，服务器不需要安装它。密码不支持换行；服务器必须已经允许该账户的密码/PAM 登录，这套流程不会修改 SSH 服务配置，也不处理需要另行输入动态验证码的登录。
 
@@ -48,7 +51,7 @@ SSH 文件权限、服务器目录属主按实际账户配置。上传失败会�
 
 ## 手动触发
 
-提交工作流到默认分支后，打开 GitHub Actions → API PM2 package and upload → Run workflow，选择需要构建的分支。`start_services` 控制上传后是否自动迁移、启动与检查健康；`initialize_admin` 只供首次安装，且必须同时启用 `start_services`。构建完成后自动上传；摘要显示实际版本目录和启动结果。
+提交工作流到默认分支后，打开 GitHub Actions → API PM2 package and upload → Run workflow，选择需要构建的分支。`start_services` 控制上传后是否自动迁移、初始化所需管理员、同步应用凭证、启动与检查健康。构建完成后自动上传；摘要显示实际版本目录和启动结果。
 
 服务器必须提前安装 Node 24.21.0（最低 24.15.0）和 PM2，SSH 非交互会话中也必须能找到 `node`、`pm2`。首次尚未准备 `shared/api.env` 时，可以先取消 `start_services` 上传，再按下节复制模板并填写实际配置。上传账户与 PM2 运行账户应一致，目前均为 root。
 

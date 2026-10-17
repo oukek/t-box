@@ -31,7 +31,7 @@ AI 余额充值在 iOS 原生壳中固定禁用，提示「iOS 应用内购暂�
 2. Android 填写实际 `applicationId`（当前 `com.tbox.app`）及签名证书 MD5。Debug 与 Release 签名不同：测试包与正式包须分别匹配开放平台实际配置，或者使用官方支持的备用签名。不要通过关闭 SDK 签名验证解决调起失败。
 3. iOS 填写实际 Bundle ID（当前 `com.tbox.app`）、Universal Link，选择实际 Xcode 开发团队，启用 Associated Domains 能力和对应签名配置。Universal Link 必须是专用 HTTPS 路径，末尾 `/`，例如 `https://app.example.com/wechat/`。不要填写示例 AppID。
 4. 填好公开配置后运行 `pnpm --filter @t-box/capacitor sync:wechat`。脚本同步 iOS Release/Debug Info.plist、URL Scheme、微信查询 Scheme、Associated Domains entitlements 和 Android 资源/回调类，保留其他 URL handler / 关联域名。后台勾选「iOS / Android 原生 APP 支付」。
-5. Universal Link 使用 `WEB_ORIGIN` 主站域名时，**Web OSS deployment** 会按已启用的公开配置自动生成、合并并上传 `/.well-known/apple-app-site-association`，无扩展名、HTTPS 200、`Content-Type: application/json`、不重定向。其他业务的关联条目可先放入 `app/public/.well-known/apple-app-site-association`，发布时保留并合并。文件限定实际 Team ID + Bundle ID 和 `/wechat/*` 路径；原生工程仍需执行同步。使用其他 Universal Link 域名时，需要由该域名的运维另行托管文件，当前主站自动发布入口要求配置与 `WEB_ORIGIN` 一致。
+5. Universal Link 使用脚本生成的主站域名（`https://box.<DEPLOY_DOMAIN>`）时，**Web OSS deployment** 会按已启用的公开配置自动生成、合并并上传 `/.well-known/apple-app-site-association`，无扩展名、HTTPS 200、`Content-Type: application/json`、不重定向。其他业务的关联条目可先放入 `app/public/.well-known/apple-app-site-association`，发布时保留并合并。文件限定实际 Team ID + Bundle ID 和 `/wechat/*` 路径；原生工程仍需执行同步。使用其他 Universal Link 域名时，需要由该域名的运维另行托管文件，当前主站自动发布入口要求配置与生成的主站来源一致。
 6. API 通知地址是后台公网地址 + `/api/v1/payments/webhooks/wechat`，必须让微信服务器可以访问。原生生产包同样需要正确的 `VITE_API_BASE_URL=https://你的API域名/api/v1`。
 
 配置未完成时入口保持关闭。客户端会比较当前后台 APP AppID 与壳内 AppID；缺少微信时提示安装，不会自动降级到 H5。

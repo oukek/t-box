@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { verifyDeploymentLinks } from '../deploy/pm2/dependencies.mjs'
+import { importTokenHash } from '../deploy/pm2/import-token.mjs'
 import { startRelease } from '../deploy/pm2/start-release.mjs'
 
 const workspace = fileURLToPath(new URL('../', import.meta.url))
@@ -27,7 +28,8 @@ const fs=require('node:fs'),path=require('node:path');
 const args=process.argv.slice(2);
 fs.appendFileSync(process.env.UPLOAD_LOG,JSON.stringify({tool:'scp',args})+'\\n');
 const target=args[args.length-1].split(':').slice(1).join(':');
-for(const source of args.slice(-4,-1)) fs.copyFileSync(source,path.join(target,path.basename(source)));
+const sources=args.slice(args.indexOf('-P')+2,-1);
+for(const source of sources) fs.copyFileSync(source,target.endsWith('/')?path.join(target,path.basename(source)):target);
 if(process.env.CORRUPT_REMOTE==='1') fs.appendFileSync(path.join(target,'runtime.tar.gz'),'corruption');
 `
 function fixture(t) {
@@ -79,13 +81,21 @@ process.exit(result.status===null ? 1 : result.status);
   mkdirSync(join(server, 'shared'), { recursive: true })
   writeFileSync(join(server, 'shared/api.env'), 'APP_ARTIFACT_ORIGIN=https://apps.example.invalid\nMYSQL_PASSWORD=\'fixture-secret\'\n', { mode: 0o600 })
   symlinkSync('releases/old', join(server, 'current'))
+  const isolatedEnvironment = { ...process.env }
+  for (const key of Object.keys(isolatedEnvironment)) {
+    if (/^(?:OSS_|REDIS_|APP_ARTIFACT_|APP_IMPORT_|WEB_ORIGIN$|ADMIN_ORIGIN$|API_BASE_URL$|WEB_OSS_|ADMIN_OSS_|APPS_OSS_)/.test(key)) {
+      delete isolatedEnvironment[key]
+    }
+  }
   const env = {
-    ...process.env,
+    ...isolatedEnvironment,
     PATH: bin + ':' + process.env.PATH,
     PM2_SSH_HOST: 'fixture.test',
     PM2_SSH_USER: 'deploy',
     PM2_SSH_PORT: '2222',
     PM2_UPLOAD_DIR: server,
+    PM2_START_SERVICES: 'false',
+    PM2_INIT_ADMIN: 'false',
     PM2_SSH_KEY_FILE: join(root, 'key'),
     PM2_SSH_KNOWN_HOSTS_FILE: join(root, 'known_hosts'),
     UPLOAD_LOG: join(root, 'upload.jsonl'),
@@ -93,11 +103,11 @@ process.exit(result.status===null ? 1 : result.status);
   delete env.PM2_SSH_PASSWORD
   const upload = (extra = {}) => spawnSync('bash', [join(workspace, 'deploy/pm2/upload-runtime.sh'), releaseId, packageDir], { env: { ...env, ...extra }, encoding: 'utf8' })
   const uploaded = join(server, 'releases', releaseId)
-  const prepare = () => spawnSync(process.execPath, [join(uploaded, 'control/prepare-release.mjs')], { encoding: 'utf8' })
+  const prepare = () => spawnSync(process.execPath, [join(uploaded, 'control/prepare-release.mjs')], { encoding: 'utf8', env })
   return { root, server, packageDir, env, upload, uploaded, prepare }
 }
 
-function startupFixture(t, { migrationFails = false, storageFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false, oss = false } = {}) {
+function startupFixture(t, { migrationFails = false, storageFails = false, importFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false, oss = false } = {}) {
   const f = fixture(t)
   assert.equal(f.upload().status, 0)
   if (oss) {
@@ -108,9 +118,13 @@ function startupFixture(t, { migrationFails = false, storageFails = false, healt
   const scripts = [join(release, 'api/dist/server.js'), join(release, 'api/dist/worker.js'), join(release, 'scripts/serve-application-artifacts.mjs')]
   let list = ['t-box-api', 't-box-worker', 't-box-artifacts', 'other-service'].map((name, index) => ({ name, pid: index + 1, pm2_env: { status: 'online', pm_exec_path: '/old/' + name, pm_uptime: 1 } }))
   let healthRequests = 0
+  let importInput
   const run = (program, args, options) => {
     commands.push([program === process.execPath ? 'node' : program, ...args])
     if (program === process.execPath) {
+      if (args[0].endsWith('import-credential-cli.js')) {
+        importInput = { input: options.input, stdio: options.stdio }
+      }
       if (storageFails && args[0] === '--input-type=module') {
         throw new Error('业务文件 OSS 配置不完整')
       }
@@ -119,6 +133,9 @@ function startupFixture(t, { migrationFails = false, storageFails = false, healt
       }
       if (migrationFails && args[0].endsWith('init-db.js')) {
         throw new Error('fixture migration failure')
+      }
+      if (importFails && args[0].endsWith('import-credential-cli.js')) {
+        throw new Error('fixture import credential synchronization failure')
       }
       return ''
     }
@@ -150,11 +167,74 @@ function startupFixture(t, { migrationFails = false, storageFails = false, healt
   const request = async (url) => {
     healthRequests++
     assert.equal(url.pathname, '/api/v1/health')
-    return new Response(JSON.stringify({ data: { status: healthy && !redisDown ? 'ok' : 'degraded', dependencies: { mysql: 'up', redis: redisDown ? 'down' : process.env.REDIS_ADDR ? 'up' : 'disabled' } } }))
+    return new Response(JSON.stringify({ data: { status: healthy && !redisDown ? 'ok' : 'degraded', dependencies: { mysql: 'up', redis: redisDown ? 'down' : f.env.REDIS_ADDR ? 'up' : 'disabled' } } }))
   }
-  const start = (extra = {}) => startRelease({ release: f.uploaded, run, request, pause: async () => {}, attempts: 4, ...extra })
-  return { ...f, commands, start, processes: () => list, healthRequests: () => healthRequests }
+  const start = (extra = {}) => startRelease({ release: f.uploaded, run, request, pause: async () => {}, attempts: 4, processEnvironment: f.env, ...extra })
+  return { ...f, commands, start, processes: () => list, healthRequests: () => healthRequests, importInput: () => importInput }
 }
+
+test('configured tokens are validated and only their digest is written or uploaded separately from the public package', (t) => {
+  const f = fixture(t)
+  const token = 'deployment_fixture_' + 'A'.repeat(45)
+  const file = join(f.root, 'import-token.sha256')
+  const hashed = spawnSync(process.execPath, [join(workspace, 'deploy/pm2/import-token.mjs'), file], { env: { ...f.env, APP_IMPORT_TOKEN: token }, encoding: 'utf8' })
+  assert.equal(hashed.status, 0, hashed.stderr)
+  assert.equal(readFileSync(file, 'utf8'), importTokenHash(token) + '\n')
+  assert.equal(hashed.stdout, '')
+  assert.equal(f.upload({ PM2_IMPORT_TOKEN_HASH_FILE: file }).status, 0)
+  assert.equal(readFileSync(join(f.uploaded, 'control/app-import.sha256'), 'utf8'), importTokenHash(token) + '\n')
+  assert.equal(existsSync(join(f.server, 'incoming', releaseId)), false)
+  assert.ok(!readFileSync(f.env.UPLOAD_LOG, 'utf8').includes(token))
+  assert.equal(existsSync(join(f.packageDir, 'import-token.sha256')), false)
+  for (const value of ['', 'short', 'a'.repeat(129), 'a'.repeat(32) + '\n', 'a'.repeat(32) + ' ']) {
+    assert.throws(() => importTokenHash(value))
+  }
+})
+
+test('managed credential synchronization runs after migration and admin bootstrap, before PM2 starts', async (t) => {
+  const f = startupFixture(t)
+  writeFileSync(join(f.uploaded, 'control/app-import.sha256'), 'a'.repeat(64))
+  await f.start({ initializeAdmin: true })
+  assert.deepEqual(f.importInput(), { input: 'a'.repeat(64), stdio: ['pipe', 'inherit', 'inherit'] })
+  const index = (part) => f.commands.findIndex((args) => args.some((arg) => arg.endsWith(part)))
+  assert.ok(index('init-db.js') < index('admin/bootstrap.js'))
+  assert.ok(index('admin/bootstrap.js') < index('import-credential-cli.js'))
+  assert.ok(index('import-credential-cli.js') < f.commands.findIndex((args) => args[0] === 'pm2' && args[1] === 'start'))
+})
+
+test('the actual Actions upload step removes the raw token before SSH and stages only its hash', (t) => {
+  const f = fixture(t)
+  const workflow = readFileSync(join(workspace, '.github/workflows/api-pm2.yml'), 'utf8')
+  const step = workflow.split('      - name: Upload, verify and optionally start PM2\n')[1].split('      - name: Deployment result\n')[0]
+  const script = step.split('        run: |\n')[1].split('\n').map((line) => line.replace(/^ {10}/, '')).join('\n')
+  const secret = 'actions_fixture_' + 'B'.repeat(48)
+  symlinkSync(f.packageDir, join(f.root, 'pm2-package'))
+  for (const name of ['ssh', 'scp']) {
+    const path = join(f.root, 'bin', name)
+    const stub = readFileSync(path, 'utf8')
+    writeFileSync(path, stub.replace('#!/usr/bin/env node\n', '#!/usr/bin/env node\nif (process.env.APP_IMPORT_TOKEN) process.exit(90);\n'), { mode: 0o755 })
+  }
+  const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], {
+    cwd: workspace,
+    encoding: 'utf8',
+    env: { ...f.env, RUNNER_TEMP: f.root, RELEASE_ID: releaseId, PM2_SSH_PRIVATE_KEY: 'fixture-key', PM2_SSH_KNOWN_HOSTS: 'fixture.test ssh-ed25519 fixture', APP_IMPORT_TOKEN: secret },
+  })
+  assert.equal(result.status, 0, result.stderr + result.stdout)
+  assert.equal(readFileSync(join(f.uploaded, 'control/app-import.sha256'), 'utf8'), importTokenHash(secret) + '\n')
+  assert.ok(!(result.stdout + result.stderr + readFileSync(f.env.UPLOAD_LOG, 'utf8')).includes(secret))
+  assert.equal(existsSync(join(f.server, 'incoming', releaseId)), false)
+})
+
+test('invalid hashes fail before downtime and failed synchronization cannot start or save the new API', async (t) => {
+  const f = startupFixture(t, { importFails: true })
+  const file = join(f.uploaded, 'control/app-import.sha256')
+  writeFileSync(file, 'invalid')
+  await assert.rejects(f.start(), /SHA-256/)
+  assert.equal(f.commands.length, 0)
+  writeFileSync(file, 'a'.repeat(64))
+  await assert.rejects(f.start(), /synchronization failure/)
+  assert.equal(f.commands.some((args) => args[0] === 'pm2' && ['start', 'save'].includes(args[1])), false)
+})
 
 test('missing server OSS credentials fail before stopping existing PM2 services', async (t) => {
   const f = startupFixture(t, { storageFails: true, oss: true })

@@ -15,34 +15,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      OSS_BUCKET: ${{ vars.ADMIN_OSS_BUCKET || 'tboxos-admin' }}
+      DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
       OSS_REGION: ${{ vars.OSS_REGION }}
-      OSS_PREFIX: ${{ vars.OSS_PREFIX || 'docker' }}
-      OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT || format('https://oss-{0}.aliyuncs.com', vars.OSS_REGION) }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Validate configuration and create release ID
+      - name: Create release ID
         id: release
         shell: bash
         run: |
-          test -n "$OSS_BUCKET" || { echo "Set Actions variable ADMIN_OSS_BUCKET"; exit 1; }
-          test -n "$OSS_REGION" || { echo "Set Actions variable OSS_REGION"; exit 1; }
           release="sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-attempt-$GITHUB_RUN_ATTEMPT"
           printf 'id=%s\ntag=t-box-api:%s\n' "$release" "$release" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7
         with:
           node-version: 24.21.0
+      - name: Prepare fixed deployment settings
+        run: node deploy/settings.mjs
       - name: Validate OSS application settings
         env:
-          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
-          APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
         run: node scripts/upload-bootstrap-oss.mjs --check
       - name: Deployment script regressions
-        run: node --test scripts/api-deployment.test.mjs
+        run: node --test scripts/api-deployment.test.mjs scripts/oss-deployment.test.mjs
       - uses: docker/setup-buildx-action@v4
       - name: Build release image
         uses: docker/build-push-action@v7
@@ -88,18 +84,14 @@ jobs:
           printf '%s\n' "$RUNNER_TEMP/oss-bin" >> "$GITHUB_PATH"
       - name: Publish application files to OSS
         env:
-          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
-          APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          OSS_SESSION_TOKEN: ${{ secrets.OSS_SESSION_TOKEN }}
         run: node scripts/upload-bootstrap-oss.mjs "$RUNNER_TEMP/bootstrap-artifacts"
       - name: Upload public release to administration bucket Docker directory
         env:
           RELEASE_ID: ${{ steps.release.outputs.id }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          OSS_SESSION_TOKEN: ${{ secrets.OSS_SESSION_TOKEN }}
         run: |
           test -n "$OSS_ACCESS_KEY_ID" && test -n "$OSS_ACCESS_KEY_SECRET" || { echo "Configure OSS AccessKey secrets"; exit 1; }
           bash deploy/api/upload-release.sh "$RELEASE_ID" "$RUNNER_TEMP/api-release"

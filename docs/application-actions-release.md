@@ -1,8 +1,10 @@
 # 独立应用：Actions → OSS → 后台待发布
 
-首次上线按 [OSS + PM2 操作顺序](first-deployment.md) 执行。当前工作流先把可直接浏览的应用文件上传到 `APPS_OSS_BUCKET`（默认 `tboxos-app`），逐文件通过 `APP_ARTIFACT_ORIGIN` 校验，再将公开 JSON 包上传到同桶 `builds/` 并登记待发布版本。无需私有 Bucket 或签名下载 URL。OSS 模式不通过服务器提供公开静态文件；服务器只在内存中读取与校验 OSS 文件，不保留应用文件副本。
+首次上线按 [OSS + PM2 操作顺序](first-deployment.md) 执行。当前工作流固定把应用网页上传到 `tboxos-app`，通过 `https://apps.<主域名>` 校验，再将公开 JSON 包上传到同桶 `builds/` 并登记待发布版本。无需私有 Bucket 或签名下载 URL。OSS 模式不通过服务器提供公开静态文件；服务器只在内存中读取与校验 OSS 文件，不保留应用文件副本。
 
 工作流 `.github/workflows/application-release.yml` 仅支持手动运行，API Docker/PM2 工作流保持原有用途。选择应用，填写新版本号和更新说明后，工作流构建该应用及依赖、上传公开 OSS，通过服务器导入接口登记为 `submitted`（已提交、未上架）。后台“应用发布”可直接选中该版本并点击发布；已安装用户沿用原版本，按已有更新机制升级。
+
+**所有 GitHub 配置一次填齐，包括 `APP_IMPORT_TOKEN`。** 你在 GitHub 设置一个长期随机字符串，PM2 后端部署自动同步其哈希；子应用发布直接使用同一个 Secret，不需要服务器生成命令，也没有定期续期步骤。所有 Actions 共用 `deploy/settings.mjs`，普通变量只保留主域名和 OSS 地域，见下方 [GitHub 配置](#github-配置)。
 
 ## 应用下拉列表
 
@@ -38,68 +40,37 @@ pnpm test:application-release
 
 输出 `output/application-releases/calculator/1.0.1/`，包含以 SHA-256 命名的 JSON 包及 `release.json`。JSON 包含静态文件、文件清单摘要、发布元信息与更新说明；不是服务器可执行代码。单文件最多 5 MiB，总静态文件最多 20 MiB / 2000 文件，编码后的包最多 30 MiB。不包含 `.env`、凭证或服务端代码。Web 构建时仍须避免把私密配置写入公开 JS。
 
-## 服务器首次接入
+## 后端自动接入
 
-先部署包含本次新增接口和迁移的 API，手动执行数据库迁移：
+先把下面的 GitHub 配置全部填好，再运行 **API PM2 package and upload**，保持 `start_services` 勾选。流程自动执行数据库迁移、确保管理员存在、同步应用提交凭证，再启动 API 和 worker。已有管理员账号不会被重置。
 
-```bash
-# 源码部署
-pnpm db:init
-# 或 PM2 dist 部署：进入 releases/<版本>/api
-node dist/init-db.js
-# Docker 部署：在 deploy/api 目录
-docker compose run --rm api node dist/init-db.js
-```
+`APP_IMPORT_TOKEN` 使用 32–128 位随机英文字母 / 数字 / `_` / `-`，推荐密码管理器生成 64 位。runner 只把它的 SHA-256 通过已验证的 SSH 通道上传，独立于可下载的后端包和 OSS 文件。服务器版本目录 `control/app-import.sha256` 与数据库只保存哈希，没有原始 Token；部署临时文件自动清理。
 
-新增 `application_import_credentials`（受限凭证，仅存 token 哈希）与 `application_build_imports`（构建来源与幂等记录）两张表；不会修改现有应用的线上版本。
+同步凭证不设置自动到期，重复部署同一个值复用现有凭证。作用范围自动取自后端包内可信的独立应用清单，不能用来登录后台、直接上架或安装后端代码。关联管理员被禁用后仍会拒绝请求。
 
-PM2 Actions 自动将应用域名、公开桶地址和目录写入后端发布包，服务器无需重复填写。首次先发布新后端包，再创建下方导入凭证；修改 GitHub Bucket、地域或目录后也先重新发布后端。
+需要更换时，更新 GitHub Secret 并重新部署后端；同步在数据库事务内撤销旧的托管凭证、登记新的凭证，保留历史构建来源。旧 Token 随即失效。手工撤销过的 Token 不会被同值部署重新启用，需要换一个新值。
 
-源码或可选 Docker 部署没有 PM2 发布包元信息，需要手动配置以下高级选项：
+无需在服务器 `.env` 中配置 `APP_IMPORT_TOKEN`。应用域名、公开 OSS 桶与目录由 PM2 包自动提供，API 在内存中下载和校验公开对象，不保存静态文件副本。API 的业务文件上传账号仍按 [部署清单](first-deployment.md) 填在服务器配置中。
 
-```dotenv
-APP_IMPORT_OSS_ORIGIN=https://tboxos-app.oss-cn-hangzhou.aliyuncs.com
-APP_IMPORT_OSS_PREFIX=builds
-APP_ARTIFACT_ORIGIN=https://apps.example.com
-```
-
-`APP_IMPORT_OSS_ORIGIN` 必须精确匹配 `tboxos-app` 的 OSS 公网桶域名，不带结尾 `/`，地域改为实际值。目前支持标准阿里云 OSS 公网桶域名，不接受内网、自定义域名、HTTP、任意跳转。API 直接下载公开 JSON，无须配置 OSS AccessKey。浏览器通过同桶的自定义域名 `APP_ARTIFACT_ORIGIN` 加载 `<应用ID>/<产物摘要>/` 中的网页。服务器仍需持久化 PM2 shared/output/app-artifacts 或 Docker data/app-artifacts 中的校验和备份副本。
-
-在服务器创建一个仅允许提交指定应用的导入凭证，管理员账号须已存在且启用：
-
-```bash
-# 源码：管理员用户名、应用 ID（多个以逗号分隔）、有效天数（默认 90，最多 365）
-pnpm --filter @t-box/api apps:credential create admin calculator 90
-# PM2 dist：进入 releases/<版本>/api
-node dist/application-platform/import-credential-cli.js create admin calculator 90
-# Docker：在 deploy/api 目录
-docker compose run --rm api node dist/application-platform/import-credential-cli.js create admin calculator 90
-```
-
-命令把 token 写入 API 的 `.secrets/app-build-<凭证ID>.txt`（权限 0600），不在日志打印 token。把其中内容设置为 GitHub Secret `APP_IMPORT_TOKEN`，妥善保管或删除本地明文副本。凭证只能提交显式允许的应用，不能用来登录后台、修改版本、上架应用、执行 SQL 或安装后端代码。禁用关联管理员会让凭证失效；轮换时先创建新凭证、更新 Secret，再撤销旧凭证：
-
-```bash
-node dist/application-platform/import-credential-cli.js revoke <凭证ID>
-```
-
-修改 API 环境后手动重启 API。宝塔/Nginx 应代理 `/api/v1/application-builds` 到 API。接口请求只有下载地址和摘要，包由 API 拉取，因此无须把反向代理请求体限制提高到 30 MiB；若下载速度较慢，为该路径将代理响应超时设置为至少 90 秒。
+改变主域名、地域或 `deploy/settings.mjs` 后，先准备好对应的 DNS / OSS 配置并重新发布后端，再提交子应用。
 
 ## GitHub 配置
 
-Repository → Settings → Secrets and variables → Actions：
+Repository → Settings → Secrets and variables → Actions，配置 Repository Secrets / Variables；工作流没有绑定命名 Environment。
 
-| 类型 | 名称 | 示例 / 用途 |
+| 类型 | 名称 | 填什么 |
 | --- | --- | --- |
-| Variable | `OSS_REGION` | `cn-hangzhou` |
-| Variable | `APPS_OSS_BUCKET` | 可不填，默认 `tboxos-app`；网页与构建包共用 |
-| Variable | `APP_ARTIFACT_ORIGIN` | 独立应用静态站点的自定义 HTTPS 来源 |
-| Variable | `OSS_ENDPOINT` | 可选，`https://oss-cn-hangzhou.aliyuncs.com`，必须公网 endpoint |
-| Variable | `APP_OSS_PREFIX` | 可选，默认 `builds`，须与服务器匹配；独立于 Docker 的 `OSS_PREFIX` |
-| Variable | `APP_IMPORT_API_URL` | `https://api.example.com/api/v1/application-builds` |
-| Secret | `OSS_ACCESS_KEY_ID` | 有应用静态目录和 `builds/` 上传及设置对象 ACL 权限的 RAM AccessKey |
-| Secret | `OSS_ACCESS_KEY_SECRET` | 对应 Secret |
-| Secret | `OSS_SESSION_TOKEN` | 可选，临时 STS 凭证使用 |
-| Secret | `APP_IMPORT_TOKEN` | 上述服务器生成的受限导入凭证 |
+| Variable | `DEPLOY_DOMAIN` | 主域名，如 `example.com`，不带协议、路径或端口 |
+| Variable | `OSS_REGION` | 实际 Bucket 地域，如 `cn-hangzhou`，不带 `oss-` |
+| Secret | `OSS_ACCESS_KEY_ID` | GitHub 发布 RAM 账号的 AccessKey ID，复用首次部署配置 |
+| Secret | `OSS_ACCESS_KEY_SECRET` | 上述账号对应 Secret，复用首次部署配置 |
+| Secret | `APP_IMPORT_TOKEN` | 你设置的 32–128 位长期随机字符串，后端部署自动同步哈希 |
+
+其余全部由 [deploy/settings.mjs](../deploy/settings.mjs) 固定或推导：应用桶 `tboxos-app`、构建目录 `builds/`、应用地址 `https://apps.<主域名>`、导入接口 `https://api.<主域名>/api/v1/application-builds`、对应地域的 OSS 公网 endpoint。脚本通过 GitHub 的环境文件传给后续步骤，不需要创建同名 Repository Variables。
+
+四个发布工作流统一使用上述两个普通变量。旧的站点 URL、Bucket、目录和 endpoint Variables 已不再读取，可以删除；当前工作流只使用长期 RAM AccessKey，已移除 `OSS_SESSION_TOKEN`。密钥和受限提交凭证继续放在 Secrets，不能写入公开脚本。
+
+应用、版本和更新说明在 Run workflow 界面选择 / 输入；输出目录与构建来源由 GitHub 自动提供，也不用额外配置。
 
 RAM 需要目标目录的 `oss:PutObject`、`oss:PutObjectAcl` 及客户端实际使用的分片上传权限。下载通过公开 HTTPS，不需要签名，也不依赖下载凭据。GitHub 的旧 `OSS_BUCKET` 变量不再使用。工作流固定 ossutil 2.4.0 并校验下载工具 SHA-256。
 
@@ -109,12 +80,12 @@ RAM 需要目标目录的 `oss:PutObject`、`oss:PutObjectAcl` 及客户端实�
 
 1. 将网页上传至 `oss://tboxos-app/<appId>/<产物摘要>/` 并验证公开访问，再将构建包公开上传至 `oss://tboxos-app/builds/<appId>/<version>/<包SHA256>.json`，使用标准 OSS HTTPS 地址下载。
 2. 工作流调用 `POST /api/v1/application-builds`，带 Bearer 导入凭证、应用、版本、摘要、公开 URL 及 GitHub repository/commit/runId。导入凭证不会写入 OSS 包或公开日志。
-3. 服务器验证凭证权限、受信桶/目录、60 秒下载超时与大小、包 SHA-256、路径及每文件摘要。静态产物使用临时目录原子写入持久目录。
+3. 服务器验证凭证权限、受信桶/目录、60 秒下载超时与大小、包 SHA-256、路径及每文件摘要，再直接读取 OSS 中已上传的静态文件核对完整性；校验在内存中完成，不写入服务器持久目录。
 4. 同一个数据库事务登记构建来源、发布定义、提交状态与审计记录。`published=0`，当前线上版本不变。后端绑定、权限和工具契约继承服务器已有可信发布，不接受构建包任意声明。发布就绪检查不通过则不登记。
 5. 网络不确定或 5xx/429 最多尝试提交 5 次；同应用/版本/包摘要返回原版本（包括管理员随后已上架的情况）。并发重试共用应用行锁；同版本不同内容返回 409，需新版本号，不能覆盖旧版本。权限/校验/版本冲突等 4xx 不重试。
 6. 管理员在已有“应用发布”页面审核更新说明与就绪状态，再手动点击发布。CI 没有上架接口权限。
 
-OSS 上传成功但登记失败时，OSS 包会保留；不会产生自动上线。可修复配置后重新运行同版本同构建，或用新版本重新构建。不同平台/Node/依赖可能导致构建字节变化，变动时须使用新版本。无登记的本地产物目录可能保留以便重试，后续清理应先核对所有发布/安装引用。
+OSS 上传成功但登记失败时，OSS 文件和构建包会保留；不会产生自动上线。可修复配置后重新运行同版本同构建，或用新版本重新构建。不同平台/Node/依赖可能导致构建字节变化，变动时须使用新版本。清理 OSS 中未登记的对象前，应先核对所有发布/安装引用。
 
 该链路发布独立应用的静态前端和已有可信能力契约，不热加载未知服务端代码。若应用此次更新改变了 API 业务实现、工具参数、权限契约或新后端绑定，应先部署相应 API/独立后端并迁移数据库，再提交应用版本；单独上传 Web 包不能升级运行中的 Node 服务。网页、Android/iOS 的 Web 容器继续通过既有安装/更新机制加载版本，原生壳本身仍按商店流程发布。
 

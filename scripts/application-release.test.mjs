@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { deploymentEnvironment } from '../deploy/settings.mjs'
 import { collectBuildFiles, discoverApplications, sha256, validVersion, workflowOptions } from './application-builds.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -114,6 +115,7 @@ import { join } from 'node:path'
 const calls = []
 globalThis.fetch = async (url, options) => {
   if (options.method !== 'POST') return new Response(readFileSync(join(process.env.FAKE_OSS_DIR, new URL(url).pathname)))
+  if (options.headers.authorization !== 'Bearer ' + 'a'.repeat(64)) throw new Error('Missing scoped import authorization')
   if (!existsSync(join(process.env.FAKE_OSS_DIR, 'calculator', process.env.ARTIFACT, 'artifact.json'))) throw new Error('Submission before static publication')
   const body = JSON.parse(options.body)
   const bundleUrl = new URL(body.url)
@@ -130,16 +132,13 @@ globalThis.fetch = async (url, options) => {
         encoding: 'utf8',
         env: {
           ...process.env,
+          ...deploymentEnvironment({ DEPLOY_DOMAIN: 'example.com', OSS_REGION: 'cn-hangzhou' }),
           PATH: bin + ':' + process.env.PATH,
           APP_RELEASE_OUTPUT: join(directory, 'releases'),
           OSS_BUCKET: 'obsolete-private-bucket-must-be-ignored',
-          OSS_REGION: 'cn-hangzhou',
           OSS_ACCESS_KEY_ID: 'fixture-key-id',
           OSS_ACCESS_KEY_SECRET: 'fixture-key-secret',
-          OSS_ENDPOINT: '',
-          APP_OSS_PREFIX: '',
-          APP_IMPORT_TOKEN: 'tbox_build_' + 'a'.repeat(43),
-          APP_IMPORT_API_URL: 'https://api.example.com/api/v1/application-builds',
+          APP_IMPORT_TOKEN: 'a'.repeat(64),
           GITHUB_REPOSITORY: 'test/repo',
           GITHUB_SHA: 'a'.repeat(40),
           GITHUB_RUN_ID: '123',
@@ -148,8 +147,6 @@ globalThis.fetch = async (url, options) => {
           FAIL_BUNDLE: String(failBundle),
           PM2_SSH_PASSWORD: 'must-not-reach-ossutil',
           FAKE_OSS_DIR: join(directory, 'public'),
-          APPS_OSS_BUCKET: 'tboxos-app',
-          APP_ARTIFACT_ORIGIN: 'https://apps.example.com',
           ARTIFACT: artifact,
         },
       })

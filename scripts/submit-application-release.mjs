@@ -28,7 +28,7 @@ if (!/^[\w-]+(?:\/[\w-]+)*$/.test(prefix)) {
 }
 const token = process.env.APP_IMPORT_TOKEN || ''
 const api = new URL(process.env.APP_IMPORT_API_URL || (process.env.API_BASE_URL ? process.env.API_BASE_URL + '/application-builds' : ''))
-if (api.protocol !== 'https:' || api.username || api.password || api.search || api.hash || api.pathname !== '/api/v1/application-builds' || !/^tbox_build_[\w-]{43}$/.test(token)) {
+if (api.protocol !== 'https:' || api.username || api.password || api.search || api.hash || api.pathname !== '/api/v1/application-builds' || !/^[\w-]{32,128}$/.test(token)) {
   throw new Error('Configure HTTPS APP_IMPORT_API_URL ending in /api/v1/application-builds and scoped APP_IMPORT_TOKEN')
 }
 const source = { repository: process.env.GITHUB_REPOSITORY, commit: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID }

@@ -7,10 +7,6 @@ on:
         description: Run migrations and start PM2 after upload
         type: boolean
         default: true
-      initialize_admin:
-        description: 'First install only: create administrator if none exists'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -24,12 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
+      DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+      OSS_REGION: ${{ vars.OSS_REGION }}
       PM2_UPLOAD_DIR: /www/wwwroot/tbox
       PM2_SSH_HOST: 8.163.69.101
       PM2_SSH_PORT: '22'
       PM2_SSH_USER: root
       PM2_START_SERVICES: ${{ inputs.start_services }}
-      PM2_INIT_ADMIN: ${{ inputs.initialize_admin }}
+      PM2_INIT_ADMIN: ${{ inputs.start_services }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -48,12 +46,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.21.0
+      - name: Prepare fixed deployment settings
+        run: node deploy/settings.mjs
+      - name: Validate application import token
+        env:
+          APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
+        run: node deploy/pm2/import-token.mjs --check
       - name: Validate OSS bootstrap settings
         env:
-          OSS_REGION: ${{ vars.OSS_REGION }}
-          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
-          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
-          APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
         run: node scripts/upload-bootstrap-oss.mjs --check
@@ -65,12 +65,6 @@ jobs:
       - name: Build and validate standalone production package
         env:
           RELEASE_ID: ${{ steps.release.outputs.id }}
-          APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
-          APP_ARTIFACT_DELIVERY: oss
-          OSS_REGION: ${{ vars.OSS_REGION }}
-          WEB_OSS_BUCKET: ${{ vars.WEB_OSS_BUCKET || 'tboxos' }}
-          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
-          APP_OSS_PREFIX: ${{ vars.APP_OSS_PREFIX || 'builds' }}
         run: node scripts/pack-api-pm2.mjs "$RELEASE_ID" "$RUNNER_TEMP/pm2-package"
       - name: Retain downloadable release package
         uses: actions/upload-artifact@v7
@@ -84,13 +78,8 @@ jobs:
         run: bash deploy/oss/install-ossutil.sh
       - name: Publish exact bootstrap application files to OSS
         env:
-          OSS_REGION: ${{ vars.OSS_REGION }}
-          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
-          APPS_OSS_BUCKET: ${{ vars.APPS_OSS_BUCKET || 'tboxos-app' }}
-          APP_ARTIFACT_ORIGIN: ${{ vars.APP_ARTIFACT_ORIGIN }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          OSS_SESSION_TOKEN: ${{ secrets.OSS_SESSION_TOKEN }}
         run: node scripts/upload-bootstrap-oss.mjs "$RUNNER_TEMP/pm2-package/bootstrap-artifacts"
       - name: Upload, verify and optionally start PM2
         env:
@@ -98,10 +87,14 @@ jobs:
           PM2_SSH_PRIVATE_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
           PM2_SSH_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
           PM2_SSH_KNOWN_HOSTS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
+          APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
         run: |
           umask 077
           ssh_dir="$(mktemp -d "$RUNNER_TEMP/tbox-ssh.XXXXXX")"
           trap 'rm -rf -- "$ssh_dir"' EXIT
+          node deploy/pm2/import-token.mjs "$ssh_dir/import-token.sha256"
+          unset APP_IMPORT_TOKEN
+          export PM2_IMPORT_TOKEN_HASH_FILE="$ssh_dir/import-token.sha256"
           if [ -n "$PM2_SSH_PASSWORD" ]; then
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends sshpass

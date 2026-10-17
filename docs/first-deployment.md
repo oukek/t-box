@@ -2,7 +2,21 @@
 
 当前方案：主前端、后台、子应用和业务文件都放 OSS；后端使用 Actions 构建包上传服务器，再由 PM2 启动。服务器保留后端程序、数据库、配置、密钥和必要日志，业务文件不长期落盘。全部 Actions 手动运行。
 
-下文的 `example.com` 换成你的真实主域名，OSS 地域换成三个 Bucket 的实际地域。
+下文的 `example.com` 换成你的真实主域名，OSS 地域换成三个 Bucket 的实际地域。GitHub 只填写主域名和地域两个普通变量；Bucket、子域名、发布目录和 API 路径统一由 [部署设置脚本](../deploy/settings.mjs) 生成。
+
+**所有需要填写的配置一次列齐：**
+
+| 配置位置 | 要填写的内容 |
+| --- | --- |
+| GitHub Repository Variables | `DEPLOY_DOMAIN`、`OSS_REGION` |
+| GitHub Repository Secrets | `PM2_SSH_PASSWORD`、`PM2_SSH_KNOWN_HOSTS`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`APP_IMPORT_TOKEN` |
+| 服务器 `/www/wwwroot/tbox/shared/api.env` | `MYSQL_HOST`、`MYSQL_USERNAME`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、服务器上传账号的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`；`REDIS_ADDR=` 保持空即可不用 Redis |
+| OSS / DNS / Nginx | 三个公开读 Bucket、四个 HTTPS 域名、网站托管、跨域及 API 反向代理，见第 1、3 步 |
+| 项目后台 AI 配置 | 服务商 API 地址、API Key、实际可用模型 |
+| 微信平台及项目后台支付配置 | 服务号 AppID / AppSecret、商户号、商户证书序列号 / 私钥、API v3 密钥、微信支付公钥 ID / PEM（或平台证书）、API 与支付网页地址、商品描述、支付渠道和充值开关；域名授权见第 6 步 |
+| 发布原生 Android / iOS 时 | 移动应用 AppID、包名 / Bundle ID、签名、Universal Link、Apple Team ID，见第 6 步 |
+
+GitHub 配置现在就全部填好。`APP_IMPORT_TOKEN` 由你设置一个 32–128 位、仅含英文字母 / 数字 / `_` / `-` 的随机字符串，推荐密码管理器生成 64 位；后端部署自动同步其哈希，不再执行生成命令，也没有 90 天到期要求。服务器不手填这个 Token。
 
 ## 1. 先配置 OSS 和域名
 
@@ -37,7 +51,7 @@
 
 进入仓库 **Settings → Secrets and variables → Actions**，添加 **Repository** 配置。当前 Actions 没有绑定命名 Environment，不能只填在 Environment Secrets 里。
 
-**首次必填的 4 个 Secrets：**
+**全部 5 个 Secrets 一次填好：**
 
 | 名称 | 填什么 |
 | --- | --- |
@@ -45,6 +59,9 @@
 | `PM2_SSH_KNOWN_HOSTS` | 下方命令输出的完整主机公钥行 |
 | `OSS_ACCESS_KEY_ID` | GitHub 发布 RAM 账号的 AccessKey ID |
 | `OSS_ACCESS_KEY_SECRET` | 该账号对应的 Secret |
+| `APP_IMPORT_TOKEN` | 你设置的长期应用提交凭证：32–128 位随机字母 / 数字 / `_` / `-`；推荐 64 位，后端与应用发布共用此 Secret |
+
+后端 Actions 会在 runner 计算 SHA-256，只通过 SSH 上传哈希，自动在数据库登记当前应用范围及启用的管理员身份，不设置自动到期。原始 Token 不上传 OSS、不进入可下载的后端包，也不写入服务器 `.env`。以后若需要更换，修改这个 GitHub Secret 并重新部署后端，旧的托管凭证自动撤销；子应用发布直接使用同一 Secret。
 
 从可信的服务器控制台执行下面命令，将完整输出填入 `PM2_SSH_KNOWN_HOSTS`：
 
@@ -52,19 +69,18 @@
 awk '{print "8.163.69.101 " $1 " " $2}' /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-**首次必填的 5 个 Variables：**
+**只需填写 2 个 Variables：**
 
 ```dotenv
+DEPLOY_DOMAIN=example.com
 OSS_REGION=cn-hangzhou
-WEB_ORIGIN=https://box.example.com
-ADMIN_ORIGIN=https://admin.example.com
-APP_ARTIFACT_ORIGIN=https://apps.example.com
-API_BASE_URL=https://api.example.com/api/v1
 ```
 
-`OSS_REGION` 填真实地域，不带 `oss-`；三个 ORIGIN 不带路径或结尾 `/`；`API_BASE_URL` 必须包含 `/api/v1`，不带结尾 `/`。
+`DEPLOY_DOMAIN` 只填小写主域名，不带协议、端口、路径或结尾 `/`；`OSS_REGION` 填三个 Bucket 的实际地域，不带 `oss-`。地域未知时不能随意写死，必须与实际 Bucket 一致。
 
-Bucket 名已经默认使用 `tboxos`、`tboxos-admin`、`tboxos-app`，不必再填。`OSS_ENDPOINT`、`APP_OSS_PREFIX`、`OSS_PREFIX`、`APP_IMPORT_API_URL` 都有默认值，首次不用配置。`APP_IMPORT_TOKEN` 只在以后单独更新子应用时需要，见文末。使用上述长期 RAM AccessKey 时，不填 `OSS_SESSION_TOKEN`。
+脚本固定使用 `tboxos`、`tboxos-admin`、`tboxos-app`，自动生成 `box/admin/apps/api.<主域名>` 四个 HTTPS 来源、API `/api/v1` 和导入接口、OSS 公网 endpoint，以及 `builds/`、`docker/` 目录。所有发布 Actions 共用同一设置，不再逐个配置地址和 Bucket。
+
+原来配置的各站点 URL、Bucket、endpoint、发布目录等 GitHub Variables 已不再读取，可以删除；Actions 使用长期 RAM AccessKey，已移除 `OSS_SESSION_TOKEN`。如需不同的子域名前缀或目录，只修改 `deploy/settings.mjs`，再准备匹配的 DNS / OSS 绑定并重新发布。
 
 SSH 地址 `8.163.69.101`、端口 `22`、用户 `root`、部署目录 `/www/wwwroot/tbox` 已写入 PM2 工作流，无须增加变量。
 
@@ -98,10 +114,10 @@ Redis 可选：不使用就保持 `REDIS_ADDR=`；使用时安装 Redis，填 `R
 先将当前代码提交、推送到 GitHub 默认分支，再在 **Actions → 对应工作流 → Run workflow** 操作；三个工作流选择同一分支 / 提交：
 
 1. **Quality**：等待检查和测试通过。发布工作流目前不会自动等待 Quality。
-2. **API PM2 package and upload**：首次勾选 `start_services`、`initialize_admin`。它会先上传四个子应用初始版本到 OSS，再上传后端包、执行数据库迁移、创建管理员、启动 PM2 并检查健康状态。服务器不需要拉 Git 仓库或重新构建。
+2. **API PM2 package and upload**：保持 `start_services` 勾选。它会先上传四个子应用初始版本到 OSS，再上传后端包、执行数据库迁移、自动确保管理员存在、同步应用提交凭证、启动 PM2 并检查健康状态。已有管理员不会被重置，服务器不需要拉 Git 仓库或重新构建。
 3. **Web OSS deployment**：`target` 选 `all`，发布主前端和后台。
 
-首次应用已随后端发布准备好，不需要先配置应用导入 Token。后续更新后端只勾选 `start_services`，无需再次初始化管理员。
+四个初始应用随流程准备好；每次后端发布都自动同步 GitHub 中配置的同一个 `APP_IMPORT_TOKEN`，无需增加配置或手工生成凭证。取消 `start_services` 仅上传时，哈希作为运行配置保存，手动启动该版本时再自动登记到数据库。
 
 ## 5. 登录后台并验收
 
@@ -170,19 +186,10 @@ H5 域名可能需要审核，先完成对应产品开通和域名配置，再�
 
 私钥、API v3 密钥和 AppSecret 加密入库，不上传到 OSS；已有密钥留空会保留。最后用真实设备和一笔小额订单核对付款、到账及订单状态，详见 [计费与支付](billing-and-payments.md)。
 
-**仅发布网页可以跳过原生配置。** 发布 Android / iOS 时，另在微信开放平台创建移动应用，绑定真实包名 / Bundle ID、Android 发布签名和 iOS Universal Link。填写 `capacitor/wechat.config.json`：`enabled=true`、移动应用 `appId`、`universalLink=https://box.example.com/wechat/` 和 Apple Team ID `iosTeamId`；当前启用校验要求四项齐全，Universal Link 必须与 `WEB_ORIGIN` 同源。在后台填写移动应用 AppID 并启用已开通的 APP 支付，然后重新发布主站生成 AASA 文件，执行 `pnpm native:sync` 并重新签名打包。移动应用 AppID 与服务号 AppID 分开使用；当前 iOS 原生 AI 余额充值禁用，详见 [原生微信配置](wechat-native-payments.md)。
+**仅发布网页可以跳过原生配置。** 发布 Android / iOS 时，另在微信开放平台创建移动应用，绑定真实包名 / Bundle ID、Android 发布签名和 iOS Universal Link。填写 `capacitor/wechat.config.json`：`enabled=true`、移动应用 `appId`、`universalLink=https://box.example.com/wechat/` 和 Apple Team ID `iosTeamId`；当前启用校验要求四项齐全，Universal Link 必须使用生成的主站域名。在后台填写移动应用 AppID 并启用已开通的 APP 支付，然后重新发布主站生成 AASA 文件，执行 `pnpm native:sync` 并重新签名打包。移动应用 AppID 与服务号 AppID 分开使用；当前 iOS 原生 AI 余额充值禁用，详见 [原生微信配置](wechat-native-payments.md)。
 
 **服务号消息发送尚未接入。** 当前 AppSecret 仅用于支付网页授权；消息 Token、EncodingAESKey、模板 ID、消息接收 URL 没有可用配置入口。不要添加虚构的 `WECHAT_*` 环境变量，也不要把支付通知地址填成公众号“服务器配置”。要发服务号消息，需要另外实现消息通道。
 
-## 以后单独更新子应用时
+## 发布子应用
 
-首次部署不用做这一步。需要更新计算器、日历、记账或时间应用时，在服务器执行：
-
-```sh
-cd /www/wwwroot/tbox/current/api
-node dist/application-platform/import-credential-cli.js create admin calculator,calendar,ledger,time 90
-```
-
-将生成的 `/www/wwwroot/tbox/shared/secrets/app-build-<凭证ID>.txt` 内容填入 GitHub Secret **`APP_IMPORT_TOKEN`**，保存后删除这份明文凭据副本。凭证有效 90 天，到期前轮换。
-
-运行 **Application OSS submission**，选应用、填未用过的版本号；成功后进入后台“应用发布”审核上架。不需要新建 Bucket。若改变 GitHub 的应用域名、Bucket、地域或构建目录，先重新发布后端，再提交应用。其他进阶操作见 [PM2 部署](api-pm2-deployment.md)、[子应用发布](application-actions-release.md)、[运维与恢复](operations-and-recovery.md)。
+后端发布成功后，直接运行 **Application OSS submission**，选应用、填未用过的版本号；成功后进入后台“应用发布”审核上架。无需补填配置、执行服务器命令或新建 Bucket。若改变主域名、地域或 `deploy/settings.mjs` 中的公共设置，先准备好对应的 OSS / DNS 配置并重新发布后端，再提交应用；已有业务文件不会因改 Bucket 而自动迁移。其他进阶操作见 [PM2 部署](api-pm2-deployment.md)、[子应用发布](application-actions-release.md)、[运维与恢复](operations-and-recovery.md)。

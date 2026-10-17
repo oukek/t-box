@@ -35,6 +35,7 @@ import { DesktopLayouts1791244817000 } from './migrations/DesktopLayouts.js'
 import { DurableTasks1791244804000 } from './migrations/DurableTasks.js'
 import { InitialSchema1791158400000 } from './migrations/InitialSchema.js'
 import { LedgerTimestamps1791244801000 } from './migrations/LedgerTimestamps.js'
+import { ManagedApplicationImport1791244850000 } from './migrations/ManagedApplicationImport.js'
 import { ModelInvocation1791244825000 } from './migrations/ModelInvocation.js'
 import { ModelPools1791244847000 } from './migrations/ModelPools.js'
 import { Notifications1791244846000 } from './migrations/Notifications.js'
@@ -123,6 +124,7 @@ export function createDataSource(config = getConfig().mysql) {
       ModelPools1791244847000,
       ResourceObjectPaths1791244848000,
       LedgerIconStorage1791244849000,
+      ManagedApplicationImport1791244850000,
     ],
     migrationsTransactionMode: 'none',
     migrationsTableName: 'schema_migrations',

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { deploymentEnvironment } from '../deploy/settings.mjs'
 import { sha256 } from './application-builds.mjs'
 import { contentType, ossSettings, publishArtifact, publishBootstrap, publishFiles, publishSite } from './oss-static.mjs'
 import { verifiedOffline } from './vite-offline.mjs'
@@ -13,6 +14,52 @@ import { prepareWebVerification } from './web-verification.mjs'
 const environment = { OSS_REGION: 'cn-hangzhou', OSS_ACCESS_KEY_ID: 'fixture-id', OSS_ACCESS_KEY_SECRET: 'fixture-secret', APP_IMPORT_TOKEN: 'private-import', PM2_SSH_PASSWORD: 'private-password' }
 const settings = () => ossSettings('test-public-bucket', 'https://apps.example.com', environment)
 const file = (path, value) => ({ path, content: Buffer.from(value).toString('base64') })
+
+test('two public settings provide isolated sites and the fixed OSS layout to every deployment workflow', async () => {
+  const generated = deploymentEnvironment({ DEPLOY_DOMAIN: 'example.com', OSS_REGION: 'cn-hangzhou', APPS_OSS_BUCKET: 'obsolete-bucket', APP_IMPORT_API_URL: 'https://untrusted.example', OSS_ENDPOINT: 'https://untrusted.example' })
+  assert.deepEqual([generated.WEB_OSS_BUCKET, generated.ADMIN_OSS_BUCKET, generated.APPS_OSS_BUCKET], ['tboxos', 'tboxos-admin', 'tboxos-app'])
+  assert.deepEqual([generated.WEB_ORIGIN, generated.ADMIN_ORIGIN, generated.APP_ARTIFACT_ORIGIN, new URL(generated.API_BASE_URL).origin], ['https://box.example.com', 'https://admin.example.com', 'https://apps.example.com', 'https://api.example.com'])
+  assert.equal(generated.APP_IMPORT_API_URL, 'https://api.example.com/api/v1/application-builds')
+  assert.equal(generated.OSS_ENDPOINT, 'https://oss-cn-hangzhou.aliyuncs.com')
+  assert.equal(generated.OSS_BUCKET, generated.ADMIN_OSS_BUCKET)
+  assert.equal(generated.APP_OSS_PREFIX, 'builds')
+  assert.equal(generated.OSS_PREFIX, 'docker')
+  for (const name of ['web-oss', 'application-release', 'api-pm2', 'api-image']) {
+    const workflow = await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8')
+    assert.deepEqual([...new Set([...workflow.matchAll(/\$\{\{ vars\.(\w+)/g)].map((match) => match[1]))].sort(), ['DEPLOY_DOMAIN', 'OSS_REGION'], name)
+    assert.ok(workflow.includes('run: node deploy/settings.mjs'), name)
+    assert.ok(!workflow.includes('secrets.OSS_SESSION_TOKEN'), name)
+  }
+})
+
+test('invalid deployment domains and regions fail before destinations can be generated', () => {
+  for (const domain of ['', 'localhost', '127.0.0.1', 'https://example.com', 'example.com/path', 'example.com:443', 'example.com\nMALICIOUS=value', '-example.com', 'example.com.']) {
+    assert.throws(() => deploymentEnvironment({ DEPLOY_DOMAIN: domain, OSS_REGION: 'cn-hangzhou' }), /DEPLOY_DOMAIN/)
+  }
+  for (const region of ['', 'oss-cn-hangzhou', 'cn-hangzhou-internal', '../region', 'cn-hangzhou\nMALICIOUS=value']) {
+    assert.throws(() => deploymentEnvironment({ DEPLOY_DOMAIN: 'example.com', OSS_REGION: region }), /OSS_REGION/)
+  }
+})
+
+test('the settings CLI exports only derived public values and its output passes website and bootstrap preflights', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'tbox-deployment-settings-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const githubEnv = join(directory, 'github-env')
+  await writeFile(githubEnv, 'EXISTING=value\n')
+  const input = { ...process.env, ...environment, DEPLOY_DOMAIN: 'example.com', GITHUB_ENV: githubEnv }
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('../deploy/settings.mjs', import.meta.url))], { encoding: 'utf8', env: input })
+  assert.equal(result.status, 0, result.stderr)
+  const exported = await readFile(githubEnv, 'utf8')
+  assert.ok(exported.startsWith('EXISTING=value\n'))
+  assert.ok(!exported.includes(environment.OSS_ACCESS_KEY_SECRET))
+  assert.ok(!exported.includes(environment.APP_IMPORT_TOKEN))
+  assert.ok(!result.stdout.includes(environment.PM2_SSH_PASSWORD))
+  const generated = Object.fromEntries(exported.trim().split('\n').map((line) => line.split('=')))
+  for (const args of [['deploy-web-oss.mjs', 'all', '--check'], ['upload-bootstrap-oss.mjs', '--check']]) {
+    const checked = spawnSync(process.execPath, [fileURLToPath(new URL(args[0], import.meta.url)), ...args.slice(1)], { encoding: 'utf8', env: { ...input, ...generated } })
+    assert.equal(checked.status, 0, checked.stderr)
+  }
+})
 
 test('website preflight rejects a shared bucket even when publishing only one site', () => {
   const run = (extra) => spawnSync(process.execPath, [fileURLToPath(new URL('./deploy-web-oss.mjs', import.meta.url)), 'app', '--check'], {

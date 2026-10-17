@@ -18,6 +18,11 @@ directory="${PM2_UPLOAD_DIR:-}"
 [[ "$directory" =~ ^/[a-zA-Z0-9_.-]+(/[a-zA-Z0-9_.-]+)*$ ]] || fail 'PM2_UPLOAD_DIR must be an absolute path without spaces'
 [[ ! "$directory" =~ (^|/)\.\.?(/|$) ]] || fail 'Parent/current path segments are not allowed'
 [[ -s "${PM2_SSH_KNOWN_HOSTS_FILE:-}" ]] || fail 'Provide a verified known_hosts file'
+if [[ -n "${PM2_IMPORT_TOKEN_HASH_FILE:-}" ]]; then
+  [[ -f "$PM2_IMPORT_TOKEN_HASH_FILE" && ! -L "$PM2_IMPORT_TOKEN_HASH_FILE" ]] || fail 'Import credential hash must be a regular file'
+  [[ "$(wc -c < "$PM2_IMPORT_TOKEN_HASH_FILE")" -le 65 ]] || fail 'Invalid import credential hash file'
+  [[ "$(cat "$PM2_IMPORT_TOKEN_HASH_FILE")" =~ ^[a-f0-9]{64}$ ]] || fail 'Invalid import credential SHA-256'
+fi
 options=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$PM2_SSH_KNOWN_HOSTS_FILE" -o ConnectTimeout=15)
 if [[ -n "${PM2_SSH_PASSWORD:-}" ]]; then
   command -v sshpass >/dev/null || fail 'Password login requires sshpass on the upload runner'
@@ -70,6 +75,9 @@ REMOTE
 }
 trap cleanup_upload EXIT
 authenticate scp "${options[@]}" -P "$port" "$package/runtime.tar.gz" "$package/runtime.tar.gz.sha256" "$package/release.json" "$host:$directory/incoming/$release/"
+if [[ -n "${PM2_IMPORT_TOKEN_HASH_FILE:-}" ]]; then
+  authenticate scp "${options[@]}" -P "$port" "$PM2_IMPORT_TOKEN_HASH_FILE" "$host:$directory/incoming/$release/import-token.sha256"
+fi
 authenticate ssh "${options[@]}" -p "$port" "$host" bash -s -- "$directory" "$release" "$archive_sha" "$architecture" "$start_services" "$initialize_admin" <<'REMOTE'
 set -Eeuo pipefail
 umask 077
@@ -95,6 +103,10 @@ test -d "$staging/api/node_modules"
 test -f "$staging/control/ecosystem.config.cjs"
 test -f "$staging/release-info.json"
 cp release.json "$staging/release.json"
+if [[ -f import-token.sha256 ]]; then
+  cp import-token.sha256 "$staging/control/app-import.sha256"
+  chmod 600 "$staging/control/app-import.sha256"
+fi
 mv "$staging" "$root/releases/$release"
 printf 'Uploaded and verified: %s/releases/%s\n' "$root" "$release"
 if [[ "$start_services" == true ]]; then

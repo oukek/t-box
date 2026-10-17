@@ -1,12 +1,18 @@
+import { readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { applicationBootstrapArtifacts } from '../config.js'
 import { createDataSource } from '../db/data-source.js'
-import { createImportCredential } from './import-credential.js'
+import { createImportCredential, synchronizeImportCredential } from './import-credential.js'
 
 // Administrative server CLI; never executed on module import by the web server.
 const args = process.argv.slice(2)
 const source = await createDataSource().initialize()
 try {
-  if (args[0] === 'revoke' && /^[a-f0-9-]{36}$/.test(args[1] || '') && args.length === 2) {
+  if (args[0] === 'sync' && args.length === 1) {
+    const hash = readFileSync(0, 'utf8').trim()
+    await synchronizeImportCredential(source, hash, Object.keys(applicationBootstrapArtifacts()))
+    process.stdout.write('GitHub application import credential synchronized (no automatic expiry).\n')
+  } else if (args[0] === 'revoke' && /^[a-f0-9-]{36}$/.test(args[1] || '') && args.length === 2) {
     await source.query('UPDATE application_import_credentials SET revoked_at=UTC_TIMESTAMP(3) WHERE id=?', [args[1]])
     process.stdout.write('Credential revoked.\n')
   } else if (args[0] === 'create' && args.length >= 3 && args.length <= 4) {
@@ -21,7 +27,7 @@ try {
     }
     process.stdout.write(`Credential ${value.id} created; token saved to api/.secrets/app-build-${value.id}.txt (0600).\n`)
   } else {
-    throw new Error('Usage: create <administrator username> <appId,appId> [expiryDays=90] | revoke <credentialId>')
+    throw new Error('Usage: sync (SHA-256 on stdin) | create <administrator username> <appId,appId> [expiryDays=90] | revoke <credentialId>')
   }
 } finally {
   await source.destroy()

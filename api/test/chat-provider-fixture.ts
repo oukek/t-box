@@ -141,12 +141,19 @@ export class FixtureChatProvider implements ChatProvider {
       )
     }
     if (opening) {
+      if (input.tools.some((tool) => tool.name === 'capability_search') && !getResult(current, 'capability_search')) {
+        return call('capability_search', { query: '', appId: 'ledger', offset: null })
+      }
       return call('app_open', {
         appId: 'ledger',
         params: { month: null, billId: null, ledgerId: null },
       })
     }
-    if (!input.tools.some((tool) => tool.name === 'bills_create')) {
+    const needed = match ? ['categories_list', 'bills_create'] : summarizing ? ['bills_summary'] : ['bills_list']
+    if (!needed.every((name) => input.tools.some((tool) => tool.name === name))) {
+      if (activated?.ok && input.tools.some((tool) => tool.name === 'capability_load')) {
+        return call('capability_load', { toolNames: needed })
+      }
       return call('skill_activate', { skillId: 'bookkeeping' })
     }
     if (match && !created) {

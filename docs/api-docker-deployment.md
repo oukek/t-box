@@ -12,7 +12,7 @@
 | tboxos-admin | 后台、docker/releases/ 下的公开镜像包 |
 | tboxos-app | 子应用静态文件及 builds/ 构建包 |
 
-GitHub 配置 OSS_ACCESS_KEY_ID、OSS_ACCESS_KEY_SECRET（Secrets），以及 OSS_REGION、APP_ARTIFACT_ORIGIN（Variables）。ADMIN_OSS_BUCKET 默认 tboxos-admin，APPS_OSS_BUCKET 默认 tboxos-app，OSS_PREFIX 默认 docker；其他可选项按 [首次部署](first-deployment.md) 填写。
+GitHub 配置 OSS_ACCESS_KEY_ID、OSS_ACCESS_KEY_SECRET（Secrets），以及 DEPLOY_DOMAIN、OSS_REGION（仅这两个 Variables）。`deploy/settings.mjs` 自动生成站点地址，固定使用 tboxos-admin/docker/ 存 Docker 包、tboxos-app 存应用文件，与 PM2 / 前端发布共用设置。首次准备按 [首次部署](first-deployment.md) 执行。
 
 API Docker OSS 工作流构建后端镜像，把子应用静态文件单独导出、上传并逐文件验证 OSS，再上传镜像归档、校验文件，最后发布 release.json。应用文件不会装进运行镜像；镜像只保留后端程序和 bootstrap-applications.json 初始摘要配置。
 

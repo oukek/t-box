@@ -101,12 +101,12 @@ export class ApplicationBuildImports {
   ) {}
 
   async authenticate(header: unknown): Promise<ImportCredential> {
-    const match = typeof header === 'string' ? /^Bearer (tbox_build_[\w-]{43})$/.exec(header) : null
+    const match = typeof header === 'string' ? /^Bearer ([\w-]{32,128})$/.exec(header) : null
     if (!match) {
       throw new ApiError(401, 'APP_IMPORT_UNAUTHORIZED', '应用构建导入凭证无效')
     }
     const [row] = await this.source.query(
-      'SELECT c.id,c.administrator_id,c.apps FROM application_import_credentials c JOIN admin_users a ON a.id=c.administrator_id WHERE c.token_hash=? AND c.revoked_at IS NULL AND c.expires_at>UTC_TIMESTAMP(3) AND a.enabled=1',
+      'SELECT c.id,c.administrator_id,c.apps FROM application_import_credentials c JOIN admin_users a ON a.id=c.administrator_id WHERE c.token_hash=? AND c.revoked_at IS NULL AND (c.expires_at>UTC_TIMESTAMP(3) OR (c.expires_at IS NULL AND c.managed_key=\'github-actions\')) AND a.enabled=1',
       [bundleHash(match[1]!)],
     )
     if (!row) {
