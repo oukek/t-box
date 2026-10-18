@@ -14,7 +14,7 @@ PNG、JPEG、WebP 上传沿用鉴权资源服务（单张 10MB，前端拒绝无
 
 ## 持久化与边界
 
-- `user_desktop_appearance` 按账号保存 `wallpapers` JSON、版本号和更新时间。部署先运行 `pnpm db:init` 应用 `DesktopAppearance1791244836000` 迁移；本地已应用。
+- `user_desktop_appearance` 按账号保存 `wallpapers` JSON、版本号和更新时间。首次部署先运行 `pnpm db:init`；桌面外观表已纳入完整初始化，旧开发库按 [初始化说明](database-initialization.md) 处理。
 - `GET /api/v1/desktop/appearance` 返回 `{data:{revision,wallpapers}}`，`PUT` 接收 `{revision,wallpapers}`。服务端从登录态取账号，验证图片归属、类型和删除状态，拒绝任意 URL、未知内置 ID 以及额外字段。
 - 并发修改使用版本校验，冲突返回 `DESKTOP_APPEARANCE_CHANGED`；相同配置重试幂等。前端重载最新配置后要求重新选择，不静默覆盖其他设备的修改。
 - 设置应用只调用 `app-shell-sdk` 的显式壁纸端口。宿主负责上传、鉴权取图、会话变更隔离、私有 Blob URL 的创建/释放和桌面渲染；账号切换时清理图片与请求。进入桌面或恢复前台时刷新配置。壁纸与应用业务配置、AI 工具注册无关。

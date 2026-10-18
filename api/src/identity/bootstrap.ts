@@ -1,45 +1,31 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { createLedgerRows } from '@t-box/ledger-server/ledgers/create'
 import { hashPassword } from '../admin/crypto.js'
 import { getConfig } from '../config.js'
 import { createDataSource } from '../db/data-source.js'
-import { LEGACY_LEDGER_ID } from '../db/migrations/SharedLedgers.js'
 
 const source = createDataSource(getConfig().mysql)
 await source.initialize()
+const connection = source.createQueryRunner()
+let locked = false
 try {
+  await connection.connect()
+  const [lock] = await connection.query('SELECT GET_LOCK(\'tbox_user_bootstrap\',10) AS acquired')
+  if (Number(lock?.acquired) !== 1) {
+    throw new Error('无法获取初始普通用户创建锁，请稍后重试')
+  }
+  locked = true
   const secret = randomBytes(12).toString('base64url')
   const hash = await hashPassword(secret)
-  const result = await source.transaction(async (db) => {
-    const [book] = await db.query(
-      'SELECT owner_id FROM ledgers WHERE id=? FOR UPDATE',
-      [LEGACY_LEDGER_ID],
-    )
-    if (book.owner_id) {
-      return null
-    }
+  const result = await connection.manager.transaction(async (db) => {
     const [{ count }] = await db.query(
       'SELECT COUNT(*) AS count FROM app_users',
     )
     if (Number(count)) {
-      throw new Error('已有普通用户，请先确认原有账本归属；不会自动认领')
+      return null
     }
-    const userId = randomUUID()
-    await db.query(
-      'INSERT INTO app_users(id,username,nickname,password_hash) VALUES(?,?,?,?)',
-      [userId, 'tbox', '我的账号', hash],
-    )
-    await db.query(
-      'UPDATE ledgers SET owner_id=?,revision=revision+1 WHERE id=?',
-      [userId, LEGACY_LEDGER_ID],
-    )
-    await db.query(
-      'INSERT INTO ledger_members(ledger_id,user_id,role) VALUES(?,?,\'owner\')',
-      [LEGACY_LEDGER_ID, userId],
-    )
-    return userId
-  })
-  if (result) {
+    // Persist credentials before committing the account; never reset a stale file.
     const dir = new URL('../../.secrets/', import.meta.url)
     mkdirSync(dir, { recursive: true, mode: 0o700 })
     writeFileSync(
@@ -47,12 +33,28 @@ try {
       `username=tbox\npassword=${secret}\n`,
       { mode: 0o600, flag: 'wx' },
     )
+    const userId = randomUUID()
+    await db.query(
+      'INSERT INTO app_users(id,username,nickname,password_hash) VALUES(?,?,?,?)',
+      [userId, 'tbox', '我的账号', hash],
+    )
+    await createLedgerRows(db, userId, { name: '我的账本', template: 'daily' })
+    return userId
+  })
+  if (result) {
     console.log(
-      '普通用户已创建，原有账本已保留。凭据存放在 api/.secrets/bootstrap-user.txt。',
+      '初始普通用户和个人账本已创建。凭据存放在 api/.secrets/bootstrap-user.txt。',
     )
   } else {
-    console.log('原有账本已有所有者，未修改账号或数据。')
+    console.log('已有普通用户，未修改账号或数据。')
   }
 } finally {
-  await source.destroy()
+  try {
+    if (locked) {
+      await connection.query('SELECT RELEASE_LOCK(\'tbox_user_bootstrap\')')
+    }
+  } finally {
+    await connection.release()
+    await source.destroy()
+  }
 }

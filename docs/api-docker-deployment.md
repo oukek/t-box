@@ -52,7 +52,7 @@ bash deploy-release.sh RELEASE_ID --init
 
 脚本在临时目录下载归档，验证大小、SHA-256、gzip、OS/架构与镜像身份，执行 docker load，随后删除临时归档。再次导入仍从 OSS 获取并校验，不保留服务器 releases 缓存。
 
-配置检查通过后才停止旧 API；--init 运行迁移并创建缺失的管理员。Compose 只启动 API，默认在 API 内运行任务恢复器，不再启动本地静态资源服务。初始管理员凭据在 data/secrets/bootstrap-admin.txt，首次登录改密后删除。
+配置检查通过后才停止旧 API；--init 运行初始化并创建缺失的管理员。Compose 只启动 API，默认在 API 内运行任务恢复器，不再启动本地静态资源服务。初始管理员凭据在 data/secrets/bootstrap-admin.txt，首次登录改密后删除。
 
 ```sh
 docker compose ps
@@ -60,9 +60,9 @@ curl -fsS http://127.0.0.1:3000/api/v1/health
 docker compose logs --tail 100 api
 ```
 
-普通升级执行 `bash deploy-release.sh NEW_RELEASE_ID`，不重建管理员。通过健康检查后更新 .env、current-release 和 previous-release；迁移或健康失败不会推进记录，也不会自动回退数据库。失败后须检查容器实际状态，不能只依据记录判断运行版本。
+普通升级执行 `bash deploy-release.sh NEW_RELEASE_ID`，不重建管理员。通过健康检查后更新 .env、current-release 和 previous-release；初始化或健康失败不会推进记录，也不会自动回退数据库。失败后须检查容器实际状态，不能只依据记录判断运行版本。
 
-确定数据库与旧代码兼容后，可执行 `bash deploy-release.sh OLD_RELEASE_ID --rollback`。它仍从 OSS 校验、导入镜像，跳过数据库迁移与管理员初始化，只切换后端程序。
+确定数据库与旧代码兼容后，可执行 `bash deploy-release.sh OLD_RELEASE_ID --rollback`。它仍从 OSS 校验、导入镜像，跳过数据库初始化与管理员初始化，只切换后端程序。
 
 ## 4. 旧数据与恢复
 
@@ -73,3 +73,5 @@ MySQL 和密钥需要配套备份；远端业务文件与应用版本另行保�
 下载或解压失败时清理本次临时目录；SIGKILL、断电或 SSH 不可达可能留下临时残留，恢复后核对再清理。保留当前和可回滚的运行镜像，按运维策略清理旧镜像；不要删除正在运行的数据或密钥。
 
 脚本回归为 pnpm test:api-deployment，使用 Docker / OSS 替身验证实际归档校验、临时目录清理、迁移、失败恢复与回滚；不代表已经完成真实 ECS / OSS 联调。
+
+数据库历史 migrations 已合并为首次初始化基线；新库与旧开发库的处理边界见 [数据库初始化](database-initialization.md)。

@@ -82,7 +82,7 @@ SSH 地址 `8.163.69.101`、端口 `22`、用户 `root`、部署目录 `/www/www
 ## 3. 准备服务器
 
 1. 安装 Linux x64 环境、Node **24.21.0**（最低 24.15）、PM2、MySQL **8.4**、Nginx，以及 bash、tar、gzip、sha256sum。PM2 可通过 `npm install -g pm2` 安装；确认 root 非交互 SSH 中也能执行 `node -v` 和 `pm2 -v`。
-2. 创建 MySQL 数据库 `t_box` 和专用用户 `t_box`，授予该数据库的建表、迁移和读写权限；数据库字符集使用 `utf8mb4`。
+2. 创建空的 MySQL 数据库 `t_box` 和专用用户 `t_box`，授予该数据库的建表及读写权限；数据库字符集建议使用 `utf8mb4`、排序规则 `utf8mb4_unicode_ci`。若旧版本初始化失败留下了表，请改用新库，详见 [数据库初始化](database-initialization.md)。
 3. 创建 `/www/wwwroot/tbox/shared/api.env`，内容如下，替换真实密码和服务器 RAM 密钥，文件权限设为 `600`：
 
 ```dotenv
@@ -109,7 +109,7 @@ Redis 可选：不使用就保持 `REDIS_ADDR=`；使用时安装 Redis，填 `R
 先将当前代码提交、推送到 GitHub 默认分支，再在 **Actions → 对应工作流 → Run workflow** 操作。项目尚未上线时，建议三个工作流选择同一分支 / 提交并按下列顺序验收：
 
 1. **代码检查与测试**：等待检查和测试通过。发布工作流目前不会自动等待 代码检查与测试。
-2. **后端部署（PM2）**：保持 `start_services` 勾选。它会先上传四个子应用初始版本到 OSS，再上传后端包、执行数据库迁移、自动确保管理员存在、同步应用提交凭证、启动 PM2 并检查健康状态。已有管理员不会被重置，服务器不需要拉 Git 仓库或重新构建。
+2. **后端部署（PM2）**：保持 `start_services` 勾选。它会先上传四个子应用初始版本到 OSS，再上传后端包、执行数据库初始化、自动确保管理员存在、同步应用提交凭证、启动 PM2 并检查健康状态。已有管理员不会被重置，服务器不需要拉 Git 仓库或重新构建。
 3. **前端与后台部署（OSS）**：`target` 选 `all`，发布主前端和后台。
 
 四个初始应用随流程准备好；每次后端发布都自动同步 GitHub 中配置的同一个 `APP_IMPORT_TOKEN`，无需增加配置或手工生成凭证。取消 `start_services` 仅上传时，哈希作为运行配置保存，手动启动该版本时再自动登记到数据库。
@@ -189,4 +189,6 @@ H5 域名可能需要审核，先完成对应产品开通和域名配置，再�
 
 ## 发布子应用
 
-在代码中修改目标应用的 `manifest.version` 并提交，然后运行 **子应用发布（OSS）**，只选中文应用名称即可，版本号自动读取；成功后进入后台“应用发布”→“编辑更新信息”填写更新说明和提示，保存后审核上架。后端与凭证已就绪时，无需重复运行后端 Actions。无需补填配置、执行服务器命令或新建 Bucket。若改变主域名、地域或 `deploy/settings.mjs` 中的公共设置，先准备好对应的 OSS / DNS 配置并重新发布后端，再提交应用；已有业务文件不会因改 Bucket 而自动迁移。其他进阶操作见 [PM2 部署](api-pm2-deployment.md)、[子应用发布](application-actions-release.md)、[运维与恢复](operations-and-recovery.md)。
+在代码中修改目标应用的 `manifest.version` 并提交，然后运行 **子应用发布（OSS）**，只选中文应用名称即可，版本号自动读取；成功后进入后台“应用发布”→“编辑更新信息”填写更新说明和提示，保存后审核上架。后端与凭证已就绪时，无需重复运行后端 Actions。无需补填配置、执行服务器命令或新建 Bucket。若改变主域名、地域或 `deploy/settings.mjs` 中的公共设置，先准备好对应的 OSS / DNS 配置并重新发布后端，再提交应用；已有业务文件不会因改 Bucket 而自动初始化数据库。其他进阶操作见 [PM2 部署](api-pm2-deployment.md)、[子应用发布](application-actions-release.md)、[运维与恢复](operations-and-recovery.md)。
+
+数据库历史 migrations 已合并为首次初始化基线；新库与旧开发库的处理边界见 [数据库初始化](database-initialization.md)。

@@ -114,7 +114,7 @@ app/src/
 
 应用接收 `ApplicationToolContext`，提供当前用户、资源作用域、任务 ID、取消信号、通用客户端交互、任务内缓存及附件视图。应用不会接收内部 `ToolContext` 中的运行注册表、模型历史、传输凭证或完整消息正文。应用工具声明需要哪些 `{resource, action}` 和是否需要确认，由执行器统一调度。权限挑战、确认文案、参数和具体接口仍由应用模块负责。图片工具通过 `attachments` 返回资源，执行器无需识别 `images_generate` 等名称。
 
-导航协议为 `{appId, params}`，例如 `{appId:"ledger", params:{ledgerId:"...",month:"2026-10",billId:"..."}}`。通用导航不解析账本字段，参数由应用模块校验；首页发送 `scopeBindings:[{appId:"ledger",resourceType:"book",resourceId:"..."}]`。旧的 `message.send.ledgerId` 与归档字段由记账模块兼容转换，不在 AI 核心保留旧业务分支。数据库迁移将 `conversations.ledger_ids` 转为 `resource_refs` 并保留数据，新部署先运行 `pnpm db:init`。
+导航协议为 `{appId, params}`，例如 `{appId:"ledger", params:{ledgerId:"...",month:"2026-10",billId:"..."}}`。通用导航不解析账本字段，参数由应用模块校验；首页发送 `scopeBindings:[{appId:"ledger",resourceType:"book",resourceId:"..."}]`。旧的 `message.send.ledgerId` 与归档字段由记账模块兼容转换，不在 AI 核心保留旧业务分支。新数据库直接使用 `conversations.resource_refs`，新部署先运行 `pnpm db:init`；旧开发库不能以初始化脚本直接接管，详见 [数据库初始化](database-initialization.md)。
 
 客户端在 `session.open.clientCapabilities` 声明支持的操作；后端对不支持的私有授权/确认操作直接返回错误。能力列表不能授权数据库操作；前端 ACK 也不能代替服务端授权。旧客户端未声明能力时保留既有行为。
 
@@ -136,7 +136,7 @@ app/src/
 
 ## 数据访问与分类扩展
 
-应用实体由各自 `apps/<app>/server/src` 导出，`api/src/db/entities.ts` 统一组装，不使用装饰器，兼容当前 tsx 开发与 tsc 生产编译。迁移位于 `api/src/db/migrations`，数据源始终关闭自动同步。首次迁移兼容已有表，分类迁移保留旧账单并拆分其他收入 / 支出。数据库连接、Repository 及管理员参数化查询共享同一 TypeORM 数据源；事务通过 EntityManager 隔离。
+应用实体与初始化表定义由各自 `apps/<app>/server/src` 导出，`api/src/db/entities.ts` 和 `api/src/db/schema/index.ts` 统一组装，不使用装饰器，兼容当前 tsx 开发与 tsc 生产编译。历史 migrations 已合并，`api/src/db/initialize.ts` 负责首次初始化、版本校验与中断恢复，数据源始终关闭自动同步。旧开发库请使用新库，详见 [数据库初始化](database-initialization.md)。数据库连接、Repository 及管理员参数化查询共享同一 TypeORM 数据源；事务通过 EntityManager 隔离。
 
 分类默认值只在后端提供，创建账本时复制一份收入/支出分类到该账本。模型通过 `categories_list` 读取当前账本分类，`bills_create` 采用动态分类 ID，与 REST 共用账本财务服务及事务授权。分类添加后入库，数据库复合外键禁止跨账本/跨类型引用。`shared` 只保存 DTO。
 

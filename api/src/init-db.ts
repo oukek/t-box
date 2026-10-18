@@ -1,6 +1,8 @@
 import { createConnection } from 'mysql2/promise'
 import { getConfig } from './config.js'
 import { createDataSource } from './db/data-source.js'
+import { initializeDatabase } from './db/initialize.js'
+import { databaseSchemas } from './db/schema/index.js'
 
 const { database, ...options } = getConfig().mysql
 const connection = await createConnection(options)
@@ -12,21 +14,13 @@ try {
   await connection.end()
 }
 const source = await createDataSource().initialize()
-const lock = source.createQueryRunner()
 try {
-  await lock.connect()
-  const acquired = await lock.query(
-    'SELECT GET_LOCK(\'tbox_schema_migrations\',30) AS acquired',
-  )
-  if (!acquired[0]?.acquired) {
-    throw new Error('Unable to lock database migrations')
-  }
-  const migrations = await source.runMigrations({ transaction: 'none' })
+  const result = await initializeDatabase(source, databaseSchemas)
   console.info(
-    `Database ready: ${migrations.length} migration(s) applied. Existing data preserved.`,
+    result.initialized
+      ? `Database initialized: ${result.tables} tables, baseline ${result.baseline}.`
+      : `Database already initialized: baseline ${result.baseline}. No data or configuration changed.`,
   )
 } finally {
-  await lock.query('SELECT RELEASE_LOCK(\'tbox_schema_migrations\')')
-  await lock.release()
   await source.destroy()
 }

@@ -63,7 +63,7 @@ erDiagram
 
 后台静态资源与 `/api/v1/admin` 应同源，反向代理至 API。生产使用 HTTPS 并设置 `NODE_ENV=production`，以启用 Secure Cookie。后台鉴权只覆盖管理接口；普通用户账单和对话的身份体系仍需独立实现。
 
-`pnpm db:init` 执行缺失的 TypeORM 迁移，`pnpm admin:init` 只初始化首个管理员。加密主密钥 `api/.secrets/provider.key` 必须持久化保存并随数据库一同备份，不能在部署时重新生成。密钥、初始管理员凭据都不能放入静态发布目录。
+`pnpm db:init` 执行完整首次初始化，同一基线重复运行不会改动已有配置；旧开发库请使用新库，详见 [初始化说明](database-initialization.md)。`pnpm admin:init` 只初始化首个管理员。加密主密钥 `api/.secrets/provider.key` 必须持久化保存并随数据库一同备份，不能在部署时重新生成。密钥、初始管理员凭据都不能放入静态发布目录。
 
 `pnpm test:admin` 使用本地 MySQL 与本地模拟 OpenAI 服务，验证登录撤销、CSRF、密钥加密、模型发现、配置依赖、Responses 探测及真实 WebSocket 使用数据库配置。测试临时切换当前模型，结束后恢复原配置并删除自己创建的记录；在开发数据库执行。真实服务商连通性仍需填写凭据后在后台验证。
 

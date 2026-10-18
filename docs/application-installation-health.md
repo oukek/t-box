@@ -13,7 +13,7 @@
 
 ## 首次从旧内置记账迁移
 
-先执行 `pnpm db:init`（dist 部署使用 `node dist/init-db.js`），新增安装错误和重试字段。先构建、部署独立记账资源，再部署 API 和宿主，或使用已包含 ledger 初始包的 Docker/PM2 构建链路。准备脚本逐个处理初始包，保留已有 deployment.local.json 和用户资源。
+先执行 `pnpm db:init`（dist 部署使用 `node dist/init-db.js`），完整初始化已包含安装错误和重试字段，旧开发库请按 [初始化说明](database-initialization.md) 处理。先构建、部署独立记账资源，再部署 API 和宿主，或使用已包含 ledger 初始包的 Docker/PM2 构建链路。准备脚本逐个处理初始包，保留已有 deployment.local.json 和用户资源。
 
 生产配置 `apps/ledger/deployment.local.json` 与计算器相同：
 

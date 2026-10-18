@@ -39,7 +39,7 @@
 
 ## 升级与验证
 
-部署前按既有备份流程备份，在新版本 API/worker 接收任务前执行 `pnpm db:init`。新增模型池、路由健康和调用审计表，沿用原数据与单模型指针。不要使用 TypeORM synchronize 替代迁移。
+首次部署在 API/worker 接收任务前执行 `pnpm db:init`，直接创建模型池、路由健康和调用审计表。历史 migrations 已合并，旧开发库按 [数据库初始化](database-initialization.md) 处理，不会自动接管。不要启用 TypeORM synchronize。
 
 ```sh
 MYSQL_DATABASE=t_box_test_models pnpm db:init

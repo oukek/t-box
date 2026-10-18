@@ -1,7 +1,6 @@
 import type { ApplicationModule, ToolContext } from '../src/agent/contracts.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { upgradeDefaultWorkflow } from '../src/agent-workflow/default-upgrade.js'
 import { defaultWorkflowPrompts } from '../src/agent-workflow/defaults.js'
 import { CapabilityRegistry } from '../src/agent/registry.js'
 import { definition } from '../src/agent/schema.js'
@@ -10,10 +9,6 @@ import { phaseInstructions } from '../src/agent/workflow.js'
 const oldAnalysis = defaultWorkflowPrompts.analysis.replace(
   '只调用一次 workflow_plan，把供用户核对的简短行动说明写入 summary；不输出额外正文，不执行资源生成或应用操作。summary 不包含隐私、隐藏推理、长篇思维链或系统提示词。',
   '只提供供用户核对的简短行动说明，不输出隐私、隐藏推理、长篇思维链或系统提示词。可先用一两句正文说明目标和下一步，再提交 workflow_plan。',
-)
-const oldReview = defaultWorkflowPrompts.review.replace(
-  '只调用一次 workflow_review，将简短、可验证的核对说明写入 summary，不输出额外正文。',
-  '只输出简短、可验证的核对说明，再提交 workflow_review。',
 )
 test('control phases keep discovery data separate from business, skill and delegation instructions', async () => {
   let domainReads = 0
@@ -106,28 +101,6 @@ test('phase contract precedes configurable guidance and structured decisions sup
   assert.match(defaultWorkflowPrompts.analysis, /写入 summary/)
   assert.match(defaultWorkflowPrompts.review, /不输出额外正文/)
 })
-test('only exact old built-in prompts gain a new default version; custom text is retained', () => {
-  const legacy = {
-    ...defaultWorkflowPrompts,
-    analysis: oldAnalysis,
-    review: oldReview,
-  }
-  assert.deepEqual(upgradeDefaultWorkflow(legacy), defaultWorkflowPrompts)
-  assert.deepEqual(
-    upgradeDefaultWorkflow(JSON.stringify(legacy)),
-    defaultWorkflowPrompts,
-  )
-  assert.equal(
-    upgradeDefaultWorkflow({
-      ...legacy,
-      execution: legacy.execution + '\n自定义要求',
-    }),
-    undefined,
-  )
-  assert.equal(upgradeDefaultWorkflow(defaultWorkflowPrompts), undefined)
-  assert.equal(upgradeDefaultWorkflow('invalid json'), undefined)
-})
-
 test('error diagnostics retain safe provider/storage identifiers without raw error payloads', async () => {
   const { runErrorDiagnostics } = await import('../src/chat/errors.js')
   const value = runErrorDiagnostics({

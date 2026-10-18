@@ -42,4 +42,4 @@
 - `runtime.configuration` Socket 事件仅公开消息长度限制；Prompt、模型和执行策略不发给客户前端。
 - `pnpm --filter @t-box/api test:configuration` 使用真实 MySQL/Redis 和临时配置键，验证跨实例更新、旧请求回填隔离、发布冲突、恢复版本、快照保留、Redis 故障回退和管理接口权限。不会请求真实模型。
 
-首次部署先运行 `pnpm db:init`，再启动 API；已部署环境迁移保留所有现有配置与业务数据。注册发生在 API ready 阶段。
+首次部署先运行 `pnpm db:init`，再启动 API；同一初始化基线重复运行不覆盖现有配置；旧开发库按 [数据库初始化](database-initialization.md) 处理。注册发生在 API ready 阶段。

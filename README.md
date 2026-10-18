@@ -30,7 +30,7 @@ pnpm install
 # 当前工作目录已配置好用户提供的本地连接信息。
 pnpm db:init
 pnpm admin:init    # 首次创建管理员，已有账号时不重置
-pnpm user:init     # 为原有账本创建初始普通账号，已有归属时不修改
+pnpm user:init     # 可选：创建首个普通账号及个人账本，已有用户时不修改
 pnpm dev
 ```
 
@@ -43,7 +43,7 @@ pnpm dev
 
 单独启动后端，在项目根目录运行 `pnpm dev:api`；前端和管理后台分别用 `pnpm dev:app`、`pnpm dev:admin`。首次安装后先运行 `pnpm build:contracts`，或直接使用会自动按依赖顺序构建应用包与 SDK 的 `pnpm dev`。不要同时运行两份 API，以免占用 3000 端口。
 
-`db:init` 创建不存在的数据库并执行未运行的 TypeORM 迁移，保留已有数据，不插入演示账单。数据库密码只保存在 `api/.env`，该文件已经加入 `.gitignore`；前端环境变量中不要放数据库连接信息。
+`db:init` 创建不存在的数据库并执行当前完整初始化，重复运行不修改数据或配置，不插入演示账单。旧开发库或旧迁移失败留下的库不能直接接管，请改用新库；不会自动清空原库。详见 [数据库初始化](docs/database-initialization.md)。数据库密码只保存在 `api/.env`，该文件已经加入 `.gitignore`；前端环境变量中不要放数据库连接信息。
 
 本地配置 MySQL 和可选 Redis，使用 [api/.env.example](api/.env.example)；生产还需在 PM2 服务器填写业务文件 OSS AccessKey，地域和 Bucket 由 Actions 自动写入发布包。用户文件、AI 图片、记账附件及分类图标统一存 `tboxos/uploads/resources/`，数据库只保存相对路径。网站发布凭据和应用导入 Token 在 GitHub 配置，微信支付与 AI 密钥在后台填写。跨域默认开放；全部配置见 [API 环境配置](docs/api-environment.md)，生产按 [首次部署步骤](docs/first-deployment.md) 操作。
 
@@ -118,7 +118,7 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；跨域默认开放，后台通过回显来源、跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包的四个子应用静态种子上传 OSS，再上传、迁移并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
+生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；跨域默认开放，后台通过回显来源、跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包的四个子应用静态种子上传 OSS，再上传、初始化数据库并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
 
 ## iOS / Android 开发热更新
 
@@ -191,7 +191,7 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
 
 普通响应为 `{ "data": ... }`，分页另含 `meta`；错误为 `{ "error": { "code": "...", "message": "..." } }`。财务写入需 `Idempotency-Key`，同键同参数返回原结果，同键不同参数返回 409。密码锁未解锁返回 423，非成员访问返回 404。
 
-数据库使用 TypeORM DataSource、EntitySchema、Repository 和显式 Migration。`pnpm db:init` 记录迁移在 `schema_migrations`；`synchronize` 始终关闭。财务加锁、投影更新和成员管理使用参数化 SQL，通过同一 TypeORM 事务 EntityManager 执行。`mysql2` 是 TypeORM 驱动，另仅用于创建尚不存在的数据库。
+数据库使用 TypeORM DataSource、EntitySchema、Repository 和显式建表初始化。历史 migrations 已合并为当前完整基线；`pnpm db:init` 通过 `schema_initialization` 记录初始化状态；`synchronize` 始终关闭。首次正式部署后保留基线，后续结构变化使用增量升级脚本。财务加锁、投影更新和成员管理使用参数化 SQL，通过同一 TypeORM 事务 EntityManager 执行。`mysql2` 是 TypeORM 驱动，另仅用于创建尚不存在的数据库。
 
 `api` / `shared` 采用原生 ESM + TypeScript NodeNext，`.ts` 源码相对导入写 `.js` 对应编译产物的扩展名，生产由 `node dist/server.js` 运行。若省略后缀，需要增加构建打包或模块解析重写；仅改 TypeScript 解析选项不会让 Node 支持无后缀相对导入。
 
@@ -221,6 +221,6 @@ API 默认监听 `127.0.0.1`，HTTP 和 WebSocket 来源默认开放，后台回
 
 ## 运行与验收基线
 
-本轮完善及验收范围见 [平台完善清单](docs/platform-hardening.md)。后端开发启动使用 `pnpm dev:api`；生产通过统一 PM2 发布入口迁移并启动 API、独立恢复 worker 和静态产物服务。所有工作流保持手动触发，PM2 发布默认在上传后自动启动，也可选择只上传。运行概况、备份和恢复步骤见 [运维手册](docs/operations-and-recovery.md)。
+本轮完善及验收范围见 [平台完善清单](docs/platform-hardening.md)。后端开发启动使用 `pnpm dev:api`；生产通过统一 PM2 发布入口初始化数据库并启动 API、独立恢复 worker 和静态产物服务。所有工作流保持手动触发，PM2 发布默认在上传后自动启动，也可选择只上传。运行概况、备份和恢复步骤见 [运维手册](docs/operations-and-recovery.md)。
 
 [统一 SDK 与应用脚手架](docs/application-sdk.md)、[成本与并发](docs/ai-cost-controls.md)、[退款与渠道对账](docs/payment-refunds-and-reconciliation.md)、[账号、通知、离线与存储](docs/account-and-offline.md)说明各自的权限、故障与验收边界。

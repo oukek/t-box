@@ -77,7 +77,8 @@
     "test:integration": "node scripts/test-integration.mjs",
     "test:browser": "node scripts/test-browser.mjs",
     "test:operations": "node --test scripts/operations*.test.mjs scripts/application-starter.test.mjs",
-    "create:application": "node scripts/create-application.mjs"
+    "create:application": "node scripts/create-application.mjs",
+    "test:db-init": "pnpm build:contracts && pnpm --filter @t-box/api test:db-init"
   },
   "devDependencies": {
     "@antfu/eslint-config": "9.5.1",

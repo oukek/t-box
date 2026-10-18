@@ -45,7 +45,8 @@
     "test:messages": "tsx test/messages.integration.ts",
     "test:answer-retry": "tsx test/answer-retry.integration.ts",
     "test:configuration": "tsx test/configuration.integration.ts",
-    "test:ledger-features": "tsx test/ledger-features.integration.ts"
+    "test:ledger-features": "tsx test/ledger-features.integration.ts",
+    "test:db-init": "tsx test/database-initialization.integration.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",

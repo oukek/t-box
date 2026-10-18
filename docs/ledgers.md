@@ -132,7 +132,7 @@ Redis 当前只用于已有的连接管理/健康检查，不作为余额真相�
 
 ## 原有数据与验证
 
-`pnpm db:init` 执行显式 TypeORM 迁移，关闭 synchronize。原有账单/分类移入“原有账本”，金额、日期和分类保持不变；导入初始事件并重建日统计。`pnpm user:init` 在尚无普通用户、原有账本无所有者时创建初始普通账号并明确认领原有账本，凭据保存到 `api/.secrets/bootstrap-user.txt`；不会让公开注册用户认领原有数据，也不会重置已有账号。
+`pnpm db:init` 执行完整首次初始化，关闭 synchronize。账本表及系统分类种子由记账应用自己的 `server/src/schema.ts` 提供；不再创建无主的“原有账本”，也不回填历史账单。`pnpm user:init` 仅在尚无普通用户时创建初始普通账号及个人账本，凭据保存到 `api/.secrets/bootstrap-user.txt`；已有用户时不修改。旧开发库请使用新库，见 [数据库初始化](database-initialization.md)。
 
 `pnpm test:ledgers` 验证真实 MySQL 下的鉴权、共享、锁定、幂等、各周期余额、历史修正、投影重建、WebSocket revision/撤销通知和并发超额结算。`test:categories` 验证分类跨账本隔离及复合外键。`test:consent` 使用本地 Fake Provider 验证 AI 往来确认、拒绝不写入、伪造回执拒绝与工具去重。`test:chat` 使用隔离的临时用户、数据库记录和测试 Provider验证真实 WebSocket 工具循环，测试后删除各自创建的数据。后台配置测试使用本地假服务商，不请求付费模型。
 

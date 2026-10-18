@@ -4,9 +4,9 @@
 
 所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。新增 后端部署（PM2），现有 代码检查与测试 和 后端镜像发布（Docker / OSS） 保留为独立的手动工作流。
 
-本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 停止旧 API 与 worker → 数据库迁移 → 确保管理员存在 → 自动同步应用提交凭证 → 启动 API 和 worker → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。初始化会保留已有管理员，无需在工作流中另选初始化开关。
+本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 停止旧 API 与 worker → 数据库初始化 → 确保管理员存在 → 自动同步应用提交凭证 → 启动 API 和 worker → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。初始化会保留已有管理员，无需在工作流中另选初始化开关。
 
-生产配置和已有数据必须事先准备好。迁移会更新数据库结构，发布前按 [运行与恢复](operations-and-recovery.md) 做好备份。启动失败会停止受管理的进程并使 Actions 失败，不自动回滚数据库或用旧代码继续连接已迁移的库。
+生产配置和已有数据必须事先准备好。首次初始化直接创建完整结构，同一基线重复部署不改动配置或数据；旧开发库不能自动接管，详见 [数据库初始化](database-initialization.md)。发布前按 [运行与恢复](operations-and-recovery.md) 做好备份。启动失败会停止受管理的进程并使 Actions 失败，不自动回滚数据库或用旧代码继续连接已迁移的库。
 
 ## GitHub 设置
 
@@ -24,7 +24,7 @@
 
 不要把 MySQL 密码、服务商密钥、生产 .env 放入构建 Secrets。SSH 信息只用于校验设置及最后的上传步骤；不会进入发布包。
 
-`APP_IMPORT_TOKEN` 在 GitHub 一次配置好。runner 只计算并通过 SSH 上传 SHA-256，原始 Token 不进入发布包、OSS、日志或服务器环境。哈希保存为版本目录 `control/app-import.sha256`，启动流程迁移数据库并确保管理员存在后自动登记为无自动到期的受限凭证。重复部署复用同值；修改 Secret 并重新部署后端会原子撤销旧的托管凭证。上传但不启动时保留哈希，之后启动该版本再同步，无需手工生成或 90 天续期。
+`APP_IMPORT_TOKEN` 在 GitHub 一次配置好。runner 只计算并通过 SSH 上传 SHA-256，原始 Token 不进入发布包、OSS、日志或服务器环境。哈希保存为版本目录 `control/app-import.sha256`，启动流程初始化数据库并确保管理员存在后自动登记为无自动到期的受限凭证。重复部署复用同值；修改 Secret 并重新部署后端会原子撤销旧的托管凭证。上传但不启动时保留哈希，之后启动该版本再同步，无需手工生成或 90 天续期。
 
 支持账号密码登录。配置 PM2_SSH_PASSWORD 后优先使用密码，不需要 PM2_SSH_PRIVATE_KEY；密码通过 sshpass 的文件描述符传递，不放在命令行参数、日志或发布包中。GitHub runner 会安装 sshpass，服务器不需要安装它。密码不支持换行；服务器必须已经允许该账户的密码/PAM 登录，这套流程不会修改 SSH 服务配置，也不处理需要另行输入动态验证码的登录。
 
@@ -42,7 +42,7 @@ SSH 文件权限、服务器目录属主按实际账户配置。上传失败会�
 
 ## 手动触发
 
-提交工作流到默认分支后，打开 GitHub Actions → 后端部署（PM2） → Run workflow，选择需要构建的分支。`start_services` 控制上传后是否自动迁移、初始化所需管理员、同步应用凭证、启动与检查健康。构建完成后自动上传；摘要显示实际版本目录和启动结果。
+提交工作流到默认分支后，打开 GitHub Actions → 后端部署（PM2） → Run workflow，选择需要构建的分支。`start_services` 控制上传后是否自动初始化数据库、初始化所需管理员、同步应用凭证、启动与检查健康。构建完成后自动上传；摘要显示实际版本目录和启动结果。
 
 服务器必须提前安装 Node 24.21.0（最低 24.15.0）和 PM2，SSH 非交互会话中也必须能找到 `node`、`pm2`。首次尚未准备 `shared/api.env` 时，可以先取消 `start_services` 上传，再按下节复制模板并填写实际配置。上传账户与 PM2 运行账户应一致，目前均为 root。
 
@@ -107,7 +107,7 @@ chmod 600 shared/api.env
 
 **迁移已有环境时**，先恢复数据库与原 provider.key 到 shared/secrets，保持密钥与数据库配套。旧本地资源按 [迁移说明](api-environment.md) 上传并校验 OSS 后删除。不要继续挂载本地静态产物目录；确认历史版本在 OSS 齐全后再清理旧副本。
 
-配置完成后，通过统一脚本准备运行配置、执行迁移并启动 API / worker 两个单实例进程：
+配置完成后，通过统一脚本准备运行配置、执行初始化并启动 API / worker 两个单实例进程：
 
 ```sh
 node "$release/control/start-release.mjs" --init-admin
@@ -184,3 +184,5 @@ node deploy/pm2/deploy-source.mjs
 - [PM2 开机恢复](https://pm2.keymetrics.io/docs/usage/startup/)。
 
 备份、隔离恢复与后台故障定位见 [运行与恢复](operations-and-recovery.md)。升级时必须同时停止旧 worker，避免旧代码使用新数据库继续执行。
+
+数据库历史 migrations 已合并为首次初始化基线；新库与旧开发库的处理边界见 [数据库初始化](database-initialization.md)。
