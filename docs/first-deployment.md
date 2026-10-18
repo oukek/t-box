@@ -2,7 +2,7 @@
 
 当前方案：主前端、后台、子应用和业务文件都放 OSS；后端使用 Actions 构建包上传服务器，再由 PM2 启动。服务器保留后端程序、数据库、配置、密钥和必要日志，业务文件不长期落盘。全部 Actions 手动运行。
 
-下文的 `example.com` 换成你的真实主域名，OSS 地域换成三个 Bucket 的实际地域。GitHub 只填写主域名和地域两个普通变量；Bucket、子域名、发布目录和 API 路径统一由 [部署设置脚本](../deploy/settings.mjs) 生成。
+当前使用主域名 `tboxos.cn`，OSS 地域填写三个 Bucket 的实际地域。GitHub 只填写主域名和地域两个普通变量；Bucket、子域名、发布目录和 API 路径统一由 [部署设置脚本](../deploy/settings.mjs) 生成。
 
 **所有需要填写的配置一次列齐：**
 
@@ -24,10 +24,10 @@ GitHub 配置现在就全部填好。`APP_IMPORT_TOKEN` 由你设置一个 32–
 
 | 域名示例 | 指向 | 存放内容 |
 | --- | --- | --- |
-| `box.example.com` | `tboxos` | 主前端；用户文件、AI 图片、记账附件等放 `uploads/resources/` |
-| `admin.example.com` | `tboxos-admin` | 管理后台；可选 Docker 包放 `docker/releases/` |
-| `apps.example.com` | `tboxos-app` | 子应用静态文件；构建 JSON 包放 `builds/` |
-| `api.example.com` | A 记录指向 `8.163.69.101` | 服务器上的 API |
+| `tboxos.cn` | `tboxos` | 主前端；用户文件、AI 图片、记账附件等放 `uploads/resources/` |
+| `admin.tboxos.cn` | `tboxos-admin` | 管理后台；可选 Docker 包放 `docker/releases/` |
+| `apps.tboxos.cn` | `tboxos-app` | 子应用静态文件；构建 JSON 包放 `builds/` |
+| `api.tboxos.cn` | A 记录指向 `8.163.69.101` | 服务器上的 API |
 
 后台与 API 使用同一主域名下的 HTTPS 子域名，这是后台 Cookie 登录的要求。三个 OSS 网站必须绑定自定义域名，不能直接用默认 Bucket 域名浏览网页。中国内地 Bucket 的自定义域名按阿里云要求完成备案。[阿里云说明](https://help.aliyun.com/zh/oss/user-guide/hosting-static-websites)
 
@@ -35,7 +35,7 @@ GitHub 配置现在就全部填好。`APP_IMPORT_TOKEN` 由你设置一个 32–
 
 1. 三个 Bucket 均设置为**公共读，禁止公共写**；如果无法开启公共读，检查并关闭 OSS 全局和对应 Bucket 的“阻止公共访问”。[公共访问开关](https://help.aliyun.com/zh/oss/user-guide/block-public-access/)
 2. 三个 Bucket 启用静态网站托管，默认首页填 `index.html`；`tboxos-app` 另外**开通子目录首页**，文件 404 规则选 `NoSuchKey`，不要把所有路径重写到根首页。
-3. 分别绑定上述三个网站域名，按 OSS 提示配置 CNAME，并配置有效的 HTTPS 证书。[HTTPS 配置](https://help.aliyun.com/zh/oss/user-guide/access-oss-by-https-protocol)
+3. 分别绑定上述三个网站域名，按 OSS 提示配置 CNAME，并配置有效的 HTTPS 证书。主站在 `tboxos` Bucket 绑定 `tboxos.cn`；DNS 的主机记录填 `@`，类型选 `CNAME`，记录值复制 OSS 控制台提供的目标域名，证书须覆盖 `tboxos.cn`。[域名绑定与解析](https://help.aliyun.com/zh/oss/user-guide/access-buckets-via-custom-domain-names)、[HTTPS 配置](https://help.aliyun.com/zh/oss/user-guide/access-oss-by-https-protocol)
 4. 三个 Bucket 的跨域规则统一设为：来源 `*`；方法 `GET`、`HEAD`；允许 Headers `*`；暴露 Headers `Content-Type`、`Content-Length`、`Content-Disposition`、`ETag`；不携带凭据。[跨域配置](https://help.aliyun.com/zh/oss/user-guide/configure-cross-origin-resource-sharing)
 
 文件地址公开可读，上传和删除仍由后端校验登录权限。业务文件数据库只存相对路径，前端自动拼接标准 OSS 公网域名；不用配置 CDN、下载签名或私有 Bucket。不要清空整桶发布网站，也不要给 `uploads/resources/` 设置自动过期删除。
@@ -67,13 +67,13 @@ GitHub 配置现在就全部填好。`APP_IMPORT_TOKEN` 由你设置一个 32–
 **只需填写 2 个 Variables：**
 
 ```dotenv
-DEPLOY_DOMAIN=example.com
+DEPLOY_DOMAIN=tboxos.cn
 OSS_REGION=cn-hangzhou
 ```
 
 `DEPLOY_DOMAIN` 只填小写主域名，不带协议、端口、路径或结尾 `/`；`OSS_REGION` 填三个 Bucket 的实际地域，不带 `oss-`。地域未知时不能随意写死，必须与实际 Bucket 一致。
 
-脚本固定使用 `tboxos`、`tboxos-admin`、`tboxos-app`，自动生成 `box/admin/apps/api.<主域名>` 四个 HTTPS 来源、API `/api/v1` 和导入接口、OSS 公网 endpoint，以及 `builds/`、`docker/` 目录。所有发布 Actions 共用同一设置，不再逐个配置地址和 Bucket。
+脚本固定使用 `tboxos`、`tboxos-admin`、`tboxos-app`；`DEPLOY_DOMAIN=tboxos.cn` 时，主站地址为 `https://tboxos.cn`，后台、子应用和 API 分别为 `https://admin.tboxos.cn`、`https://apps.tboxos.cn`、`https://api.tboxos.cn`。API `/api/v1`、导入接口、OSS 公网 endpoint，以及 `builds/`、`docker/` 目录也自动生成，所有发布 Actions 共用同一设置。
 
 原来配置的各站点 URL、Bucket、endpoint、发布目录等 GitHub Variables 已不再读取，可以删除；Actions 使用长期 RAM AccessKey，已移除 `OSS_SESSION_TOKEN`。如需不同的子域名前缀或目录，只修改 `deploy/settings.mjs`，再准备匹配的 DNS / OSS 绑定并重新发布。
 
@@ -99,7 +99,7 @@ REDIS_ADDR=
 
 Redis 可选：不使用就保持 `REDIS_ADDR=`；使用时安装 Redis，填 `REDIS_ADDR=127.0.0.1:6379`、实际 `REDIS_PASSWORD` 和选用的 `REDIS_DB`（模板为 `5`）。配置模板见 [api.env.example](../deploy/pm2/api.env.example)，高级覆盖项见 [API 环境配置](api-environment.md)。
 
-4. 为 `api.example.com` 创建 Nginx HTTPS 站点，将 [Nginx 示例](../deploy/api/nginx-api.conf.example) 的 `/api/` 配置放进 `server {}`，代理到 `127.0.0.1:3000`，保留 `/api/` 路径和 WebSocket。API 和登录响应不设置公共缓存；不要将部署目录或 `shared` 目录设为网站公开根目录。
+4. 为 `api.tboxos.cn` 创建 Nginx HTTPS 站点，将 [Nginx 示例](../deploy/api/nginx-api.conf.example) 的 `/api/` 配置放进 `server {}`，代理到 `127.0.0.1:3000`，保留 `/api/` 路径和 WebSocket。API 和登录响应不设置公共缓存；不要将部署目录或 `shared` 目录设为网站公开根目录。
 5. 安全组和防火墙放行 `22`、`80`、`443`。MySQL、Redis、API 仅在本机监听。
 
 不需要手填 `CORS_ORIGINS`、`ADMIN_ORIGINS`、`TRUSTED_PROXIES`、`TASK_WORKER_MODE` 或 `APP_ARTIFACT_DELIVERY`：当前方案自动处理跨域、本机代理、独立 worker 和 OSS 交付。
@@ -124,13 +124,13 @@ Redis 可选：不使用就保持 `REDIS_ADDR=`；使用时安装 Redis，填 `R
 cat /www/wwwroot/tbox/shared/secrets/bootstrap-admin.txt
 ```
 
-打开 `https://admin.example.com`，用文件中的账号密码登录，立即修改密码，再删除这个初始凭据文件。在后台配置 AI 服务商的 API 地址、API Key 和实际可用模型；启用 AI 功能需要这些配置，服务器不用另外填写 AI 环境变量。
+打开 `https://admin.tboxos.cn`，用文件中的账号密码登录，立即修改密码，再删除这个初始凭据文件。在后台配置 AI 服务商的 API 地址、API Key 和实际可用模型；启用 AI 功能需要这些配置，服务器不用另外填写 AI 环境变量。
 
 随后执行 `pm2 startup`，按输出完成开机启动设置，再执行 `pm2 save`。首次启动自动生成的 `/www/wwwroot/tbox/shared/secrets/provider.key` 必须保留并与数据库一起备份，它用于解密 AI 和微信密钥，不是临时文件。
 
 最后检查：
 
-- `https://api.example.com/api/v1/health` 返回健康状态，`pm2 status` 中 `t-box-api`、`t-box-worker` 均为 online。
+- `https://api.tboxos.cn/api/v1/health` 返回健康状态，`pm2 status` 中 `t-box-api`、`t-box-worker` 均为 online。
 - 主站正常登录，后台登录成功，四个初始子应用可以打开。
 - 上传一张图片、添加一笔带附件的记账，刷新后还能查看；OSS 的 `tboxos/uploads/resources/` 出现对应文件。
 
@@ -146,9 +146,9 @@ cat /www/wwwroot/tbox/shared/secrets/bootstrap-admin.txt
 
 | 配置位置 | 填写示例 |
 | --- | --- |
-| 公众平台：网页授权域名，启用 JSAPI 时配置 | `api.example.com`，回调在 API 域名 |
-| 商户平台：H5 支付域名，启用 H5 时配置 | `box.example.com`，不带协议 |
-| 商户平台：JSAPI 支付授权目录，启用 JSAPI 时配置 | `https://box.example.com/`，带末尾 `/` |
+| 公众平台：网页授权域名，启用 JSAPI 时配置 | `api.tboxos.cn`，回调在 API 域名 |
+| 商户平台：H5 支付域名，启用 H5 时配置 | `tboxos.cn`，不带协议 |
+| 商户平台：JSAPI 支付授权目录，启用 JSAPI 时配置 | `https://tboxos.cn/`，带末尾 `/` |
 
 H5 域名可能需要审核，先完成对应产品开通和域名配置，再开启项目中的渠道。[H5 配置](https://pay.wechatpay.cn/doc/v3/merchant/4013287193)、[JSAPI 目录配置](https://pay.wechatpay.cn/doc/v3/merchant/4013287088)
 
@@ -168,22 +168,22 @@ H5 域名可能需要审核，先完成对应产品开通和域名配置，再�
 | API v3 密钥 | 商户平台配置的 32 字节密钥 |
 | 微信支付公钥 ID / 平台证书序列号 | 当前商户使用的微信支付公钥 ID，或平台证书序列号 |
 | 微信支付公钥 / 平台证书 PEM | 与上项匹配的微信公钥 PEM，或平台证书 PEM |
-| API 公网地址 | `https://api.example.com`，这里**不带** `/api/v1` |
-| 支付网页地址 | `https://box.example.com`，不带路径或 `#` |
+| API 公网地址 | `https://api.tboxos.cn`，这里**不带** `/api/v1` |
+| 支付网页地址 | `https://tboxos.cn`，不带路径或 `#` |
 | 商品描述 | 例如 `T Box 服务余额充值`，不能为空 |
 | 支付渠道、开放充值 | 只启用商户已开通的渠道；核对配置后开放充值 |
 
 支付通知和退款通知地址由后台根据 API 公网地址自动生成；保证公网可达即可，无需增加环境变量：
 
 ```text
-支付通知：https://api.example.com/api/v1/payments/webhooks/wechat
-退款通知：https://api.example.com/api/v1/payments/webhooks/wechat/refunds
-网页授权回调：https://api.example.com/api/v1/payments/wechat/oauth/callback
+支付通知：https://api.tboxos.cn/api/v1/payments/webhooks/wechat
+退款通知：https://api.tboxos.cn/api/v1/payments/webhooks/wechat/refunds
+网页授权回调：https://api.tboxos.cn/api/v1/payments/wechat/oauth/callback
 ```
 
 私钥、API v3 密钥和 AppSecret 加密入库，不上传到 OSS；已有密钥留空会保留。最后用真实设备和一笔小额订单核对付款、到账及订单状态，详见 [计费与支付](billing-and-payments.md)。
 
-**仅发布网页可以跳过原生配置。** 发布 Android / iOS 时，另在微信开放平台创建移动应用，绑定真实包名 / Bundle ID、Android 发布签名和 iOS Universal Link。填写 `capacitor/wechat.config.json`：`enabled=true`、移动应用 `appId`、`universalLink=https://box.example.com/wechat/` 和 Apple Team ID `iosTeamId`；当前启用校验要求四项齐全，Universal Link 必须使用生成的主站域名。在后台填写移动应用 AppID 并启用已开通的 APP 支付，然后重新发布主站生成 AASA 文件，执行 `pnpm native:sync` 并重新签名打包。移动应用 AppID 与服务号 AppID 分开使用；当前 iOS 原生 AI 余额充值禁用，详见 [原生微信配置](wechat-native-payments.md)。
+**仅发布网页可以跳过原生配置。** 发布 Android / iOS 时，另在微信开放平台创建移动应用，绑定真实包名 / Bundle ID、Android 发布签名和 iOS Universal Link。填写 `capacitor/wechat.config.json`：`enabled=true`、移动应用 `appId`、`universalLink=https://tboxos.cn/wechat/` 和 Apple Team ID `iosTeamId`；当前启用校验要求四项齐全，Universal Link 必须使用生成的主站域名。在后台填写移动应用 AppID 并启用已开通的 APP 支付，然后重新发布主站生成 AASA 文件，执行 `pnpm native:sync` 并重新签名打包。移动应用 AppID 与服务号 AppID 分开使用；当前 iOS 原生 AI 余额充值禁用，详见 [原生微信配置](wechat-native-payments.md)。
 
 **服务号消息发送尚未接入。** 当前 AppSecret 仅用于支付网页授权；消息 Token、EncodingAESKey、模板 ID、消息接收 URL 没有可用配置入口。不要添加虚构的 `WECHAT_*` 环境变量，也不要把支付通知地址填成公众号“服务器配置”。要发服务号消息，需要另外实现消息通道。
 

@@ -118,7 +118,7 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；跨域默认开放，后台通过回显来源、跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包的四个子应用静态种子上传 OSS，再上传、迁移并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
+生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；跨域默认开放，后台通过回显来源、跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包的四个子应用静态种子上传 OSS，再上传、迁移并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
 
 ## iOS / Android 开发热更新
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 // Public deployment conventions. Change them here when the installation needs a different layout.
 const buckets = { web: 'tboxos', admin: 'tboxos-admin', apps: 'tboxos-app' }
-const subdomains = { web: 'box', admin: 'admin', apps: 'apps', api: 'api' }
+const subdomains = { admin: 'admin', apps: 'apps', api: 'api' }
 const applicationPrefix = 'builds'
 const dockerPrefix = 'docker'
 
@@ -25,7 +25,7 @@ export function deploymentEnvironment(input = process.env) {
     WEB_OSS_BUCKET: buckets.web,
     ADMIN_OSS_BUCKET: buckets.admin,
     APPS_OSS_BUCKET: buckets.apps,
-    WEB_ORIGIN: origin('web'),
+    WEB_ORIGIN: `https://${domain}`,
     ADMIN_ORIGIN: origin('admin'),
     APP_ARTIFACT_ORIGIN: origin('apps'),
     API_BASE_URL: apiBase,
