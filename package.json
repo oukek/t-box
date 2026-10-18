@@ -56,7 +56,7 @@
     "check:apps": "node scripts/check-application-boundaries.mjs && node scripts/sync-application-icons.mjs --check && node scripts/generate-application-workflow.mjs --check",
     "apps:workflow": "node scripts/generate-application-workflow.mjs",
     "pack:application": "node scripts/pack-application-release.mjs",
-    "test:application-release": "node --test scripts/application-release.test.mjs scripts/oss-deployment.test.mjs",
+    "test:application-release": "node --test scripts/application-release.test.mjs scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs",
     "deploy:web:oss": "node scripts/deploy-web-oss.mjs",
     "test:application-import": "pnpm --filter @t-box/api exec tsx test/application-build-import.integration.ts",
     "test:installation-health": "pnpm --filter @t-box/api exec tsx test/application-installation-health.integration.ts",

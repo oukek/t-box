@@ -88,6 +88,7 @@ export default antfu(
       'packages/*/test/**/*.mjs',
       'scripts/**/*.mjs',
       'deploy/api/**/*.mjs',
+      'deploy/oss/**/*.mjs',
       'deploy/pm2/**/*.{mjs,cjs}',
       'capacitor/**/*.ts',
       'capacitor/scripts/**/*.mjs',

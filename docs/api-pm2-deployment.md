@@ -54,7 +54,7 @@ sha-<40位SHA>-run-<编号>-attempt-<次数>
 
 构建 runner 为 Linux x64，Node 24.21.0、pnpm 11.18.0。API 及 workspace 包先编译，再通过 pnpm deploy --legacy --prod 打包；node_modules 已包含第三方生产依赖及编译后的 workspace 包。服务器不需要 pnpm、源码或 TypeScript 编译器。
 
-计算器、记账、日历和时间的独立 Web 产物作为初始化种子额外构建，输出 bootstrap-artifacts 并在 SSH 上传前发布至 OSS。发布包记录此来源和分发模式，服务器配置不一致时会在停止旧服务前拒绝启动。已有应用绑定和已发布版本不会被种子覆盖。主前端和后台使用 前端与后台部署（OSS） 独立部署。
+计算器、记账、日历和时间的独立 Web 产物作为初始化种子额外构建，输出 bootstrap-artifacts 并在 SSH 上传前通过官方 ali-oss SDK 发布至 OSS。发布包记录此来源和分发模式，服务器配置不一致时会在停止旧服务前拒绝启动。已有应用绑定和已发布版本不会被种子覆盖。主前端和后台使用 前端与后台部署（OSS） 独立部署。
 
 业务文件使用 `tboxos/uploads/resources/`，运行中的 API / worker 需要服务器 `shared/api.env` 内的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`；`OSS_REGION` 和业务 Bucket 从 Actions 发布包读取。GitHub 上传凭据不会自动进入服务器。账号授权及 Bucket 跨域设置按 [首次部署](first-deployment.md) 操作。PM2 在停止旧服务前校验业务文件配置完整性。
 

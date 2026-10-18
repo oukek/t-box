@@ -83,7 +83,7 @@ Repository → Settings → Secrets and variables → Actions，配置 Repositor
 
 Run workflow 只选择应用；版本来自代码，更新说明与提示在后台维护。输出目录与构建来源由 GitHub 自动提供，也不用额外配置。
 
-RAM 需要目标目录的 `oss:PutObject`、`oss:PutObjectAcl` 及客户端实际使用的分片上传权限。下载通过公开 HTTPS，不需要签名，也不依赖下载凭据。GitHub 的旧 `OSS_BUCKET` 变量不再使用。工作流固定 ossutil 2.4.0 并校验下载工具 SHA-256。
+RAM 需要目标目录的 `oss:PutObject`、`oss:PutObjectAcl` 及客户端实际使用的分片上传权限。下载通过公开 HTTPS，不需要签名，也不依赖下载凭据。GitHub 的旧 `OSS_BUCKET` 变量不再使用。上传统一调用官方 `ali-oss` SDK（6.23.0），依赖由 pnpm 锁文件固定，无需下载独立 OSS 命令行工具。
 
 手动运行 **子应用发布（OSS）**：选择“数学计算器 (calculator)”即可。脚本严格匹配生成的应用选项，构建后校验 `manifest.version` 并传给上传步骤；Actions 摘要会展示实际版本号。
 

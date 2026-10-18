@@ -1,7 +1,7 @@
-import { spawnSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createOssClient, putOssObject } from '../deploy/oss/client.mjs'
 import { sha256, validAppId, validVersion } from './application-builds.mjs'
 import { ossSettings, publishArtifact } from './oss-static.mjs'
 
@@ -36,21 +36,17 @@ if (!/^[\w.-]+\/[\w.-]+$/.test(source.repository || '') || !/^[a-f0-9]{40}$/.tes
   throw new Error('GitHub build provenance is required')
 }
 const path = `${prefix}/${appId}/${version}/${release.file}`
-const object = `oss://${settings.bucket}/${path}`
+const client = createOssClient(settings.clientOptions)
 const bundle = JSON.parse(bytes.toString('utf8'))
 if (bundle.protocol !== 1 || bundle.appId !== appId || bundle.version !== version || !Array.isArray(bundle.files) || bundle.artifact !== release.artifact) {
   throw new Error('Release static files do not match the registered build')
 }
 // Never register a version until the exact static files are publicly available on OSS.
-await publishArtifact(appId, bundle.artifact, bundle.files, settings)
-const run = (args) => {
-  const result = spawnSync('ossutil', args, { env: settings.environment, encoding: 'utf8', timeout: 180_000, maxBuffer: 1024 * 1024 })
-  if (result.error || result.status !== 0) {
-    // CLI output can contain credentials; do not print it.
-    throw new Error('OSS operation failed; check AccessKey permissions and bucket configuration')
-  }
-}
-run(['cp', join(directory, release.file), object, '--force', '--acl', 'public-read', '--content-type', 'application/json', '--cache-control', 'public,max-age=31536000,immutable'])
+await publishArtifact(appId, bundle.artifact, bundle.files, settings, { client })
+await putOssObject(client, path, bytes, { mime: 'application/json', headers: {
+  'x-oss-object-acl': 'public-read',
+  'Cache-Control': 'public,max-age=31536000,immutable',
+} })
 const url = new URL(`https://${settings.bucket}.oss-${region}.aliyuncs.com/${path}`)
 const request = JSON.stringify({ appId, version, url: url.href, sha256: release.sha256, source })
 let data

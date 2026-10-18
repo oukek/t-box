@@ -5,6 +5,7 @@ packages:
   - capacitor
   - capacitor-plugins/*
   - shared
+  - deploy/oss
   - packages/*
   - apps/*/contracts
   - apps/*/server

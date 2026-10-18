@@ -892,6 +892,12 @@ importers:
         specifier: 8.5.2
         version: 8.5.2
 
+  deploy/oss:
+    dependencies:
+      ali-oss:
+        specifier: 6.23.0
+        version: 6.23.0(supports-color@10.2.2)
+
   packages/app-contracts:
     dependencies:
       '@t-box/errors':

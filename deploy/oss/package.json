@@ -1,0 +1,9 @@
+{
+  "name": "@t-box/oss-deployment",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "files": ["client.mjs", "diagnostics.mjs", "transfer.mjs"],
+  "engines": { "node": ">=24.15.0" },
+  "dependencies": { "ali-oss": "6.23.0" }
+}

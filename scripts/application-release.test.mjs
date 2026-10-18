@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -10,6 +11,7 @@ import { applicationChoice, collectBuildFiles, discoverApplications, selectAppli
 import { packApplicationRelease } from './pack-application-release.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
+const ossModule = pathToFileURL(createRequire(new URL('../deploy/oss/package.json', import.meta.url)).resolve('ali-oss')).href
 test('only apps with validated independent Web builds appear in the generated choices', async () => {
   const applications = await discoverApplications(root)
   assert.ok(applications.length > 0)
@@ -158,31 +160,23 @@ for (const scenario of [
       const digest = sha256(bundle)
       await writeFile(join(releaseDir, digest + '.json'), bundle)
       await writeFile(join(releaseDir, 'release.json'), JSON.stringify({ appId: 'calculator', version: '1.2.3', artifact, sha256: digest, file: digest + '.json' }))
-      const bin = join(directory, 'bin')
-      await mkdir(bin)
-      const oss = join(bin, 'ossutil')
-      await writeFile(oss, `#!/usr/bin/env node
-const fs = require('node:fs'), path = require('node:path')
-const args = process.argv.slice(2)
-if (args[0] !== 'cp' || !args[2].startsWith('oss://tboxos-app/')) process.exit(2)
-if (process.env.APP_IMPORT_TOKEN || process.env.PM2_SSH_PASSWORD) process.exit(3)
-fs.appendFileSync(process.env.OSS_TRACE, JSON.stringify(args) + '\\n')
-if (args[2].includes('/builds/')) {
-  if (args[args.indexOf('--acl') + 1] !== 'public-read') process.exit(4)
-  if (process.env.FAIL_BUNDLE === 'true') process.exit(5)
-}
-if (args[0] === 'cp') {
-  const target = path.join(process.env.FAKE_OSS_DIR, new URL(args[2]).pathname)
-  fs.mkdirSync(path.dirname(target), { recursive: true })
-  fs.copyFileSync(args[1], target)
-}
-`, { mode: 0o755 })
       const trace = join(directory, 'trace.json')
       const mock = join(directory, 'mock.mjs')
       await writeFile(mock, `
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import OSS from '${ossModule}'
 import { setTimeout as schedule } from 'node:timers'
+OSS.prototype.put = async function (key, input, options) {
+  if (this.options.bucket !== 'tboxos-app') throw new Error('Wrong applications bucket')
+  if (this.options.APP_IMPORT_TOKEN || this.options.PM2_SSH_PASSWORD) throw new Error('Unrelated credentials reached SDK')
+  appendFileSync(process.env.OSS_TRACE, JSON.stringify({ key, options }) + '\\n')
+  if (options.headers['x-oss-object-acl'] !== 'public-read') throw new Error('Expected public objects')
+  if (key.includes('builds/') && process.env.FAIL_BUNDLE === 'true') throw new Error('fixture-key-secret must be sanitized')
+  const target = join(process.env.FAKE_OSS_DIR, key)
+  mkdirSync(dirname(target), { recursive: true })
+  writeFileSync(target, Buffer.isBuffer(input) ? input : readFileSync(input))
+}
 const calls = []
 const delays = []
 const save = () => writeFileSync(process.env.TRACE, JSON.stringify({ calls, delays }))
@@ -222,7 +216,6 @@ globalThis.fetch = async (url, options) => {
         env: {
           ...process.env,
           ...deploymentEnvironment({ DEPLOY_DOMAIN: 'example.com', OSS_REGION: 'cn-hangzhou' }),
-          PATH: bin + ':' + process.env.PATH,
           APP_RELEASE_OUTPUT: join(directory, 'releases'),
           OSS_BUCKET: 'obsolete-private-bucket-must-be-ignored',
           OSS_ACCESS_KEY_ID: 'fixture-key-id',
@@ -235,14 +228,14 @@ globalThis.fetch = async (url, options) => {
           OSS_TRACE: join(directory, 'oss-trace.jsonl'),
           FAIL_BUNDLE: String(failBundle),
           SUBMISSION_FAILURE: scenario.failure,
-          PM2_SSH_PASSWORD: 'must-not-reach-ossutil',
+          PM2_SSH_PASSWORD: 'must-not-reach-sdk',
           FAKE_OSS_DIR: join(directory, 'public'),
           ARTIFACT: artifact,
         },
       })
       const uploads = (await readFile(join(directory, 'oss-trace.jsonl'), 'utf8')).trim().split('\n').map((line) => JSON.parse(line))
       assert.equal(uploads.length, 3)
-      assert.equal(uploads.at(-1)[2], `oss://tboxos-app/builds/calculator/1.2.3/${digest}.json`)
+      assert.equal(uploads.at(-1).key, `builds/calculator/1.2.3/${digest}.json`)
       if (failBundle) {
         assert.notEqual(result.status, 0)
         await assert.rejects(readFile(trace), { code: 'ENOENT' })

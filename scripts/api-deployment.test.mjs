@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const deployment = fileURLToPath(new URL('../deploy/api/', import.meta.url))
+const ossModule = createRequire(new URL('../deploy/oss/package.json', import.meta.url)).resolve('ali-oss')
 const release = 'sha-' + 'a'.repeat(40) + '-run-123-attempt-1'
 const imageId = 'sha256:' + 'b'.repeat(64)
 const dockerStub = `#!/usr/bin/env node
@@ -22,17 +24,23 @@ else if (args[0]==='compose') {
   if (args.includes('up') && process.env.FAKE_FAIL==='health') process.exit(10);
 }
 `
-const ossStub = `#!/usr/bin/env node
-const fs = require('node:fs');
-const path = require('node:path');
-const args = process.argv.slice(2);
-fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({tool:'ossutil',args})+'\\n');
-const mapped = v => v.startsWith('oss://') ? path.join(process.env.FAKE_OSS_ROOT,v.replace(/^oss:\\/\\/[^/]+\\//,'')) : v;
-if(args[0]!=='cp') process.exit(2);
-const source=mapped(args[1]), target=mapped(args[2]);
-if(args[2].startsWith('oss://') && path.basename(source)===process.env.FAKE_FAIL_UPLOAD) process.exit(8);
-try { fs.mkdirSync(path.dirname(target),{recursive:true}); fs.copyFileSync(source,target); }
-catch { process.exit(3); }
+const ossStub = `
+import OSS from '${pathToFileURL(ossModule).href}'
+import fs from 'node:fs'
+import path from 'node:path'
+const record = (operation, key, options, bucket) => fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({tool:'oss-sdk',operation,args:[key],options,bucket})+'\\n')
+OSS.prototype.put = async function(key, input, options) {
+  record('put', key, options, this.options.bucket)
+  if (path.basename(key) === process.env.FAKE_FAIL_UPLOAD) throw new Error('fixture-secret must be sanitized')
+  const target = path.join(process.env.FAKE_OSS_ROOT, key)
+  fs.mkdirSync(path.dirname(target),{recursive:true})
+  fs.writeFileSync(target, Buffer.isBuffer(input) ? input : fs.readFileSync(input))
+}
+OSS.prototype.getStream = async function(key) {
+  record('getStream', key, {}, this.options.bucket)
+  const source = path.join(process.env.FAKE_OSS_ROOT, key)
+  return {stream:fs.createReadStream(source),res:{headers:{'content-length':String(fs.statSync(source).size)}}}
+}
 `
 
 function fixture(t) {
@@ -46,7 +54,14 @@ function fixture(t) {
     copyFileSync(join(deployment, file), join(dir, file))
   }
   writeFileSync(join(bin, 'docker'), dockerStub, { mode: 0o755 })
-  writeFileSync(join(bin, 'ossutil'), ossStub, { mode: 0o755 })
+  mkdirSync(join(root, 'oss/node_modules'), { recursive: true })
+  for (const file of ['client.mjs', 'diagnostics.mjs', 'transfer.mjs', 'package.json']) {
+    copyFileSync(new URL('../deploy/oss/' + file, import.meta.url), join(root, 'oss', file))
+  }
+  const sdkDirectory = dirname(dirname(ossModule))
+  symlinkSync(sdkDirectory, join(root, 'oss/node_modules/ali-oss'))
+  const preload = join(root, 'mock-sdk.mjs')
+  writeFileSync(preload, ossStub)
   // Only command sequencing is mocked; SHA-256, gzip, jq, and file operations are real.
   writeFileSync(join(bin, 'flock'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
   const env = {
@@ -57,12 +72,14 @@ function fixture(t) {
     FAKE_IMAGE_ID: imageId,
     OSS_BUCKET: '',
     OSS_PREFIX: '',
-    OSSUTIL_CONFIG_FILE: join(root, 'unused-config'),
+    OSS_REGION: 'cn-hangzhou',
+    OSS_ENDPOINT: 'https://oss-cn-hangzhou.aliyuncs.com',
+    OSS_ACCESS_KEY_ID: 'fixture-id',
+    OSS_ACCESS_KEY_SECRET: 'fixture-secret',
+    NODE_OPTIONS: '--import=' + pathToFileURL(preload).href,
     GITHUB_SHA: 'a'.repeat(40),
   }
-  // Do not allow a test to use any real OSS access credentials.
-  delete env.OSS_ACCESS_KEY_ID
-  delete env.OSS_ACCESS_KEY_SECRET
+  // Fixture credentials and SDK methods cannot access a real bucket.
   delete env.OSS_SESSION_TOKEN
   const originalEnv = 'API_IMAGE=t-box-api:old\nMYSQL_PASSWORD=\'fixture$#\'\nAPP_ARTIFACT_ORIGIN=https://apps.example.invalid\n'
   writeFileSync(join(dir, '.env'), originalEnv)
@@ -87,17 +104,20 @@ test('export creates a checked archive; publication marker is uploaded last', (t
   assert.equal(manifest.image.id, imageId)
   assert.equal(manifest.image.tag, 't-box-api:' + release)
   f.ok(f.run('upload-release.sh', [release, f.output]))
-  assert.deepEqual(f.logs().filter((row) => row.tool === 'ossutil').map((row) => basename(row.args[1])), ['image.tar.gz', 'image.tar.gz.sha256', 'release.json'])
-  for (const { args } of f.logs().filter((row) => row.tool === 'ossutil')) {
-    assert.ok(args[2].startsWith(`oss://tboxos-admin/docker/releases/${release}/`))
-    assert.equal(args[args.indexOf('--acl') + 1], 'public-read')
+  assert.deepEqual(f.logs().filter((row) => row.tool === 'oss-sdk').map((row) => basename(row.args[0])), ['image.tar.gz', 'image.tar.gz.sha256', 'release.json'])
+  for (const { args, options, bucket } of f.logs().filter((row) => row.tool === 'oss-sdk')) {
+    assert.equal(bucket, 'tboxos-admin')
+    assert.ok(args[0].startsWith(`docker/releases/${release}/`))
+    assert.equal(options.headers['x-oss-object-acl'], 'public-read')
   }
 })
 
 test('failed archive upload never publishes a ready manifest', (t) => {
   const f = fixture(t)
   f.ok(f.run('export-release.sh', [release, f.output]))
-  assert.notEqual(f.run('upload-release.sh', [release, f.output], { FAKE_FAIL_UPLOAD: 'image.tar.gz' }).status, 0)
+  const failed = f.run('upload-release.sh', [release, f.output], { FAKE_FAIL_UPLOAD: 'image.tar.gz' })
+  assert.notEqual(failed.status, 0)
+  assert.ok(!(failed.stderr + failed.stdout).includes('fixture-secret'))
   assert.equal(existsSync(join(f.remote, 'release.json')), false)
 })
 

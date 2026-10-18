@@ -50,16 +50,16 @@ jobs:
         env:
           APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
         run: node deploy/pm2/import-token.mjs --check
+      - uses: pnpm/action-setup@v6
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
       - name: Validate OSS bootstrap settings
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
         run: node scripts/upload-bootstrap-oss.mjs --check
-      - uses: pnpm/action-setup@v6
-      - name: Install locked dependencies
-        run: pnpm install --frozen-lockfile
       - name: PM2 packaging and upload regressions
-        run: node --test scripts/pm2-deployment.test.mjs scripts/oss-deployment.test.mjs
+        run: node --test scripts/pm2-deployment.test.mjs scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs
       - name: Build and validate standalone production package
         env:
           RELEASE_ID: ${{ steps.release.outputs.id }}
@@ -72,8 +72,6 @@ jobs:
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
-      - name: Install verified ossutil
-        run: bash deploy/oss/install-ossutil.sh
       - name: Publish exact bootstrap application files to OSS
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}

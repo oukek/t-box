@@ -20,12 +20,15 @@ GitHub 配置 OSS_ACCESS_KEY_ID、OSS_ACCESS_KEY_SECRET（Secrets），以及 DE
 
 ## 2. 服务器准备
 
-使用 Linux Docker、Compose v2.20+、bash、jq、gzip、sha256sum、flock 和 ossutil 2.x。仓库脚本固定使用官方 ossutil 2.4.0，并校验安装包 SHA-256。
+使用 Linux Docker、Compose v2.20+、Node.js 24.15+、bash、jq、gzip、sha256sum 和 flock。OSS 传输统一使用阿里云官方 `ali-oss` Node.js SDK（锁定 6.23.0），不需要单独安装 OSS 命令行工具。
 
-把 deploy/api 下的部署脚本、compose.yaml 和 env 示例复制到部署目录，例如 /www/server/t-box：
+从镜像工作流的 Artifacts 下载 `oss-deployment-tools`，解压 ZIP 后得到 `oss-deployment-tools.tar.gz`。将 tar 包上传服务器并解压到 `/www/server/t-box`；它包含 `api/` 部署脚本和 `oss/` SDK 程序及生产依赖。保持两个目录相邻，勿单独复制 `api/`；tar 会保留依赖软链接，服务器无需安装 pnpm 或克隆源码。
 
 ```sh
+mkdir -p /www/server/t-box
 cd /www/server/t-box
+tar -xzf /path/to/oss-deployment-tools.tar.gz
+cd api
 cp .env.example .env
 cp oss.env.example oss.env
 chmod 600 .env oss.env
@@ -36,7 +39,7 @@ chmod 700 data/secrets
 
 .env 填写 MySQL、可选 Redis、业务文件 OSS_REGION / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET，以及独立的 APP_ARTIFACT_ORIGIN HTTPS 域名。业务 Bucket 默认 tboxos。API_IMAGE 首次保留占位值，部署成功后脚本会更新为实际标签。
 
-oss.env 用于下载镜像包：OSS_BUCKET=tboxos-admin，OSS_PREFIX=docker，并填写实际地域。ossutil 凭据由部署账户配置；Compose 不会把 oss.env 加载到 API。运行时业务文件上传密钥仍需在 .env 中提供。
+oss.env 用于 SDK 下载镜像包：OSS_BUCKET=tboxos-admin，OSS_PREFIX=docker，并填写实际地域和仅有读取权限的 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET；也可由部署进程环境提供。允许同地域 HTTPS 内网 endpoint，Actions 仅允许公网 endpoint。Compose 不会把 oss.env 加载到 API，运行时业务文件上传密钥仍需在 .env 中单独提供。
 
 Compose 使用宿主机网络，API 监听 127.0.0.1:3000，MySQL / Redis 使用服务器实际地址；不对外发布 API 端口。后台与 API 继续使用同一主域下的 HTTPS 子域名。只为 API 配置 Nginx，保留 /api/、WebSocket、微信通知原始请求体及请求头。主站、后台和子应用域名直接绑定 OSS。
 
@@ -50,7 +53,7 @@ Compose 使用宿主机网络，API 监听 127.0.0.1:3000，MySQL / Redis 使用
 bash deploy-release.sh RELEASE_ID --init
 ```
 
-脚本在临时目录下载归档，验证大小、SHA-256、gzip、OS/架构与镜像身份，执行 docker load，随后删除临时归档。再次导入仍从 OSS 获取并校验，不保留服务器 releases 缓存。
+脚本通过 SDK 流式下载归档，按清单大小限制下载量，在临时目录验证大小、SHA-256、gzip、OS/架构与镜像身份，执行 docker load，随后删除临时归档。再次导入仍从 OSS 获取并校验，不保留服务器 releases 缓存。
 
 配置检查和 `node dist/init-db.js --check` 只读数据库预检通过后才停止旧 API；--init 运行初始化并创建缺失的管理员。Compose 只启动 API，默认在 API 内运行任务恢复器，不再启动本地静态资源服务。初始管理员凭据在 data/secrets/bootstrap-admin.txt，首次登录改密后删除。
 
@@ -72,6 +75,8 @@ MySQL 和密钥需要配套备份；远端业务文件与应用版本另行保�
 
 下载或解压失败时清理本次临时目录；SIGKILL、断电或 SSH 不可达可能留下临时残留，恢复后核对再清理。保留当前和可回滚的运行镜像，按运维策略清理旧镜像；不要删除正在运行的数据或密钥。
 
-脚本回归为 pnpm test:api-deployment，使用 Docker / OSS 替身验证实际归档校验、临时目录清理、数据库初始化、预检失败保留旧服务与代码回滚；不代表已经完成真实 ECS / OSS 联调。
+脚本回归为 pnpm test:api-deployment，使用 Docker / SDK 替身验证实际归档校验、临时目录清理、数据库初始化、预检失败保留旧服务与代码回滚；不代表已经完成真实 ECS / OSS 联调。
 
 数据库历史 migrations 已合并为首次初始化基线；新库与旧开发库的处理边界见 [数据库初始化](database-initialization.md)。
+
+部署工具实现位于 `deploy/oss/`，由 workspace 锁文件固定 SDK 依赖；需要本地生成同样的独立工具包时运行 `node scripts/pack-oss-tools.mjs /tmp/tbox-deployment-tools`，产物为 `/tmp/tbox-deployment-tools.tar.gz`。归档不含凭据，替换工具包时保留服务器已有 `.env`、`oss.env` 和 `api/data/`。

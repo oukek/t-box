@@ -1,26 +1,15 @@
-import { spawnSync } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
+import { createOssClient, ossClientOptions, putOssObject } from '../deploy/oss/client.mjs'
 import { collectBuildFiles, sha256, validAppId } from './application-builds.mjs'
 
 export function ossSettings(bucket, origin, env = process.env) {
-  const region = env.OSS_REGION || ''
-  const endpoint = env.OSS_ENDPOINT || `https://oss-${region}.aliyuncs.com`
+  const clientOptions = ossClientOptions(bucket, env)
   const url = new URL(origin || '')
-  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket || '') ||
-    !/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(region) || endpoint !== `https://oss-${region}.aliyuncs.com` ||
-    url.protocol !== 'https:' || url.origin !== origin || url.username || url.password) {
-    throw new Error('Configure an OSS bucket, OSS_REGION, public OSS_ENDPOINT and an exact custom HTTPS origin without a trailing slash')
+  if (url.protocol !== 'https:' || url.origin !== origin || url.username || url.password) {
+    throw new Error('Configure an exact custom HTTPS origin without a trailing slash')
   }
-  if (!env.OSS_ACCESS_KEY_ID || !env.OSS_ACCESS_KEY_SECRET) {
-    throw new Error('Configure OSS_ACCESS_KEY_ID and OSS_ACCESS_KEY_SECRET')
-  }
-  const environment = { ...env, OSS_ENDPOINT: endpoint }
-  delete environment.APP_IMPORT_TOKEN
-  delete environment.PM2_SSH_PASSWORD
-  delete environment.PM2_SSH_PRIVATE_KEY
-  return { bucket, origin, environment }
+  return { bucket, origin, clientOptions }
 }
 
 const types = {
@@ -47,12 +36,7 @@ export async function publishFiles(files, settings, {
   prefix = '',
   immutable = false,
   marker,
-  run = (args, env) => {
-    const result = spawnSync('ossutil', args, { env, encoding: 'utf8', timeout: 180_000, maxBuffer: 1024 * 1024 })
-    if (result.error || result.status !== 0) {
-      throw new Error('OSS upload failed; check bucket, credentials and PutObject permissions')
-    }
-  },
+  client,
   request = globalThis.fetch,
 } = {}) {
   if (prefix && !/^[\w-]+(?:\/[\w-]+)*\/$/.test(prefix)) {
@@ -77,46 +61,40 @@ export async function publishFiles(files, settings, {
   // Publish dependency files before the HTML entry; activate a worker/manifest only after all files verify.
   const priority = (path) => path === marker ? 3 : path === 'tbox-offline-sw.js' ? 2 : path === 'index.html' ? 1 : 0
   const ordered = [...entries].sort(([a], [b]) => priority(a) - priority(b) || a.localeCompare(b))
-  const temporary = await mkdtemp(join(tmpdir(), 'tbox-oss-static-'))
-  try {
-    for (const [path, bytes] of ordered) {
-      const source = join(temporary, 'object')
-      await writeFile(source, bytes)
-      const name = path.split('/').at(-1).split('.').slice(0, -1).join('.')
-      const suffix = name.slice(name.lastIndexOf('-') + 1)
-      const hashed = path.startsWith('assets/') && name.includes('-') && suffix.length >= 8 && /^[\w-]+$/.test(suffix)
-      const cache = immutable || hashed ? 'public,max-age=31536000,immutable' : 'no-cache'
-      await run(['cp', source, `oss://${settings.bucket}/${prefix}${path}`, '--force', '--acl', 'public-read', '--content-type', contentType(path), '--cache-control', cache], settings.environment)
-      const url = new URL(`${settings.origin}/${prefix}${path}`)
-      url.searchParams.set('tbox_sha256', sha256(bytes))
-      const response = await request(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) })
-      if (!response.ok || !response.body) {
-        throw new Error('Published static file is not publicly reachable; check OSS website, domain and HTTPS settings')
-      }
-      const reader = response.body.getReader()
-      const chunks = []
-      let length = 0
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) {
-            break
-          }
-          length += value.length
-          if (length > bytes.length) {
-            throw new Error('Published static file exceeds its expected size')
-          }
-          chunks.push(Buffer.from(value))
-        }
-      } finally {
-        await reader.cancel().catch(() => {})
-      }
-      if (sha256(Buffer.concat(chunks)) !== sha256(bytes)) {
-        throw new Error('Published static file checksum mismatch; check CDN caches or content rewriting')
-      }
+  const storage = client || createOssClient(settings.clientOptions)
+  for (const [path, bytes] of ordered) {
+    const name = path.split('/').at(-1).split('.').slice(0, -1).join('.')
+    const suffix = name.slice(name.lastIndexOf('-') + 1)
+    const hashed = path.startsWith('assets/') && name.includes('-') && suffix.length >= 8 && /^[\w-]+$/.test(suffix)
+    const cache = immutable || hashed ? 'public,max-age=31536000,immutable' : 'no-cache'
+    await putOssObject(storage, prefix + path, bytes, { mime: contentType(path), headers: { 'x-oss-object-acl': 'public-read', 'Cache-Control': cache } })
+    const url = new URL(`${settings.origin}/${prefix}${path}`)
+    url.searchParams.set('tbox_sha256', sha256(bytes))
+    const response = await request(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) })
+    if (!response.ok || !response.body) {
+      throw new Error('Published static file is not publicly reachable; check OSS website, domain and HTTPS settings')
     }
-  } finally {
-    await rm(temporary, { recursive: true, force: true })
+    const reader = response.body.getReader()
+    const chunks = []
+    let length = 0
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) {
+          break
+        }
+        length += value.length
+        if (length > bytes.length) {
+          throw new Error('Published static file exceeds its expected size')
+        }
+        chunks.push(Buffer.from(value))
+      }
+    } finally {
+      await reader.cancel().catch(() => {})
+    }
+    if (sha256(Buffer.concat(chunks)) !== sha256(bytes)) {
+      throw new Error('Published static file checksum mismatch; check CDN caches or content rewriting')
+    }
   }
   return entries.size
 }

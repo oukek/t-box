@@ -48,11 +48,9 @@ jobs:
         run: node scripts/generate-application-workflow.mjs --check
       - run: pnpm install --frozen-lockfile
       - name: Release script regressions
-        run: node --test scripts/application-release.test.mjs scripts/oss-deployment.test.mjs
+        run: node --test scripts/application-release.test.mjs scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs
       - name: Build selected application and package static bundle
         run: node scripts/pack-application-release.mjs "$APPLICATION_SELECTION"
-      - name: Install verified ossutil 2.4.0
-        run: bash deploy/oss/install-ossutil.sh
       - name: Upload to OSS and register submitted version (never publish)
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}

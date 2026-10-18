@@ -83,7 +83,7 @@ test('website preflight rejects a shared bucket even when publishing only one si
 })
 
 test('website preflight accepts generated settings for different OSS regions and publishing targets', () => {
-  for (const region of ['cn-hangzhou', 'cn-shenzhen', 'eu-central-1']) {
+  for (const region of ['cn-hangzhou', 'cn-shenzhen', 'cn-guangzhou', 'eu-central-1']) {
     const generated = deploymentEnvironment({ DEPLOY_DOMAIN: 'example.com', OSS_REGION: region })
     for (const target of ['app', 'admin', 'all']) {
       const checked = spawnSync(process.execPath, [fileURLToPath(new URL('./deploy-web-oss.mjs', import.meta.url)), target, '--check'], {
@@ -101,13 +101,11 @@ function storage({ corrupt = false, missing = false } = {}) {
     objects,
     calls,
     options: {
-      run: async (args, env) => {
-        assert.equal(env.APP_IMPORT_TOKEN, undefined)
-        assert.equal(env.PM2_SSH_PASSWORD, undefined)
-        calls.push(args)
-        assert.equal(args[args.indexOf('--acl') + 1], 'public-read')
-        objects.set(new URL(args[2]).pathname, await readFile(args[1]))
-      },
+      client: { put: async (key, bytes, options) => {
+        calls.push({ key, options })
+        assert.equal(options.headers['x-oss-object-acl'], 'public-read')
+        objects.set('/' + key, Buffer.from(bytes))
+      } },
       request: async (url, options) => {
         assert.equal(options.redirect, 'error')
         assert.equal(options.cache, 'no-store')
@@ -119,7 +117,11 @@ function storage({ corrupt = false, missing = false } = {}) {
 }
 
 test('OSS configuration rejects unsafe destinations and removes unrelated credentials', () => {
-  assert.equal(settings().environment.OSS_ENDPOINT, 'https://oss-cn-hangzhou.aliyuncs.com')
+  assert.equal(settings().clientOptions.endpoint, 'https://oss-cn-hangzhou.aliyuncs.com')
+  assert.equal(settings().clientOptions.authorizationV4, true)
+  assert.equal(settings().clientOptions.retryMax, 4)
+  assert.equal(settings().clientOptions.APP_IMPORT_TOKEN, undefined)
+  assert.equal(settings().clientOptions.PM2_SSH_PASSWORD, undefined)
   for (const origin of ['http://apps.example.com', 'https://apps.example.com/', 'https://user:password@apps.example.com', 'https://apps.example.com/path', 'https://apps.example.com?x=1']) {
     assert.throws(() => ossSettings('test-bucket', origin, environment))
   }
@@ -132,11 +134,10 @@ test('OSS configuration rejects unsafe destinations and removes unrelated creden
 test('website dependencies precede HTML and the service worker; metadata controls cache and MIME', async () => {
   const remote = storage()
   await publishFiles([file('index.html', 'html'), file('tbox-offline-sw.js', 'worker'), file('assets/main-Abc12345.js', 'script'), file('tbox-offline.js', 'register')], settings(), remote.options)
-  assert.deepEqual(remote.calls.map((args) => new URL(args[2]).pathname), ['/assets/main-Abc12345.js', '/tbox-offline.js', '/index.html', '/tbox-offline-sw.js'])
-  assert.equal(remote.calls[0].at(-1), 'public,max-age=31536000,immutable')
-  assert.equal(remote.calls[2].at(-1), 'no-cache')
-  assert.ok(remote.calls[2].includes('text/html; charset=utf-8'))
-  assert.ok(remote.calls.every((args) => !args.includes('rm') && !args.includes('--delete')))
+  assert.deepEqual(remote.calls.map(({ key }) => '/' + key), ['/assets/main-Abc12345.js', '/tbox-offline.js', '/index.html', '/tbox-offline-sw.js'])
+  assert.equal(remote.calls[0].options.headers['Cache-Control'], 'public,max-age=31536000,immutable')
+  assert.equal(remote.calls[2].options.headers['Cache-Control'], 'no-cache')
+  assert.equal(remote.calls[2].options.mime, 'text/html; charset=utf-8')
 })
 
 test('a missing or changed remote dependency prevents entrypoint publication', async () => {
@@ -154,8 +155,8 @@ test('immutable application files and canonical manifest publish before version 
   const digest = sha256(JSON.stringify(hashes))
   const remote = storage()
   await publishArtifact('calendar', digest, files, settings(), remote.options)
-  assert.equal(remote.calls.at(-1)[2], `oss://test-public-bucket/calendar/${digest}/artifact.json`)
-  assert.ok(remote.calls.every((args) => args.at(-1).includes('immutable')))
+  assert.equal(remote.calls.at(-1).key, `calendar/${digest}/artifact.json`)
+  assert.ok(remote.calls.every(({ options }) => options.headers['Cache-Control'].includes('immutable')))
   const manifest = JSON.parse(remote.objects.get(`/calendar/${digest}/artifact.json`))
   assert.deepEqual(manifest, { protocol: 1, appId: 'calendar', digest, files: hashes })
   await assert.rejects(publishArtifact('calendar', '0'.repeat(64), files, settings(), remote.options), /digest/)

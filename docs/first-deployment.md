@@ -44,7 +44,7 @@ GitHub 配置现在就全部填好。`APP_IMPORT_TOKEN` 由你设置一个 32–
 
 | 账号用途 | 对象范围 | 权限 |
 | --- | --- | --- |
-| GitHub 发布 | `acs:oss:*:*:tboxos/*`、`acs:oss:*:*:tboxos-admin/*`、`acs:oss:*:*:tboxos-app/*` | `oss:PutObject`、`oss:PutObjectAcl`；ossutil 分片上传另需 `oss:ListParts`、`oss:AbortMultipartUpload` |
+| GitHub 发布 | `acs:oss:*:*:tboxos/*`、`acs:oss:*:*:tboxos-admin/*`、`acs:oss:*:*:tboxos-app/*` | `oss:PutObject`、`oss:PutObjectAcl`；SDK 分片上传另需 `oss:ListParts`、`oss:AbortMultipartUpload` |
 | 服务器业务上传 | `acs:oss:*:*:tboxos/uploads/resources/*` | `oss:PutObject`、`oss:PutObjectAcl`、`oss:GetObject`、`oss:DeleteObject` |
 
 ## 2. 再配置 GitHub
@@ -192,3 +192,24 @@ H5 域名可能需要审核，先完成对应产品开通和域名配置，再�
 在代码中修改目标应用的 `manifest.version` 并提交，然后运行 **子应用发布（OSS）**，只选中文应用名称即可，版本号自动读取；成功后进入后台“应用发布”→“编辑更新信息”填写更新说明和提示，保存后审核上架。后端与凭证已就绪时，无需重复运行后端 Actions。无需补填配置、执行服务器命令或新建 Bucket。若改变主域名、地域或 `deploy/settings.mjs` 中的公共设置，先准备好对应的 OSS / DNS 配置并重新发布后端，再提交应用；已有业务文件不会因改 Bucket 而自动初始化数据库。其他进阶操作见 [PM2 部署](api-pm2-deployment.md)、[子应用发布](application-actions-release.md)、[运维与恢复](operations-and-recovery.md)。
 
 数据库历史 migrations 已合并为首次初始化基线；新库与旧开发库的处理边界见 [数据库初始化](database-initialization.md)。
+
+OSS 上传统一使用官方 `ali-oss` SDK，部署脚本共用 `deploy/oss/client.mjs`，不安装独立 OSS 命令行程序。小文件直接上传并附带 Content-MD5；大镜像使用分片上传，下载采用有大小限制的流式读取。SDK 与公开域名校验、SHA-256 和发布顺序各司其职：HTML / 服务工作线程 / 版本登记仍必须等依赖文件上传验证后执行。官方接口见 [Node.js 分片上传](https://help.aliyun.com/zh/oss/developer-reference/multipart-upload-3)。
+
+## PM2 工作流上传 OSS 失败时
+
+“Publish exact bootstrap application files to OSS” 步骤将初始子应用文件上传到 `tboxos-app`。该步骤使用 GitHub Repository Secrets 的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`，不读取服务器 `shared/api.env`，也不使用 SSH 登录凭据。两项 Secret 必须来自同一对有效的长期 RAM AccessKey，不能包含前后空格或换行。
+
+`OSS_REGION` 必须与 **Bucket 实际地域** 一致，例如杭州使用 `cn-hangzhou`，广州使用 `cn-guangzhou`；不要按 ECS 所在地域推测。SDK 的 `region` 会自动拼接为 `oss-cn-guangzhou`，公网 endpoint 自动生成为 `https://oss-cn-guangzhou.aliyuncs.com`，GitHub Variable 不要再加 `oss-`。当前三个 Bucket 固定为 `tboxos`、`tboxos-admin`、`tboxos-app`，共用一个地域配置；自定义桶名应先修改 `deploy/settings.mjs`。
+
+部署错误会保留安全诊断：错误码、HTTP 状态、RequestId、EC、目标桶、地域与对象路径；不输出原始 SDK 错误正文、请求头、签名或密钥。根据实际错误排查：
+
+| 错误码 | 核对内容 |
+| --- | --- |
+| `AccessDenied` | Bucket 所属账号、跨账号授权、RAM / Bucket Policy 的显式 Deny，以及全局和 Bucket 的阻止公共访问。当前静态上传携带 `public-read`，RAM 全部权限不能替代公共访问策略。 |
+| `SignatureDoesNotMatch` | GitHub 中的 ID 与 Secret 是否匹配、是否复制错误，以及地域。 |
+| `InvalidAccessKeyId` | Key 是否正确、启用，是否属于正确的账号。 |
+| `NoSuchBucket` / `PermanentRedirect` / `AuthorizationHeaderMalformed` | 固定桶是否存在、`OSS_REGION` 是否与实际桶一致。 |
+| `ENOTFOUND` / `ConnectionTimeoutError` | 公网 endpoint 的 DNS 和执行机器网络。 |
+| `ENOENT` | 本地打包产物路径，属于文件问题。 |
+
+如需公开托管应用静态文件，全局与该 Bucket 的阻止公共访问均需允许公共访问；只有 Bucket 开关关闭而全局仍开启时不会生效，见 [阿里云阻止公共访问说明](https://help.aliyun.com/zh/oss/user-guide/block-public-access/)。不要将任何桶设置成公共写。若仍失败，提供新的脱敏错误行即可，不要发送 AccessKey Secret。

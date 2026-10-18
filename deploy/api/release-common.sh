@@ -21,6 +21,7 @@ load_oss_settings() {
   fi
   OSS_BUCKET="${OSS_BUCKET:-tboxos-admin}"
   OSS_PREFIX="${OSS_PREFIX:-docker}"
+  export OSS_BUCKET OSS_PREFIX
   [[ "$OSS_BUCKET" =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]] || fail 'Invalid OSS_BUCKET'
   [[ "$OSS_PREFIX" =~ ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$ ]] || fail 'Invalid OSS_PREFIX'
 }
@@ -47,4 +48,8 @@ verify_archive() {
     fail 'Checksum file differs from release manifest'
   (cd "$folder" && sha256sum --check --status image.tar.gz.sha256) || fail 'Image SHA-256 verification failed'
   gzip -t "$folder/image.tar.gz" || fail 'Invalid gzip archive'
+}
+
+oss_transfer() {
+  node "$script_dir/../oss/transfer.mjs" "$@"
 }

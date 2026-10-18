@@ -6,17 +6,17 @@ source "$script_dir/release-common.sh"
 [[ $# == 1 ]] || fail 'Usage: bash download-release.sh RELEASE_ID'
 release_id="$1"
 validate_release_id "$release_id"
-need_commands ossutil docker jq gzip sha256sum flock
+need_commands node docker jq gzip sha256sum flock
 load_oss_settings
 exec 9>"$script_dir/.download.lock"
 flock -n 9 || fail 'Another download/import is already running'
 folder="$(mktemp -d "${TMPDIR:-/tmp}/tbox-docker-import.XXXXXX")"
 trap 'rm -rf -- "$folder"' EXIT
-origin="oss://$OSS_BUCKET/$OSS_PREFIX/releases/$release_id"
-ossutil cp "$origin/release.json" "$folder/release.json" --force
+object_prefix="$OSS_PREFIX/releases/$release_id"
+oss_transfer download "$object_prefix/release.json" "$folder/release.json" 65536
 validate_manifest "$folder" "$release_id"
-ossutil cp "$origin/image.tar.gz.sha256" "$folder/image.tar.gz.sha256" --force
-ossutil cp "$origin/image.tar.gz" "$folder/image.tar.gz" --force
+oss_transfer download "$object_prefix/image.tar.gz.sha256" "$folder/image.tar.gz.sha256" 1024
+oss_transfer download "$object_prefix/image.tar.gz" "$folder/image.tar.gz" "$(jq -r '.archive.size' "$folder/release.json")"
 verify_archive "$folder" "$release_id"
 platform="$(docker info --format '{{.OSType}}/{{.Architecture}}')"
 case "$platform" in
