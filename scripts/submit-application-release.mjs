@@ -63,13 +63,19 @@ for (let attempt = 1; attempt <= 5; attempt++) {
       headers: { 'authorization': `Bearer ${token}`, 'content-type': 'application/json' },
       body: request,
     })
-    const result = await response.json().catch(() => ({}))
+    const result = await response.json().catch((error) => {
+      // A committed import can lose its response body; retry the same idempotent request.
+      if (response.ok) {
+        throw error
+      }
+      return {}
+    })
     if (!response.ok) {
-      const error = new Error(`Server rejected build (${response.status}): ${String(result.error?.code || 'UNKNOWN')}`)
+      const error = new Error(`Server rejected build (${response.status}): ${String(result?.error?.code || 'UNKNOWN')}`)
       error.retryable = response.status >= 500 || response.status === 429
       throw error
     }
-    if (!result.data?.releaseId || !['submitted', 'published', 'retired'].includes(result.data.status)) {
+    if (!result?.data?.releaseId || !['submitted', 'published', 'retired'].includes(result.data.status)) {
       const error = new Error('Unexpected import response')
       error.retryable = false
       throw error

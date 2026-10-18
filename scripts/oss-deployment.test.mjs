@@ -66,11 +66,33 @@ test('the settings CLI exports only derived public values and its output passes 
 test('website preflight rejects a shared bucket even when publishing only one site', () => {
   const run = (extra) => spawnSync(process.execPath, [fileURLToPath(new URL('./deploy-web-oss.mjs', import.meta.url)), 'app', '--check'], {
     encoding: 'utf8',
-    env: { ...process.env, ...environment, API_BASE_URL: 'https://api.example.com/api/v1', WEB_ORIGIN: 'https://example.com', ADMIN_ORIGIN: 'https://admin.example.com', APP_ARTIFACT_ORIGIN: 'https://apps.example.com', WEB_OSS_BUCKET: 'test-web-bucket', ADMIN_OSS_BUCKET: 'test-admin-bucket', APPS_OSS_BUCKET: 'test-apps-bucket', ...extra },
+    // CLI checks need no host environment: a runner's OSS_ENDPOINT may use another region.
+    env: { ...environment, API_BASE_URL: 'https://api.example.com/api/v1', WEB_ORIGIN: 'https://example.com', ADMIN_ORIGIN: 'https://admin.example.com', APP_ARTIFACT_ORIGIN: 'https://apps.example.com', WEB_OSS_BUCKET: 'test-web-bucket', ADMIN_OSS_BUCKET: 'test-admin-bucket', APPS_OSS_BUCKET: 'test-apps-bucket', ...extra },
   })
-  assert.equal(run({}).status, 0)
-  assert.notEqual(run({ ADMIN_OSS_BUCKET: 'test-web-bucket' }).status, 0)
-  assert.notEqual(run({ API_BASE_URL: 'http://api.example.com/api/v1' }).status, 0)
+  const valid = run({})
+  assert.equal(valid.status, 0, valid.stderr)
+  const shared = run({ ADMIN_OSS_BUCKET: 'test-web-bucket' })
+  assert.notEqual(shared.status, 0)
+  assert.match(shared.stderr, /Use separate buckets and origins/)
+  const insecureApi = run({ API_BASE_URL: 'http://api.example.com/api/v1' })
+  assert.notEqual(insecureApi.status, 0)
+  assert.match(insecureApi.stderr, /Set API_BASE_URL/)
+  const mismatchedEndpoint = run({ OSS_ENDPOINT: 'https://oss-cn-shenzhen.aliyuncs.com' })
+  assert.notEqual(mismatchedEndpoint.status, 0)
+  assert.match(mismatchedEndpoint.stderr, /public OSS_ENDPOINT/)
+})
+
+test('website preflight accepts generated settings for different OSS regions and publishing targets', () => {
+  for (const region of ['cn-hangzhou', 'cn-shenzhen', 'eu-central-1']) {
+    const generated = deploymentEnvironment({ DEPLOY_DOMAIN: 'example.com', OSS_REGION: region })
+    for (const target of ['app', 'admin', 'all']) {
+      const checked = spawnSync(process.execPath, [fileURLToPath(new URL('./deploy-web-oss.mjs', import.meta.url)), target, '--check'], {
+        encoding: 'utf8',
+        env: { ...environment, ...generated },
+      })
+      assert.equal(checked.status, 0, `${region}/${target}: ${checked.stderr}`)
+    }
+  }
 })
 function storage({ corrupt = false, missing = false } = {}) {
   const objects = new Map()

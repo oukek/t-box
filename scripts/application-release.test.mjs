@@ -133,8 +133,21 @@ test('release versions reject paths and shell interpolation', () => {
   }
 })
 
-for (const failBundle of [false, true]) {
-  test(failBundle ? 'failed public bundle upload never calls the import API' : 'one public applications bucket serves static files and the unsigned bundle; submission retries without publishing', async () => {
+for (const scenario of [
+  { name: 'one public applications bucket serves static files and the unsigned bundle; submission retries without publishing', failure: 'connection', attempts: 2 },
+  { name: 'an interrupted successful import response retries the same submission without reuploading', failure: 'response-body', attempts: 2 },
+  { name: 'a temporary server failure retries the same import request', failure: 'unavailable', attempts: 2 },
+  { name: 'a rate-limited import retries the same request', failure: 'rate-limit', attempts: 2 },
+  { name: 'an import permission failure with a non-JSON body never retries', failure: 'forbidden', attempts: 1, error: /Server rejected build \(403\)/ },
+  { name: 'an import permission failure with a null JSON body never retries', failure: 'forbidden-null', attempts: 1, error: /Server rejected build \(403\)/ },
+  { name: 'a version conflict never retries or reports a successful submission', failure: 'conflict', attempts: 1, error: /Server rejected build \(409\)/ },
+  { name: 'an invalid import response never reports a successful submission', failure: 'invalid-response', attempts: 1, error: /Unexpected import response/ },
+  { name: 'a null import response fails immediately as an invalid response', failure: 'null-response', attempts: 1, error: /Unexpected import response/ },
+  { name: 'repeated network failures stop after five submissions without reuploading', failure: 'exhausted', attempts: 5, error: /Build submission failed after retries/ },
+  { name: 'failed public bundle upload never calls the import API', failBundle: true },
+]) {
+  test(scenario.name, async () => {
+    const failBundle = Boolean(scenario.failBundle)
     const directory = await mkdtemp(join(tmpdir(), 'tbox-app-submit-'))
     try {
       const releaseDir = join(directory, 'releases/calculator/1.2.3')
@@ -169,7 +182,15 @@ if (args[0] === 'cp') {
       await writeFile(mock, `
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { setTimeout as schedule } from 'node:timers'
 const calls = []
+const delays = []
+const save = () => writeFileSync(process.env.TRACE, JSON.stringify({ calls, delays }))
+globalThis.setTimeout = (callback, delay, ...args) => {
+  delays.push(delay)
+  save()
+  return schedule(callback, 0, ...args)
+}
 globalThis.fetch = async (url, options) => {
   if (options.method !== 'POST') return new Response(readFileSync(join(process.env.FAKE_OSS_DIR, new URL(url).pathname)))
   if (options.headers.authorization !== 'Bearer ' + 'a'.repeat(64)) throw new Error('Missing scoped import authorization')
@@ -180,8 +201,19 @@ globalThis.fetch = async (url, options) => {
   const bundle = JSON.parse(readFileSync(join(process.env.FAKE_OSS_DIR, bundleUrl.pathname), 'utf8'))
   if (bundle.artifact !== process.env.ARTIFACT) throw new Error('Missing public build bundle')
   calls.push({ url: String(url), body, method: options.method })
-  writeFileSync(process.env.TRACE, JSON.stringify(calls))
-  if (calls.length === 1) throw new Error('Connection lost after server commit')
+  save()
+  const failure = process.env.SUBMISSION_FAILURE
+  if (failure === 'forbidden') return new Response('Forbidden', { status: 403 })
+  if (failure === 'forbidden-null') return new Response('null', { status: 403 })
+  if (failure === 'conflict') return new Response(JSON.stringify({ error: { code: 'APP_VERSION_CONFLICT' } }), { status: 409 })
+  if (failure === 'invalid-response') return new Response('{}', { status: 201 })
+  if (failure === 'null-response') return new Response('null', { status: 201 })
+  if (failure === 'exhausted' || (failure === 'connection' && calls.length === 1)) throw new Error('Connection lost after server commit')
+  if (calls.length === 1) {
+    if (failure === 'response-body') return new Response(new ReadableStream({ start(controller) { controller.error(new Error('Connection lost while reading import response')) } }), { status: 201 })
+    if (failure === 'unavailable') return new Response('Upstream unavailable', { status: 503 })
+    if (failure === 'rate-limit') return new Response(JSON.stringify({ error: { code: 'RATE_LIMITED' } }), { status: 429 })
+  }
   return new Response(JSON.stringify({ data: { releaseId: 'test-release', revision: 1, status: 'submitted' } }), { status: 201 })
 }
 `)
@@ -202,6 +234,7 @@ globalThis.fetch = async (url, options) => {
           TRACE: trace,
           OSS_TRACE: join(directory, 'oss-trace.jsonl'),
           FAIL_BUNDLE: String(failBundle),
+          SUBMISSION_FAILURE: scenario.failure,
           PM2_SSH_PASSWORD: 'must-not-reach-ossutil',
           FAKE_OSS_DIR: join(directory, 'public'),
           ARTIFACT: artifact,
@@ -215,12 +248,21 @@ globalThis.fetch = async (url, options) => {
         await assert.rejects(readFile(trace), { code: 'ENOENT' })
         return
       }
-      assert.equal(result.status, 0, result.stderr)
-      const calls = JSON.parse(await readFile(trace, 'utf8'))
-      assert.equal(calls.length, 2)
-      assert.deepEqual(calls[0], calls[1])
+      const { calls, delays } = JSON.parse(await readFile(trace, 'utf8'))
+      assert.equal(calls.length, scenario.attempts)
+      assert.deepEqual(delays, Array.from({ length: scenario.attempts - 1 }, (_, index) => 1000 * 2 ** index))
+      for (const call of calls) {
+        assert.deepEqual(call, calls[0])
+      }
       assert.equal(calls[0].url, 'https://api.example.com/api/v1/application-builds')
       assert.equal(calls[0].body.url, `https://tboxos-app.oss-cn-hangzhou.aliyuncs.com/builds/calculator/1.2.3/${digest}.json`)
+      if (scenario.error) {
+        assert.notEqual(result.status, 0)
+        assert.match(result.stderr, scenario.error)
+        assert.ok(!result.stdout.includes('Build registered:'))
+        return
+      }
+      assert.equal(result.status, 0, result.stderr)
       assert.ok(result.stdout.includes('status submitted'))
     } finally {
       await rm(directory, { recursive: true, force: true })

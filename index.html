@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f4f6f8" />
+    <meta
+      name="description"
+      content="T Box 日常助手，将 AI 对话、记账、日历、计算器与时间工具汇集在一处，让日常安排更有条理。"
+    />
+    <title>T Box · 日常助手</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+CiAgPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iMTAiIGZpbGw9IiMyMDM0NDciLz4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgPHBhdGggZD0iTTEyIDloMjR2MzBIMTJ6TTE5IDl2MzBNMjUgMTdoNk0yNSAyNGg2TTI1IDMxaDMiLz4KICA8L2c+Cjwvc3ZnPgo="
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #203447;
+        --muted: #627281;
+        --accent: #137b72;
+        --line: #e1e7eb;
+        --cloud: #f4f6f8;
+        --mist: #e8f2ef;
+        --paper: #fff;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background: var(--cloud);
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      img,
+      svg {
+        display: block;
+      }
+      img {
+        max-width: 100%;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      a:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 6px;
+        border-radius: 4px;
+      }
+      .wrap {
+        width: min(1120px, calc(100% - 96px));
+        margin-inline: auto;
+      }
+      .skip-link {
+        position: absolute;
+        top: -80px;
+        left: 24px;
+        z-index: 3;
+        padding: 14px 20px;
+        background: var(--paper);
+      }
+      .skip-link:focus {
+        top: 16px;
+      }
+
+      .site-header {
+        border-bottom: 1px solid var(--line);
+      }
+      .header-inner {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-height: 92px;
+        gap: 24px;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .brand img {
+        width: 36px;
+        height: 36px;
+        border-radius: 9px;
+      }
+      .brand-name {
+        font-size: 23px;
+        font-weight: 700;
+        letter-spacing: -0.8px;
+      }
+      .brand-tagline {
+        margin-left: 7px;
+        padding-left: 19px;
+        border-left: 1px solid #cdd6dc;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 2px;
+      }
+      .site-nav {
+        display: flex;
+        align-items: center;
+        gap: 30px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .site-nav a {
+        padding-block: 12px;
+      }
+      .site-nav a:hover,
+      .footer-link:hover {
+        color: var(--accent);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: center;
+        gap: 72px;
+        padding-block: 86px 88px;
+      }
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 2px;
+      }
+      .eyebrow::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        background: currentColor;
+        border-radius: 50%;
+      }
+      h1 {
+        margin-top: 25px;
+        font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        font-size: clamp(40px, 4.7vw, 62px);
+        font-weight: 650;
+        line-height: 1.35;
+        letter-spacing: -2px;
+      }
+      h1 span {
+        color: var(--accent);
+      }
+      .hero-description {
+        max-width: 390px;
+        margin-top: 25px;
+        font-size: 15px;
+        line-height: 1.95;
+        color: var(--muted);
+      }
+      .primary-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        min-height: 48px;
+        margin-top: 32px;
+        padding: 13px 21px;
+        background: var(--ink);
+        border: 1px solid var(--ink);
+        border-radius: 9px;
+        color: var(--paper);
+        font-size: 14px;
+        font-weight: 500;
+        transition: background 0.18s;
+      }
+      .primary-link:hover {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .primary-link svg {
+        width: 17px;
+        height: 17px;
+      }
+      .hero-note {
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.5px;
+      }
+
+      .desktop-figure {
+        margin: 0;
+        position: relative;
+      }
+      .desktop {
+        padding: 25px 28px 22px;
+        border: 1px solid #d9e6e3;
+        border-radius: 24px;
+        background: var(--mist);
+        box-shadow:
+          0 18px 44px -28px #20344750,
+          inset 0 1px 0 #ffffffb3;
+      }
+      .desktop-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding-bottom: 27px;
+      }
+      .desktop-title {
+        color: #44645f;
+        font-size: 12px;
+        letter-spacing: 1px;
+      }
+      .window-dots {
+        display: flex;
+        gap: 5px;
+      }
+      .window-dots i {
+        display: block;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #a3bdb6;
+      }
+      .desktop-heading {
+        font-size: 26px;
+        font-weight: 600;
+        letter-spacing: -1px;
+      }
+      .desktop-subtitle {
+        margin-top: 8px;
+        color: #536f69;
+        font-size: 12px;
+      }
+      .app-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 26px 18px;
+        margin: 30px 0 29px;
+        padding: 23px 12px;
+        border: 1px solid #ffffffc9;
+        border-radius: 18px;
+        background: #ffffff66;
+      }
+      .app-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+      }
+      .app-item img {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        box-shadow: 0 4px 8px #2034470c;
+      }
+      .desktop-caption {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+        border: 1px solid #ffffffb3;
+        border-radius: 12px;
+        background: #ffffff9c;
+        color: #44645f;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .desktop-caption svg {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        color: var(--accent);
+      }
+      figcaption {
+        margin-top: 12px;
+        padding-right: 3px;
+        text-align: right;
+        font-size: 10px;
+        color: var(--muted);
+        letter-spacing: 1px;
+      }
+
+      .features {
+        padding-block: 58px 60px;
+        border-top: 1px solid var(--line);
+        scroll-margin-top: 28px;
+      }
+      .section-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 20px;
+      }
+      h2 {
+        font-size: 25px;
+        font-weight: 600;
+        line-height: 1.5;
+        letter-spacing: -0.6px;
+      }
+      .section-heading > p {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 30px;
+        margin-top: 34px;
+      }
+      .feature-icon {
+        width: 24px;
+        height: 24px;
+        margin-bottom: 19px;
+        color: var(--accent);
+      }
+      h3 {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .feature-copy {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.95;
+      }
+
+      .about {
+        display: grid;
+        grid-template-columns: 1fr 1.35fr;
+        gap: 72px;
+        padding: 36px 40px;
+        margin-bottom: 60px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--paper);
+        scroll-margin-top: 28px;
+      }
+      .about-label {
+        margin-bottom: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        color: var(--accent);
+      }
+      .about h2 {
+        font-size: 21px;
+        line-height: 1.6;
+      }
+      .about-copy {
+        align-self: center;
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 2;
+      }
+      .about-copy p + p {
+        margin-top: 10px;
+      }
+
+      .site-footer {
+        border-top: 1px solid var(--line);
+      }
+      .footer-inner {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+        padding-block: 25px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.8;
+      }
+      .footer-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 24px;
+      }
+      .footer-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+
+      @media (min-width: 1500px) {
+        .hero {
+          padding-block: 104px;
+        }
+      }
+
+      @media (max-width: 1000px) {
+        .wrap {
+          width: calc(100% - 64px);
+        }
+        .hero {
+          gap: 40px;
+          padding-block: 65px;
+        }
+        .desktop {
+          padding: 23px;
+        }
+        .desktop-heading {
+          font-size: 23px;
+        }
+        .feature-grid {
+          gap: 24px;
+        }
+        .about {
+          gap: 32px;
+          padding: 30px;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .wrap {
+          width: calc(100% - 40px);
+        }
+        .header-inner {
+          min-height: 76px;
+          gap: 16px;
+        }
+        .brand {
+          gap: 9px;
+        }
+        .brand img {
+          width: 31px;
+          height: 31px;
+        }
+        .brand-name {
+          font-size: 21px;
+        }
+        .brand-tagline {
+          display: none;
+        }
+        .site-nav {
+          gap: 20px;
+          font-size: 12px;
+        }
+        .hero {
+          grid-template-columns: 1fr;
+          gap: 40px;
+          padding-block: 48px 42px;
+        }
+        h1 {
+          margin-top: 20px;
+          font-size: 46px;
+          letter-spacing: -1.5px;
+        }
+        .hero-description {
+          max-width: 440px;
+          margin-top: 20px;
+          font-size: 14px;
+        }
+        .primary-link {
+          margin-top: 25px;
+        }
+        .hero-note {
+          margin-top: 20px;
+        }
+        .desktop-figure {
+          width: 100%;
+          max-width: 460px;
+          justify-self: center;
+        }
+        .desktop {
+          padding: 23px;
+          border-radius: 20px;
+        }
+        .desktop-toolbar {
+          padding-bottom: 22px;
+        }
+        .desktop-heading {
+          font-size: 25px;
+        }
+        .app-grid {
+          margin-block: 24px;
+          gap: 24px 14px;
+        }
+        .features {
+          padding-block: 38px 40px;
+        }
+        h2 {
+          font-size: 23px;
+        }
+        .section-heading {
+          display: block;
+        }
+        .section-heading > p {
+          margin-top: 10px;
+        }
+        .feature-grid {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 30px 24px;
+          margin-top: 30px;
+        }
+        .feature-icon {
+          margin-bottom: 14px;
+        }
+        .feature-copy {
+          margin-top: 9px;
+          font-size: 12px;
+        }
+        .about {
+          grid-template-columns: 1fr;
+          gap: 20px;
+          padding: 25px;
+          margin-bottom: 40px;
+        }
+        .about h2 {
+          font-size: 20px;
+        }
+        .footer-inner {
+          align-items: flex-start;
+          font-size: 10px;
+          padding-block: 22px;
+        }
+        .footer-info {
+          flex-direction: column;
+          gap: 4px;
+        }
+      }
+
+      @media (max-width: 360px) {
+        .wrap {
+          width: calc(100% - 32px);
+        }
+        h1 {
+          font-size: 40px;
+        }
+        .site-nav {
+          gap: 14px;
+        }
+        .desktop {
+          padding: 19px;
+        }
+        .desktop-caption {
+          padding: 12px;
+          font-size: 11px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="#top" aria-label="T Box 首页">
+          <img
+            src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+CiAgPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iMTAiIGZpbGw9IiMyMDM0NDciLz4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgPHBhdGggZD0iTTEyIDloMjR2MzBIMTJ6TTE5IDl2MzBNMjUgMTdoNk0yNSAyNGg2TTI1IDMxaDMiLz4KICA8L2c+Cjwvc3ZnPgo="
+            width="36"
+            height="36"
+            alt=""
+          />
+          <span class="brand-name">T Box</span>
+          <span class="brand-tagline">日常助手</span>
+        </a>
+        <nav class="site-nav" aria-label="主导航">
+          <a href="#features">功能介绍</a>
+          <a href="#about">关于 T Box</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="wrap">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-content">
+          <p class="eyebrow">T BOX · 日常工具与智能助手</p>
+          <h1 id="hero-title">把日常，<br />安放在<span>一处。</span></h1>
+          <p class="hero-description">
+            记下每一笔收支，安排每一个日程，处理随手的计算。从对话到工具，T Box
+            让日常大小事更有条理。
+          </p>
+          <a class="primary-link" href="#features">
+            了解 T Box
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 12h15m-6-6 6 6-6 6" />
+            </svg>
+          </a>
+          <p class="hero-note">对话有回应，生活有安排。</p>
+        </div>
+
+        <figure
+          class="desktop-figure"
+          aria-label="T Box 应用桌面静态示意，展示记账、日历、计算器、时间、应用市场和设置"
+        >
+          <div class="desktop">
+            <div class="desktop-toolbar">
+              <span class="desktop-title">T Box / 我的日常桌面</span>
+              <span class="window-dots" aria-hidden="true"
+                ><i></i><i></i><i></i
+              ></span>
+            </div>
+            <p class="desktop-heading">生活有序，各有其位。</p>
+            <p class="desktop-subtitle">常用的小工具，都在这里。</p>
+            <div class="app-grid">
+              <div class="app-item">
+                <img
+                  src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiYWNrZ3JvdW5kIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzQ4YmRhOSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE2ODM3NCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0LjcyIiBmaWxsPSJ1cmwoI2JhY2tncm91bmQpIi8+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMy4yIDMuMikgc2NhbGUoLjkpIj48cmVjdCB4PSIxNSIgeT0iMTIiIHdpZHRoPSIzNSIgaGVpZ2h0PSI0MSIgcng9IjciIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii45NSIvPjxwYXRoIGQ9Ik0yMyAxMnY0MSIgc3Ryb2tlPSIjYjllY2UzIiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMzIgMjRoOU0zMiAzMmg5TTMyIDQwaDYiIHN0cm9rZT0iIzIxODk3ZSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNMTggMjBoLTVNMTggMzBoLTVNMTggNDBoLTUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9nPjwvc3ZnPgo="
+                  width="52"
+                  height="52"
+                  alt=""
+                /><span>记账</span>
+              </div>
+              <div class="app-item">
+                <img
+                  src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQuNzIiIGZpbGw9IiNmZmYiLz48cGF0aCBkPSJNMTQuNzIgMGgzNC41NkExNC43MiAxNC43MiAwIDAgMSA2NCAxNC43MnY1LjEySDB2LTUuMTJBMTQuNzIgMTQuNzIgMCAwIDEgMTQuNzIgMCIgZmlsbD0iI2U4ODY3ZCIvPjx0ZXh0IHg9IjMyIiB5PSIxMyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iOS42IiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSJ3aGl0ZSI+5pel5Y6GPC90ZXh0Pjx0ZXh0IHg9IjMxIiB5PSI1MiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9Ii1hcHBsZS1zeXN0ZW0sQmxpbmtNYWNTeXN0ZW1Gb250LHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzAiIGZvbnQtd2VpZ2h0PSI1MDAiIGxldHRlci1zcGFjaW5nPSItMiIgZmlsbD0iIzI5MzY0YyI+MTU8L3RleHQ+PC9zdmc+Cg=="
+                  width="52"
+                  height="52"
+                  alt=""
+                /><span>日历</span>
+              </div>
+              <div class="app-item">
+                <img
+                  src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiYWNrZ3JvdW5kIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzU2NjE3NCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzJkMzc0OCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0LjcyIiBmaWxsPSJ1cmwoI2JhY2tncm91bmQpIi8+PHJlY3QgeD0iMTAuODgiIHk9IjEyLjQ4IiB3aWR0aD0iNDIuMjQiIGhlaWdodD0iMTQuNzIiIHJ4PSI0IiBmaWxsPSIjYjlkM2M1Ii8+PHRleHQgeD0iNTAiIHk9IjIzLjAyIiB0ZXh0LWFuY2hvcj0iZW5kIiBmaWxsPSIjMzE0YzQzIiBmb250LWZhbWlseT0idWktbW9ub3NwYWNlLG1vbm9zcGFjZSIgZm9udC1zaXplPSI5LjI4IiBmb250LXdlaWdodD0iNjAwIj7PgCArIGU8L3RleHQ+PGcgZmlsbD0iI2QxZGFlNSI+PHJlY3QgeD0iMTAuODgiIHk9IjMxLjY4IiB3aWR0aD0iMTEuNzMiIGhlaWdodD0iOC4xNiIgcng9IjMiLz48cmVjdCB4PSIyNi4xMyIgeT0iMzEuNjgiIHdpZHRoPSIxMS43MyIgaGVpZ2h0PSI4LjE2IiByeD0iMyIvPjxyZWN0IHg9IjEwLjg4IiB5PSI0My4zNiIgd2lkdGg9IjExLjczIiBoZWlnaHQ9IjguMTYiIHJ4PSIzIi8+PHJlY3QgeD0iMjYuMTMiIHk9IjQzLjM2IiB3aWR0aD0iMTEuNzMiIGhlaWdodD0iOC4xNiIgcng9IjMiLz48L2c+PGcgZmlsbD0iI2U5YWQ3MiI+PHJlY3QgeD0iNDEuMzkiIHk9IjMxLjY4IiB3aWR0aD0iMTEuNzMiIGhlaWdodD0iOC4xNiIgcng9IjMiLz48cmVjdCB4PSI0MS4zOSIgeT0iNDMuMzYiIHdpZHRoPSIxMS43MyIgaGVpZ2h0PSI4LjE2IiByeD0iMyIvPjwvZz48L3N2Zz4K"
+                  width="52"
+                  height="52"
+                  alt=""
+                /><span>计算器</span>
+              </div>
+              <div class="app-item">
+                <img
+                  src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiYWNrZ3JvdW5kIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzcxYTdlYyIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzQ0NzNjMyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0LjcyIiBmaWxsPSJ1cmwoI2JhY2tncm91bmQpIi8+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMy4yIDMuMikgc2NhbGUoLjkpIiBzdHJva2U9IndoaXRlIiBzdHJva2UtbGluZWNhcD0icm91bmQiPjxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjIyIiBzdHJva2Utd2lkdGg9IjMiLz48cGF0aCBkPSJNMzIgMzJWMTkiIHN0cm9rZS13aWR0aD0iMy41IiB0cmFuc2Zvcm09InJvdGF0ZSgzMDUgMzIgMzIpIi8+PHBhdGggZD0iTTMyIDMyVjE0IiBzdHJva2Utd2lkdGg9IjIuNSIgdHJhbnNmb3JtPSJyb3RhdGUoNjAgMzIgMzIpIi8+PHBhdGggZD0iTTMyIDM1VjExIiBzdHJva2U9IiNmZmUwYzYiIHN0cm9rZS13aWR0aD0iMS4yIi8+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMi41IiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSJub25lIi8+PC9nPjwvc3ZnPgo="
+                  width="52"
+                  height="52"
+                  alt=""
+                /><span>时间</span>
+              </div>
+              <div class="app-item">
+                <img
+                  src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQuNzIiIGZpbGw9IiM2MTdkOTkiLz48cGF0aCBkPSJNNCA0aDZ2Nkg0eiBNMTQgNGg2djZoLTZ6IE00IDE0aDZ2Nkg0eiBNMTQgMTRoNnY2aC02eiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTYgMTYpIHNjYWxlKDEuMzMzMykiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS43IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4K"
+                  width="52"
+                  height="52"
+                  alt=""
+                /><span>应用市场</span>
+              </div>
+              <div class="app-item">
+                <img
+                  src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiYWNrZ3JvdW5kIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzhkOWFhYSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzU2Njg3ZiIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0LjcyIiBmaWxsPSJ1cmwoI2JhY2tncm91bmQpIi8+PHBhdGggZD0iTTEyIDhhNCA0IDAgMSAwIDAgOCA0IDQgMCAwIDAgMC04IE05IDNoNmwxIDMgMyAxIDIgNS0yIDUtMyAxLTEgM0g5bC0xLTMtMy0xLTItNSAyLTUgMy0xeiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTMuNDQgMTMuNDQpIHNjYWxlKDEuNTQ2NykiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS43IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4K"
+                  width="52"
+                  height="52"
+                  alt=""
+                /><span>设置</span>
+              </div>
+            </div>
+            <div class="desktop-caption">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4L12 3Z"
+                />
+              </svg>
+              <span>从一句话开始，连接你的日常工具。</span>
+            </div>
+          </div>
+          <figcaption>应用桌面示意 · 本页为项目介绍</figcaption>
+        </figure>
+      </section>
+
+      <section id="features" class="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <h2 id="features-title">日常工具，随手可用。</h2>
+          <p>把常用的事，放在顺手的地方。</p>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="4" y="3" width="16" height="18" rx="3" />
+              <path d="M9 3v18m4-12h3m-3 4h3m-3 4h2M2 8h4m-4 5h4" />
+            </svg>
+            <h3>记账与收支</h3>
+            <p class="feature-copy">
+              记录日常收支，管理不同账本。通过分类和统计，了解每一笔花费。
+            </p>
+          </article>
+          <article>
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="5" width="18" height="16" rx="3" />
+              <path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2" />
+            </svg>
+            <h3>日历与时间</h3>
+            <p class="feature-copy">
+              安排日程和重要纪念日，使用世界时钟、倒计时与秒表，照顾日常节奏。
+            </p>
+          </article>
+          <article>
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="4" y="2" width="16" height="20" rx="3" />
+              <path d="M8 6h8v4H8zM8 14h1m6 0h1m-8 4h1m6 0h1" />
+            </svg>
+            <h3>计算与换算</h3>
+            <p class="feature-copy">
+              从四则运算到科学计算，支持方程求解与数学分析，处理不同的计算需求。
+            </p>
+          </article>
+          <article>
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M21 11a8 8 0 0 1-8 8H9l-5 3v-6a8 8 0 0 1-2-5 8 8 0 0 1 8-8h3a8 8 0 0 1 8 8Z"
+              />
+              <path d="M8 11h.01M12 11h.01M16 11h.01" stroke-width="2.5" />
+            </svg>
+            <h3>AI 对话助手</h3>
+            <p class="feature-copy">
+              用自然语言交流，连接应用与工具，让对话成为处理日常事务的另一个入口。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="about" class="about" aria-labelledby="about-title">
+        <div>
+          <p class="about-label">关于 T BOX</p>
+          <h2 id="about-title">一个入口，<br />连接对话与日常工具。</h2>
+        </div>
+        <div class="about-copy">
+          <p>
+            T Box 是一个面向日常生活的工具与智能助手项目，将 AI
+            对话和常用应用放在同一个入口，涵盖记账、日程、计算及时间管理。
+          </p>
+          <p>本网站用于介绍 T Box 项目及其主要功能。</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <div class="footer-info">
+          <span>© 2026 T Box</span>
+          <span>日常工具与智能助手</span>
+          <!-- 取得备案号后，在此取消注释并替换为真实号码；未取得前不展示虚构号码。
+          <a class="footer-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">在此填写实际的 ICP 备案号</a>
+          -->
+          <!-- 如需展示主办单位与联系邮箱，请在此填写真实信息。 -->
+        </div>
+        <a class="footer-link" href="#top"
+          >返回顶部 <span aria-hidden="true">↑</span></a
+        >
+      </div>
+    </footer>
+  </body>
+</html>
