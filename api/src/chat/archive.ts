@@ -4,12 +4,13 @@ import type { ResourceAccessRegistry } from '../agent/access.js'
 import type { Actor } from '../agent/contracts.js'
 import type { ChatSession } from './session.js'
 import { randomUUID } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
 import { parseId } from '@t-box/server-foundation/validation'
-import {
-  uniqueResources,
-} from '@t-box/shared'
+import { uniqueResources } from '@t-box/shared'
+import { In, Not } from 'typeorm'
+import { ConversationEntity } from '../db/records/conversations-entities.js'
+import { AgentTaskEntity } from '../db/records/tasks-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 type Saved = Pick<
   ChatSession,
@@ -80,38 +81,36 @@ export class ConversationArchive {
     const revision = await this.source.transaction(
       'READ COMMITTED',
       async (db) => {
-        const [row] = await db.query(
-          'SELECT user_id,revision,title FROM conversations WHERE id=? FOR UPDATE',
-          [id],
-        )
+        const row = await db.getRepository(ConversationEntity).findOne({
+          select: { user_id: true, revision: true, title: true },
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        })
         if (lease) {
-          const [task] = await db.query(
-            'SELECT lease_owner,status,lease_until>=UTC_TIMESTAMP(3) AS valid FROM agent_tasks WHERE id=? AND user_id=? AND conversation_id=? FOR UPDATE',
-            [lease.taskId, session.userId, id],
-          )
+          const [task] = await db
+            .createQueryBuilder()
+            .select('lease_owner,status,lease_until>=UTC_TIMESTAMP(3) AS valid')
+            .from('agent_tasks', 'agent_tasks')
+            .where('id=:p0 AND user_id=:p1 AND conversation_id=:p2')
+            .setLock('pessimistic_write')
+            .setParameters({ p0: lease.taskId, p1: session.userId, p2: id })
+            .getRawMany()
           if (
             !task ||
             task.lease_owner !== lease.owner ||
             task.status !== 'running' ||
             !task.valid
           ) {
-            throw new ApiError(
-              409,
-              'TASK_LEASE_LOST',
-              '任务租约已失效，不能覆盖会话记录',
-            )
+            throw ErrorCode.TASK_LEASE_LOST('任务租约已失效，不能覆盖会话记录')
           }
         } else {
-          const running = await db.query(
-            'SELECT id FROM agent_tasks WHERE active_key=? AND status=\'running\' FOR UPDATE',
-            [id],
-          )
+          const running = await db.getRepository(AgentTaskEntity).find({
+            select: { id: true },
+            where: { active_key: id, status: 'running' },
+            lock: { mode: 'pessimistic_write' },
+          })
           if (running.length) {
-            throw new ApiError(
-              409,
-              'CONVERSATION_BUSY',
-              '任务正在执行，不能覆盖会话记录',
-            )
+            throw ErrorCode.CONVERSATION_BUSY()
           }
         }
         if (row) {
@@ -119,76 +118,79 @@ export class ConversationArchive {
             row.user_id !== session.userId ||
             Number(row.revision) !== session.archiveRevision
           ) {
-            throw new ApiError(
-              409,
-              'CONVERSATION_STALE',
-              '会话已更新，请重新连接，已执行的操作保留',
-            )
+            throw ErrorCode.CONVERSATION_STALE()
           }
           // Store the replaced answer and publish its replacement in the same transaction.
           if (session.pendingAnswerVersion) {
             const version = session.pendingAnswerVersion
-            await db.query(
-              'INSERT IGNORE INTO conversation_answer_versions(conversation_id,message_id,replacement_request_id,revision,snapshot_json) VALUES(?,?,?,?,?)',
-              [
-                id,
-                version.message.id,
-                version.requestId,
-                version.message.answerRevision || 0,
-                JSON.stringify({
+            await db
+              .createQueryBuilder()
+              .insert()
+              .into('conversation_answer_versions')
+              .values({
+                conversation_id: id,
+                message_id: version.message.id,
+                replacement_request_id: version.requestId,
+                revision: version.message.answerRevision || 0,
+                snapshot_json: () => ':p4',
+              })
+              .updateEntity(false)
+              .orIgnore()
+              .setParameters({
+                p4: JSON.stringify({
                   message: version.message,
                   calls: version.calls,
                 }),
-              ],
-            )
+              })
+              .execute()
           }
-          await db.query(
-            'UPDATE conversations SET state_json=?,resource_refs=?,message_count=?,revision=revision+1,updated_at=UTC_TIMESTAMP(3) WHERE id=? AND user_id=?',
-            [
-              JSON.stringify(state),
-              JSON.stringify(refs),
-              session.messages.length,
-              id,
-              session.userId,
-            ],
+          await db.getRepository(ConversationEntity).update(
+            { id, user_id: session.userId },
+            {
+              state_json: JSON.stringify(state),
+              resource_refs: refs,
+              message_count: session.messages.length,
+              revision: () => 'revision+1',
+              updated_at: () => 'UTC_TIMESTAMP(3)',
+            },
           )
           session.title = row.title
           return Number(row.revision) + 1
         }
         if (session.archived) {
-          throw new ApiError(
-            404,
-            'CONVERSATION_NOT_FOUND',
-            '会话已删除，请新建会话',
-          )
+          throw ErrorCode.CONVERSATION_NOT_FOUND('会话已删除，请新建会话')
         }
-        await db.query(
-          'INSERT INTO conversations(id,user_id,title,title_source,state_json,resource_refs,message_count) VALUES(?,?,?,?,?,?,?)',
-          [
-            id,
-            session.userId,
-            title,
-            session.branch ? 'generated' : 'pending',
-            JSON.stringify(state),
-            JSON.stringify(refs),
-            session.messages.length,
-          ],
-        )
+        await db.getRepository(ConversationEntity).insert({
+          id,
+          user_id: session.userId,
+          title,
+          title_source: session.branch ? 'generated' : 'pending',
+          state_json: JSON.stringify(state),
+          resource_refs: refs,
+          message_count: session.messages.length,
+        })
         if (session.pendingAnswerVersion) {
           const version = session.pendingAnswerVersion
-          await db.query(
-            'INSERT IGNORE INTO conversation_answer_versions(conversation_id,message_id,replacement_request_id,revision,snapshot_json) VALUES(?,?,?,?,?)',
-            [
-              id,
-              version.message.id,
-              version.requestId,
-              version.message.answerRevision || 0,
-              JSON.stringify({
+          await db
+            .createQueryBuilder()
+            .insert()
+            .into('conversation_answer_versions')
+            .values({
+              conversation_id: id,
+              message_id: version.message.id,
+              replacement_request_id: version.requestId,
+              revision: version.message.answerRevision || 0,
+              snapshot_json: () => ':p4',
+            })
+            .updateEntity(false)
+            .orIgnore()
+            .setParameters({
+              p4: JSON.stringify({
                 message: version.message,
                 calls: version.calls,
               }),
-            ],
-          )
+            })
+            .execute()
         }
         session.title = title
         return 1
@@ -204,12 +206,29 @@ export class ConversationArchive {
     id: string,
     trustedRefresh = false,
   ): Promise<Saved> {
-    const [row] = await this.source.query(
-      'SELECT state_json AS state,resource_refs AS resourceRefs,revision,title FROM conversations WHERE id=? AND user_id=?',
-      [parseId(id), principal.user.id],
-    )
+    const row = await this.source
+      .getRepository(ConversationEntity)
+      .findOne({
+        select: {
+          state_json: true,
+          resource_refs: true,
+          revision: true,
+          title: true,
+        },
+        where: { id: parseId(id), user_id: principal.user.id },
+      })
+      .then((row) =>
+        row
+          ? {
+              state: row.state_json,
+              resourceRefs: row.resource_refs,
+              revision: row.revision,
+              title: row.title,
+            }
+          : null,
+      )
     if (!row) {
-      throw new ApiError(404, 'CONVERSATION_NOT_FOUND', '会话不存在')
+      throw ErrorCode.CONVERSATION_NOT_FOUND()
     }
     const refs: ResourceRef[] =
       typeof row.resourceRefs === 'string'
@@ -287,12 +306,31 @@ export class ConversationArchive {
   }
 
   async list(principal: Actor): Promise<ConversationSummary[]> {
-    const rows = await this.source.query(
-      'SELECT id,title,updated_at AS updatedAt,message_count AS messageCount,resource_refs AS resourceRefs FROM conversations WHERE user_id=? ORDER BY updated_at DESC,id DESC LIMIT 100',
-      [principal.user.id],
-    )
+    const rows = await this.source
+      .getRepository(ConversationEntity)
+      .find({
+        select: {
+          id: true,
+          title: true,
+          updated_at: true,
+          message_count: true,
+          resource_refs: true,
+        },
+        where: { user_id: principal.user.id },
+        order: { updated_at: 'DESC', id: 'DESC' },
+        take: 100,
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          title: row.title,
+          updatedAt: row.updated_at,
+          messageCount: row.message_count,
+          resourceRefs: row.resource_refs,
+        })),
+      )
     return Promise.all(
-      rows.map(async (row: any) => {
+      rows.map(async (row) => {
         const refs: ResourceRef[] =
           typeof row.resourceRefs === 'string'
             ? JSON.parse(row.resourceRefs)
@@ -334,10 +372,10 @@ export class ConversationArchive {
   }
 
   async needsTitle(principal: Actor, id: string): Promise<boolean> {
-    const [row] = await this.source.query(
-      'SELECT title_source FROM conversations WHERE id=? AND user_id=?',
-      [parseId(id), principal.user.id],
-    )
+    const row = await this.source.getRepository(ConversationEntity).findOne({
+      select: { title_source: true },
+      where: { id: parseId(id), user_id: principal.user.id },
+    })
     return row?.title_source === 'pending'
   }
 
@@ -347,21 +385,24 @@ export class ConversationArchive {
     title: string,
   ): Promise<string> {
     return this.source.transaction(async (db) => {
-      const [row] = await db.query(
-        'SELECT title,title_source FROM conversations WHERE id=? AND user_id=? FOR UPDATE',
-        [parseId(id), principal.user.id],
-      )
+      const row = await db.getRepository(ConversationEntity).findOne({
+        select: { title: true, title_source: true },
+        where: { id: parseId(id), user_id: principal.user.id },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (!row) {
-        throw new ApiError(404, 'CONVERSATION_NOT_FOUND', '会话不存在')
+        throw ErrorCode.CONVERSATION_NOT_FOUND()
       }
       // A concurrent manual rename wins. Title metadata never changes the execution revision.
       if (row.title_source !== 'pending') {
         return row.title
       }
-      await db.query(
-        'UPDATE conversations SET title=?,title_source=\'generated\' WHERE id=? AND user_id=?',
-        [title, id, principal.user.id],
-      )
+      await db
+        .getRepository(ConversationEntity)
+        .update(
+          { id, user_id: principal.user.id },
+          { title, title_source: 'generated' },
+        )
       return title
     })
   }
@@ -373,7 +414,7 @@ export class ConversationArchive {
       Array.isArray(value) ||
       Object.keys(value).some((k) => k !== 'title')
     ) {
-      throw new ApiError(400, 'INVALID_TITLE', '请填写会话标题')
+      throw ErrorCode.INVALID_TITLE()
     }
     const title = (value as { title?: unknown }).title
     if (
@@ -383,66 +424,60 @@ export class ConversationArchive {
       // eslint-disable-next-line no-control-regex -- Conversation titles must not contain control characters.
       /[\u0000-\u001F]/u.test(title)
     ) {
-      throw new ApiError(
-        400,
-        'INVALID_TITLE',
-        '标题需为1至60个字符，不能包含换行',
-      )
+      throw ErrorCode.INVALID_TITLE('标题需为1至60个字符，不能包含换行')
     }
     await this.load(principal, id) // Same ownership and resource grants as opening the conversation.
-    const changed = await this.source.query(
-      'UPDATE conversations SET title=?,title_source=\'manual\' WHERE id=? AND user_id=?',
-      [title.trim(), parseId(id), principal.user.id],
-    )
-    if (!changed.affectedRows) {
-      throw new ApiError(404, 'CONVERSATION_NOT_FOUND', '会话不存在')
+    const changed = await this.source
+      .getRepository(ConversationEntity)
+      .update(
+        { id: parseId(id), user_id: principal.user.id },
+        { title: title.trim(), title_source: 'manual' },
+      )
+    if (!changed.affected) {
+      throw ErrorCode.CONVERSATION_NOT_FOUND()
     }
     return { id, title: title.trim() }
   }
 
   async exists(principal: Actor, id: string): Promise<boolean> {
-    const rows = await this.source.query(
-      'SELECT 1 FROM conversations WHERE id=? AND user_id=?',
-      [parseId(id), principal.user.id],
-    )
+    const rows = await this.source.getRepository(ConversationEntity).find({
+      select: { id: true },
+      where: { id: parseId(id), user_id: principal.user.id },
+    })
     return !!rows.length
   }
 
   async remove(principal: Actor, id: string) {
     if (this.active.has(parseId(id))) {
-      throw new ApiError(
-        409,
-        'CONVERSATION_BUSY',
-        '请先停止此会话正在执行的任务',
-      )
+      throw ErrorCode.CONVERSATION_BUSY('请先停止此会话正在执行的任务')
     }
     await this.source.transaction(async (db) => {
-      const rows = await db.query(
-        'SELECT id FROM conversations WHERE id=? AND user_id=? FOR UPDATE',
-        [parseId(id), principal.user.id],
-      )
+      const rows = await db.getRepository(ConversationEntity).find({
+        select: { id: true },
+        where: { id: parseId(id), user_id: principal.user.id },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (!rows.length) {
         return
       }
-      const tasks = await db.query(
-        'SELECT id FROM agent_tasks WHERE conversation_id=? AND user_id=? AND status NOT IN (\'completed\',\'cancelled\') FOR UPDATE',
-        [id, principal.user.id],
-      )
+      const tasks = await db.getRepository(AgentTaskEntity).find({
+        select: { id: true },
+        where: {
+          conversation_id: id,
+          user_id: principal.user.id,
+          status: Not(In(['completed', 'cancelled'])),
+        },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (tasks.length) {
-        throw new ApiError(
-          409,
-          'CONVERSATION_BUSY',
-          '请先继续或结束此会话的待处理任务',
-        )
+        throw ErrorCode.CONVERSATION_BUSY('请先继续或结束此会话的待处理任务')
       }
-      await db.query(
-        'DELETE FROM agent_tasks WHERE conversation_id=? AND user_id=?',
-        [id, principal.user.id],
-      )
-      await db.query('DELETE FROM conversations WHERE id=? AND user_id=?', [
-        id,
-        principal.user.id,
-      ])
+      await db
+        .getRepository(AgentTaskEntity)
+        .delete({ conversation_id: id, user_id: principal.user.id })
+      await db
+        .getRepository(ConversationEntity)
+        .delete({ id, user_id: principal.user.id })
     })
   }
 }

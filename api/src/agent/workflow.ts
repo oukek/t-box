@@ -4,7 +4,7 @@ import type {
   ToolResult,
 } from '@t-box/shared'
 import type { ModelCall } from '../chat/provider.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { definition } from './schema.js'
 
 export type WorkflowPhase =
@@ -67,11 +67,7 @@ export const reviewTool = definition(
   },
 )
 const invalid = (): never => {
-  throw new ApiError(
-    502,
-    'WORKFLOW_DECISION_INVALID',
-    '模型未返回有效的阶段决定，请确认会话模型支持工具选择',
-  )
+  throw ErrorCode.WORKFLOW_DECISION_INVALID()
 }
 function decision(calls: ModelCall[], name: string): Record<string, unknown> {
   if (
@@ -154,7 +150,9 @@ export function phaseInstructions(
   receipts: unknown,
   deferred = false,
 ) {
-  const discovery = deferred ? '可先单独调用 capability_search 或 capability_load 发现和加载必要能力，或用 tool_result_read / conversation_history_read 核对已有事实，再提交阶段决定；不得与阶段决定或业务调用混在同一轮。当前能力目录只包含已加载部分，不代表全部已安装能力。' : ''
+  const discovery = deferred
+    ? '可先单独调用 capability_search 或 capability_load 发现和加载必要能力，或用 tool_result_read / conversation_history_read 核对已有事实，再提交阶段决定；不得与阶段决定或业务调用混在同一轮。当前能力目录只包含已加载部分，不代表全部已安装能力。'
+    : ''
   if (flow.phase === 'dispatch') {
     const capabilities = Array.isArray(catalog)
       ? catalog.map((module) => ({
@@ -204,11 +202,27 @@ export function phaseTools(
   tools: ApplicationToolDefinition[],
   deferred = false,
 ) {
-  const discovery = deferred ? tools.filter((tool) => ['capability_search', 'capability_load', 'tool_result_read', 'conversation_history_read'].includes(tool.name)) : []
+  const discovery = deferred
+    ? tools.filter((tool) =>
+        [
+          'capability_search',
+          'capability_load',
+          'tool_result_read',
+          'conversation_history_read',
+        ].includes(tool.name),
+      )
+    : []
   return phase === 'analysis' || phase === 'dispatch'
     ? [planTool, ...discovery]
     : phase === 'review'
-      ? [reviewTool, ...discovery.filter((tool) => ['tool_result_read', 'conversation_history_read'].includes(tool.name))]
+      ? [
+          reviewTool,
+          ...discovery.filter((tool) =>
+            ['tool_result_read', 'conversation_history_read'].includes(
+              tool.name,
+            ),
+          ),
+        ]
       : phase === 'answer'
         ? []
         : tools

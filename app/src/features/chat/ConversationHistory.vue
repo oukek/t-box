@@ -5,6 +5,7 @@ import { AppIcon, SidePanel } from '@t-box/ui-kit'
 import { ref, watch } from 'vue'
 import { authorizeResources } from '../../applications/registry'
 import { request } from '../../core/network'
+import { ErrorCode } from '../../error-codes.js'
 import {
   chatBusy,
   chatState,
@@ -39,7 +40,7 @@ async function enter(item: DeepReadonly<ConversationSummary>) {
   error.value = ''
   try {
     if (item.unavailable) {
-      throw new Error('此会话涉及已不可访问的应用资源')
+      throw ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED()
     }
     if (!(await authorizeResources(item.protectedResources, '查看会话历史'))) {
       return

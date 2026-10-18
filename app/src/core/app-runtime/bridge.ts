@@ -1,4 +1,9 @@
-import type { BridgeRequest, BridgeResponse, HostMethod, RuntimeDescriptor } from '@t-box/app-contracts'
+import type {
+  BridgeRequest,
+  BridgeResponse,
+  HostMethod,
+  RuntimeDescriptor,
+} from '@t-box/app-contracts'
 import {
   APP_PROTOCOL,
   APP_SDK_VERSION,
@@ -6,6 +11,7 @@ import {
   createApplicationRequestId,
 } from '@t-box/app-contracts'
 import { AppSdkError } from '@t-box/app-sdk'
+import { ErrorCode } from '../../error-codes.js'
 import { request } from '../network'
 import { identity } from '../session'
 import { createHostTransport } from './sdkHost'
@@ -42,7 +48,7 @@ export async function descriptor(appId: string) {
     entry.username ||
     entry.password
   ) {
-    throw new Error('应用运行协议或来源无效')
+    throw ErrorCode.INTERNAL_INVALID_APPLICATION_RUNTIME()
   }
   // Local Vite live reload follows the host's LAN address. Packaged production always uses the registered HTTPS origin.
   if (
@@ -55,7 +61,7 @@ export async function descriptor(appId: string) {
     result.data.origin = url.origin
   }
   if (result.data.origin === location.origin) {
-    throw new Error('独立应用需要使用单独的来源地址')
+    throw ErrorCode.INTERNAL_APPLICATION_ORIGIN_REQUIRED()
   }
   return result.data
 }
@@ -115,10 +121,10 @@ export function connectFrame(
     transport.close()
     channel.port1.close()
     channel.port2.close()
-    rejectReady(new Error(reason))
+    rejectReady(ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED(reason))
     for (const p of pending.values()) {
       clearTimeout(p.timer)
-      p.reject(new Error(reason))
+      p.reject(ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED(reason))
     }
     pending.clear()
     if (connections.get(runtime.appId)?.promise === promise) {
@@ -127,18 +133,18 @@ export function connectFrame(
   }
   const current = async () => {
     if (closed || identity.user?.id !== userId) {
-      throw new Error('应用会话已结束')
+      throw ErrorCode.INTERNAL_APPLICATION_SESSION_ENDED()
     }
     const latest = await descriptor(runtime.appId)
     if (closed || identity.user?.id !== userId) {
-      throw new Error('应用会话已结束')
+      throw ErrorCode.INTERNAL_APPLICATION_SESSION_ENDED()
     }
     if (
       latest.releaseId !== runtime.releaseId ||
       latest.generation !== runtime.generation
     ) {
       close('应用安装状态已改变')
-      throw new Error('请重新打开应用')
+      throw ErrorCode.INTERNAL_APPLICATION_REOPEN_REQUIRED()
     }
   }
   channel.port1.onmessage = async (event: MessageEvent) => {
@@ -150,10 +156,11 @@ export function connectFrame(
       if (
         ready ||
         data.nonce !== nonce ||
-        (data.appNavigation !== undefined && typeof data.appNavigation !== 'boolean') ||
-        !Array.isArray(data.tools) ||
-        JSON.stringify([...data.tools].sort()) !==
-        JSON.stringify([...runtime.clientTools].sort())
+        (data.appNavigation !== undefined &&
+          typeof data.appNavigation !== 'boolean') ||
+          !Array.isArray(data.tools) ||
+          JSON.stringify([...data.tools].sort()) !==
+          JSON.stringify([...runtime.clientTools].sort())
       ) {
         close('应用工具声明不匹配')
         return
@@ -163,24 +170,33 @@ export function connectFrame(
       resolveReady({
         appNavigation: data.appNavigation === true,
         close: () => close(),
-        cancelInteractions: () => channel.port1.postMessage({ type: 'event', name: 'runtime.interactions.cancelled', data: {} }),
+        cancelInteractions: () =>
+          channel.port1.postMessage({
+            type: 'event',
+            name: 'runtime.interactions.cancelled',
+            data: {},
+          }),
         navigate: (params) => {
           for (const key of Object.keys(currentParams)) {
             delete currentParams[key]
           }
           Object.assign(currentParams, params)
-          channel.port1.postMessage({ type: 'event', name: 'runtime.navigation', data: params })
+          channel.port1.postMessage({
+            type: 'event',
+            name: 'runtime.navigation',
+            data: params,
+          })
         },
         invoke: async (name, args) => {
           await current()
           if (!runtime.clientTools.includes(name)) {
-            throw new Error('未授权的应用工具')
+            throw ErrorCode.INTERNAL_APPLICATION_TOOL_FORBIDDEN()
           }
           return new Promise((resolve, reject) => {
             const id = createApplicationRequestId()
             const timeout = setTimeout(() => {
               pending.delete(id)
-              reject(new Error('应用工具执行超时'))
+              reject(ErrorCode.INTERNAL_APPLICATION_TOOL_TIMEOUT())
             }, 300_000)
             pending.set(id, { resolve, reject, timer: timeout })
             channel.port1.postMessage({
@@ -210,13 +226,17 @@ export function connectFrame(
       try {
         await current()
       } catch (e) {
-        p.reject(e instanceof Error ? e : new Error('应用授权已失效'))
+        p.reject(
+          e instanceof Error
+            ? e
+            : ErrorCode.INTERNAL_APPLICATION_AUTHORIZATION_EXPIRED(),
+        )
         return
       }
       data.ok === true
         ? p.resolve(data.data)
         : p.reject(
-            new Error(
+            ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED(
               typeof data.error === 'string'
                 ? data.error.slice(0, 300)
                 : '应用执行失败',
@@ -230,7 +250,7 @@ export function connectFrame(
     const r = data as BridgeRequest
     try {
       if (JSON.stringify(r.args).length > applicationPayloadLimit(r.method)) {
-        throw new Error('应用请求内容过大')
+        throw ErrorCode.INTERNAL_APPLICATION_REQUEST_TOO_LARGE()
       }
       const value = await transport.call(r.method as HostMethod, r.args, {
         idempotencyKey: r.options?.idempotencyKey ?? r.id,
@@ -286,7 +306,7 @@ export async function invokeApplicationTool(
   open: (args: unknown) => Promise<unknown>,
 ) {
   if (!value || typeof value !== 'object') {
-    throw new Error('应用工具参数无效')
+    throw ErrorCode.INTERNAL_INVALID_APPLICATION_TOOL_ARGUMENTS()
   }
   const a = value as {
     appId: string
@@ -303,7 +323,7 @@ export async function invokeApplicationTool(
     typeof a.appId !== 'string' ||
     typeof a.tool !== 'string'
   ) {
-    throw new Error('应用工具参数无效')
+    throw ErrorCode.INTERNAL_INVALID_APPLICATION_TOOL_ARGUMENTS()
   }
   const runtime = await descriptor(a.appId)
   if (
@@ -311,7 +331,7 @@ export async function invokeApplicationTool(
     runtime.generation !== a.generation ||
     !runtime.clientTools.includes(a.tool)
   ) {
-    throw new Error('应用工具授权已过期')
+    throw ErrorCode.INTERNAL_APPLICATION_TOOL_AUTHORIZATION_EXPIRED()
   }
   await open({ appId: a.appId })
   // Rendering creates the iframe before its load callback establishes the channel.
@@ -321,7 +341,7 @@ export async function invokeApplicationTool(
   }
   const connection = connections.get(a.appId)
   if (!connection) {
-    throw new Error('应用尚未打开')
+    throw ErrorCode.INTERNAL_APPLICATION_NOT_OPEN()
   }
   return (await connection.promise).invoke(a.tool, a.arguments)
 }
@@ -332,10 +352,28 @@ export function closeApplicationRuntimes() {
   connections.clear()
 }
 /** Trusted application adapters delegate interaction UI into their isolated application. */
-export async function invokeDeclaredApplicationTool(appId: string, tool: string, args: unknown, open: (value: unknown) => Promise<unknown>) {
+export async function invokeDeclaredApplicationTool(
+  appId: string,
+  tool: string,
+  args: unknown,
+  open: (value: unknown) => Promise<unknown>,
+) {
   const runtime = await descriptor(appId)
-  return invokeApplicationTool({ appId, releaseId: runtime.releaseId, generation: runtime.generation, tool, arguments: args }, open)
+  return invokeApplicationTool(
+    {
+      appId,
+      releaseId: runtime.releaseId,
+      generation: runtime.generation,
+      tool,
+      arguments: args,
+    },
+    open,
+  )
 }
 export function cancelApplicationInteractions(appId: string) {
-  void connections.get(appId)?.promise.then((connection) => connection.cancelInteractions()).catch(() => {})
+  void connections
+    .get(appId)
+    ?.promise
+    .then((connection) => connection.cancelInteractions())
+    .catch(() => {})
 }

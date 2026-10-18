@@ -4,6 +4,7 @@ import { createCipheriv, generateKeyPairSync, randomUUID, sign } from 'node:cryp
 import { test } from 'node:test'
 import { parseWechatRefund } from '../src/payments/wechat-refund.js'
 import { WechatGateway } from '../src/payments/wechat.js'
+import { queryBuilderFixture } from './query-builder-fixture.js'
 
 test('WeChat refund uses the original merchant identity, authenticates signed responses and encrypted callbacks', async () => {
   const merchant = generateKeyPairSync('rsa', { modulusLength: 2048 })
@@ -12,7 +13,7 @@ test('WeChat refund uses the original merchant identity, authenticates signed re
   const orderId = randomUUID()
   const c = { id: randomUUID(), merchantId: '1234567890', merchantSerial: 'MERCHANT', platformSerial: 'PUB_KEY_ID_fixture', apiV3Key: '0'.repeat(32), privateKey: merchant.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(), platformPublicKey: platform.publicKey.export({ format: 'pem', type: 'spki' }).toString(), apiBaseUrl: 'https://api.example.test' } as WechatRuntime
   const data: Record<string, unknown> = { out_refund_no: id.replaceAll('-', ''), out_trade_no: orderId.replaceAll('-', ''), transaction_id: '420000000000000000001', refund_id: '500000000000000000001', status: 'PROCESSING', amount: { refund: 100, total: 100, currency: 'CNY' } }
-  const configuration = { runtime: async () => c, credentials: async () => c, source: { query: async (sql: string) => sql.includes('payment_refunds') ? [{ configuration_id: c.id }] : [{ id: c.id }] } } as unknown as PaymentConfiguration
+  const configuration = { runtime: async () => c, credentials: async () => c, source: await queryBuilderFixture(async (sql: string) => sql.includes('payment_refunds') ? [{ configuration_id: c.id }] : [{ id: c.id }]) } as unknown as PaymentConfiguration
   const signed = (body: Buffer) => {
     const timestamp = String(Math.floor(Date.now() / 1000))
     const nonce = 'fixture-nonce'

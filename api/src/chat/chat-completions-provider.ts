@@ -6,12 +6,12 @@ import type {
   ProviderTurn,
 } from './provider.js'
 import { createHash } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { contextOutputBudget, resolveContextPolicy } from '@t-box/shared'
 import OpenAI from 'openai'
 import { settingNumber } from '../configuration/defaults.js'
 import { modelParameters } from '../configuration/model-parameters.js'
 import { titleInstructions } from '../configuration/prompts.js'
+import { ErrorCode } from '../error-codes.js'
 import { chatMessages } from './chat-messages.js'
 import { invocationContextPolicy } from './invocation-mode.js'
 import { providerStream } from './provider-stream.js'
@@ -126,7 +126,7 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
     for await (const chunk of providerStream(stream)) {
       input.signal.throwIfAborted()
       if (responseId && chunk.id && chunk.id !== responseId) {
-        throw new ApiError(502, 'PROVIDER_FAILED', '模型响应标识不一致')
+        throw ErrorCode.PROVIDER_FAILED()
       }
       responseId ||= chunk.id
       if (chunk.usage && !usageReported) {
@@ -144,11 +144,7 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
       }
       for (const choice of chunk.choices) {
         if (choice.index !== 0) {
-          throw new ApiError(
-            502,
-            'PROVIDER_FAILED',
-            '模型返回了非预期的多项响应',
-          )
+          throw ErrorCode.PROVIDER_FAILED('模型返回了非预期的多项响应')
         }
         if (choice.delta.content) {
           text += choice.delta.content
@@ -162,7 +158,7 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
             delta.index > 127 ||
             (delta.type && delta.type !== 'function')
           ) {
-            throw new ApiError(502, 'PROVIDER_FAILED', '模型工具调用格式无效')
+            throw ErrorCode.PROVIDER_FAILED('模型工具调用格式无效')
           }
           const call = calls.get(delta.index) ?? {
             id: '',
@@ -171,11 +167,7 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
           }
           if (delta.id) {
             if (call.id && call.id !== delta.id) {
-              throw new ApiError(
-                502,
-                'PROVIDER_FAILED',
-                '模型工具调用标识不一致',
-              )
+              throw ErrorCode.PROVIDER_FAILED('模型工具调用标识不一致')
             }
             call.id = delta.id
           }
@@ -189,16 +181,10 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
       }
     }
     if (!finish) {
-      throw new ApiError(
-        502,
-        'PROVIDER_STREAM_CLOSED',
-        '模型连接提前结束，未获得完整响应',
-      )
+      throw ErrorCode.PROVIDER_STREAM_CLOSED()
     }
     if (!['stop', 'tool_calls'].includes(finish)) {
-      throw new ApiError(
-        502,
-        'PROVIDER_INCOMPLETE',
+      throw ErrorCode.PROVIDER_INCOMPLETE(
         finish === 'length'
           ? '模型输出额度不足，响应未完成'
           : finish === 'content_filter'
@@ -207,7 +193,7 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
       )
     }
     if (refusal) {
-      throw new ApiError(502, 'PROVIDER_REFUSED', '模型拒绝了本次请求')
+      throw ErrorCode.PROVIDER_REFUSED()
     }
     const completed = [...calls.entries()]
       .sort(([a], [b]) => a - b)
@@ -217,10 +203,10 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
       completed.some((c) => !c.id || !c.name || !c.arguments) ||
       new Set(completed.map((c) => c.id)).size !== completed.length
     ) {
-      throw new ApiError(502, 'PROVIDER_FAILED', '模型未返回完整的工具调用')
+      throw ErrorCode.PROVIDER_FAILED('模型未返回完整的工具调用')
     }
     if (!completed.length && !text.trim()) {
-      throw new ApiError(502, 'PROVIDER_FAILED', '模型未返回有效内容')
+      throw ErrorCode.PROVIDER_FAILED('模型未返回有效内容')
     }
     return {
       output: [
@@ -266,7 +252,7 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
           ),
     })
     if (turn.calls.length || !text.trim()) {
-      throw new ApiError(502, 'SUMMARY_INVALID', '模型未返回有效的上下文摘要')
+      throw ErrorCode.SUMMARY_INVALID()
     }
     return text.trim()
   }

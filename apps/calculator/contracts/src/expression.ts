@@ -1,9 +1,13 @@
-import { CalculationError, formatNumber } from './types.js'
+import { CalculationErrorCode } from './error-codes.js'
+import { formatNumber } from './types.js'
 
 export type AngleMode = 'deg' | 'rad'
-interface Token { type: 'number' | 'name' | 'op' | 'end', text: string }
+interface Token {
+  type: 'number' | 'name' | 'op' | 'end'
+  text: string
+}
 const fail = (message: string): never => {
-  throw new CalculationError(message)
+  throw CalculationErrorCode.INVALID_CALCULATION(message)
 }
 const finite = (n: number) => {
   formatNumber(n)
@@ -26,7 +30,7 @@ function gcd(a: number, b: number): number {
   a = Math.abs(a)
   b = Math.abs(b)
   while (b) {
-    [a, b] = [b, a % b]
+    ;[a, b] = [b, a % b]
   }
   return a
 }

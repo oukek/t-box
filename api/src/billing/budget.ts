@@ -1,7 +1,8 @@
 import type { ConfigurationSnapshot } from '@t-box/shared'
 import type { EntityManager } from 'typeorm'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { settingNumber } from '../configuration/defaults.js'
+import { AiCostGuardEntity } from '../db/records/models-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { money } from './money.js'
 
 /** Provider cost, independent of wallet deductions. Unknown usage remains conservatively reserved. */
@@ -11,19 +12,30 @@ export async function admitCost(
   configuration?: ConfigurationSnapshot,
 ) {
   if (input.reserve < 0n) {
-    throw new ApiError(400, 'INVALID_COST_RESERVATION', '成本预估无效')
+    throw ErrorCode.INVALID_COST_RESERVATION()
   }
   // This short transaction lock serializes concurrent admissions across API/worker
   // processes, including different users. No network request runs while holding it.
-  await db.query('SELECT id FROM ai_cost_guard WHERE id=1 FOR UPDATE')
-  const [totals] = await db.query(
-    `SELECT
-    COALESCE(SUM(IF(created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR,IF(status='settled',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS platform_cost,
-    COALESCE(SUM(IF(user_id=? AND created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR,IF(status='settled',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS user_cost,
-    COALESCE(SUM(IF(task_id=?,IF(status='settled',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS task_cost
-    FROM billing_usage WHERE created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR OR task_id=?`,
-    [input.userId, input.taskId || null, input.taskId || null],
-  )
+  await db.getRepository(AiCostGuardEntity).find({
+    select: { id: true },
+    where: { id: 1 },
+    lock: { mode: 'pessimistic_write' },
+  })
+  const [totals] = await db
+    .createQueryBuilder()
+    .select(
+      'COALESCE(SUM(IF(created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR,IF(status=\'settled\',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS platform_cost,\n    COALESCE(SUM(IF(user_id=:p0 AND created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR,IF(status=\'settled\',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS user_cost,\n    COALESCE(SUM(IF(task_id=:p1,IF(status=\'settled\',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS task_cost',
+    )
+    .from('billing_usage', 'billing_usage')
+    .where(
+      'created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR OR task_id=:p2',
+    )
+    .setParameters({
+      p0: input.userId,
+      p1: input.taskId || null,
+      p2: input.taskId || null,
+    })
+    .getRawMany()
   const policies: [string, string, string, number][] = [
     [
       'ai.cost.platformDailyYuan',
@@ -46,7 +58,7 @@ export async function admitCost(
       String(settingNumber(configuration, key, Number(fallback))),
     )
     if (limit > 0n && BigInt(totals[field] || 0) + input.reserve > limit) {
-      throw new ApiError(429, 'AI_COST_LIMIT', `${message}；已完成的操作仍保留`)
+      throw ErrorCode.AI_COST_LIMIT(`${message}；已完成的操作仍保留`)
     }
   }
 }

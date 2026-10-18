@@ -12,6 +12,7 @@
   "dependencies": {
     "@t-box/app-contracts": "workspace:*",
     "@t-box/calendar-contracts": "workspace:*",
+    "@t-box/errors": "workspace:*",
     "@t-box/ledger-contracts": "workspace:*",
     "@t-box/shared": "workspace:*",
     "@t-box/ui-kit": "workspace:*",

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ApplicationFile } from '@t-box/app-contracts'
 import {
   LEDGER_ATTACHMENT_LIMIT,
   LEDGER_ATTACHMENT_MAX_BYTES,
@@ -25,7 +26,9 @@ watch(
       if (!names.value[id]) {
         try {
           names.value[id] = (
-            await featureApi(props.ledgerId).get(`/attachment-resources/${id}`)
+            await featureApi(props.ledgerId).get<ApplicationFile>(
+              `/attachment-resources/${id}`,
+            )
           ).name
         } catch {
           names.value[id] = '已选择附件'
@@ -64,7 +67,7 @@ async function upload(event: Event) {
       for (let i = 0; i < bytes.length; i += 8192) {
         raw += String.fromCharCode(...bytes.subarray(i, i + 8192))
       }
-      const resource = await featureApi(props.ledgerId).write(
+      const resource = await featureApi(props.ledgerId).write<ApplicationFile>(
         '/attachment-resources',
         { name: file.name, base64: btoa(raw) },
       )

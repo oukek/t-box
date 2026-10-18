@@ -9,6 +9,7 @@ import { WechatPay } from '@t-box/capacitor-wechat-pay'
 import QRCode from 'qrcode'
 import { onBeforeUnmount, ref } from 'vue'
 import { request } from '../../core/network'
+import { ErrorCode } from '../../error-codes.js'
 import {
   billingPurchaseBlockReason,
   selectPaymentMode,
@@ -44,7 +45,7 @@ async function bridge(): Promise<Bridge> {
     }
     const timer = setTimeout(() => {
       document.removeEventListener('WeixinJSBridgeReady', done)
-      reject(new Error('请在微信内打开此网页支付'))
+      reject(ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED())
     }, 8000)
     document.addEventListener('WeixinJSBridgeReady', done)
   })
@@ -165,7 +166,7 @@ export function useWechatCheckout(onPaid: () => Promise<void>) {
   async function startPayment(item: PaymentOrder) {
     const blocked = purchaseBlockReason()
     if (blocked) {
-      throw new Error(blocked)
+      throw ErrorCode.INTERNAL_PAYMENT_PLATFORM_UNAVAILABLE(blocked)
     }
     close()
     const version = generation
@@ -176,10 +177,10 @@ export function useWechatCheckout(onPaid: () => Promise<void>) {
     if (paymentMode() === 'app') {
       const status = await WechatPay.getStatus()
       if (!status.configured) {
-        throw new Error('原生微信支付尚未开放')
+        throw ErrorCode.INTERNAL_NATIVE_WECHAT_UNAVAILABLE()
       }
       if (!status.installed) {
-        throw new Error('请先安装微信后再支付')
+        throw ErrorCode.INTERNAL_WECHAT_NOT_INSTALLED()
       }
       await listenNative()
     }
@@ -200,7 +201,7 @@ export function useWechatCheckout(onPaid: () => Promise<void>) {
         url.protocol !== 'https:' ||
         !['wx.tenpay.com', 'open.weixin.qq.com'].includes(url.hostname)
       ) {
-        throw new Error('支付链接无效')
+        throw ErrorCode.INTERNAL_INVALID_WECHAT_PAYMENT_URL()
       }
       location.assign(url.href)
       return
@@ -220,7 +221,7 @@ export function useWechatCheckout(onPaid: () => Promise<void>) {
       const sdk = await bridge()
       const result = await new Promise<string>((resolve, reject) => {
         const deadline = setTimeout(
-          () => reject(new Error('支付操作未返回，请在订单中核对结果')),
+          () => reject(ErrorCode.INTERNAL_PAYMENT_RESULT_UNKNOWN()),
           120_000,
         )
         sdk.invoke('getBrandWCPayRequest', intent.parameters, (r) => {
@@ -240,13 +241,13 @@ export function useWechatCheckout(onPaid: () => Promise<void>) {
       notice.value = '正在调起微信，完成后将核对到账结果…'
       const result = await WechatPay.pay(intent.parameters)
       if (!result.launched) {
-        throw new Error('未能调起微信，请核对原订单')
+        throw ErrorCode.INTERNAL_WECHAT_LAUNCH_FAILED()
       }
       if (disposed || version !== generation) {
         return
       }
     } else {
-      throw new Error('当前客户端暂不支持此支付方式')
+      throw ErrorCode.INTERNAL_PAYMENT_METHOD_UNSUPPORTED()
     }
     void poll(item.id, version)
   }

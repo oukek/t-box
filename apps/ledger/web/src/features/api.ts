@@ -6,10 +6,10 @@ import { request } from '../sdk'
 export const featureApi = (book: string) => {
   const root = `/ledgers/${encodeURIComponent(book)}`
   return {
-    async get<T = any>(path: string) {
+    async get<T = unknown>(path: string) {
       return (await request<{ data: T }>(root + path)).data
     },
-    async write<T = any>(
+    async write<T = unknown>(
       path: string,
       body: unknown = {},
       method: 'POST' | 'PATCH' | 'DELETE' = 'POST',

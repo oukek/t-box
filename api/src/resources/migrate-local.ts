@@ -5,16 +5,50 @@ import { randomUUID } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { LedgerCategoryIconEntity } from '@t-box/ledger-server/persistence/categories-entities'
+import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
+import { IsNull, Not } from 'typeorm'
+import { ErrorCode } from '../error-codes.js'
 
 /** Copy and verify first, commit the new location, then remove only the proven local object. */
-export async function migrateLocalResources(source: DataSource, local: LocalResourceStorage, remote: OssResourceStorage, backend: string) {
+export async function migrateLocalResources(
+  source: DataSource,
+  local: LocalResourceStorage,
+  remote: OssResourceStorage,
+  backend: string,
+) {
   let migrated = 0
   let purged = 0
-  const resources = await source.query('SELECT id,name,mime_type AS mimeType,object_path AS path,deleted_at FROM resources WHERE storage_backend=\'local\'')
+  const resources = await source
+    .getRepository(ResourceEntity)
+    .find({
+      select: {
+        id: true,
+        name: true,
+        mime_type: true,
+        object_path: true,
+        deleted_at: true,
+      },
+      where: { storage_backend: 'local' },
+    })
+    .then((rows) =>
+      rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        mimeType: row.mime_type,
+        path: row.object_path,
+        deleted_at: row.deleted_at,
+      })),
+    )
   for (const row of resources) {
     if (row.deleted_at) {
       await local.remove(row.path)
-      await source.query('UPDATE resources SET purged_at=COALESCE(purged_at,UTC_TIMESTAMP(3)) WHERE id=? AND storage_backend=\'local\' AND deleted_at IS NOT NULL', [row.id])
+      await source
+        .getRepository(ResourceEntity)
+        .update(
+          { id: row.id, storage_backend: 'local', deleted_at: Not(IsNull()) },
+          { purged_at: () => 'COALESCE(purged_at,UTC_TIMESTAMP(3))' },
+        )
       purged++
       continue
     }
@@ -24,13 +58,23 @@ export async function migrateLocalResources(source: DataSource, local: LocalReso
     let committed = false
     try {
       if (!(await remote.read(path)).equals(bytes)) {
-        throw new Error('OSS migration content verification failed')
+        throw ErrorCode.INTERNAL_OSS_MIGRATION_CONTENT_VERIFICATION_FAILED()
       }
-      const result = await source.query('UPDATE resources SET storage_backend=?,object_path=? WHERE id=? AND storage_backend=\'local\' AND object_path=? AND deleted_at IS NULL', [backend, path, row.id, row.path])
-      committed = result.affectedRows === 1
+      const result = await source.getRepository(ResourceEntity).update(
+        {
+          id: row.id,
+          storage_backend: 'local',
+          object_path: row.path,
+          deleted_at: IsNull(),
+        },
+        { storage_backend: backend, object_path: path },
+      )
+      committed = result.affected === 1
     } catch (error) {
       // An ambiguous database result may already be committed. Never delete an object still referenced by SQL.
-      const [current] = await source.query('SELECT object_path FROM resources WHERE id=?', [row.id])
+      const current = await source
+        .getRepository(ResourceEntity)
+        .findOne({ select: { object_path: true }, where: { id: row.id } })
       if (current?.object_path !== path) {
         await remote.remove(path)
       }
@@ -43,20 +87,42 @@ export async function migrateLocalResources(source: DataSource, local: LocalReso
       await remote.remove(path)
     }
   }
-  const icons = await source.query('SELECT id,content,object_path AS path,storage_backend FROM ledger_category_icons WHERE storage_backend=\'local\' OR object_path IS NULL')
+  const icons = await source
+    .createQueryBuilder()
+    .select('id,content,object_path AS path,storage_backend')
+    .from('ledger_category_icons', 'ledger_category_icons')
+    .where('storage_backend=\'local\' OR object_path IS NULL')
+    .getRawMany()
   for (const row of icons) {
-    const bytes = row.path ? await local.read(row.path) : Buffer.from(row.content)
+    const bytes = row.path
+      ? await local.read(row.path)
+      : Buffer.from(row.content)
     const path = remote.path(randomUUID())
-    await remote.write(path, bytes, { name: '分类图标.png', mimeType: 'image/png' })
+    await remote.write(path, bytes, {
+      name: '分类图标.png',
+      mimeType: 'image/png',
+    })
     let committed = false
     try {
       if (!(await remote.read(path)).equals(bytes)) {
-        throw new Error('OSS migration content verification failed')
+        throw ErrorCode.INTERNAL_OSS_MIGRATION_CONTENT_VERIFICATION_FAILED()
       }
-      const result = await source.query('UPDATE ledger_category_icons SET storage_backend=?,object_path=?,content=NULL WHERE id=? AND (storage_backend=\'local\' OR object_path IS NULL)', [backend, path, row.id])
-      committed = result.affectedRows === 1
+      const result = await source
+        .createQueryBuilder()
+        .update('ledger_category_icons')
+        .set({ storage_backend: backend, object_path: path, content: null })
+        .updateEntity(false)
+        .where('id=:p2 AND (storage_backend=\'local\' OR object_path IS NULL)')
+        .setParameters({ p2: row.id })
+        .execute()
+      committed = result.affected === 1
     } catch (error) {
-      const [current] = await source.query('SELECT object_path FROM ledger_category_icons WHERE id=?', [row.id])
+      const current = await source
+        .getRepository(LedgerCategoryIconEntity)
+        .findOne({
+          select: { id: true, object_path: true },
+          where: { id: row.id },
+        })
       if (current?.object_path !== path) {
         await remote.remove(path)
       }
@@ -72,7 +138,11 @@ export async function migrateLocalResources(source: DataSource, local: LocalReso
     }
   }
   // Resume cleanup after a crash between the committed SQL update and local unlink.
-  const locations = await source.query('SELECT id,object_path AS path FROM resources WHERE storage_backend=? AND deleted_at IS NULL UNION ALL SELECT id,object_path AS path FROM ledger_category_icons WHERE storage_backend=?', [backend, backend])
+  // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
+  const locations = await source.query(
+    'SELECT id,object_path AS path FROM resources WHERE storage_backend=? AND deleted_at IS NULL UNION ALL SELECT id,object_path AS path FROM ledger_category_icons WHERE storage_backend=?',
+    [backend, backend],
+  )
   for (const row of locations) {
     let bytes: Buffer
     try {
@@ -84,19 +154,25 @@ export async function migrateLocalResources(source: DataSource, local: LocalReso
       throw error
     }
     if (!(await remote.read(row.path)).equals(bytes)) {
-      throw new Error('Local cleanup refused: stored object differs from its OSS copy')
+      throw ErrorCode.INTERNAL_LOCAL_CLEANUP_REFUSED_STORED_OBJECT_DIFFERS_FROM_ITS_OSS_COPY()
     }
     await local.remove(row.id)
   }
   return { migrated, purged }
 }
 
-const entry = process.argv[1] && await realpath(process.argv[1]).catch(() => '')
+const entry =
+  process.argv[1] && (await realpath(process.argv[1]).catch(() => ''))
 if (entry && import.meta.url === pathToFileURL(entry).href) {
   if (process.argv.length > 3) {
-    throw new Error('Usage: node migrate-local.js [LOCAL_RESOURCE_DIRECTORY]')
+    throw ErrorCode.INTERNAL_USAGE_NODE_MIGRATE_LOCAL_JS_LOCAL_RESOURCE_DIRECTORY()
   }
-  const [{ resourceStorageSettings }, { createDataSource }, { LocalResourceStorage }, { OssResourceStorage, ossResourceBackend }] = await Promise.all([
+  const [
+    { resourceStorageSettings },
+    { createDataSource },
+    { LocalResourceStorage },
+    { OssResourceStorage, ossResourceBackend },
+  ] = await Promise.all([
     import('../config.js'),
     import('../db/data-source.js'),
     import('./storage.js'),
@@ -104,13 +180,22 @@ if (entry && import.meta.url === pathToFileURL(entry).href) {
   ])
   const options = resourceStorageSettings()
   if (!options) {
-    throw new Error('Configure OSS credentials before migrating local files')
+    throw ErrorCode.INTERNAL_CONFIGURE_OSS_CREDENTIALS_BEFORE_MIGRATING_LOCAL_FILES()
   }
   const source = await createDataSource().initialize()
   try {
-    const root = process.argv[2] ? resolve(process.argv[2]) : fileURLToPath(new URL('../../.storage/resources/', import.meta.url))
-    const result = await migrateLocalResources(source, new LocalResourceStorage(root), new OssResourceStorage(options), ossResourceBackend(options))
-    process.stdout.write(`OSS migration completed: ${result.migrated} copied and verified, ${result.purged} deleted resources cleaned.\n`)
+    const root = process.argv[2]
+      ? resolve(process.argv[2])
+      : fileURLToPath(new URL('../../.storage/resources/', import.meta.url))
+    const result = await migrateLocalResources(
+      source,
+      new LocalResourceStorage(root),
+      new OssResourceStorage(options),
+      ossResourceBackend(options),
+    )
+    process.stdout.write(
+      `OSS migration completed: ${result.migrated} copied and verified, ${result.purged} deleted resources cleaned.\n`,
+    )
   } finally {
     await source.destroy()
   }

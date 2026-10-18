@@ -9,6 +9,7 @@ import { BottomSheet, SheetSelect } from '@t-box/ui-kit'
 import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { formatMoney, localDate, normalizeAmount } from '../bills/format'
+import { ErrorCode } from '../error-codes.js'
 import { featureApi } from '../features/api'
 import AttachmentButton from '../features/AttachmentButton.vue'
 import AttachmentPicker from '../features/AttachmentPicker.vue'
@@ -186,7 +187,7 @@ async function save() {
     if (modal.value === 'create') {
       const amount = normalizeAmount(form.amount)
       if (!amount) {
-        throw new Error('金额须大于零且最多两位小数')
+        throw ErrorCode.INTERNAL_INVALID_AMOUNT()
       }
       await booksApi.debt(
         props.ledgerId,
@@ -207,12 +208,12 @@ async function save() {
       const rows = Object.entries(allocations).map(([debtId, value]) => {
         const amount = normalizeAmount(value)
         if (!amount) {
-          throw new Error('每笔分配金额须大于零且最多两位小数')
+          throw ErrorCode.INTERNAL_INVALID_ALLOCATION_AMOUNT()
         }
         return { debtId, amount }
       })
       if (!rows.length) {
-        throw new Error('至少选择一笔往来')
+        throw ErrorCode.INTERNAL_DEBT_SELECTION_REQUIRED()
       }
       await booksApi.settle(
         props.ledgerId,

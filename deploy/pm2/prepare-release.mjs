@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// Explicitly invoked by the operator. This never starts PM2 or runs a DB migration.
+// Explicitly invoked by the operator. This never starts PM2 or runs database initialization.
 const release = fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/, '')
 const info = JSON.parse(await readFile(join(release, 'release-info.json'), 'utf8'))
 const [major, minor] = process.versions.node.split('.').map(Number)
@@ -68,4 +68,4 @@ if (delivery === 'oss') {
     stdio: 'inherit',
   })
 }
-process.stdout.write('Persistent paths prepared. Database migration and PM2 startup remain manual.\n')
+process.stdout.write('Persistent paths prepared. Database initialization and PM2 startup remain manual.\n')

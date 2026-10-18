@@ -5,6 +5,8 @@ import type { LedgerServices } from './ports.js'
 import { object } from '@t-box/app-server-sdk'
 import { digest } from '@t-box/server-foundation/crypto'
 import { invalid } from '@t-box/server-foundation/errors'
+import { In } from 'typeorm'
+import { DebtPositionEntity } from '../domain-entities.js'
 import { attachmentIds, recordKind } from '../features/attachments.js'
 import {
   confirmationLines,
@@ -179,10 +181,14 @@ export async function chatContext(
     if (tool.needsConfirmation) {
       featureHandlers[`confirm_${name}`] = async (args) => {
         await p.access.check(principal, ledgerId, 'write')
-        const v = object(
-          args,
-          Object.keys((tool.definition.parameters as any).properties ?? {}),
-        )
+        const properties = tool.definition.parameters.properties
+        const keys =
+          properties &&
+          typeof properties === 'object' &&
+          !Array.isArray(properties)
+            ? Object.keys(properties)
+            : []
+        const v = object(args, keys)
         const categories = await p.finance.categories(principal, ledgerId)
         const accounts = await f.accounts.list(principal, ledgerId)
         const labels = new Map<string, string>([
@@ -237,10 +243,29 @@ export async function chatContext(
         await p.access.check(principal, ledgerId, 'write')
         const input = settlementInput(args)
         const ids = input.allocations.map((row) => row.debtId)
-        const debts = (await p.access.source.query(
-          `SELECT id,direction,counterparty,remaining,occurred_date AS date,note FROM debt_positions WHERE ledger_id=? AND id IN (${ids.map(() => '?').join(',')})`,
-          [ledgerId, ...ids],
-        )) as {
+        const debts = (await p.access.source
+          .getRepository(DebtPositionEntity)
+          .find({
+            select: {
+              id: true,
+              direction: true,
+              counterparty: true,
+              remaining: true,
+              date: true,
+              note: true,
+            },
+            where: { ledgerId, id: In(ids) },
+          })
+          .then((rows) =>
+            rows.map((row) => ({
+              id: row.id,
+              direction: row.direction,
+              counterparty: row.counterparty,
+              remaining: row.remaining,
+              date: row.date,
+              note: row.note,
+            })),
+          )) as {
           id: string
           direction: string
           counterparty: string

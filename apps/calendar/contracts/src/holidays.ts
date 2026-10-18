@@ -1,4 +1,5 @@
-import { DateTimeError, validDate } from '@t-box/time-contracts'
+import { DateTimeErrorCode } from '@t-box/dayjs'
+import { validDate } from '@t-box/time-contracts'
 
 export interface HolidayArrangement {
   name: string
@@ -37,7 +38,7 @@ export function holidayYear(value: unknown): number {
   const year =
     typeof value === 'string' && /^\d{4}$/.test(value) ? Number(value) : value
   if (!Number.isInteger(year) || Number(year) < 1900 || Number(year) > 2100) {
-    throw new DateTimeError('节假日年度范围为 1900–2100 年')
+    throw DateTimeErrorCode.INVALID_DATETIME('节假日年度范围为 1900–2100 年')
   }
   return Number(year)
 }
@@ -46,7 +47,7 @@ export function parseHolidayDataset(
   complete = false,
 ): HolidayDataset {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new DateTimeError('节假日数据格式无效')
+    throw DateTimeErrorCode.INVALID_DATETIME('节假日数据格式无效')
   }
   const v = value as Record<string, unknown>
   const year = holidayYear(v.year)
@@ -58,17 +59,19 @@ export function parseHolidayDataset(
     !Array.isArray(v.days) ||
     v.days.length > 120
   ) {
-    throw new DateTimeError('请提供年度、官方原文链接和日期列表')
+    throw DateTimeErrorCode.INVALID_DATETIME(
+      '请提供年度、官方原文链接和日期列表',
+    )
   }
   const papers = v.papers.map((link) => {
     if (typeof link !== 'string' || link.length > 2048) {
-      throw new DateTimeError('官方来源链接无效')
+      throw DateTimeErrorCode.INVALID_DATETIME('官方来源链接无效')
     }
     let url: URL
     try {
       url = new URL(link)
     } catch {
-      throw new DateTimeError('官方来源链接无效')
+      throw DateTimeErrorCode.INVALID_DATETIME('官方来源链接无效')
     }
     if (
       !['https:', 'http:'].includes(url.protocol) ||
@@ -77,14 +80,14 @@ export function parseHolidayDataset(
       url.password ||
       url.port
     ) {
-      throw new DateTimeError('来源须为中国政府网站的公告链接')
+      throw DateTimeErrorCode.INVALID_DATETIME('来源须为中国政府网站的公告链接')
     }
     return link
   })
   const days = v.days
     .map((raw): HolidayDay => {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-        throw new DateTimeError('日期记录格式无效')
+        throw DateTimeErrorCode.INVALID_DATETIME('日期记录格式无效')
       }
       const d = raw as Record<string, unknown>
       const date = validDate(d.date)
@@ -99,7 +102,7 @@ export function parseHolidayDataset(
         date < `${year - 1}-12-01` ||
         date > `${year + 1}-01-31`
       ) {
-        throw new DateTimeError('日期、节日名称或休班类型无效')
+        throw DateTimeErrorCode.INVALID_DATETIME('日期、节日名称或休班类型无效')
       }
       return {
         date,
@@ -109,7 +112,7 @@ export function parseHolidayDataset(
     })
     .sort((a, b) => a.date.localeCompare(b.date))
   if (new Set(days.map((d) => d.date)).size !== days.length) {
-    throw new DateTimeError('同一日期不能重复')
+    throw DateTimeErrorCode.INVALID_DATETIME('同一日期不能重复')
   }
   if (
     complete &&
@@ -119,7 +122,9 @@ export function parseHolidayDataset(
           !days.some((d) => d.status === 'rest' && d.name.includes(name)),
       ))
   ) {
-    throw new DateTimeError('年度安排尚不完整，需覆盖七类主要节假日')
+    throw DateTimeErrorCode.INVALID_DATETIME(
+      '年度安排尚不完整，需覆盖七类主要节假日',
+    )
   }
   return { year, papers: [...new Set(papers)], days }
 }

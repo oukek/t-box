@@ -4,6 +4,7 @@ import type {
   CalendarOccurrence,
   ReminderItem,
 } from './types.js'
+import { DateTimeErrorCode } from '@t-box/dayjs'
 import {
   DateTimeError,
   dayjs,
@@ -68,7 +69,7 @@ export function expandCalendar(
   const finish = dayjs.utc(to)
   const span = finish.diff(start, 'day')
   if (span < 0 || span > 370) {
-    throw new DateTimeError('日历查询范围最多 371 天')
+    throw DateTimeErrorCode.INVALID_DATETIME('日历查询范围最多 371 天')
   }
   const first = dayjs.utc(event.start.slice(0, 10))
   const durationDays = dayjs.utc(event.end.slice(0, 10)).diff(first, 'day')

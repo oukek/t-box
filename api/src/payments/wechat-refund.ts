@@ -1,5 +1,6 @@
 import type { PaymentConfiguration, WechatRuntime } from './configuration.js'
 import type { VerifiedRefund } from './gateway.js'
+import { PaymentConfigurationEntity } from '../db/records/payments-entities.js'
 import {
   decryptWechat,
   localOrder,
@@ -60,9 +61,9 @@ export async function verifyWechatRefund(
   ) {
     throw wechatFailure()
   }
-  const rows = await configuration.source.query(
-    'SELECT id FROM payment_configurations ORDER BY version DESC',
-  )
+  const rows = await configuration.source
+    .getRepository(PaymentConfigurationEntity)
+    .find({ select: { id: true }, order: { version: 'DESC' } })
   let authenticated = false
   for (const row of rows) {
     const config = await configuration.runtime(row.id)
@@ -98,10 +99,17 @@ export async function verifyWechatRefund(
     } catch {
       continue
     }
-    const [refund] = await configuration.source.query(
-      `SELECT o.configuration_id FROM payment_refunds r JOIN payment_orders o ON o.id=r.order_id WHERE r.id=? AND o.id=?`,
-      [localOrder(data.out_refund_no), localOrder(data.out_trade_no)],
-    )
+    const [refund] = await configuration.source
+      .createQueryBuilder()
+      .select('o.configuration_id', 'configuration_id')
+      .from('payment_refunds', 'r')
+      .innerJoin('payment_orders', 'o', 'o.id=r.order_id')
+      .where('r.id=:p0 AND o.id=:p1')
+      .setParameters({
+        p0: localOrder(data.out_refund_no),
+        p1: localOrder(data.out_trade_no),
+      })
+      .getRawMany()
     const bound = refund?.configuration_id
       ? await configuration.runtime(refund.configuration_id)
       : null

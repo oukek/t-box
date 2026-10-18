@@ -1,16 +1,33 @@
-import type { AppInstallation, ApplicationContext, AppRelease, LifecycleAction, LifecycleReceipt, MarketEntry, RuntimeDescriptor } from '@t-box/app-contracts'
+import type {
+  AppInstallation,
+  ApplicationContext,
+  AppRelease,
+  LifecycleAction,
+  LifecycleReceipt,
+  MarketEntry,
+  RuntimeDescriptor,
+} from '@t-box/app-contracts'
 import type { DataSource, EntityManager } from 'typeorm'
+import type { StoredApplicationInstallation } from '../db/records/applications-entities.js'
 import type { ApplicationBackend } from './adapters/contracts.js'
 import { createHash, randomUUID } from 'node:crypto'
-import {
-  APP_SDK_VERSION,
-  validateRelease,
-} from '@t-box/app-contracts'
+import { APP_SDK_VERSION, validateRelease } from '@t-box/app-contracts'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { jsonDocument } from '@t-box/server-foundation/persistence/columns'
+import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
+import { IsNull } from 'typeorm'
+import {
+  ApplicationInstallationEntity,
+  ApplicationLifecycleOperationEntity,
+  ApplicationPublicationEventEntity,
+  ApplicationRegistryEntity,
+  ApplicationReleaseEntity,
+} from '../db/records/applications-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { ApplicationArtifacts } from './artifacts.js'
 
-const json = <T>(value: string | T): T =>
-  typeof value === 'string' ? JSON.parse(value) : value
+const json = <T>(value: unknown): T =>
+  typeof value === 'string' ? JSON.parse(value) : (value as T)
 const hash = (v: unknown) =>
   createHash('sha256').update(JSON.stringify(v)).digest('hex')
 interface Operation {
@@ -20,7 +37,7 @@ interface Operation {
   release_id: string
   generation: number
   action: LifecycleAction
-  submitted: number
+  submitted: number | boolean
   attempts: number
   status: string
   receipt: unknown
@@ -38,12 +55,15 @@ export class ApplicationPlatform {
     private readonly source: DataSource,
     private readonly releases: readonly AppRelease[],
     private readonly kinds: Readonly<Record<string, AppRelease['kind']>> = {},
-    private readonly options: { shellMigrations?: readonly string[], deploymentIssues?: Record<string, string> } = {},
+    private readonly options: {
+      shellMigrations?: readonly string[]
+      deploymentIssues?: Record<string, string>
+    } = {},
   ) {}
 
   bind(name: string, backend: ApplicationBackend) {
     if (this.backends.has(name)) {
-      throw new Error('Duplicate backend binding')
+      throw ErrorCode.INTERNAL_DUPLICATE_BACKEND_BINDING()
     }
     this.backends.set(name, backend)
   }
@@ -70,67 +90,153 @@ export class ApplicationPlatform {
           continue
         }
         await this.source.transaction(async (db) => {
-        // Take an exclusive registry-row lock immediately. INSERT IGNORE on an
-        // existing key takes shared locks, whose later FOR UPDATE upgrades can
-        // deadlock when multiple API workers seed the same applications.
-          await db.query(
-            'INSERT INTO application_registry(app_id,kind,created_at) VALUES(?,?,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE app_id=app_id',
-            [release.appId, this.kinds[release.appId] ?? release.kind],
-          )
-          const [policy] = await db.query(
-            'SELECT kind FROM application_registry WHERE app_id=? FOR UPDATE',
-            [release.appId],
-          )
-          const [old] = await db.query(
-            'SELECT definition,definition_hash FROM application_releases WHERE release_id=? FOR UPDATE',
-            [release.releaseId],
-          )
+          // Take an exclusive registry-row lock immediately. INSERT IGNORE on an
+          // existing key takes shared locks, whose later FOR UPDATE upgrades can
+          // deadlock when multiple API workers seed the same applications.
+          await db
+            .createQueryBuilder()
+            .insert()
+            .into('application_registry')
+            .values({
+              app_id: () => ':p0',
+              kind: () => ':p1',
+              created_at: () => 'UTC_TIMESTAMP(3)',
+            })
+            .updateEntity(false)
+            .setParameters({
+              p0: release.appId,
+              p1: this.kinds[release.appId] ?? release.kind,
+            })
+            .orUpdate(['app_id'])
+            .execute()
+          const policy = await db
+            .getRepository(ApplicationRegistryEntity)
+            .findOne({
+              select: { kind: true },
+              where: { app_id: release.appId },
+              lock: { mode: 'pessimistic_write' },
+            })
+          const old = await db.getRepository(ApplicationReleaseEntity).findOne({
+            select: { definition: true, definition_hash: true },
+            where: { release_id: release.releaseId },
+            lock: { mode: 'pessimistic_write' },
+          })
+          if (!policy) {
+            throw ErrorCode.APP_NOT_FOUND()
+          }
           if (old && old.definition_hash !== hash(release)) {
-          // Kind moved to the app-level registry in the publishing migration. Preserve the historical definition and hash.
+            // Kind moved to the app-level registry in the publishing migration. Preserve the historical definition and hash.
             const historical = json<AppRelease>(old.definition)
             if (
               policy.kind !== release.kind ||
-              hash({ ...release, kind: historical.kind }) !== old.definition_hash
+              hash({ ...release, kind: historical.kind }) !==
+              old.definition_hash
             ) {
-              throw new Error(`Immutable release changed: ${release.releaseId}`)
+              throw ErrorCode.INTERNAL_IMMUTABLE_RELEASE_CHANGED(
+                `Immutable release changed: ${release.releaseId}`,
+              )
             }
           }
-          const [known] = await db.query(
-            'SELECT release_id FROM application_releases WHERE app_id=? LIMIT 1',
-            [release.appId],
-          )
+          const known = await db
+            .getRepository(ApplicationReleaseEntity)
+            .findOne({
+              select: { release_id: true },
+              where: { app_id: release.appId },
+            })
           // Only trusted code/deployment can register executable bindings. User installation never registers services.
-          await db.query(
-            'INSERT IGNORE INTO application_releases(release_id,app_id,definition,definition_hash,published,status,created_at) VALUES(?,?,?,?,?,?,UTC_TIMESTAMP(3))',
-            [
-              release.releaseId,
-              release.appId,
-              JSON.stringify(release),
-              hash(release),
-              known ? 0 : 1,
-              known ? 'submitted' : 'published',
-            ],
-          )
+          await db
+            .createQueryBuilder()
+            .insert()
+            .into('application_releases')
+            .values({
+              release_id: release.releaseId,
+              app_id: release.appId,
+              definition: () => ':p2',
+              definition_hash: hash(release),
+              published: known ? 0 : 1,
+              status: known ? 'submitted' : 'published',
+              created_at: () => 'UTC_TIMESTAMP(3)',
+            })
+            .updateEntity(false)
+            .orIgnore()
+            .setParameters({ p2: JSON.stringify(release) })
+            .execute()
           if (!old && !known) {
-            await db.query(
-              'UPDATE application_releases SET published=(release_id=?),status=IF(release_id=?,\'published\',IF(status=\'published\',\'retired\',status)) WHERE app_id=?',
-              [release.releaseId, release.releaseId, release.appId],
-            )
+            await db
+              .createQueryBuilder()
+              .update('application_releases')
+              .set({
+                published: () => '(release_id=:p0)',
+                status: () =>
+                  'IF(release_id=:p1,\'published\',IF(status=\'published\',\'retired\',status))',
+              })
+              .updateEntity(false)
+              .where('app_id=:p2')
+              .setParameters({
+                p0: release.releaseId,
+                p1: release.releaseId,
+                p2: release.appId,
+              })
+              .execute()
           }
-          if (this.options.shellMigrations?.includes(release.appId) && release.runtime.type === 'web') {
-            const [legacy] = await db.query('SELECT release_id,definition FROM application_releases WHERE app_id=? AND published=1', [release.appId])
-            if (legacy && json<AppRelease>(legacy.definition).runtime.type === 'shell') {
-              await db.query('UPDATE application_releases SET published=0,status=\'retired\',revision=revision+1 WHERE release_id=?', [legacy.release_id])
-              await db.query('UPDATE application_releases SET published=1,status=\'published\',published_at=UTC_TIMESTAMP(3),revision=revision+1 WHERE release_id=?', [release.releaseId])
-              await db.query('INSERT INTO application_publication_events(id,app_id,release_id,action,administrator_id,detail) VALUES(?,?,?,?,?,?)', [randomUUID(), release.appId, release.releaseId, 'migrate_runtime', '00000000-0000-0000-0000-000000000000', JSON.stringify({ from: legacy.release_id, origin: 'trusted_deployment' })])
+          if (
+            this.options.shellMigrations?.includes(release.appId) &&
+            release.runtime.type === 'web'
+          ) {
+            const legacy = await db
+              .getRepository(ApplicationReleaseEntity)
+              .findOne({
+                select: { release_id: true, definition: true },
+                where: { app_id: release.appId, published: 1 },
+              })
+            if (
+              legacy &&
+              json<AppRelease>(legacy.definition).runtime.type === 'shell'
+            ) {
+              await db.getRepository(ApplicationReleaseEntity).update(
+                { release_id: legacy.release_id },
+                {
+                  published: 0,
+                  status: 'retired',
+                  revision: () => 'revision+1',
+                },
+              )
+              await db.getRepository(ApplicationReleaseEntity).update(
+                { release_id: release.releaseId },
+                {
+                  published: 1,
+                  status: 'published',
+                  published_at: () => 'UTC_TIMESTAMP(3)',
+                  revision: () => 'revision+1',
+                },
+              )
+              await db.getRepository(ApplicationPublicationEventEntity).insert({
+                id: randomUUID(),
+                app_id: release.appId,
+                release_id: release.releaseId,
+                action: 'migrate_runtime',
+                administrator_id: '00000000-0000-0000-0000-000000000000',
+                detail: {
+                  from: legacy.release_id,
+                  origin: 'trusted_deployment',
+                },
+              })
             }
           }
         })
       } catch (error) {
-        if (error && typeof error === 'object' && ('driverError' in error || (error as { name?: string }).name === 'QueryFailedError')) {
+        if (
+          error &&
+          typeof error === 'object' &&
+          ('driverError' in error ||
+            (error as { name?: string }).name === 'QueryFailedError')
+        ) {
           throw error
         }
-        this.faults.set(release.appId, '应用版本定义不兼容，请管理员检查部署配置')
+        this.faults.set(
+          release.appId,
+          '应用版本定义不兼容，请管理员检查部署配置',
+        )
       }
     }
   }
@@ -139,12 +245,16 @@ export class ApplicationPlatform {
     id: string,
     db: EntityManager | DataSource = this.source,
   ): Promise<AppRelease> {
-    const [row] = await db.query(
-      'SELECT r.definition,a.kind FROM application_releases r JOIN application_registry a ON a.app_id=r.app_id WHERE r.release_id=?',
-      [id],
-    )
+    const [row] = await db
+      .createQueryBuilder()
+      .select('r.definition,a.kind')
+      .from('application_releases', 'r')
+      .innerJoin('application_registry', 'a', 'a.app_id=r.app_id')
+      .where('r.release_id=:p0')
+      .setParameters({ p0: id })
+      .getRawMany()
     if (!row) {
-      throw new ApiError(404, 'APP_RELEASE_NOT_FOUND', '应用版本不存在')
+      throw ErrorCode.APP_RELEASE_NOT_FOUND('应用版本不存在')
     }
     return { ...json<AppRelease>(row.definition), kind: row.kind }
   }
@@ -167,10 +277,24 @@ export class ApplicationPlatform {
   }
 
   deploymentIssue(appId: string) {
-    return this.faults.get(appId) || this.options.deploymentIssues?.[appId] || null
+    return (
+      this.faults.get(appId) || this.options.deploymentIssues?.[appId] || null
+    )
   }
 
-  private installation(row: Record<string, unknown>): AppInstallation {
+  private installation(
+    row: Pick<
+      StoredApplicationInstallation,
+      | 'app_id' |
+      'release_id' |
+      'target_release_id' |
+      'generation' |
+      'status' |
+      'operation_id' |
+      'grants' |
+      'error'
+    > & { installed_version?: unknown },
+  ): AppInstallation {
     return {
       appId: String(row.app_id),
       releaseId: String(row.release_id),
@@ -192,9 +316,11 @@ export class ApplicationPlatform {
     await this.initialize()
     // Database publication is shared across API workers; a local invalidation alone is insufficient.
     const stamp = hash(
-      await this.source.query(
-        'SELECT app_id,release_id FROM application_releases WHERE published=1 ORDER BY app_id',
-      ),
+      await this.source.getRepository(ApplicationReleaseEntity).find({
+        select: { app_id: true, release_id: true },
+        where: { published: 1 },
+        order: { app_id: 'ASC' },
+      }),
     )
     if (stamp !== this.catalogStamp) {
       this.catalogStamp = stamp
@@ -202,7 +328,10 @@ export class ApplicationPlatform {
       this.bootstrapTimes.clear()
     }
     const existing = this.bootstraps.get(userId)
-    if (existing && Date.now() - (this.bootstrapTimes.get(userId) || 0) < 10_000) {
+    if (
+      existing &&
+      Date.now() - (this.bootstrapTimes.get(userId) || 0) < 10_000
+    ) {
       return existing
     }
     if (this.bootstraps.size >= 5000) {
@@ -221,37 +350,103 @@ export class ApplicationPlatform {
 
   private async ensureDefaults(userId: string) {
     // INSERT IGNORE preserves revoked tombstones: visiting OS cannot reinstall a removed app.
-    const defaults = await this.source.query(
-      'SELECT r.definition,a.kind FROM application_releases r JOIN application_registry a ON a.app_id=r.app_id WHERE r.published=1 AND (a.kind=\'system\' OR JSON_EXTRACT(r.definition,\'$.defaultInstalled\')=true)',
-    )
+    const defaults = await this.source
+      .createQueryBuilder()
+      .select('r.definition,a.kind')
+      .from('application_releases', 'r')
+      .innerJoin('application_registry', 'a', 'a.app_id=r.app_id')
+      .where(
+        'r.published=1 AND (a.kind=\'system\' OR JSON_EXTRACT(r.definition,\'$.defaultInstalled\')=true)',
+      )
+      .getRawMany()
     for (const published of defaults) {
       const r = json<AppRelease>(published.definition)
       try {
         if (published.kind === 'system') {
-          await this.source.query(
-            'UPDATE application_installations SET status=\'installing\',generation=generation+1 WHERE user_id=? AND app_id=? AND status=\'revoked\' AND operation_id IS NULL',
-            [userId, r.appId],
+          await this.source.getRepository(ApplicationInstallationEntity).update(
+            {
+              user_id: userId,
+              app_id: r.appId,
+              status: 'revoked',
+              operation_id: IsNull(),
+            },
+            { status: 'installing', generation: () => 'generation+1' },
           )
         }
-        await this.source.query(
-          `INSERT IGNORE INTO application_installations(user_id,app_id,release_id,status,grants) VALUES(?,?,?,'installing',?)`,
-          [userId, r.appId, r.releaseId, JSON.stringify(r.permissions)],
-        )
-        const [row] = await this.source.query(
-          'SELECT *,(retry_at IS NULL OR retry_at<=UTC_TIMESTAMP(3)) AS retry_ready FROM application_installations WHERE user_id=? AND app_id=?',
-          [userId, r.appId],
-        )
-        if (row?.status === 'active' && !row.operation_id && r.runtime.type === 'web' && this.options.shellMigrations?.includes(r.appId)) {
+        await this.source
+          .createQueryBuilder()
+          .insert()
+          .into('application_installations')
+          .values({
+            user_id: userId,
+            app_id: r.appId,
+            release_id: r.releaseId,
+            status: 'installing',
+            grants: () => ':p3',
+          })
+          .updateEntity(false)
+          .orIgnore()
+          .setParameters({ p3: JSON.stringify(r.permissions) })
+          .execute()
+        const [row] = await this.source
+          .createQueryBuilder()
+          .select(
+            'user_id,app_id,release_id,target_release_id,generation,status,grants,operation_id,updated_at,error,retry_attempts,retry_at,(retry_at IS NULL OR retry_at<=UTC_TIMESTAMP(3)) AS retry_ready',
+          )
+          .from('application_installations', 'application_installations')
+          .where('user_id=:p0 AND app_id=:p1')
+          .setParameters({ p0: userId, p1: r.appId })
+          .getRawMany()
+        if (
+          row?.status === 'active' &&
+          !row.operation_id &&
+          r.runtime.type === 'web' &&
+          this.options.shellMigrations?.includes(r.appId)
+        ) {
           const installed = await this.release(row.release_id)
           if (installed.runtime.type === 'shell') {
             await this.source.transaction(async (db) => {
-              await db.query('SELECT id FROM app_users WHERE id=? FOR UPDATE', [userId])
-              await db.query('UPDATE application_installations SET release_id=?,generation=generation+1,grants=?,error=NULL WHERE user_id=? AND app_id=? AND release_id=? AND status=\'active\' AND operation_id IS NULL', [r.releaseId, JSON.stringify(r.permissions), userId, r.appId, row.release_id])
+              await db
+                .getRepository(AppUserEntity)
+                .find({
+                  select: { id: true },
+                  where: { id: userId },
+                  lock: { mode: 'pessimistic_write' },
+                })
+                .then((rows) => rows.map((row) => ({ id: row.id })))
+              await db.getRepository(ApplicationInstallationEntity).update(
+                {
+                  user_id: userId,
+                  app_id: r.appId,
+                  release_id: row.release_id,
+                  status: 'active',
+                  operation_id: IsNull(),
+                },
+                {
+                  release_id: r.releaseId,
+                  generation: () => 'generation+1',
+                  grants: r.permissions,
+                  error: null,
+                },
+              )
             })
           }
         }
-        if (published.kind === 'system' && row?.status === 'failed' && Number(row.retry_attempts) < 5 && Number(row.retry_ready)) {
-          await this.source.query('UPDATE application_installations SET status=\'installing\',generation=generation+1 WHERE user_id=? AND app_id=? AND status=\'failed\' AND operation_id IS NULL', [userId, r.appId])
+        if (
+          published.kind === 'system' &&
+          row?.status === 'failed' &&
+          Number(row.retry_attempts) < 5 &&
+          Number(row.retry_ready)
+        ) {
+          await this.source.getRepository(ApplicationInstallationEntity).update(
+            {
+              user_id: userId,
+              app_id: r.appId,
+              status: 'failed',
+              operation_id: IsNull(),
+            },
+            { status: 'installing', generation: () => 'generation+1' },
+          )
           row.status = 'installing'
           row.generation = Number(row.generation) + 1
         }
@@ -271,26 +466,75 @@ export class ApplicationPlatform {
         if (!(error instanceof ApiError)) {
           throw error
         }
-        await this.source.query('UPDATE application_installations SET error=? WHERE user_id=? AND app_id=?', [error.message.slice(0, 300), userId, r.appId])
+        await this.source
+          .getRepository(ApplicationInstallationEntity)
+          .update(
+            { user_id: userId, app_id: r.appId },
+            { error: error.message.slice(0, 300) },
+          )
       }
     }
   }
 
   async catalog(userId: string): Promise<MarketEntry[]> {
     await this.bootstrap(userId)
-    const rows = await this.source.query(
-      `SELECT r.definition,a.kind,i.*,JSON_UNQUOTE(JSON_EXTRACT(installed.definition,'$.manifest.version')) AS installed_version,r.release_notes AS latest_release_notes,JSON_EXTRACT(installed.definition,'$.updatePrompt') AS installed_update_prompt FROM application_releases r JOIN application_registry a ON a.app_id=r.app_id LEFT JOIN application_installations i ON i.app_id=r.app_id AND i.user_id=? LEFT JOIN application_releases installed ON installed.release_id=i.release_id WHERE r.published=1 ORDER BY r.created_at,r.app_id`,
-      [userId],
-    )
-    return rows.map((r: Record<string, unknown>) => ({
+    const rows = await this.source
+      .createQueryBuilder()
+      .select(
+        'r.definition,a.kind,i.user_id,i.app_id,i.release_id,i.target_release_id,i.generation,i.status,i.grants,i.operation_id,i.error,JSON_UNQUOTE(JSON_EXTRACT(installed.definition,\'$.manifest.version\')) AS installed_version,r.release_notes AS latest_release_notes,JSON_EXTRACT(installed.definition,\'$.updatePrompt\') AS installed_update_prompt',
+      )
+      .from('application_releases', 'r')
+      .innerJoin('application_registry', 'a', 'a.app_id=r.app_id')
+      .leftJoin(
+        'application_installations',
+        'i',
+        'i.app_id=r.app_id AND i.user_id=:p0',
+      )
+      .leftJoin(
+        'application_releases',
+        'installed',
+        'installed.release_id=i.release_id',
+      )
+      .where('r.published=1')
+      .orderBy('r.created_at', 'ASC')
+      .addOrderBy('r.app_id', 'ASC')
+      .setParameters({ p0: userId })
+      .getRawMany<
+        Pick<
+          StoredApplicationInstallation,
+          | 'user_id' |
+          'app_id' |
+          'release_id' |
+          'target_release_id' |
+          'generation' |
+          'status' |
+          'grants' |
+          'operation_id' |
+          'error'
+        > & {
+          definition: AppRelease | string
+          kind: AppRelease['kind']
+          installed_version: string | null
+          latest_release_notes: string
+          installed_update_prompt: string | null
+        }
+    >()
+    return rows.map((r) => ({
       release: {
         ...json<AppRelease>(r.definition as string),
         kind: r.kind as AppRelease['kind'],
       },
       releaseNotes: String(r.latest_release_notes || ''),
-      ...(r.installed_update_prompt ? { installedUpdatePrompt: json(r.installed_update_prompt as string) } : {}),
+      ...(r.installed_update_prompt
+        ? {
+            installedUpdatePrompt: json<
+              NonNullable<MarketEntry['installedUpdatePrompt']>
+            >(r.installed_update_prompt as string),
+          }
+        : {}),
       installation: r.user_id ? this.installation(r) : null,
-      issue: r.status === 'active' ? null : this.deploymentIssue(String(r.app_id)),
+      issue:
+        r.status === 'active' ? null : this.deploymentIssue(String(r.app_id)),
     }))
   }
 
@@ -311,12 +555,37 @@ export class ApplicationPlatform {
 
   async repair(userId: string, appId: string) {
     await this.initialize()
-    const [releaseRow] = await this.source.query('SELECT definition FROM application_releases WHERE app_id=? AND published=1', [appId])
+    const releaseRow = await this.source
+      .getRepository(ApplicationReleaseEntity)
+      .findOne({
+        select: { definition: true },
+        where: { app_id: appId, published: 1 },
+      })
     if (!releaseRow) {
-      throw new ApiError(503, 'APP_DEPLOYMENT_UNAVAILABLE', this.deploymentIssue(appId) || '应用版本尚未部署')
+      throw ErrorCode.APP_DEPLOYMENT_UNAVAILABLE(
+        this.deploymentIssue(appId) || '应用版本尚未部署',
+      )
     }
     const release = json<AppRelease>(releaseRow.definition)
-    const [row] = await this.source.query('SELECT * FROM application_installations WHERE user_id=? AND app_id=?', [userId, appId])
+    const row = await this.source
+      .getRepository(ApplicationInstallationEntity)
+      .findOne({
+        select: {
+          user_id: true,
+          app_id: true,
+          release_id: true,
+          target_release_id: true,
+          generation: true,
+          status: true,
+          grants: true,
+          operation_id: true,
+          updated_at: true,
+          error: true,
+          retry_attempts: true,
+          retry_at: true,
+        },
+        where: { user_id: userId, app_id: appId },
+      })
     if (row?.status === 'active' && !row.operation_id) {
       return { status: 'completed' }
     }
@@ -325,9 +594,17 @@ export class ApplicationPlatform {
       return this.operation(userId, row.operation_id)
     }
     if ((!row || row.status === 'revoked') && release.kind !== 'system') {
-      throw new ApiError(403, 'APP_NOT_INSTALLED', '请先在市场安装此应用')
+      throw ErrorCode.APP_NOT_INSTALLED()
     }
-    const result = await this.change(userId, appId, 'install', release.releaseId, randomUUID(), release.permissions, { background: release.backend.type === 'remote' })
+    const result = await this.change(
+      userId,
+      appId,
+      'install',
+      release.releaseId,
+      randomUUID(),
+      release.permissions,
+      { background: release.backend.type === 'remote' },
+    )
     this.bootstraps.delete(userId)
     return result
   }
@@ -338,12 +615,27 @@ export class ApplicationPlatform {
     expected?: { releaseId: string, generation: number },
   ) {
     await this.bootstrap(userId)
-    const [row] = await this.source.query(
-      'SELECT * FROM application_installations WHERE user_id=? AND app_id=?',
-      [userId, appId],
-    )
+    const row = await this.source
+      .getRepository(ApplicationInstallationEntity)
+      .findOne({
+        select: {
+          user_id: true,
+          app_id: true,
+          release_id: true,
+          target_release_id: true,
+          generation: true,
+          status: true,
+          grants: true,
+          operation_id: true,
+          updated_at: true,
+          error: true,
+          retry_attempts: true,
+          retry_at: true,
+        },
+        where: { user_id: userId, app_id: appId },
+      })
     if (!row || row.status !== 'active') {
-      throw new ApiError(403, 'APP_NOT_INSTALLED', '请先在应用市场安装此应用')
+      throw ErrorCode.APP_NOT_INSTALLED('请先在应用市场安装此应用')
     }
     const installation = this.installation(row)
     if (
@@ -351,9 +643,7 @@ export class ApplicationPlatform {
       (expected.releaseId !== installation.releaseId ||
         expected.generation !== installation.generation)
     ) {
-      throw new ApiError(
-        409,
-        'APP_RUNTIME_EXPIRED',
+      throw ErrorCode.APP_RUNTIME_EXPIRED(
         '应用版本或安装状态已改变，请重新打开',
       )
     }
@@ -363,11 +653,7 @@ export class ApplicationPlatform {
         (permission) => !installation.grants.includes(permission),
       )
     ) {
-      throw new ApiError(
-        403,
-        'APP_PERMISSION_REVOKED',
-        '应用权限已撤销，请重新确认安装权限',
-      )
+      throw ErrorCode.APP_PERMISSION_REVOKED()
     }
     return { installation, release }
   }
@@ -383,99 +669,130 @@ export class ApplicationPlatform {
   ) {
     await this.initialize()
     if (!/^[\w-]{1,80}$/.test(key)) {
-      throw new ApiError(400, 'INVALID_REQUEST_KEY', '操作标识无效')
+      throw ErrorCode.INVALID_REQUEST_KEY()
     }
     const requestHash = hash({ action, releaseId, grants: [...grants].sort() })
     const op = await this.source.transaction(async (db) => {
-      await db.query('SELECT id FROM app_users WHERE id=? FOR UPDATE', [
-        userId,
-      ])
-      const [existing] = await db.query(
-        'SELECT * FROM application_lifecycle_operations WHERE user_id=? AND app_id=? AND request_key=?',
-        [userId, appId, key],
-      )
+      await db
+        .getRepository(AppUserEntity)
+        .find({
+          select: { id: true },
+          where: { id: userId },
+          lock: { mode: 'pessimistic_write' },
+        })
+        .then((rows) => rows.map((row) => ({ id: row.id })))
+      const existing = await db
+        .getRepository(ApplicationLifecycleOperationEntity)
+        .findOne({
+          select: {
+            id: true,
+            user_id: true,
+            app_id: true,
+            request_key: true,
+            request_hash: true,
+            release_id: true,
+            generation: true,
+            action: true,
+            status: true,
+            submitted: true,
+            attempts: true,
+            lease_token: true,
+            lease_until: true,
+            next_attempt_at: true,
+            receipt: true,
+            error: true,
+            created_at: true,
+            updated_at: true,
+          },
+          where: { user_id: userId, app_id: appId, request_key: key },
+        })
       if (existing) {
         if (existing.request_hash !== requestHash) {
-          throw new ApiError(
-            409,
-            'APP_REQUEST_CONFLICT',
-            '操作标识已被其他请求使用',
-          )
+          throw ErrorCode.APP_REQUEST_CONFLICT()
         }
         return existing as Operation
       }
-      const [row] = await db.query(
-        'SELECT * FROM application_installations WHERE user_id=? AND app_id=? FOR UPDATE',
-        [userId, appId],
-      )
+      const row = await db
+        .getRepository(ApplicationInstallationEntity)
+        .findOne({
+          select: {
+            user_id: true,
+            app_id: true,
+            release_id: true,
+            target_release_id: true,
+            generation: true,
+            status: true,
+            grants: true,
+            operation_id: true,
+            updated_at: true,
+            error: true,
+            retry_attempts: true,
+            retry_at: true,
+          },
+          where: { user_id: userId, app_id: appId },
+          lock: { mode: 'pessimistic_write' },
+        })
       if (row?.operation_id) {
-        throw new ApiError(
-          409,
-          'APP_OPERATION_PENDING',
-          '此应用有操作正在处理',
-        )
+        throw ErrorCode.APP_OPERATION_PENDING()
       }
       const target = await this.release(
         action === 'uninstall' && row ? row.release_id : releaseId,
         db,
       )
       if (target.appId !== appId) {
-        throw new ApiError(400, 'APP_RELEASE_MISMATCH', '应用版本不匹配')
+        throw ErrorCode.APP_RELEASE_MISMATCH()
       }
       if (action === 'uninstall' && target.kind === 'system') {
-        throw new ApiError(403, 'SYSTEM_APP_REQUIRED', '系统应用不能卸载')
+        throw ErrorCode.SYSTEM_APP_REQUIRED()
       }
       if (action === 'uninstall' && (!row || row.status === 'revoked')) {
-        throw new ApiError(409, 'APP_ALREADY_REMOVED', '应用已经卸载')
+        throw ErrorCode.APP_ALREADY_REMOVED()
       }
       if (action === 'update' && row?.status !== 'active') {
-        throw new ApiError(409, 'APP_NOT_INSTALLED', '请先安装应用')
+        throw ErrorCode.APP_NOT_INSTALLED.conflict()
       }
       if (action === 'install' && row?.status === 'active') {
-        throw new ApiError(409, 'APP_ALREADY_INSTALLED', '应用已经安装')
+        throw ErrorCode.APP_ALREADY_INSTALLED()
       }
       if (action !== 'uninstall') {
-        const [pub] = await db.query(
-          'SELECT published FROM application_releases WHERE release_id=?',
-          [target.releaseId],
-        )
+        const pub = await db.getRepository(ApplicationReleaseEntity).findOne({
+          select: { published: true },
+          where: { release_id: target.releaseId },
+        })
         if (!pub?.published) {
-          throw new ApiError(409, 'APP_RELEASE_UNPUBLISHED', '应用版本已下架')
+          throw ErrorCode.APP_RELEASE_UNPUBLISHED()
         }
         if (
           target.permissions.some((p) => !grants.includes(p)) ||
           grants.some((p) => !target.permissions.includes(p))
         ) {
-          throw new ApiError(
-            400,
-            'APP_PERMISSION_REQUIRED',
-            '请确认此版本的应用权限',
-          )
+          throw ErrorCode.APP_PERMISSION_REQUIRED()
         }
       }
       const id = randomUUID()
       const generation =
         Number(row?.generation || 0) +
         (action === 'install' && row?.status !== 'installing' ? 1 : 0) || 1
-      await db.query(
-        `INSERT INTO application_lifecycle_operations(id,user_id,app_id,request_key,request_hash,release_id,generation,action,created_at,updated_at,next_attempt_at) VALUES(?,?,?,?,?,?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
-        [
-          id,
-          userId,
-          appId,
-          key,
-          requestHash,
-          target.releaseId,
-          generation,
-          action,
-        ],
-      )
+      await db.getRepository(ApplicationLifecycleOperationEntity).insert({
+        id,
+        user_id: userId,
+        app_id: appId,
+        request_key: key,
+        request_hash: requestHash,
+        release_id: target.releaseId,
+        generation,
+        action,
+        created_at: () => 'UTC_TIMESTAMP(3)',
+        updated_at: () => 'UTC_TIMESTAMP(3)',
+        next_attempt_at: () => 'UTC_TIMESTAMP(3)',
+      })
       const status =
         action === 'uninstall'
           ? 'revoked'
           : action === 'update'
             ? 'active'
             : 'installing'
+      // native-sql: atomic counter, cooldown or permission merge; preserve existing-row expressions
       await db.query(
         `INSERT INTO application_installations(user_id,app_id,release_id,target_release_id,generation,status,grants,operation_id) VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE target_release_id=VALUES(target_release_id),generation=VALUES(generation),status=VALUES(status),grants=IF(VALUES(status)='revoked',JSON_ARRAY(),grants),operation_id=VALUES(operation_id),updated_at=UTC_TIMESTAMP(3)`,
         [
@@ -489,10 +806,31 @@ export class ApplicationPlatform {
           id,
         ],
       )
-      const [created] = await db.query(
-        'SELECT * FROM application_lifecycle_operations WHERE id=?',
-        [id],
-      )
+      const created = await db
+        .getRepository(ApplicationLifecycleOperationEntity)
+        .findOne({
+          select: {
+            id: true,
+            user_id: true,
+            app_id: true,
+            request_key: true,
+            request_hash: true,
+            release_id: true,
+            generation: true,
+            action: true,
+            status: true,
+            submitted: true,
+            attempts: true,
+            lease_token: true,
+            lease_until: true,
+            next_attempt_at: true,
+            receipt: true,
+            error: true,
+            created_at: true,
+            updated_at: true,
+          },
+          where: { id },
+        })
       return created as Operation
     })
     if (options.background) {
@@ -504,12 +842,21 @@ export class ApplicationPlatform {
   }
 
   async operation(userId: string, id: string) {
-    const [op] = await this.source.query(
-      'SELECT id,app_id,action,status,receipt,error FROM application_lifecycle_operations WHERE id=? AND user_id=?',
-      [id, userId],
-    )
+    const op = await this.source
+      .getRepository(ApplicationLifecycleOperationEntity)
+      .findOne({
+        select: {
+          id: true,
+          app_id: true,
+          action: true,
+          status: true,
+          receipt: true,
+          error: true,
+        },
+        where: { id, user_id: userId },
+      })
     if (!op) {
-      throw new ApiError(404, 'APP_OPERATION_NOT_FOUND', '应用操作不存在')
+      throw ErrorCode.APP_OPERATION_NOT_FOUND()
     }
     return {
       id: op.id,
@@ -524,15 +871,32 @@ export class ApplicationPlatform {
   async recover() {
     await this.initialize()
     const bindings = [...this.backends.keys()]
-    const owned = bindings.length ? `JSON_UNQUOTE(JSON_EXTRACT(r.definition,'$.backend.binding')) IN (${bindings.map(() => '?').join(',')})` : '0=1'
-    const rows = await this.source.query(
-      `SELECT o.id,o.release_id FROM application_lifecycle_operations o JOIN application_releases r ON r.release_id=o.release_id WHERE o.status IN ('queued','pending') AND o.next_attempt_at<=UTC_TIMESTAMP(3) AND (o.lease_until IS NULL OR o.lease_until<UTC_TIMESTAMP(3)) AND (JSON_UNQUOTE(JSON_EXTRACT(r.definition,'$.backend.type'))='none' OR ${owned}) ORDER BY o.created_at LIMIT 20`,
-      bindings,
-    )
+    const noBackend =
+      'JSON_UNQUOTE(JSON_EXTRACT(r.definition,\'$.backend.type\'))=\'none\''
+    const rows = await this.source
+      .createQueryBuilder()
+      .select('o.id,o.release_id')
+      .from('application_lifecycle_operations', 'o')
+      .innerJoin('application_releases', 'r', 'r.release_id=o.release_id')
+      .where(
+        'o.status IN (\'queued\',\'pending\') AND o.next_attempt_at<=UTC_TIMESTAMP(3) AND (o.lease_until IS NULL OR o.lease_until<UTC_TIMESTAMP(3))',
+      )
+      .andWhere(
+        bindings.length
+          ? `(${noBackend} OR JSON_UNQUOTE(JSON_EXTRACT(r.definition,'$.backend.binding')) IN (:...bindings))`
+          : noBackend,
+        { bindings },
+      )
+      .orderBy('o.created_at', 'ASC')
+      .limit(20)
+      .getRawMany()
     for (const row of rows) {
       try {
         const release = await this.release(row.release_id)
-        if (release.backend.type !== 'none' && !this.backends.has(release.backend.binding)) {
+        if (
+          release.backend.type !== 'none' &&
+          !this.backends.has(release.backend.binding)
+        ) {
           continue
         }
         await this.process(row.id)
@@ -540,10 +904,29 @@ export class ApplicationPlatform {
         if (!(error instanceof ApiError)) {
           throw error
         }
-        await this.source.query('UPDATE application_lifecycle_operations SET error=?,next_attempt_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 600 SECOND) WHERE id=?', [error.message.slice(0, 300), row.id])
+        await this.source
+          .getRepository(ApplicationLifecycleOperationEntity)
+          .update(
+            { id: row.id },
+            {
+              error: error.message.slice(0, 300),
+              next_attempt_at: () =>
+                'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 600 SECOND)',
+            },
+          )
       }
     }
-    const failed = await this.source.query('SELECT i.user_id,i.app_id FROM application_installations i JOIN application_registry a ON a.app_id=i.app_id WHERE a.kind=\'system\' AND i.status=\'failed\' AND i.operation_id IS NULL AND i.retry_attempts<5 AND (i.retry_at IS NULL OR i.retry_at<=UTC_TIMESTAMP(3)) ORDER BY i.retry_at LIMIT 20')
+    const failed = await this.source
+      .createQueryBuilder()
+      .select('i.user_id,i.app_id')
+      .from('application_installations', 'i')
+      .innerJoin('application_registry', 'a', 'a.app_id=i.app_id')
+      .where(
+        'a.kind=\'system\' AND i.status=\'failed\' AND i.operation_id IS NULL AND i.retry_attempts<5 AND (i.retry_at IS NULL OR i.retry_at<=UTC_TIMESTAMP(3))',
+      )
+      .orderBy('i.retry_at', 'ASC')
+      .limit(20)
+      .getRawMany()
     for (const row of failed) {
       try {
         await this.repair(row.user_id, row.app_id)
@@ -557,17 +940,48 @@ export class ApplicationPlatform {
 
   private async process(id: string) {
     const token = randomUUID()
-    const claim = await this.source.query(
-      `UPDATE application_lifecycle_operations SET lease_token=?,lease_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 SECOND),attempts=attempts+1 WHERE id=? AND status IN ('queued','pending') AND (lease_until IS NULL OR lease_until<UTC_TIMESTAMP(3))`,
-      [token, id],
-    )
-    if (!claim.affectedRows) {
+    const claim = await this.source
+      .createQueryBuilder()
+      .update('application_lifecycle_operations')
+      .set({
+        lease_token: token,
+        lease_until: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 SECOND)',
+        attempts: () => 'attempts+1',
+      })
+      .updateEntity(false)
+      .where(
+        'id=:p1 AND status IN (\'queued\',\'pending\') AND (lease_until IS NULL OR lease_until<UTC_TIMESTAMP(3))',
+      )
+      .setParameters({ p1: id })
+      .execute()
+    if (!claim.affected) {
       return
     }
-    const [op]: Operation[] = await this.source.query(
-      'SELECT * FROM application_lifecycle_operations WHERE id=?',
-      [id],
-    )
+    const op = await this.source
+      .getRepository(ApplicationLifecycleOperationEntity)
+      .findOne({
+        select: {
+          id: true,
+          user_id: true,
+          app_id: true,
+          request_key: true,
+          request_hash: true,
+          release_id: true,
+          generation: true,
+          action: true,
+          status: true,
+          submitted: true,
+          attempts: true,
+          lease_token: true,
+          lease_until: true,
+          next_attempt_at: true,
+          receipt: true,
+          error: true,
+          created_at: true,
+          updated_at: true,
+        },
+        where: { id },
+      })
     if (!op) {
       return
     }
@@ -593,10 +1007,9 @@ export class ApplicationPlatform {
             ? await backend!.operation(request)
             : null
       if (!result) {
-        await this.source.query(
-          'UPDATE application_lifecycle_operations SET submitted=1 WHERE id=? AND lease_token=?',
-          [id, token],
-        )
+        await this.source
+          .getRepository(ApplicationLifecycleOperationEntity)
+          .update({ id, lease_token: token }, { submitted: 1 })
         result = backend
           ? await backend.lifecycle(request)
           : { status: 'completed', receipt: {} }
@@ -607,17 +1020,36 @@ export class ApplicationPlatform {
       }
       await this.source.transaction(async (db) => {
         // Generation + operation fence prevents a stale worker from activating a reinstalled application.
-        const [locked] = await db.query(
-          'SELECT lease_token FROM application_lifecycle_operations WHERE id=? FOR UPDATE',
-          [id],
-        )
+        const locked = await db
+          .getRepository(ApplicationLifecycleOperationEntity)
+          .findOne({
+            select: { id: true, lease_token: true },
+            where: { id },
+            lock: { mode: 'pessimistic_write' },
+          })
         if (locked?.lease_token !== token) {
           return
         }
-        const [current] = await db.query(
-          'SELECT * FROM application_installations WHERE user_id=? AND app_id=? FOR UPDATE',
-          [op.user_id, op.app_id],
-        )
+        const current = await db
+          .getRepository(ApplicationInstallationEntity)
+          .findOne({
+            select: {
+              user_id: true,
+              app_id: true,
+              release_id: true,
+              target_release_id: true,
+              generation: true,
+              status: true,
+              grants: true,
+              operation_id: true,
+              updated_at: true,
+              error: true,
+              retry_attempts: true,
+              retry_at: true,
+            },
+            where: { user_id: op.user_id, app_id: op.app_id },
+            lock: { mode: 'pessimistic_write' },
+          })
         if (
           current?.operation_id !== id ||
           Number(current.generation) !== Number(op.generation)
@@ -626,41 +1058,62 @@ export class ApplicationPlatform {
         }
         const ok = result!.status === 'completed'
         if (ok && op.action !== 'uninstall') {
-          await db.query(
-            `UPDATE application_installations SET release_id=?,status='active',grants=?,target_release_id=NULL,operation_id=NULL,updated_at=UTC_TIMESTAMP(3) WHERE user_id=? AND app_id=?`,
-            [
-              release.releaseId,
-              JSON.stringify(release.permissions),
-              op.user_id,
-              op.app_id,
-            ],
+          await db.getRepository(ApplicationInstallationEntity).update(
+            { user_id: op.user_id, app_id: op.app_id },
+            {
+              release_id: release.releaseId,
+              status: 'active',
+              grants: release.permissions,
+              target_release_id: null,
+              operation_id: null,
+              updated_at: () => 'UTC_TIMESTAMP(3)',
+            },
           )
         } else {
-          await db.query(
-            `UPDATE application_installations SET status=?,target_release_id=NULL,operation_id=NULL,updated_at=UTC_TIMESTAMP(3) WHERE user_id=? AND app_id=?`,
-            [
-              op.action === 'uninstall'
-                ? 'revoked'
-                : op.action === 'update'
-                  ? 'active'
-                  : 'failed',
-              op.user_id,
-              op.app_id,
-            ],
+          await db.getRepository(ApplicationInstallationEntity).update(
+            { user_id: op.user_id, app_id: op.app_id },
+            {
+              status:
+                op.action === 'uninstall'
+                  ? 'revoked'
+                  : op.action === 'update'
+                    ? 'active'
+                    : 'failed',
+              target_release_id: null,
+              operation_id: null,
+              updated_at: () => 'UTC_TIMESTAMP(3)',
+            },
           )
         }
-        await db.query('UPDATE application_installations SET error=?,retry_at=IF(?,NULL,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL LEAST(600,10*POW(2,LEAST(6,retry_attempts))) SECOND)),retry_attempts=IF(?,0,retry_attempts+1) WHERE user_id=? AND app_id=?', [ok ? null : result!.status === 'rejected' ? result!.message.slice(0, 300) : '安装失败', ok, ok, op.user_id, op.app_id])
-        await db.query(
-          `UPDATE application_lifecycle_operations SET status=?,receipt=?,error=?,lease_token=NULL,lease_until=NULL,updated_at=UTC_TIMESTAMP(3) WHERE id=? AND lease_token=?`,
-          [
-            ok ? 'completed' : 'failed',
-            ok
-              ? JSON.stringify((result as { receipt: unknown }).receipt)
+        await db
+          .createQueryBuilder()
+          .update('application_installations')
+          .set({
+            error: ok
+              ? null
+              : result!.status === 'rejected'
+                ? result!.message.slice(0, 300)
+                : '安装失败',
+            retry_at: () =>
+              'IF(:p1,NULL,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL LEAST(600,10*POW(2,LEAST(6,retry_attempts))) SECOND))',
+            retry_attempts: () => 'IF(:p2,0,retry_attempts+1)',
+          })
+          .updateEntity(false)
+          .where('user_id=:p3 AND app_id=:p4')
+          .setParameters({ p1: ok, p2: ok, p3: op.user_id, p4: op.app_id })
+          .execute()
+        await db.getRepository(ApplicationLifecycleOperationEntity).update(
+          { id, lease_token: token },
+          {
+            status: ok ? 'completed' : 'failed',
+            receipt: ok
+              ? jsonDocument((result as { receipt: unknown }).receipt)
               : null,
-            result!.status === 'rejected' ? result!.message : null,
-            id,
-            token,
-          ],
+            error: result!.status === 'rejected' ? result!.message : null,
+            lease_token: null,
+            lease_until: null,
+            updated_at: () => 'UTC_TIMESTAMP(3)',
+          },
         )
       })
     } catch {
@@ -669,11 +1122,31 @@ export class ApplicationPlatform {
   }
 
   private async retry(id: string, token: string) {
-    await this.source.query(
-      `UPDATE application_lifecycle_operations SET status='pending',lease_token=NULL,lease_until=NULL,next_attempt_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL LEAST(600,10*POW(2,LEAST(6,attempts-1))) SECOND),error='应用服务尚未确认结果，正在核对',updated_at=UTC_TIMESTAMP(3) WHERE id=? AND lease_token=?`,
-      [id, token],
-    )
-    await this.source.query('UPDATE application_installations SET error=\'应用服务尚未确认结果，正在核对\' WHERE operation_id=?', [id])
+    await this.source.transaction(async (db) => {
+      const changed = await db
+        .getRepository(ApplicationLifecycleOperationEntity)
+        .update(
+          { id, lease_token: token },
+          {
+            status: 'pending',
+            lease_token: null,
+            lease_until: null,
+            next_attempt_at: () =>
+              'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL LEAST(600,10*POW(2,LEAST(6,GREATEST(CAST(attempts AS SIGNED)-1,0)))) SECOND)',
+            error: '应用服务尚未确认结果，正在核对',
+            updated_at: () => 'UTC_TIMESTAMP(3)',
+          },
+        )
+      if (!changed.affected) {
+        return
+      }
+      await db
+        .getRepository(ApplicationInstallationEntity)
+        .update(
+          { operation_id: id },
+          { error: '应用服务尚未确认结果，正在核对' },
+        )
+    })
   }
 
   subject(userId: string, appId: string) {
@@ -686,21 +1159,30 @@ export class ApplicationPlatform {
     platform: 'web' | 'android' | 'ios',
   ): Promise<RuntimeDescriptor> {
     const { installation, release } = await this.assertActive(userId, appId)
-    if (release.runtime.type === 'shell' && this.options.shellMigrations?.includes(appId) && this.deploymentIssue(appId)) {
-      throw new ApiError(503, 'APP_DEPLOYMENT_UNAVAILABLE', this.deploymentIssue(appId)!)
+    if (
+      release.runtime.type === 'shell' &&
+      this.options.shellMigrations?.includes(appId) &&
+      this.deploymentIssue(appId)
+    ) {
+      throw ErrorCode.APP_DEPLOYMENT_UNAVAILABLE(this.deploymentIssue(appId)!)
     }
-    if (!release.platforms.includes(platform) || release.runtime.type !== 'web') {
-      throw new ApiError(
-        409,
-        'APP_RUNTIME_UNSUPPORTED',
-        '应用不支持此运行环境',
-      )
+    if (
+      !release.platforms.includes(platform) ||
+      release.runtime.type !== 'web'
+    ) {
+      throw ErrorCode.APP_RUNTIME_UNSUPPORTED()
     }
-    if (process.env.NODE_ENV === 'production' || !release.runtime.integrity.endsWith('0'.repeat(64))) {
+    if (
+      process.env.NODE_ENV === 'production' ||
+      !release.runtime.integrity.endsWith('0'.repeat(64))
+    ) {
       try {
-        await new ApplicationArtifacts().verify(appId, release.runtime.integrity.slice(7))
+        await new ApplicationArtifacts().verify(
+          appId,
+          release.runtime.integrity.slice(7),
+        )
       } catch {
-        throw new ApiError(503, 'APP_ARTIFACT_UNAVAILABLE', '此应用资源暂不可用，请重试或联系管理员检查部署')
+        throw ErrorCode.APP_ARTIFACT_UNAVAILABLE()
       }
     }
     return {
@@ -724,11 +1206,7 @@ export class ApplicationPlatform {
   ): Promise<ApplicationContext> {
     const { installation, release } = await this.assertActive(userId, appId)
     if (!release.platforms.includes(platform)) {
-      throw new ApiError(
-        409,
-        'APP_RUNTIME_UNSUPPORTED',
-        '应用不支持此运行环境',
-      )
+      throw ErrorCode.APP_RUNTIME_UNSUPPORTED()
     }
     return {
       sdkVersion: APP_SDK_VERSION,
@@ -750,10 +1228,22 @@ export class ApplicationPlatform {
         'auth.session',
         'navigation.back',
         'navigation.open',
-        ...(installation.grants.includes('files') ? ['files.pick' as const, 'files.upload' as const, 'files.read' as const] : []),
-        ...(installation.grants.includes('api.request') ? ['api.request' as const] : []),
-        ...(installation.grants.includes('device.reminders') ? ['device.reminders' as const] : []),
-        ...(installation.grants.includes('resources.bindings') ? ['resources.bindings' as const] : []),
+        ...(installation.grants.includes('files')
+          ? [
+              'files.pick' as const,
+              'files.upload' as const,
+              'files.read' as const,
+            ]
+          : []),
+        ...(installation.grants.includes('api.request')
+          ? ['api.request' as const]
+          : []),
+        ...(installation.grants.includes('device.reminders')
+          ? ['device.reminders' as const]
+          : []),
+        ...(installation.grants.includes('resources.bindings')
+          ? ['resources.bindings' as const]
+          : []),
         ...(release.backend.type !== 'none' ? ['api.invoke' as const] : []),
         ...(installation.grants.includes('storage')
           ? [
@@ -782,11 +1272,11 @@ export class ApplicationPlatform {
       generation,
     })
     if (!installation.grants.includes(`${appId}.${method}`)) {
-      throw new ApiError(403, 'APP_PERMISSION_DENIED', '此应用没有该操作权限')
+      throw ErrorCode.APP_PERMISSION_DENIED()
     }
     const backend = this.backends.get(release.backend.binding)
     if (!backend) {
-      throw new ApiError(503, 'APP_BACKEND_UNAVAILABLE', '应用后端不可用')
+      throw ErrorCode.APP_BACKEND_UNAVAILABLE.unavailable()
     }
     return backend.invoke(
       {
@@ -803,31 +1293,82 @@ export class ApplicationPlatform {
     )
   }
 
-  async prepare(userId: string, input: { invocation: Omit<import('@t-box/app-contracts').BackendInvocation, 'subject'>, continuation?: string, response?: import('@t-box/app-contracts').BackendPreparation['response'] }, signal?: AbortSignal) {
+  async prepare(
+    userId: string,
+    input: {
+      invocation: Omit<
+        import('@t-box/app-contracts').BackendInvocation,
+        'subject'
+      >
+      continuation?: string
+      response?: import('@t-box/app-contracts').BackendPreparation['response']
+    },
+    signal?: AbortSignal,
+  ) {
     const invocation = input.invocation
-    const { installation, release } = await this.assertActive(userId, invocation.appId, invocation)
-    if (!installation.grants.includes(`${invocation.appId}.${invocation.method}`)) {
-      throw new ApiError(403, 'APP_PERMISSION_DENIED', '此应用没有该操作权限')
+    const { installation, release } = await this.assertActive(
+      userId,
+      invocation.appId,
+      invocation,
+    )
+    if (
+      !installation.grants.includes(`${invocation.appId}.${invocation.method}`)
+    ) {
+      throw ErrorCode.APP_PERMISSION_DENIED()
     }
     const backend = this.backends.get(release.backend.binding)
     if (!backend?.prepare) {
-      throw new ApiError(409, 'APP_PREPARATION_UNSUPPORTED', '应用后端未提供执行前交互协议')
+      throw ErrorCode.APP_PREPARATION_UNSUPPORTED()
     }
-    return backend.prepare({ ...input, invocation: { ...invocation, subject: this.subject(userId, invocation.appId) } }, signal)
+    return backend.prepare(
+      {
+        ...input,
+        invocation: {
+          ...invocation,
+          subject: this.subject(userId, invocation.appId),
+        },
+      },
+      signal,
+    )
   }
 
-  async events(userId: string, appId: string, input: { releaseId: string, generation: number, channel: string, cursor?: string, arguments?: unknown }, signal?: AbortSignal) {
-    const { installation, release } = await this.assertActive(userId, appId, input)
+  async events(
+    userId: string,
+    appId: string,
+    input: {
+      releaseId: string
+      generation: number
+      channel: string
+      cursor?: string
+      arguments?: unknown
+    },
+    signal?: AbortSignal,
+  ) {
+    const { installation, release } = await this.assertActive(
+      userId,
+      appId,
+      input,
+    )
     if (!installation.grants.includes(`events.${input.channel}`)) {
-      throw new ApiError(403, 'APP_PERMISSION_DENIED', '此应用没有该事件权限')
+      throw ErrorCode.APP_PERMISSION_DENIED('此应用没有该事件权限')
     }
     const backend = this.backends.get(release.backend.binding)
     if (!backend?.events) {
-      throw new ApiError(409, 'APP_EVENTS_UNSUPPORTED', '应用后端未提供此事件通道')
+      throw ErrorCode.APP_EVENTS_UNSUPPORTED()
     }
-    const result = await backend.events({ ...input, appId, subject: this.subject(userId, appId) }, signal)
-    if (!result || typeof result.cursor !== 'string' || result.cursor.length > 4096 || !Array.isArray(result.events) || result.events.length > 50 || JSON.stringify(result).length > 256_000) {
-      throw new ApiError(502, 'APP_PROTOCOL_INVALID', '应用事件协议无效')
+    const result = await backend.events(
+      { ...input, appId, subject: this.subject(userId, appId) },
+      signal,
+    )
+    if (
+      !result ||
+      typeof result.cursor !== 'string' ||
+      result.cursor.length > 4096 ||
+      !Array.isArray(result.events) ||
+      result.events.length > 50 ||
+      JSON.stringify(result).length > 256_000
+    ) {
+      throw ErrorCode.APP_PROTOCOL_INVALID()
     }
     await this.assertActive(userId, appId, input)
     return result

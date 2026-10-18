@@ -1,17 +1,20 @@
 import type { CustomerSupportConfiguration } from '@t-box/shared'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 export function parseSupportConfiguration(
   value: unknown,
 ): CustomerSupportConfiguration {
   const invalid = (message: string): never => {
-    throw new ApiError(400, 'INVALID_SUPPORT_CONFIG', message)
+    throw ErrorCode.INVALID_SUPPORT_CONFIG(message)
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     invalid('客服配置必须是对象')
   }
   const input = value as Record<string, unknown>
-  if (Object.keys(input).some((key) => !['enabled', 'qrCodeUrl'].includes(key))) {
+  if (
+    Object.keys(input).some((key) => !['enabled', 'qrCodeUrl'].includes(key))
+  ) {
     invalid('客服配置包含未支持字段')
   }
   if (typeof input.enabled !== 'boolean') {
@@ -24,7 +27,12 @@ export function parseSupportConfiguration(
   if (qrCodeUrl) {
     try {
       const url = new URL(qrCodeUrl)
-      if (url.protocol !== 'https:' || url.username || url.password || url.hash) {
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password ||
+        url.hash
+      ) {
         invalid('二维码图片请使用不带账号和锚点的 HTTPS 地址')
       }
     } catch (cause) {

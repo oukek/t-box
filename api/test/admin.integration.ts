@@ -333,11 +333,11 @@ try {
   assert.equal((await service.runtime('image'))?.model, 'image-test')
   assert.equal((await service.runtime('image'))?.prices.imagePrice, '0.350000')
   // Even direct/inconsistent database selections cannot cross the runtime purpose boundary.
-  await store.execute('UPDATE ai_settings SET model_id=? WHERE id=1', [
+  await pool.query('UPDATE ai_settings SET model_id=? WHERE id=1', [
     ids.imageModel!,
   ])
   await assert.rejects(service.runtime(), { code: 'MODEL_PURPOSE_MISMATCH' })
-  await store.execute('UPDATE ai_settings SET model_id=? WHERE id=1', [
+  await pool.query('UPDATE ai_settings SET model_id=? WHERE id=1', [
     ids.model!,
   ])
   assert.equal((await service.runtime())?.model, 'test-model')
@@ -565,27 +565,27 @@ try {
   )
 } finally {
   if (settingsChanged) {
-    await store.execute(
+    await pool.query(
       'UPDATE ai_settings SET model_id=?,image_model_id=? WHERE id=1',
       [original.modelId, original.imageModelId],
     )
   }
   if (ids.imageModel) {
-    await store.execute('DELETE FROM ai_models WHERE id=?', [ids.imageModel])
+    await pool.query('DELETE FROM ai_models WHERE id=?', [ids.imageModel])
   }
   if (ids.model) {
-    await store.execute('DELETE FROM ai_models WHERE id=?', [ids.model])
+    await pool.query('DELETE FROM ai_models WHERE id=?', [ids.model])
   }
   if (ids.provider) {
-    await store.execute('DELETE FROM ai_providers WHERE id=?', [ids.provider])
+    await pool.query('DELETE FROM ai_providers WHERE id=?', [ids.provider])
   }
   if (ids.secondAdmin) {
-    await store.execute('DELETE FROM admin_users WHERE id=?', [
+    await pool.query('DELETE FROM admin_users WHERE id=?', [
       ids.secondAdmin,
     ])
   }
   if (ids.admin) {
-    await store.execute('DELETE FROM admin_users WHERE id=?', [ids.admin])
+    await pool.query('DELETE FROM admin_users WHERE id=?', [ids.admin])
   }
   await app.close()
   remote.closeAllConnections()

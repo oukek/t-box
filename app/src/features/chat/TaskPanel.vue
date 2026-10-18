@@ -5,6 +5,7 @@ import { ref, watch } from 'vue'
 import { authorizeResources } from '../../applications/registry'
 import { navigateTab } from '../../core/navigation'
 import { request } from '../../core/network'
+import { ErrorCode } from '../../error-codes.js'
 import {
   chatBusy,
   chatState,
@@ -75,7 +76,7 @@ async function details(task: TaskSummary) {
   const detailRev = ++detailRevision
   try {
     if (task.unavailable) {
-      throw new Error('此任务涉及的应用资源已不可访问')
+      throw ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED()
     }
     if (
       !(await authorizeResources(task.protectedResources || [], '查看任务记录'))
@@ -119,7 +120,7 @@ async function resume() {
 async function showConversation(task: TaskSummary) {
   try {
     if (task.unavailable) {
-      throw new Error('此任务涉及的应用资源已不可访问')
+      throw ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED()
     }
     if (
       !(await authorizeResources(task.protectedResources || [], '打开任务会话'))

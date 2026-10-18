@@ -1,7 +1,11 @@
 import type { ConfigurationSnapshot } from '@t-box/shared'
-import type { ChatProvider, ProviderInput, ProviderItem } from '../chat/provider.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import type {
+  ChatProvider,
+  ProviderInput,
+  ProviderItem,
+} from '../chat/provider.js'
 import { platformDefinitions } from '../configuration/defaults.js'
+import { ErrorCode } from '../error-codes.js'
 import { DisclosureFilter } from './disclosure.js'
 import { secureInstructions, systemSecurityPolicy } from './policy.js'
 
@@ -20,26 +24,49 @@ export class ProtectedChatProvider implements ChatProvider {
   readonly configurationKey
   readonly contextPolicy
   readonly maxOutputTokens
-  constructor(private readonly inner: ChatProvider, private readonly configuration: ProtectedConfiguration) {
+  constructor(
+    private readonly inner: ChatProvider,
+    private readonly configuration: ProtectedConfiguration,
+  ) {
     this.mode = inner.mode
     this.configurationKey = inner.configurationKey
     this.contextPolicy = inner.contextPolicy
     this.maxOutputTokens = inner.maxOutputTokens
   }
 
-  private filter(input: { configuration?: ConfigurationSnapshot, confidentialInstructions?: string[] }) {
+  private filter(input: {
+    configuration?: ConfigurationSnapshot
+    confidentialInstructions?: string[]
+  }) {
     const config = this.configuration
     // Short remote model IDs (e.g. o3) still need protection; short display
     // labels are too ambiguous to treat as private substrings in ordinary text.
-    const identities = [config.model, ...[config.modelName, config.providerName, config.baseURL || ''].filter((value) => value.length >= 4)]
+    const identities = [
+      config.model,
+      ...[config.modelName, config.providerName, config.baseURL || ''].filter(
+        (value) => value.length >= 4,
+      ),
+    ]
     try {
       identities.push(new URL(config.baseURL!).hostname)
-    } catch { /* No configured endpoint. */ }
+    } catch {
+      /* No configured endpoint. */
+    }
     const values = (input.configuration ?? config.configuration)?.values || {}
     const prompts = platformDefinitions
       .filter((definition) => definition.key.startsWith('ai.prompt.'))
-      .map((definition) => String(values[definition.key] ?? definition.defaultValue))
-    return new DisclosureFilter([config.apiKey], [systemSecurityPolicy, ...prompts, ...(input.confidentialInstructions || [])], identities)
+      .map((definition) =>
+        String(values[definition.key] ?? definition.defaultValue),
+      )
+    return new DisclosureFilter(
+      [config.apiKey],
+      [
+        systemSecurityPolicy,
+        ...prompts,
+        ...(input.confidentialInstructions || []),
+      ],
+      identities,
+    )
   }
 
   private input(input: ProviderInput, filter: DisclosureFilter) {
@@ -76,22 +103,31 @@ export class ProtectedChatProvider implements ChatProvider {
       let args: unknown = call.arguments
       try {
         args = JSON.parse(call.arguments)
-      } catch { /* Ordinary dispatch reports malformed JSON. */ }
+      } catch {
+        /* Ordinary dispatch reports malformed JSON. */
+      }
       if (filter.contains(args) || filter.contains(call.name)) {
-        throw new ApiError(403, 'AI_DISCLOSURE_BLOCKED', '已阻止包含内部信息的工具调用，请调整请求后重试')
+        throw ErrorCode.AI_DISCLOSURE_BLOCKED()
       }
     }
     guarded.finish()
     return { ...turn, output: this.output(turn.output, filter) }
   }
 
-  private output(items: ProviderItem[], filter: DisclosureFilter): ProviderItem[] {
+  private output(
+    items: ProviderItem[],
+    filter: DisclosureFilter,
+  ): ProviderItem[] {
     return items.map((item) => {
       if (item.type === 'reasoning') {
         // Keep opaque provider state for continuity; no reasoning summary is public.
         return { ...item, summary: [] }
       }
-      if ('role' in item && item.role === 'assistant' && typeof item.content === 'string') {
+      if (
+        'role' in item &&
+        item.role === 'assistant' &&
+        typeof item.content === 'string'
+      ) {
         return { ...item, content: filter.mask(item.content) }
       }
       if (item.type === 'message' && Array.isArray(item.content)) {
@@ -114,15 +150,17 @@ export class ProtectedChatProvider implements ChatProvider {
 
   async summarize(input: ProviderInput) {
     if (!this.inner.summarize) {
-      throw new ApiError(409, 'SUMMARY_UNSUPPORTED', '服务商不支持摘要压缩')
+      throw ErrorCode.SUMMARY_UNSUPPORTED()
     }
     const filter = this.filter(input)
-    return filter.mask(await this.inner.summarize(this.input(input, filter).input))
+    return filter.mask(
+      await this.inner.summarize(this.input(input, filter).input),
+    )
   }
 
   async compact(input: ProviderInput) {
     if (!this.inner.compact) {
-      throw new ApiError(409, 'COMPACTION_DISABLED', '服务商不支持上下文压缩')
+      throw ErrorCode.COMPACTION_DISABLED()
     }
     // Native encrypted compaction items are private state; do not alter them.
     return this.inner.compact(this.input(input, this.filter(input)).input)
@@ -130,15 +168,22 @@ export class ProtectedChatProvider implements ChatProvider {
 
   async countInputTokens(input: ProviderInput) {
     if (!this.inner.countInputTokens) {
-      throw new ApiError(409, 'TOKEN_COUNT_UNSUPPORTED', '服务商不支持输入 token 计数')
+      throw ErrorCode.TOKEN_COUNT_UNSUPPORTED()
     }
-    return this.inner.countInputTokens(this.input(input, this.filter(input)).input)
+    return this.inner.countInputTokens(
+      this.input(input, this.filter(input)).input,
+    )
   }
 
   async title(input: Parameters<NonNullable<ChatProvider['title']>>[0]) {
     if (!this.inner.title) {
       return ''
     }
-    return this.filter(input).mask(await this.inner.title({ ...input, instructions: secureInstructions(input.instructions || '') }))
+    return this.filter(input).mask(
+      await this.inner.title({
+        ...input,
+        instructions: secureInstructions(input.instructions || ''),
+      }),
+    )
   }
 }

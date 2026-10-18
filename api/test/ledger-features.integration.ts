@@ -1,3 +1,4 @@
+import type { QueryRunner } from 'typeorm'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { chatContext } from '@t-box/ledger-server/ai/context'
@@ -17,7 +18,24 @@ import { fixtureOss } from './oss-fixture.js'
 
 const source = createDataSource()
 await source.initialize()
-const oss = fixtureOss()
+const activeRunners = new Set<QueryRunner>()
+const createRunner = source.createQueryRunner.bind(source)
+source.createQueryRunner = (...args) => {
+  const runner = createRunner(...args)
+  activeRunners.add(runner)
+  const release = runner.release.bind(runner)
+  runner.release = async () => {
+    try {
+      await release()
+    } finally {
+      activeRunners.delete(runner)
+    }
+  }
+  return runner
+}
+const oss = fixtureOss(() => {
+  assert.ok([...activeRunners].every((runner) => !runner.isTransactionActive), 'object uploads must not hold a database transaction')
+})
 const p = new PlatformService(source, undefined, undefined, undefined, undefined, oss.resources(source))
 const app = createApp({
   logger: { level: 'error' },

@@ -12,6 +12,7 @@ import AdminDialog from '../components/AdminDialog.vue'
 import AdminIcon from '../components/AdminIcon.vue'
 import AdminSelect from '../components/AdminSelect.vue'
 import { errorMessage, request, save } from '../core/api'
+import { ErrorCode } from '../error-codes.js'
 
 interface Artifact {
   digest: string
@@ -51,12 +52,24 @@ const form = reactive({
   iconVariant: 'image' as 'image' | 'calendar' | 'clock',
   color: 'blue',
   releaseNotes: '',
-  updatePrompt: { mode: 'default' as 'default' | 'custom', title: '', description: '', confirmText: '', deferText: '' },
+  updatePrompt: {
+    mode: 'default' as 'default' | 'custom',
+    title: '',
+    description: '',
+    confirmText: '',
+    deferText: '',
+  },
   artifact: '',
   runtime: 'web',
   revision: 1,
 })
-const iconOf = (entry?: ManagedRelease) => presentApplicationIcon({ id: entry?.release.appId || '', icon: entry?.release.manifest.icon || 'apps', iconAsset: entry?.release.manifest.iconAsset, iconVariant: entry?.release.manifest.iconVariant })
+const iconOf = (entry?: ManagedRelease) =>
+  presentApplicationIcon({
+    id: entry?.release.appId || '',
+    icon: entry?.release.manifest.icon || 'apps',
+    iconAsset: entry?.release.manifest.iconAsset,
+    iconVariant: entry?.release.manifest.iconVariant,
+  })
 async function uploadIcon(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -67,16 +80,25 @@ async function uploadIcon(event: Event) {
   dialogError.value = ''
   try {
     if (file.size > 128 * 1024) {
-      throw new Error('图标最大 128 KB')
+      throw ErrorCode.INTERNAL_128_KB()
     }
     const extension = file.name.split('.').pop()?.toLowerCase()
-    const mime = ({ svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' } as Record<string, string>)[extension || '']
+    const mime = (
+      {
+        svg: 'image/svg+xml',
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        webp: 'image/webp',
+        gif: 'image/gif',
+      } as Record<string, string>
+    )[extension || '']
     if (!mime) {
-      throw new Error('请选择 PNG、JPEG、WebP、GIF 或 SVG 图标')
+      throw ErrorCode.INTERNAL_PNG_JPEG_WEBP_GIF_SVG()
     }
     const data = `data:${mime};base64,${btoa(Array.from(new Uint8Array(await file.arrayBuffer()), (b) => String.fromCharCode(b)).join(''))}`
     if (!validApplicationIcon(data)) {
-      throw new Error('图标格式无效；SVG 仅支持静态矢量图形')
+      throw ErrorCode.INTERNAL_SVG()
     }
     form.iconAsset = data
     form.iconVariant = 'image'
@@ -171,7 +193,14 @@ async function edit(entry?: ManagedRelease, createApplication = false) {
     iconVariant: appearance?.iconVariant || 'image',
     color: r?.manifest.color || 'blue',
     releaseNotes: entry?.releaseNotes || '',
-    updatePrompt: { mode: 'default', title: '', description: '', confirmText: '', deferText: '', ...r?.updatePrompt },
+    updatePrompt: {
+      mode: 'default',
+      title: '',
+      description: '',
+      confirmText: '',
+      deferText: '',
+      ...r?.updatePrompt,
+    },
     artifact: r?.runtime.type === 'web' ? r.runtime.integrity.slice(7) : '',
     runtime: r?.runtime.type || 'web',
     revision: entry?.revision || 1,
@@ -195,7 +224,7 @@ async function upload(event: Event) {
       files.some((f) => f.size > 5 * 1024 * 1024) ||
       files.reduce((n, f) => n + f.size, 0) > 20 * 1024 * 1024
     ) {
-      throw new Error('最多 2000 个文件，单文件 5 MB，完整应用 20 MB')
+      throw ErrorCode.INTERNAL_2000_5_MB_20_MB()
     }
     const data = []
     for (const file of files) {
@@ -205,9 +234,9 @@ async function upload(event: Event) {
         : relative
       const content = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = () =>
-          resolve(String(reader.result).split(',')[1] || '')
-        reader.onerror = () => reject(new Error('读取构建文件失败'))
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+        reader.onerror = () =>
+          reject(ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED())
         reader.readAsDataURL(file)
       })
       data.push({ path, content })
@@ -236,13 +265,19 @@ async function submitDraft() {
           ? `/application-releases/${editing.value.release.releaseId}`
           : '/application-releases',
       editingMetadata.value
-        ? { revision: form.revision, releaseNotes: form.releaseNotes, updatePrompt: form.updatePrompt }
+        ? {
+            revision: form.revision,
+            releaseNotes: form.releaseNotes,
+            updatePrompt: form.updatePrompt,
+          }
         : { ...form },
       editing.value ? 'PATCH' : 'POST',
     )
     selectedId.value = form.appId
     editorOpen.value = false
-    notice.value = editingMetadata.value ? '更新信息已保存，可审核发布' : '版本草稿已保存，提交后可发布'
+    notice.value = editingMetadata.value
+      ? '更新信息已保存，可审核发布'
+      : '版本草稿已保存，提交后可发布'
     await load()
   } catch (e) {
     dialogError.value = errorMessage(e)

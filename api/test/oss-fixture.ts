@@ -6,13 +6,14 @@ import { ResourceService } from '../src/resources/service.js'
 import { ResourceStorageRegistry } from '../src/resources/storage.js'
 
 /** Public object I/O is in memory; no cloud requests or download signatures are used. */
-export function fixtureOss() {
+export function fixtureOss(beforeWrite?: () => void) {
   const options = { region: 'cn-hangzhou', bucket: 'tboxos', accessKeyId: 'fixture-access-id', accessKeySecret: 'fixture-secret-never-log' }
   const objects = new Map<string, Buffer>()
   const metadata = new Map<string, { mime: string, headers: Record<string, string> }>()
   let failWrites = false
   const client = {
     async put(path: string, bytes: Buffer, config: { mime: string, headers: Record<string, string> }) {
+      beforeWrite?.()
       assert.match(path, /^uploads\/resources\/[a-f0-9-]{36}$/)
       assert.equal(config.headers?.['x-oss-object-acl'], 'public-read')
       assert.equal(config.headers?.['x-oss-forbid-overwrite'], 'true')

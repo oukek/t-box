@@ -1,5 +1,6 @@
 import type { ApplicationModule } from './contracts.js'
 import { invalid } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { createDiscoveryTools } from './capability-tools.js'
 import { definition, nullable, object } from './schema.js'
 /** Shell capabilities contain no application fields or handlers. */
@@ -34,9 +35,7 @@ export function createShellModule(
               alwaysAvailable: true,
               successSummary: '专业 Agent 已返回结果',
               handler: async () => {
-                throw new Error(
-                  'Delegation must be handled by the orchestrator',
-                )
+                throw ErrorCode.INTERNAL_DELEGATION_MUST_BE_HANDLED_BY_THE_ORCHESTRATOR()
               },
             },
           }
@@ -90,12 +89,27 @@ export function createShellModule(
             try {
               await ctx.registry.loadTools(skill.tools, ctx)
             } catch (error) {
-              if (!(error && typeof error === 'object' && 'code' in error && ['TOOL_LOAD_LIMIT', 'TOOL_SCHEMA_LIMIT', 'TOOL_INSTRUCTIONS_LIMIT'].includes(String(error.code)))) {
+              if (!(
+                error &&
+                typeof error === 'object' &&
+                'code' in error &&
+                [
+                  'TOOL_LOAD_LIMIT',
+                  'TOOL_SCHEMA_LIMIT',
+                  'TOOL_INSTRUCTIONS_LIMIT',
+                ].includes(String(error.code))
+              )) {
                 throw error
               }
               ctx.skills.clear()
               previousSkills.forEach((id) => ctx.skills.add(id))
-              return { skillId: args.skillId, title: skill.title, version: skill.version, loaded: false, note: '技能包含的工具超出预算，请使用 capability_search 或 capability_load 选择本次所需工具。' }
+              return {
+                skillId: args.skillId,
+                title: skill.title,
+                version: skill.version,
+                loaded: false,
+                note: '技能包含的工具超出预算，请使用 capability_search 或 capability_load 选择本次所需工具。',
+              }
             }
           }
           return {

@@ -3,17 +3,18 @@ import type {
   AgentWorkflowPrompts,
 } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { isoTime } from '@t-box/server-foundation/time'
 import { ConfigurationCache } from '../configuration/cache.js'
+import {
+  AiWorkflowConfigurationEntity,
+  AiWorkflowSettingEntity,
+} from '../db/records/workflow-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { defaultWorkflowPrompts } from './defaults.js'
 
 export function parseWorkflowPrompts(value: unknown): AgentWorkflowPrompts {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new ApiError(
-      400,
-      'INVALID_WORKFLOW_PROMPTS',
-      '阶段 Prompt 格式不正确',
-    )
+    throw ErrorCode.INVALID_WORKFLOW_PROMPTS()
   }
   const input = value as Record<string, unknown>
   if (
@@ -21,7 +22,7 @@ export function parseWorkflowPrompts(value: unknown): AgentWorkflowPrompts {
       (key) => !Object.hasOwn(defaultWorkflowPrompts, key),
     )
   ) {
-    throw new ApiError(400, 'INVALID_WORKFLOW_PROMPTS', '存在未知阶段')
+    throw ErrorCode.INVALID_WORKFLOW_PROMPTS('存在未知阶段')
   }
   const prompts = {} as AgentWorkflowPrompts
   for (const key of Object.keys(
@@ -33,9 +34,7 @@ export function parseWorkflowPrompts(value: unknown): AgentWorkflowPrompts {
       text.trim().length < 20 ||
       text.length > 12000
     ) {
-      throw new ApiError(
-        400,
-        'INVALID_WORKFLOW_PROMPTS',
+      throw ErrorCode.INVALID_WORKFLOW_PROMPTS(
         '每个阶段 Prompt 需为 20–12000 个字符',
       )
     }
@@ -54,29 +53,25 @@ export class WorkflowConfigurationStore {
   }
 
   async snapshot(): Promise<AgentWorkflowConfiguration> {
-    const [state] = await this.source.query(
-      'SELECT revision FROM ai_workflow_settings WHERE id=1',
-    )
+    const state = await this.source
+      .getRepository(AiWorkflowSettingEntity)
+      .findOne({ select: { revision: true }, where: { id: 1 } })
     if (!state) {
-      throw new ApiError(
-        503,
-        'WORKFLOW_CONFIG_REQUIRED',
-        '请先初始化分析流程数据库',
-      )
+      throw ErrorCode.WORKFLOW_CONFIG_REQUIRED()
     }
     return this.cache.read('workflow', Number(state.revision), () =>
       this.load(Number(state.revision)))
   }
 
   private async load(revision: number): Promise<AgentWorkflowConfiguration> {
-    const [row] = await this.source.query(
-      `SELECT revision,prompts_json,created_at FROM ai_workflow_configurations WHERE revision=?`,
-      [revision],
-    )
+    const row = await this.source
+      .getRepository(AiWorkflowConfigurationEntity)
+      .findOne({
+        select: { revision: true, prompts_json: true, created_at: true },
+        where: { revision },
+      })
     if (!row) {
-      throw new ApiError(
-        503,
-        'WORKFLOW_CONFIG_REQUIRED',
+      throw ErrorCode.WORKFLOW_CONFIG_REQUIRED(
         '分析流程尚未初始化，请执行数据库初始化',
       )
     }
@@ -87,7 +82,7 @@ export class WorkflowConfigurationStore {
           ? JSON.parse(row.prompts_json)
           : row.prompts_json,
       ),
-      updatedAt: new Date(row.created_at).toISOString(),
+      updatedAt: isoTime(row.created_at),
     }
   }
 
@@ -96,42 +91,43 @@ export class WorkflowConfigurationStore {
     administratorId: string,
   ): Promise<AgentWorkflowConfiguration> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      throw new ApiError(400, 'INVALID_WORKFLOW_PROMPTS', '配置格式不正确')
+      throw ErrorCode.INVALID_WORKFLOW_PROMPTS('配置格式不正确')
     }
     const input = value as Record<string, unknown>
     if (Object.keys(input).some((k) => !['revision', 'prompts'].includes(k))) {
-      throw new ApiError(400, 'INVALID_WORKFLOW_PROMPTS', '配置存在未知字段')
+      throw ErrorCode.INVALID_WORKFLOW_PROMPTS('配置存在未知字段')
     }
     const prompts = parseWorkflowPrompts(input.prompts)
     const revision = await this.source.transaction(async (db) => {
-      const [current] = await db.query(
-        'SELECT revision FROM ai_workflow_settings WHERE id=1 FOR UPDATE',
-      )
+      const current = await db.getRepository(AiWorkflowSettingEntity).findOne({
+        select: { revision: true },
+        where: { id: 1 },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (!current || input.revision !== Number(current.revision)) {
-        throw new ApiError(
-          409,
-          'WORKFLOW_CONFIG_CHANGED',
-          '配置已更新，请刷新后再保存',
-        )
+        throw ErrorCode.WORKFLOW_CONFIG_CHANGED()
       }
       const next = Number(current.revision) + 1
-      await db.query(
-        'INSERT INTO ai_workflow_configurations(revision,prompts_json,administrator_id) VALUES(?,?,?)',
-        [next, JSON.stringify(prompts), administratorId],
-      )
-      await db.query('UPDATE ai_workflow_settings SET revision=? WHERE id=1', [
-        next,
-      ])
+      await db.getRepository(AiWorkflowConfigurationEntity).insert({
+        revision: next,
+        prompts_json: prompts,
+        administrator_id: administratorId,
+      })
+      await db
+        .getRepository(AiWorkflowSettingEntity)
+        .update({ id: 1 }, { revision: next })
       return next
     })
-    const [row] = await this.source.query(
-      'SELECT created_at FROM ai_workflow_configurations WHERE revision=?',
-      [revision],
-    )
+    const row = await this.source
+      .getRepository(AiWorkflowConfigurationEntity)
+      .findOne({ select: { created_at: true }, where: { revision } })
+    if (!row) {
+      throw ErrorCode.SCHEMA_REQUIRED('工作流配置记录不存在')
+    }
     return {
       revision,
       prompts,
-      updatedAt: new Date(row.created_at).toISOString(),
+      updatedAt: isoTime(row.created_at),
     }
   }
 }

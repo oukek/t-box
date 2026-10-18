@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import type {
+  LedgerAgingDebt,
+  LedgerContact,
+  LedgerDebtAdjustment,
+  LedgerDebtAdjustmentRecord,
+} from '@t-box/ledger-contracts'
 import type { FormValues, LedgerFormField } from './form'
 import { BottomSheet, SheetSelect } from '@t-box/ui-kit'
 import { computed, onMounted, ref } from 'vue'
@@ -14,16 +20,16 @@ const props = defineProps<{
 }>()
 const api = featureApi(props.ledgerId)
 const action = useFeatureAction()
-const rows = ref<any[]>([])
-const aging = ref<any[]>([])
+const rows = ref<LedgerContact[]>([])
+const aging = ref<LedgerAgingDebt[]>([])
 const bucket = ref('all')
 const contact = ref('')
 const editor = ref<'create' | 'edit' | 'adjust' | null>(null)
-const target = ref<any>()
-const historyTarget = ref<any>()
-const adjustments = ref<any[]>([])
-const allAdjustments = ref<any[]>([])
-const reverseTarget = ref<any>()
+const target = ref<{ id: string }>()
+const historyTarget = ref<LedgerAgingDebt>()
+const adjustments = ref<LedgerDebtAdjustment[]>([])
+const allAdjustments = ref<LedgerDebtAdjustmentRecord[]>([])
+const reverseTarget = ref<LedgerDebtAdjustment>()
 const attachmentResourceIds = ref<string[]>([])
 const form = ref<FormValues>({})
 const visible = computed(() =>
@@ -70,39 +76,51 @@ const fields = computed<LedgerFormField[]>(() =>
       ],
 )
 async function load() {
-  [rows.value, aging.value, allAdjustments.value] = await Promise.all([
-    api.get('/contacts'),
-    api.get('/debts/aging'),
-    api.get('/debt-adjustments'),
+  ;[rows.value, aging.value, allAdjustments.value] = await Promise.all([
+    api.get<LedgerContact[]>('/contacts'),
+    api.get<LedgerAgingDebt[]>('/debts/aging'),
+    api.get<LedgerDebtAdjustmentRecord[]>('/debt-adjustments'),
   ])
 }
-function open(mode: typeof editor.value, row?: any) {
+function open(
+  mode: typeof editor.value,
+  row?: LedgerContact | LedgerAgingDebt,
+) {
   attachmentResourceIds.value = []
   editor.value = mode
   target.value = row
   action.error.value = ''
-  form.value =
-    mode === 'adjust'
-      ? {
-          kind: 'extension',
-          amount: row.remaining,
-          date: localDate(),
-          dueDate: row.dueDate ?? localDate(),
-          note: '',
-        }
-      : {
-          name: row?.name ?? '',
-          note: row?.note ?? '',
-          ...(mode === 'edit' ? { archived: !!Number(row.archived) } : {}),
-        }
+  if (mode === 'adjust') {
+    if (!row || !('remaining' in row)) {
+      return
+    }
+    form.value = {
+      kind: 'extension',
+      amount: row.remaining,
+      date: localDate(),
+      dueDate: row.dueDate ?? localDate(),
+      note: '',
+    }
+  } else {
+    const contactRow = row && 'name' in row ? row : undefined
+    form.value = {
+      name: contactRow?.name ?? '',
+      note: contactRow?.note ?? '',
+      ...(mode === 'edit' ? { archived: contactRow?.archived ?? false } : {}),
+    }
+  }
 }
 async function save() {
   const mode = editor.value
+  if (!mode || (mode !== 'create' && !target.value)) {
+    return
+  }
+  const targetId = target.value?.id
   const path =
     mode === 'adjust'
-      ? `/debts/${target.value.id}/adjustments`
+      ? `/debts/${targetId}/adjustments`
       : mode === 'edit'
-        ? `/contacts/${target.value.id}`
+        ? `/contacts/${targetId}`
         : '/contacts'
   const body =
     mode === 'adjust'
@@ -110,12 +128,9 @@ async function save() {
           ...form.value,
           attachmentResourceIds: attachmentResourceIds.value,
           amount:
-              form.value.kind === 'extension'
-                ? null
-                : String(form.value.amount),
+            form.value.kind === 'extension' ? null : String(form.value.amount),
           date: form.value.kind === 'extension' ? null : form.value.date,
-          dueDate:
-              form.value.kind === 'extension' ? form.value.dueDate : null,
+          dueDate: form.value.kind === 'extension' ? form.value.dueDate : null,
         }
       : form.value
   const result = await action.run(path, body, (k) =>
@@ -125,15 +140,20 @@ async function save() {
     await load()
   }
 }
-async function history(row: any) {
+async function history(row: LedgerAgingDebt) {
   historyTarget.value = row
   try {
-    adjustments.value = await api.get(`/debts/${row.id}/adjustments`)
+    adjustments.value = await api.get<LedgerDebtAdjustment[]>(
+      `/debts/${row.id}/adjustments`,
+    )
   } catch (e) {
     action.error.value = (e as Error).message
   }
 }
 async function reverse() {
+  if (!reverseTarget.value) {
+    return
+  }
   const path = `/debt-adjustments/${reverseTarget.value.id}/reversal`
   const r = await action.run(path, {}, (k) => api.write(path, {}, 'POST', k))
   if (r) {

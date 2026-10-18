@@ -22,7 +22,8 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
   "dependencies": {
-    "@t-box/app-contracts": "workspace:*"
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/errors": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

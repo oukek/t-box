@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import type { PaymentCapabilities, PaymentOrder, RechargeConfiguration } from '@t-box/shared'
-import { WechatPay } from '@t-box/capacitor-wechat-pay'
-import {
-  rechargeCents,
-  rechargeOfferBonusCents,
+import type {
+  PaymentCapabilities,
+  PaymentOrder,
+  RechargeConfiguration,
 } from '@t-box/shared'
+import { WechatPay } from '@t-box/capacitor-wechat-pay'
+import { rechargeCents, rechargeOfferBonusCents } from '@t-box/shared'
 import { AppIcon } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { openWallet } from '../../core/navigation'
 import { request, RequestError } from '../../core/network'
+import { ErrorCode } from '../../error-codes.js'
 import CheckoutDialog from './CheckoutDialog.vue'
 import { centsYuan, displayMoney as fee } from './format'
 import {
@@ -111,7 +113,10 @@ async function load() {
       if (signal.aborted) {
         return
       }
-      if (!status.configured || status.appId !== capabilities.data.mobileAppId) {
+      if (
+        !status.configured ||
+        status.appId !== capabilities.data.mobileAppId
+      ) {
         reason.value = '当前 App 的微信支付尚未开放。'
       } else if (!status.installed) {
         reason.value = '请安装微信后刷新此页面再充值。'
@@ -165,7 +170,7 @@ async function submit() {
         })
       ).data
       if (fee(pendingOrder.value.bonusAmount) !== previewBonus) {
-        throw new Error('充值优惠已更新，请确认当前到账金额后继续支付。')
+        throw ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED()
       }
     }
     amount.value = fee(pendingOrder.value.amount)

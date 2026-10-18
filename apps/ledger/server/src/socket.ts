@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { Principal } from './ledgers/types.js'
 import type { LedgerRuntimeServices } from './ports.js'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from './error-codes.js'
 import { parseId } from './validation.js'
 import '@fastify/websocket'
 
@@ -15,11 +16,14 @@ export function registerLedgerSocket(
     {
       websocket: true,
       preValidation: async (req) => {
-        if (!allowed.has('*') && (!req.headers.origin || !allowed.has(req.headers.origin))) {
-          throw new ApiError(403, 'ORIGIN_NOT_ALLOWED', '此网页来源不允许连接')
+        if (
+          !allowed.has('*') &&
+          (!req.headers.origin || !allowed.has(req.headers.origin))
+        ) {
+          throw ErrorCode.ORIGIN_NOT_ALLOWED()
         }
         if (scope.websocketServer.clients.size >= 200) {
-          throw new ApiError(429, 'CONNECTION_LIMIT', '连接数已满')
+          throw ErrorCode.CONNECTION_LIMIT('连接数已满')
         }
       },
     },
@@ -112,7 +116,7 @@ export function registerLedgerSocket(
             bookId = id
             await refresh()
           } else {
-            throw new ApiError(400, 'INVALID_EVENT', '事件无效')
+            throw ErrorCode.INVALID_EVENT('事件无效')
           }
         } catch (error) {
           send({

@@ -1,7 +1,7 @@
 import type { ApplicationModule } from '@t-box/app-server-sdk'
 import type { ApplicationPlatform } from '../service.js'
 import { bindRemoteTools } from '@t-box/app-server-sdk'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../../error-codes.js'
 /** A remote service participates in exactly the same AI execution journal and installation checks as local code. */
 export function remoteApplicationModule(
   module: ApplicationModule,
@@ -11,16 +11,22 @@ export function remoteApplicationModule(
 ) {
   return bindRemoteTools(module, methods, {
     ...(options.preparation
-      ? { prepare: async (input, context) => {
-          if (!context.actor) {
-            throw new ApiError(401, 'AUTH_REQUIRED', '请先登录')
-          }
-          return platform.prepare(context.actor.user.id, input, context.signal)
-        } }
+      ? {
+          prepare: async (input, context) => {
+            if (!context.actor) {
+              throw ErrorCode.AUTH_REQUIRED()
+            }
+            return platform.prepare(
+              context.actor.user.id,
+              input,
+              context.signal,
+            )
+          },
+        }
       : {}),
     invoke: async (input, context) => {
       if (!context.actor) {
-        throw new ApiError(401, 'AUTH_REQUIRED', '请先登录')
+        throw ErrorCode.AUTH_REQUIRED()
       }
       return platform.invoke(
         context.actor.user.id,

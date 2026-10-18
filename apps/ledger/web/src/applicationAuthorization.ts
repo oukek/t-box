@@ -1,4 +1,5 @@
 import { reactive, readonly } from 'vue'
+import { ErrorCode } from './error-codes.js'
 
 const state = reactive({
   open: false,
@@ -13,7 +14,7 @@ export function requestApplicationAuthorization(
   value: unknown,
 ): Promise<{ authorized: boolean }> {
   if (settle || !value || typeof value !== 'object') {
-    throw new Error('已有授权等待处理或授权信息无效')
+    throw ErrorCode.INTERNAL_AUTHORIZATION_UNAVAILABLE()
   }
   const args = value as typeof state
   if (
@@ -23,7 +24,7 @@ export function requestApplicationAuthorization(
     typeof args.purpose !== 'string' ||
     !['read', 'write'].includes(args.scope)
   ) {
-    throw new Error('授权范围无效')
+    throw ErrorCode.INTERNAL_INVALID_AUTHORIZATION_SCOPE()
   }
   Object.assign(state, {
     open: true,

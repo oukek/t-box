@@ -43,7 +43,7 @@ function create() {
 }
 async function load() {
   try {
-    rows.value = await api.get('/categories')
+    rows.value = await api.get<ManagedCategory[]>('/categories')
   } catch (e) {
     action.error.value = e instanceof Error ? e.message : '分类读取失败'
   }

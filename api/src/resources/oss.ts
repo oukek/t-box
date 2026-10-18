@@ -1,8 +1,8 @@
 import type { ResourceFileMetadata, ResourceStorage } from './storage.js'
 import { createHash } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { parseId } from '@t-box/server-foundation/validation'
 import OSS from 'ali-oss'
+import { ErrorCode } from '../error-codes.js'
 
 export const RESOURCE_OSS_PREFIX = 'uploads/resources'
 export interface OssResourceOptions {
@@ -13,15 +13,27 @@ export interface OssResourceOptions {
   stsToken?: string
 }
 /** Scope the persisted backend ID to its immutable physical bucket, independent of key rotation. */
-export function ossResourceBackend(options: Pick<OssResourceOptions, 'region' | 'bucket'>) {
+export function ossResourceBackend(
+  options: Pick<OssResourceOptions, 'region' | 'bucket'>,
+) {
   return `oss-${createHash('sha256').update(`${options.region}/${options.bucket}`).digest('hex').slice(0, 24)}`
 }
 export class OssResourceStorage implements ResourceStorage {
   readonly origin: string
   readonly client: Pick<OSS, 'put' | 'get' | 'delete'>
-  constructor(options: OssResourceOptions, client?: OssResourceStorage['client']) {
+  constructor(
+    options: OssResourceOptions,
+    client?: OssResourceStorage['client'],
+  ) {
     this.origin = `https://${options.bucket}.oss-${options.region}.aliyuncs.com`
-    const configuration = { ...options, region: `oss-${options.region}`, secure: true, authorizationV4: true, timeout: 30000, retryMax: 0 }
+    const configuration = {
+      ...options,
+      region: `oss-${options.region}`,
+      secure: true,
+      authorizationV4: true,
+      timeout: 30000,
+      retryMax: 0,
+    }
     this.client = client ?? new OSS(configuration)
   }
 
@@ -32,14 +44,23 @@ export class OssResourceStorage implements ResourceStorage {
   private key(path: string) {
     const id = path.slice(RESOURCE_OSS_PREFIX.length + 1)
     if (path !== this.path(id)) {
-      throw new ApiError(503, 'RESOURCE_STORAGE_UNAVAILABLE', '文件存储路径无效')
+      throw ErrorCode.RESOURCE_STORAGE_UNAVAILABLE()
     }
     return path
   }
 
-  async write(path: string, bytes: Buffer, file: ResourceFileMetadata = { name: 'file', mimeType: 'application/octet-stream' }) {
+  async write(
+    path: string,
+    bytes: Buffer,
+    file: ResourceFileMetadata = {
+      name: 'file',
+      mimeType: 'application/octet-stream',
+    },
+  ) {
     const key = this.key(path)
-    const image = ['image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType)
+    const image = ['image/png', 'image/jpeg', 'image/webp'].includes(
+      file.mimeType,
+    )
     try {
       await this.client.put(key, bytes, {
         mime: image ? file.mimeType : 'application/octet-stream',
@@ -53,7 +74,9 @@ export class OssResourceStorage implements ResourceStorage {
       })
     } catch {
       // SDK errors can contain signed requests and credentials; never expose or log them.
-      throw new ApiError(503, 'RESOURCE_STORAGE_UNAVAILABLE', '文件上传失败，请检查 OSS 配置后重试')
+      throw ErrorCode.RESOURCE_STORAGE_UNAVAILABLE(
+        '文件上传失败，请检查 OSS 配置后重试',
+      )
     }
   }
 
@@ -64,9 +87,9 @@ export class OssResourceStorage implements ResourceStorage {
       return Buffer.from(result.content)
     } catch (error) {
       if ((error as { code?: string }).code === 'NoSuchKey') {
-        throw new ApiError(404, 'RESOURCE_MISSING', '文件已不存在')
+        throw ErrorCode.RESOURCE_MISSING()
       }
-      throw new ApiError(503, 'RESOURCE_STORAGE_UNAVAILABLE', '文件存储暂时不可用')
+      throw ErrorCode.RESOURCE_STORAGE_UNAVAILABLE('文件存储暂时不可用')
     }
   }
 
@@ -76,7 +99,7 @@ export class OssResourceStorage implements ResourceStorage {
       await this.client.delete(key)
     } catch (error) {
       if ((error as { code?: string }).code !== 'NoSuchKey') {
-        throw new ApiError(503, 'RESOURCE_STORAGE_UNAVAILABLE', '文件清理暂时失败')
+        throw ErrorCode.RESOURCE_STORAGE_UNAVAILABLE('文件清理暂时失败')
       }
     }
   }

@@ -1,8 +1,10 @@
 import type { Actor } from '@t-box/app-server-sdk'
 import type { DataSource } from 'typeorm'
 import { randomUUID } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
+import { IsNull } from 'typeorm'
+import { UserNotificationEntity } from '../db/records/operations-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 const labels: Record<string, string> = {
   completed: '任务已完成',
@@ -22,32 +24,82 @@ export class NotificationService {
   }
 
   private async collect() {
-    const rows = await this.source.query(`SELECT t.id,t.user_id,t.status,t.updated_at FROM agent_tasks t
-      JOIN notification_watermark w ON w.id=1 AND t.updated_at>=w.started_at
-      WHERE t.status IN ('completed','waiting_client','paused','needs_review') AND t.recovery_ready=FALSE
-      AND NOT EXISTS (SELECT 1 FROM user_notifications n WHERE n.user_id=t.user_id AND n.source_key=CONCAT(t.id,':',t.status))
-      ORDER BY t.updated_at,t.id LIMIT 256`)
+    const rows = await this.source
+      .createQueryBuilder()
+      .select('t.id,t.user_id,t.status,t.updated_at')
+      .from('agent_tasks', 't')
+      .innerJoin(
+        'notification_watermark',
+        'w',
+        'w.id=1 AND t.updated_at>=w.started_at',
+      )
+      .where(
+        't.status IN (\'completed\',\'waiting_client\',\'paused\',\'needs_review\') AND t.recovery_ready=FALSE\n      AND NOT EXISTS (SELECT 1 FROM user_notifications n WHERE n.user_id=t.user_id AND n.source_key=CONCAT(t.id,\':\',t.status))',
+      )
+      .orderBy('t.updated_at', 'ASC')
+      .addOrderBy('t.id', 'ASC')
+      .limit(256)
+      .getRawMany()
     for (const row of rows) {
       // Recheck the exact state, including its timestamp, after the nonlocking scan.
-      await this.source.query(`INSERT IGNORE INTO user_notifications(id,user_id,source_key,task_id,kind)
-        SELECT ?,user_id,CONCAT(id,':',status),id,status FROM agent_tasks WHERE id=? AND status=? AND updated_at=? AND recovery_ready=FALSE`, [randomUUID(), row.id, row.status, row.updated_at])
+      // native-sql: atomic insert-select projection or state-transition notification
+      await this.source.query(
+        `INSERT IGNORE INTO user_notifications(id,user_id,source_key,task_id,kind)
+        SELECT ?,user_id,CONCAT(id,':',status),id,status FROM agent_tasks WHERE id=? AND status=? AND updated_at=? AND recovery_ready=FALSE`,
+        [randomUUID(), row.id, row.status, row.updated_at],
+      )
     }
   }
 
   async list(actor: Actor) {
     await this.recover()
-    const rows = await this.source.query('SELECT id,task_id,kind,read_at,created_at FROM user_notifications WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 100', [actor.user.id])
-    const [counts] = await this.source.query('SELECT COUNT(*) total FROM user_notifications WHERE user_id=? AND read_at IS NULL', [actor.user.id])
-    return { unread: Number(counts.total), items: rows.map((row: any) => ({ id: row.id, taskId: row.task_id, title: labels[row.kind] || '任务状态已更新', read: !!row.read_at, createdAt: isoTime(row.created_at)! })) }
+    const rows = await this.source.getRepository(UserNotificationEntity).find({
+      select: {
+        id: true,
+        task_id: true,
+        kind: true,
+        read_at: true,
+        created_at: true,
+      },
+      where: { user_id: actor.user.id },
+      order: { created_at: 'DESC', id: 'DESC' },
+      take: 100,
+    })
+    const unread = await this.source
+      .getRepository(UserNotificationEntity)
+      .countBy({ user_id: actor.user.id, read_at: IsNull() })
+    return {
+      unread,
+      items: rows.map((row) => ({
+        id: row.id,
+        taskId: row.task_id,
+        title: labels[row.kind] || '任务状态已更新',
+        read: !!row.read_at,
+        createdAt: isoTime(row.created_at)!,
+      })),
+    }
   }
 
   async read(actor: Actor, id?: string) {
     if (id) {
-      const [owned] = await this.source.query('SELECT id FROM user_notifications WHERE id=? AND user_id=?', [id, actor.user.id])
+      const owned = await this.source
+        .getRepository(UserNotificationEntity)
+        .findOne({
+          select: { id: true },
+          where: { id, user_id: actor.user.id },
+        })
       if (!owned) {
-        throw new ApiError(404, 'NOTIFICATION_NOT_FOUND', '通知不存在')
+        throw ErrorCode.NOTIFICATION_NOT_FOUND()
       }
     }
-    await this.source.query(`UPDATE user_notifications SET read_at=COALESCE(read_at,UTC_TIMESTAMP(3)) WHERE user_id=?${id ? ' AND id=?' : ''}`, [actor.user.id, ...(id ? [id] : [])])
+    const update = this.source
+      .createQueryBuilder()
+      .update('user_notifications')
+      .set({ read_at: () => 'COALESCE(read_at,UTC_TIMESTAMP(3))' })
+      .where('user_id=:userId', { userId: actor.user.id })
+    if (id) {
+      update.andWhere('id=:id', { id })
+    }
+    await update.execute()
   }
 }

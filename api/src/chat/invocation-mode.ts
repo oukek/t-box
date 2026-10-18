@@ -1,5 +1,5 @@
 import type { ContextPolicy, ModelInvocationMode } from '@t-box/shared'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 export function invocationMode(
   value: unknown,
@@ -12,11 +12,7 @@ export function invocationMode(
       ? mode !== 'images'
       : !['responses', 'chat_completions'].includes(mode))
   ) {
-    throw new ApiError(
-      400,
-      'INVALID_INVOCATION_MODE',
-      '调用方式与模型用途不匹配',
-    )
+    throw ErrorCode.INVALID_INVOCATION_MODE()
   }
   return mode as ModelInvocationMode
 }

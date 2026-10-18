@@ -1,10 +1,8 @@
-import type {
-  ApplicationDestination,
-  ApplicationManifest,
-} from '@t-box/shared'
+import type { ApplicationDestination, ApplicationManifest } from '@t-box/shared'
 import { presentApplicationIcon } from '@t-box/shared'
 import { computed } from 'vue'
 import { applicationModules } from '../applications/registry'
+import { ErrorCode } from '../error-codes.js'
 import { isInstalled } from './app-runtime/catalog'
 
 export const applications = computed(() =>
@@ -33,17 +31,17 @@ export function getApplication(id: string) {
 /** A validated destination cannot select arbitrary URLs, components or executable code. */
 export function parseOpenAppArguments(value: unknown): ApplicationDestination {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('打开应用的参数无效')
+    throw ErrorCode.INTERNAL_INVALID_OPEN_APPLICATION_ARGUMENTS()
   }
   const args = value as Record<string, unknown>
   if (Object.keys(args).some((key) => !['appId', 'params'].includes(key))) {
-    throw new Error('打开应用包含未支持的参数')
+    throw ErrorCode.INTERNAL_UNSUPPORTED_OPEN_APPLICATION_ARGUMENTS()
   }
   const module = applicationModules.find(
     (module) => module.manifest.id === args.appId,
   )
   if (!module) {
-    throw new Error('暂不支持打开这个应用')
+    throw ErrorCode.INTERNAL_UNSUPPORTED_APPLICATION()
   }
   return {
     appId: module.manifest.id,

@@ -6,24 +6,26 @@ import type {
 } from '@t-box/app-contracts'
 import type { AppTransport, RequestOptions } from '@t-box/app-sdk'
 import { APP_SDK_VERSION } from '@t-box/app-contracts'
-import {
-  AppSdkError,
-} from '@t-box/app-sdk'
+import { AppSdkError, SdkErrorCode } from '@t-box/app-sdk'
 import { watch } from 'vue'
 import { applicationModules } from '../../applications/registry'
 import { applicationMutation } from '../applicationMutation'
 import { createRequestId } from '../identifiers'
-import {
-  backFromApplication,
-  navigation,
-  openApplication,
-} from '../navigation'
+import { backFromApplication, navigation, openApplication } from '../navigation'
 import { chatWebSocketUrl, request } from '../network'
 import { identity } from '../session'
 import { appCatalog } from './catalog'
-import { chooseApplicationFiles, decodeApplicationFile, readApplicationFile, uploadApplicationFile } from './files'
+import {
+  chooseApplicationFiles,
+  decodeApplicationFile,
+  readApplicationFile,
+  uploadApplicationFile,
+} from './files'
 import { setApplicationBindings } from './resourceBindings'
-import { parseApplicationHttpRequest, validateApplicationRestPath } from './trustedPath'
+import {
+  parseApplicationHttpRequest,
+  validateApplicationRestPath,
+} from './trustedPath'
 import { availableUpdate, updatePrompts } from './updatePrompts'
 
 interface HostOptions {
@@ -38,17 +40,15 @@ const platform = () =>
     : 'web'
 const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new AppSdkError('INVALID_ARGUMENTS', '应用参数无效', 400)
+    throw SdkErrorCode.INVALID_ARGUMENTS('应用参数无效', 400)
   }
   return value as Record<string, unknown>
 }
 /** One app-bound host service shared by shell and MessageChannel adapters. */
 export function createHostTransport(options: HostOptions): AppTransport {
-  const module = applicationModules.find(
-    (m) => m.manifest.id === options.appId,
-  )
+  const module = applicationModules.find((m) => m.manifest.id === options.appId)
   if (options.trusted && !module) {
-    throw new AppSdkError('APP_NOT_REGISTERED', '应用未注册')
+    throw SdkErrorCode.APP_NOT_REGISTERED()
   }
   let closed = false
   let epoch = 0
@@ -122,9 +122,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
           : session(),
       })
       if (!options.trusted) {
-        close(
-          new AppSdkError('SESSION_CHANGED', '登录状态已改变，请重新打开应用'),
-        )
+        close(SdkErrorCode.SESSION_CHANGED('登录状态已改变，请重新打开应用'))
       } else if (identity.user) {
         void binding()
           .then(() => {
@@ -152,30 +150,24 @@ export function createHostTransport(options: HostOptions): AppTransport {
         installation.releaseId !== bound.releaseId ||
         installation.generation !== bound.generation
       ) {
-        close(
-          new AppSdkError(
-            'APP_RUNTIME_EXPIRED',
-            '应用安装状态已改变，请重新打开',
-            409,
-          ),
-        )
+        close(SdkErrorCode.APP_RUNTIME_EXPIRED(undefined, 409))
       }
     },
     { flush: 'sync' },
   )
   function assertEpoch(expectedEpoch: number) {
     if (closed) {
-      throw new AppSdkError('APP_CLOSED', '应用已关闭')
+      throw SdkErrorCode.APP_CLOSED()
     }
     if (expectedEpoch !== epoch) {
-      throw new AppSdkError('SESSION_CHANGED', '登录状态已改变，请重新操作')
+      throw SdkErrorCode.SESSION_CHANGED()
     }
   }
   async function binding(signal?: AbortSignal): Promise<ApplicationContext> {
     const started = epoch
     assertEpoch(started)
     if (!identity.user) {
-      throw new AppSdkError('AUTH_REQUIRED', '请先登录', 401)
+      throw SdkErrorCode.AUTH_REQUIRED('请先登录', 401)
     }
     const context = (
       await request<{ data: ApplicationContext }>(
@@ -192,23 +184,18 @@ export function createHostTransport(options: HostOptions): AppTransport {
         context.subject !== expected.subject)
     ) {
       close(
-        new AppSdkError(
-          'APP_RUNTIME_EXPIRED',
+        SdkErrorCode.APP_RUNTIME_EXPIRED(
           '应用版本或安装状态已改变，请重新打开',
           409,
         ),
       )
-      throw new AppSdkError(
-        'APP_RUNTIME_EXPIRED',
-        '应用版本或安装状态已改变',
-        409,
-      )
+      throw SdkErrorCode.APP_RUNTIME_EXPIRED('应用版本或安装状态已改变', 409)
     }
     if (
       context.sdkVersion !== APP_SDK_VERSION ||
       context.appId !== options.appId
     ) {
-      throw new AppSdkError('PROTOCOL_MISMATCH', '应用 SDK 协议不兼容')
+      throw SdkErrorCode.PROTOCOL_MISMATCH()
     }
     const storage = options.trusted && module?.sdk?.storage
     const events = Object.keys(module?.sdk?.events ?? {}).filter(
@@ -230,7 +217,10 @@ export function createHostTransport(options: HostOptions): AppTransport {
                 'storage.remove' as const,
               ]
             : []),
-          ...(events.length || context.permissions.some((permission) => /^events\.[a-z][a-z0-9_.-]{0,63}$/.test(permission))
+          ...(events.length ||
+            context.permissions.some((permission) =>
+              /^events\.[a-z][a-z0-9_.-]{0,63}$/.test(permission),
+            )
             ? ['events.subscribe' as const, 'events.unsubscribe' as const]
             : []),
         ]),
@@ -249,14 +239,18 @@ export function createHostTransport(options: HostOptions): AppTransport {
       subscriptions.has(id) ||
       subscriptions.size >= 32
     ) {
-      throw new AppSdkError('INVALID_SUBSCRIPTION', '事件订阅无效或过多')
+      throw SdkErrorCode.INVALID_SUBSCRIPTION()
     }
     if (cancelledSubscriptions.delete(id)) {
       return { subscribed: false }
     }
     const channel = typeof args.channel === 'string' ? args.channel : ''
     const registered = module?.sdk?.events?.[channel]
-    if (!registered && context.permissions.includes(`events.${channel}`) && /^[a-z][a-z0-9_.-]{0,63}$/.test(channel)) {
+    if (
+      !registered &&
+      context.permissions.includes(`events.${channel}`) &&
+      /^[a-z][a-z0-9_.-]{0,63}$/.test(channel)
+    ) {
       const started = epoch
       let stopped = false
       let cursor: string | undefined
@@ -271,15 +265,30 @@ export function createHostTransport(options: HostOptions): AppTransport {
       const poll = async () => {
         try {
           assertEpoch(started)
-          const result = (await request<{ data: { cursor: string, events: unknown[] } }>(`/applications/${encodeURIComponent(options.appId)}/events`, {
-            method: 'POST',
-            signal: abort.signal,
-            body: JSON.stringify({ releaseId: context.releaseId, generation: context.generation, channel, cursor, arguments: args.arguments }),
-          })).data
+          const result = (
+            await request<{ data: { cursor: string, events: unknown[] } }>(
+              `/applications/${encodeURIComponent(options.appId)}/events`,
+              {
+                method: 'POST',
+                signal: abort.signal,
+                body: JSON.stringify({
+                  releaseId: context.releaseId,
+                  generation: context.generation,
+                  channel,
+                  cursor,
+                  arguments: args.arguments,
+                }),
+              },
+            )
+          ).data
           assertEpoch(started)
           if (!stopped) {
             for (const value of result.events) {
-              emit({ type: 'event', name: 'app.event', data: { subscriptionId: id, value } })
+              emit({
+                type: 'event',
+                name: 'app.event',
+                data: { subscriptionId: id, value },
+              })
             }
             cursor = result.cursor
             failures = 0
@@ -288,7 +297,11 @@ export function createHostTransport(options: HostOptions): AppTransport {
           if (!stopped && !closed) {
             failures++
             const failure = AppSdkError.from(error)
-            emit({ type: 'event', name: 'app.event.error', data: { subscriptionId: id, error: failure } })
+            emit({
+              type: 'event',
+              name: 'app.event.error',
+              data: { subscriptionId: id, error: failure },
+            })
             if ([401, 403, 409].includes(failure.status ?? 0)) {
               subscriptions.get(id)?.()
               subscriptions.delete(id)
@@ -296,9 +309,12 @@ export function createHostTransport(options: HostOptions): AppTransport {
           }
         } finally {
           if (!stopped && !closed) {
-            timer = setTimeout(() => {
-              void poll()
-            }, Math.min(60_000, 5000 * 2 ** Math.min(failures, 4)))
+            timer = setTimeout(
+              () => {
+                void poll()
+              },
+              Math.min(60_000, 5000 * 2 ** Math.min(failures, 4)),
+            )
           }
         }
       }
@@ -309,7 +325,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
       !registered ||
       (!options.trusted && !context.permissions.includes(`events.${channel}`))
     ) {
-      throw new AppSdkError('PERMISSION_DENIED', '应用未授权此事件通道', 403)
+      throw SdkErrorCode.PERMISSION_DENIED(undefined, 403)
     }
     const payload = registered.subscribe(args.arguments)
     const started = epoch
@@ -365,9 +381,9 @@ export function createHostTransport(options: HostOptions): AppTransport {
               active.send(JSON.stringify(payload))
             } else if (value.type === 'error') {
               fail(
-                new AppSdkError(
-                  value.code || 'EVENT_FAILED',
-                  '应用事件订阅失败',
+                AppSdkError.from(
+                  { code: value.code, message: '应用事件订阅失败' },
+                  SdkErrorCode.EVENT_FAILED(),
                 ),
               )
             } else {
@@ -386,12 +402,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
             return
           }
           if (event.code === 1008) {
-            fail(
-              new AppSdkError(
-                'EVENT_AUTH_FAILED',
-                '事件连接授权失效，请重新打开应用',
-              ),
-            )
+            fail(SdkErrorCode.EVENT_AUTH_FAILED())
             stop()
             subscriptions.delete(id)
           } else {
@@ -439,94 +450,140 @@ export function createHostTransport(options: HostOptions): AppTransport {
       assertEpoch(started)
       const timeoutMs = callOptions.timeoutMs ?? 15000
       if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000) {
-        throw new AppSdkError('INVALID_TIMEOUT', '请求超时时间无效')
+        throw SdkErrorCode.INVALID_TIMEOUT()
       }
       if (method === 'auth.session' && !identity.user) {
         return session() as T
       }
       const context = await binding(callOptions.signal)
       if (!context.capabilities.includes(method)) {
-        throw new AppSdkError(
-          'CAPABILITY_UNAVAILABLE',
-          '此应用没有该宿主能力',
-          403,
-        )
+        throw SdkErrorCode.CAPABILITY_UNAVAILABLE(undefined, 403)
       }
       const a = object(args)
       let value: unknown
       if (method === 'runtime.context') {
         value = context
       } else if (method === 'updates.getAvailable') {
-        value = availableUpdate(appCatalog.entries.find((entry) => entry.release.appId === options.appId))
+        value = availableUpdate(
+          appCatalog.entries.find(
+            (entry) => entry.release.appId === options.appId,
+          ),
+        )
       } else if (method === 'updates.openMarket') {
-        if (navigation.screen !== 'application' || navigation.application?.appId !== options.appId) {
-          throw new AppSdkError('NAVIGATION_DENIED', '只有当前应用可以打开更新页面')
+        if (
+          navigation.screen !== 'application' ||
+          navigation.application?.appId !== options.appId
+        ) {
+          throw SdkErrorCode.NAVIGATION_DENIED()
         }
         // Reply before navigating unmounts and closes the app's transport.
         setTimeout(() => {
           if (!closed && navigation.application?.appId === options.appId) {
-            void openApplication({ appId: 'market', params: { appId: options.appId } }).catch(() => {})
+            void openApplication({
+              appId: 'market',
+              params: { appId: options.appId },
+            }).catch(() => {})
           }
         }, 0)
       } else if (method === 'updates.presentation') {
-        if (typeof a.registrationId !== 'string' || !/^[\w-]{1,80}$/.test(a.registrationId) || typeof a.enabled !== 'boolean') {
-          throw new AppSdkError('INVALID_ARGUMENTS', '更新提示注册无效')
+        if (
+          typeof a.registrationId !== 'string' ||
+          !/^[\w-]{1,80}$/.test(a.registrationId) ||
+          typeof a.enabled !== 'boolean'
+        ) {
+          throw SdkErrorCode.INVALID_ARGUMENTS('更新提示注册无效')
         }
         if (a.enabled) {
           if (context.updatePrompt?.mode !== 'custom') {
-            throw new AppSdkError('CUSTOM_UPDATE_PROMPT_DISABLED', '此已安装版本使用系统更新提示')
+            throw SdkErrorCode.CUSTOM_UPDATE_PROMPT_DISABLED()
           }
-          updatePrompts.register(options.appId, updateOwner, a.registrationId, (data) => emit({ type: 'event', name: 'runtime.update', data }))
+          updatePrompts.register(
+            options.appId,
+            updateOwner,
+            a.registrationId,
+            (data) => emit({ type: 'event', name: 'runtime.update', data }),
+          )
         } else {
           updatePrompts.unregister(options.appId, updateOwner, a.registrationId)
         }
       } else if (method === 'updates.respond') {
         if (typeof a.promptId !== 'string' || typeof a.shown !== 'boolean') {
-          throw new AppSdkError('INVALID_ARGUMENTS', '更新提示确认无效')
+          throw SdkErrorCode.INVALID_ARGUMENTS('更新提示确认无效')
         }
-        value = updatePrompts.respond(options.appId, updateOwner, a.promptId, a.shown)
+        value = updatePrompts.respond(
+          options.appId,
+          updateOwner,
+          a.promptId,
+          a.shown,
+        )
       } else if (method === 'auth.session') {
         value = session()
       } else if (method === 'resources.bindings') {
         setApplicationBindings(options.appId, a.bindings)
       } else if (method === 'files.pick' || method === 'files.upload') {
-        const signal = callOptions.signal ? AbortSignal.any([lifetime.signal, callOptions.signal]) : lifetime.signal
-        const files = method === 'files.pick' ? await chooseApplicationFiles(a, signal) : [decodeApplicationFile(a)]
+        const signal = callOptions.signal
+          ? AbortSignal.any([lifetime.signal, callOptions.signal])
+          : lifetime.signal
+        const files =
+          method === 'files.pick'
+            ? await chooseApplicationFiles(a, signal)
+            : [decodeApplicationFile(a)]
         assertEpoch(started)
         const uploaded = []
         for (const file of files) {
           assertEpoch(started)
           signal.throwIfAborted()
-          uploaded.push(await uploadApplicationFile(options.appId, file, signal))
+          uploaded.push(
+            await uploadApplicationFile(options.appId, file, signal),
+          )
         }
         value = method === 'files.pick' ? uploaded : uploaded[0]
       } else if (method === 'files.read') {
         if (Object.keys(a).some((key) => key !== 'id')) {
-          throw new AppSdkError('INVALID_ARGUMENTS', '文件读取参数无效')
+          throw SdkErrorCode.INVALID_ARGUMENTS('文件读取参数无效')
         }
-        value = await readApplicationFile(options.appId, a.id, callOptions.signal)
+        value = await readApplicationFile(
+          options.appId,
+          a.id,
+          callOptions.signal,
+        )
       } else if (method === 'device.reminders') {
-        if (Object.keys(a).some((k) => k !== 'action') || !module?.sdk?.reminders) {
-          throw new AppSdkError('INVALID_ARGUMENTS', '提醒操作无效')
+        if (
+          Object.keys(a).some((k) => k !== 'action') ||
+          !module?.sdk?.reminders
+        ) {
+          throw SdkErrorCode.INVALID_ARGUMENTS('提醒操作无效')
         }
         value = await module.sdk.reminders(a.action)
       } else if (method === 'api.request') {
-        const http = parseApplicationHttpRequest(module?.sdk?.restPrefixes || [], a)
+        const http = parseApplicationHttpRequest(
+          module?.sdk?.restPrefixes || [],
+          a,
+        )
         if (http.stable === true) {
-          value = await applicationMutation(http.path, http.method as 'POST' | 'PATCH' | 'DELETE', http.body)
+          value = await applicationMutation(
+            http.path,
+            http.method as 'POST' | 'PATCH' | 'DELETE',
+            http.body,
+          )
         } else {
           value = await request(http.path, {
             method: http.method || 'GET',
-            ...(http.body === undefined ? {} : { body: JSON.stringify(http.body) }),
+            ...(http.body === undefined
+              ? {}
+              : { body: JSON.stringify(http.body) }),
             signal: callOptions.signal,
             timeoutMs,
             redirect: 'error',
-            headers: { 'Idempotency-Key': callOptions.idempotencyKey || createRequestId() },
+            headers: {
+              'Idempotency-Key':
+                callOptions.idempotencyKey || createRequestId(),
+            },
           })
         }
       } else if (method === 'api.invoke') {
         if (typeof a.method !== 'string') {
-          throw new AppSdkError('INVALID_ARGUMENTS', '应用方法无效')
+          throw SdkErrorCode.INVALID_ARGUMENTS('应用方法无效')
         }
         value = (
           await request<{ data: unknown }>(
@@ -550,13 +607,16 @@ export function createHostTransport(options: HostOptions): AppTransport {
         ).data
       } else if (method.startsWith('storage.')) {
         if (typeof a.key !== 'string' || !/^[\w.-]{1,80}$/.test(a.key)) {
-          throw new AppSdkError('INVALID_STORAGE_KEY', '应用存储键无效')
+          throw SdkErrorCode.INVALID_STORAGE_KEY()
         }
         const key = `tbox.app.${options.appId}.${context.subject}.${a.key}`
         if (method === 'storage.get') {
           const saved = localStorage.getItem(key)
           const migrations = module?.sdk?.legacyStorageKeys
-          const legacyKey = migrations && Object.hasOwn(migrations, a.key) ? migrations[a.key]?.(identity.user!.id) : undefined
+          const legacyKey =
+            migrations && Object.hasOwn(migrations, a.key)
+              ? migrations[a.key]?.(identity.user!.id)
+              : undefined
           let serialized = saved
           if (serialized === null && legacyKey) {
             try {
@@ -566,7 +626,9 @@ export function createHostTransport(options: HostOptions): AppTransport {
                 localStorage.setItem(key, old)
                 serialized = old
               }
-            } catch { /* Invalid legacy preferences do not prevent opening the application. */ }
+            } catch {
+              /* Invalid legacy preferences do not prevent opening the application. */
+            }
           }
           value = JSON.parse(serialized || 'null')
         } else if (method === 'storage.remove') {
@@ -574,10 +636,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
         } else {
           const serialized = JSON.stringify(a.value)
           if (serialized === undefined || serialized.length > 64000) {
-            throw new AppSdkError(
-              'INVALID_STORAGE_VALUE',
-              '存储内容无效或过大',
-            )
+            throw SdkErrorCode.INVALID_STORAGE_VALUE()
           }
           localStorage.setItem(key, serialized)
         }
@@ -600,7 +659,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
         })
       } else if (method === 'navigation.back') {
         if (navigation.application?.appId !== options.appId) {
-          throw new AppSdkError('NAVIGATION_DENIED', '只有当前应用可以返回')
+          throw SdkErrorCode.NAVIGATION_DENIED('只有当前应用可以返回')
         }
         // Acknowledge before the renderer unmounts and disposes its transport.
         setTimeout(() => {
@@ -635,16 +694,16 @@ export async function trustedApplicationRequest<T>(
     )
   ).data
   if (identity.token !== token) {
-    throw new AppSdkError('SESSION_CHANGED', '登录状态已改变')
+    throw SdkErrorCode.SESSION_CHANGED('登录状态已改变')
   }
   if (context.runtime !== 'shell') {
-    throw new AppSdkError('TRUSTED_RUNTIME_REQUIRED', '此接口仅供内置应用使用')
+    throw SdkErrorCode.TRUSTED_RUNTIME_REQUIRED()
   }
   const result = mutation
     ? await applicationMutation<T>(path, mutation.method, mutation.body)
     : await request<T>(path, options)
   if (identity.token !== token) {
-    throw new AppSdkError('SESSION_CHANGED', '登录状态已改变')
+    throw SdkErrorCode.SESSION_CHANGED('登录状态已改变')
   }
   return result
 }

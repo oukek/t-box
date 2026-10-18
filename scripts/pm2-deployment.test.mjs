@@ -105,7 +105,7 @@ process.exit(result.status===null ? 1 : result.status);
   return { root, server, packageDir, env, upload, uploaded, prepare }
 }
 
-function startupFixture(t, { migrationFails = false, storageFails = false, importFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false, oss = false } = {}) {
+function startupFixture(t, { initializationFails = false, preflightFails = false, storageFails = false, importFails = false, healthy = true, wrongScript = false, restarts = false, redisDown = false, oss = false } = {}) {
   const f = fixture(t)
   assert.equal(f.upload().status, 0)
   if (oss) {
@@ -129,8 +129,11 @@ function startupFixture(t, { migrationFails = false, storageFails = false, impor
       if (args[0].endsWith('prepare-release.mjs')) {
         return execPreparation()
       }
-      if (migrationFails && args[0].endsWith('init-db.js')) {
-        throw new Error('fixture migration failure')
+      if (preflightFails && args[0].endsWith('init-db.js') && args.includes('--check')) {
+        throw new Error('fixture preflight failure')
+      }
+      if (initializationFails && args[0].endsWith('init-db.js') && !args.includes('--check')) {
+        throw new Error('fixture initialization failure')
       }
       if (importFails && args[0].endsWith('import-credential-cli.js')) {
         throw new Error('fixture import credential synchronization failure')
@@ -189,7 +192,7 @@ test('configured tokens are validated and only their digest is written or upload
   }
 })
 
-test('managed credential synchronization runs after migration and admin bootstrap, before PM2 starts', async (t) => {
+test('managed credential synchronization runs after initialization and admin bootstrap, before PM2 starts', async (t) => {
   const f = startupFixture(t)
   writeFileSync(join(f.uploaded, 'control/app-import.sha256'), 'a'.repeat(64))
   await f.start({ initializeAdmin: true })
@@ -445,13 +448,15 @@ test('a production dependency pointing outside the release is rejected', async (
   await assert.rejects(verifyDeploymentLinks(api), /Nonportable/)
 })
 
-test('startup stops both writers before migration, replaces absolute paths and saves only a healthy release', async (t) => {
+test('startup stops both writers before initialization, replaces absolute paths and saves only a healthy release', async (t) => {
   const f = startupFixture(t)
   await f.start()
-  const migration = f.commands.findIndex((command) => command[1]?.endsWith('/dist/init-db.js'))
-  assert.ok(migration > f.commands.findIndex((command) => command[0] === 'pm2' && command[1] === 'stop' && command[2] === 't-box-api'))
-  assert.ok(migration > f.commands.findIndex((command) => command[0] === 'pm2' && command[1] === 'stop' && command[2] === 't-box-worker'))
-  assert.ok(f.commands.findIndex((command) => command[1] === 'start') > migration)
+  const initialization = f.commands.findIndex((command) => command[1]?.endsWith('/dist/init-db.js') && !command.includes('--check'))
+  const preflight = f.commands.findIndex((command) => command.includes('--check') && command[1]?.endsWith('/dist/init-db.js'))
+  assert.ok(preflight >= 0 && preflight < f.commands.findIndex((command) => command[0] === 'pm2' && command[1] === 'stop'))
+  assert.ok(initialization > f.commands.findIndex((command) => command[0] === 'pm2' && command[1] === 'stop' && command[2] === 't-box-api'))
+  assert.ok(initialization > f.commands.findIndex((command) => command[0] === 'pm2' && command[1] === 'stop' && command[2] === 't-box-worker'))
+  assert.ok(f.commands.findIndex((command) => command[1] === 'start') > initialization)
   assert.equal(f.commands.some((command) => command[1]?.endsWith('/dist/admin/bootstrap.js')), false)
   assert.deepEqual(f.commands.at(-1), ['pm2', 'save'])
   assert.equal(f.healthRequests(), 3)
@@ -460,18 +465,26 @@ test('startup stops both writers before migration, replaces absolute paths and s
   assert.equal(f.processes().find((entry) => entry.name === 'other-service').pm2_env.status, 'online')
 })
 
+test('incompatible database preflight fails before stopping either writer', async (t) => {
+  const f = startupFixture(t, { preflightFails: true })
+  await assert.rejects(f.start(), /fixture preflight failure/)
+  assert.equal(f.commands.some((command) => command[0] === 'pm2' && ['stop', 'delete', 'start', 'save'].includes(command[1])), false)
+  assert.ok(f.processes().every((entry) => entry.pm2_env.status === 'online'))
+  assert.equal(existsSync(join(f.server, '.pm2-deploy.lock')), false)
+})
+
 test('administrator initialization requires an explicit first-install option', async (t) => {
   const f = startupFixture(t)
   await f.start({ initializeAdmin: true })
-  const migration = f.commands.findIndex((command) => command[1]?.endsWith('/dist/init-db.js'))
+  const initialization = f.commands.findIndex((command) => command[1]?.endsWith('/dist/init-db.js') && !command.includes('--check'))
   const admin = f.commands.findIndex((command) => command[1]?.endsWith('/dist/admin/bootstrap.js'))
-  assert.ok(admin > migration)
+  assert.ok(admin > initialization)
   assert.ok(admin < f.commands.findIndex((command) => command[1] === 'start'))
 })
 
-test('migration failure leaves writers stopped without starting, saving or changing current', async (t) => {
-  const f = startupFixture(t, { migrationFails: true })
-  await assert.rejects(f.start(), /fixture migration failure/)
+test('initialization failure leaves writers stopped without starting, saving or changing current', async (t) => {
+  const f = startupFixture(t, { initializationFails: true })
+  await assert.rejects(f.start(), /fixture initialization failure/)
   assert.equal(f.commands.some((command) => ['start', 'save', 'delete'].includes(command[1])), false)
   assert.ok(f.processes().filter((entry) => entry.name.startsWith('t-box-')).every((entry) => entry.pm2_env.status === 'stopped'))
   assert.equal(existsSync(join(f.server, 'current')), false) // The original fixture link points at its old, absent release.

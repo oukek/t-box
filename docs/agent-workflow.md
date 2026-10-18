@@ -35,7 +35,7 @@
 
 - 后台「分析流程」：四个阶段的 Prompt 可以分别在弹窗中编辑或填入默认版本，保存时发布配置新版本。
 - 管理接口：`GET /api/v1/admin/workflow`、`GET /api/v1/admin/workflow/defaults`、`PATCH /api/v1/admin/workflow`。沿用管理员认证和 CSRF 检查。PATCH 必须带原 `revision` 与完整 `prompts`，并发修改返回 409。
-- TypeORM migration `AgentWorkflow1791244823000` 创建 `ai_workflow_configurations`（不可变版本，含管理员及时间）与 `ai_workflow_settings`（当前版本）。默认 Prompt 自动入库，已有版本不被启动覆盖。
+- 首次初始化的 `api/src/db/schema/ai.ts` 创建 `ai_workflow_configurations`（不可变版本，含管理员及时间）与 `ai_workflow_settings`（当前版本）。默认 Prompt 自动入库，已有版本不被启动覆盖。
 - `WorkflowPhaseIsolation1791244826000` 只为完全未修改的旧内置 Prompt 发布新版本，消除正文与结构化决定的冲突；自定义 Prompt 及旧任务快照保持原文。
 - 运行器通过配置端口加载快照，保存在任务 checkpoint；每个 Agent frame 保存阶段、计划、候选结果、核对结果及次数。继续任务沿用原配置，不因管理员修改而跳过授权或重跑成功写入。
 - 生产组合根从数据库注入配置端口；底层执行器测试也可以不注入该端口，以单独验证基础工具循环。旧 checkpoint 没有阶段状态时，从其尚未结束的 frame 建立阶段；已保存的待执行工具及副作用记录保持原有恢复机制。
@@ -68,7 +68,7 @@ WebSocket 继续使用有序、带 revision 的 `timeline.update` / `timeline.de
 
 ## 模型调用方式
 
-模型管理的「调用方式」存入 `ai_models.invocation_mode`，每轮任务解析一次并保持不变。现有会话模型迁移为 `responses`，图片模型迁移为 `images`。普通会话可选 `responses` / `chat_completions`；图片工具只调用 Images API，不能选作会话接口。需求分析、任务处理、结果核对、回复、摘要和免费标题均使用选中的会话适配器。
+模型管理的「调用方式」存入 `ai_models.invocation_mode`，每轮任务解析一次并保持不变。新建会话模型默认使用 `responses`，图片模型使用 `images`；历史开发库不自动接管。普通会话可选 `responses` / `chat_completions`；图片工具只调用 Images API，不能选作会话接口。需求分析、任务处理、结果核对、回复、摘要和免费标题均使用选中的会话适配器。
 
 运行时继续持久化统一的 message / function_call / function_call_output 历史。Chat Completions 适配层转为 `messages` / `assistant.tool_calls` / `tool` 消息，按 index 拼接流式工具参数，响应完整后才执行工具。普通正文仍通过 WebSocket 发布；服务商的原始隐藏推理不展示。usage.prompt_tokens / completion_tokens 转为统一用量字段，缓存输入和推理 token 分项保留。截断或断流不执行半截调用，也不自动切换接口重试。
 

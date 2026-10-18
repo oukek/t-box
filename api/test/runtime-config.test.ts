@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const require = createRequire(import.meta.url)
 function fixture(t: { after: (cleanup: () => void) => void }, metadata?: object) {
@@ -14,7 +14,10 @@ function fixture(t: { after: (cleanup: () => void) => void }, metadata?: object)
   mkdirSync(join(root, 'api/src'), { recursive: true })
   mkdirSync(join(root, 'api/node_modules'))
   symlinkSync(dirname(dirname(require.resolve('dotenv'))), join(root, 'api/node_modules/dotenv'))
+  mkdirSync(join(root, 'api/node_modules/@t-box'))
+  symlinkSync(dirname(dirname(fileURLToPath(import.meta.resolve('@t-box/errors')))), join(root, 'api/node_modules/@t-box/errors'))
   copyFileSync(new URL('../src/config.ts', import.meta.url), join(root, 'api/src/config.ts'))
+  copyFileSync(new URL('../src/error-codes.ts', import.meta.url), join(root, 'api/src/error-codes.js'))
   writeFileSync(join(root, 'api/package.json'), '{"type":"module"}')
   writeFileSync(join(root, 'api/.env'), 'MYSQL_HOST=127.0.0.1:3306\nMYSQL_USERNAME=fixture\nMYSQL_PASSWORD=file-password\nMYSQL_DATABASE=t_box_fixture\n')
   if (metadata) {

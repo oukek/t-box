@@ -6,6 +6,7 @@ import type {
   ToolCallView,
 } from '@t-box/shared'
 import type { ChatSession } from '../chat/session.js'
+import { ErrorCode } from '../error-codes.js'
 
 /** One ordered public projection per assistant turn; tool status updates retain their original position. */
 export class MessageTimeline {
@@ -51,7 +52,7 @@ export class MessageTimeline {
       this.publish(item)
     }
     if (item.kind === 'tool') {
-      throw new Error('Timeline item type conflict')
+      throw ErrorCode.INTERNAL_TIMELINE_ITEM_TYPE_CONFLICT()
     }
     const nextText = delta ? item.text + text : text
     const total = (this.message.timeline || []).reduce(
@@ -63,7 +64,7 @@ export class MessageTimeline {
       nextText.length > (kind === 'notice' ? 1000 : 80_000) ||
       (kind !== 'notice' && total + nextText.length > 400_000)
     ) {
-      throw new Error('Public timeline output limit')
+      throw ErrorCode.INTERNAL_PUBLIC_TIMELINE_OUTPUT_LIMIT()
     }
     if (delta) {
       if (!text) {
@@ -112,7 +113,7 @@ export class MessageTimeline {
       this.message.timeline!.push(item)
     } else {
       if (item.kind !== 'tool') {
-        throw new Error('Timeline item type conflict')
+        throw ErrorCode.INTERNAL_TIMELINE_ITEM_TYPE_CONFLICT()
       }
       item.tool = { ...tool }
       item.revision++

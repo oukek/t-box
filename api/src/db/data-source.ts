@@ -14,6 +14,7 @@ export function createDataSource(config = getConfig().mysql) {
     bigNumberStrings: true,
     entities,
     synchronize: false,
+    invalidWhereValuesBehavior: { null: 'throw', undefined: 'throw' },
     logging: false,
     extra: { connectionLimit: 10, waitForConnections: true, queueLimit: 100 },
   })

@@ -1,21 +1,24 @@
-import type {
-  TaskStatus,
-  TaskSummary,
-  TaskToolRecord,
-  ToolResult,
-} from '@t-box/shared'
+import type { TaskStatus, TaskSummary, TaskToolRecord } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { Actor, TaskPort, ToolJournal } from '../agent/contracts.js'
+import type { StoredAgentTask } from '../db/records/tasks-entities.js'
 import { createHash } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
+import { In, IsNull, Raw } from 'typeorm'
+import { parseToolResult } from '../agent/tool-result-schema.js'
+import { ConversationEntity } from '../db/records/conversations-entities.js'
+import {
+  AgentTaskEntity,
+  AgentTaskToolEntity,
+} from '../db/records/tasks-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 const hash = (call: { name: string, arguments: string }) =>
   createHash('sha256').update(`${call.name}:${call.arguments}`).digest('hex')
 const executionKey = (key?: string) =>
   key ? createHash('sha256').update(key).digest('hex') : null
 const uncertain = (effect: string) => ['write', 'external'].includes(effect)
-const decode = (value: string | unknown) =>
+const decode = (value: unknown): unknown =>
   typeof value === 'string' ? JSON.parse(value) : value
 /** MySQL owns execution leases/checkpoints; UI waits release leases until an authenticated client returns. */
 export class TaskStore implements TaskPort {
@@ -33,22 +36,51 @@ export class TaskStore implements TaskPort {
   }
 
   private async recoverExpired() {
-    const exhausted: { id: string }[] = await this.source.query(`SELECT id FROM agent_tasks WHERE recovery_ready=TRUE AND recovery_attempts>=5
-      AND status IN ('queued','paused') AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3)) LIMIT 256`)
+    const exhausted: { id: string }[] = await this.source
+      .createQueryBuilder()
+      .select('id')
+      .from('agent_tasks', 'agent_tasks')
+      .where(
+        'recovery_ready=TRUE AND recovery_attempts>=5\n      AND status IN (\'queued\',\'paused\') AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3))',
+      )
+      .limit(256)
+      .getRawMany()
     for (const { id } of exhausted) {
-      await this.source.query(`UPDATE agent_tasks SET recovery_ready=FALSE,recovery_claim=NULL,recovery_claim_until=NULL,
-        status='paused',reason='自动恢复尝试已达上限，请打开会话核对后继续',updated_at=UTC_TIMESTAMP(3)
-        WHERE id=? AND recovery_ready=TRUE AND recovery_attempts>=5 AND status IN ('queued','paused')
-        AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3))`, [id])
+      await this.source
+        .createQueryBuilder()
+        .update('agent_tasks')
+        .set({
+          recovery_ready: false,
+          recovery_claim: null,
+          recovery_claim_until: null,
+          status: 'paused',
+          reason: '自动恢复尝试已达上限，请打开会话核对后继续',
+          updated_at: () => 'UTC_TIMESTAMP(3)',
+        })
+        .updateEntity(false)
+        .where(
+          'id=:p0 AND recovery_ready=TRUE AND recovery_attempts>=5 AND status IN (\'queued\',\'paused\')\n        AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3))',
+        )
+        .setParameters({ p0: id })
+        .execute()
     }
     // A range UPDATE takes InnoDB next-key locks even when no lease has expired.
     // Read candidates without locks, then fence each update by its current lease.
     // Bound each sweep so recovery cannot monopolize admission on a large backlog.
-    const rows: { id: string }[] = await this.source.query(
-      `SELECT id FROM agent_tasks WHERE status='running' AND lease_until < UTC_TIMESTAMP(3) ORDER BY lease_until,id LIMIT 256`,
-    )
+    const rows: { id: string }[] = await this.source
+      .getRepository(AgentTaskEntity)
+      .find({
+        select: { id: true },
+        where: {
+          status: 'running',
+          lease_until: Raw((column) => `${column} < UTC_TIMESTAMP(3)`),
+        },
+        order: { lease_until: 'ASC', id: 'ASC' },
+        take: 256,
+      })
     for (const { id } of rows) {
       // Never replay a possibly committed write or external request after expiry.
+      // native-sql: atomic correlated update fenced against concurrent task/category changes
       await this.source.query(
         `UPDATE agent_tasks t SET
       status=IF(EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')), 'needs_review', IF(cancel_requested,'cancelled','paused')),
@@ -77,47 +109,40 @@ export class TaskStore implements TaskPort {
     try {
       await this.source.transaction(async (db) => {
         if (existingConversation) {
-          const rows = await db.query(
-            'SELECT id,revision FROM conversations WHERE id=? AND user_id=? FOR UPDATE',
-            [conversationId, actor.user.id],
-          )
-          if (!rows.length) {
-            throw new ApiError(
-              404,
-              'CONVERSATION_NOT_FOUND',
-              '会话已删除，任务未执行',
-            )
+          const row = await db.getRepository(ConversationEntity).findOne({
+            select: { id: true, revision: true },
+            where: { id: conversationId, user_id: actor.user.id },
+            lock: { mode: 'pessimistic_write' },
+          })
+          if (!row) {
+            throw ErrorCode.CONVERSATION_NOT_FOUND('会话已删除，任务未执行')
           }
           if (
             archiveRevision !== undefined &&
-            Number(rows[0].revision) !== archiveRevision
+            Number(row.revision) !== archiveRevision
           ) {
-            throw new ApiError(
-              409,
-              'CONVERSATION_STALE',
+            throw ErrorCode.CONVERSATION_STALE(
               '会话已在其他连接更新，请重新连接后继续',
             )
           }
         }
-        await db.query(
-          `INSERT INTO agent_tasks(id,user_id,conversation_id,request_id,status,active_key,agent_id,checkpoint_json,recovery_auth_hash,recovery_ready,recovery_after) VALUES(?,?,?,?,'queued',?,?,?,?,TRUE,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 SECOND))`,
-          [
-            id,
-            actor.user.id,
-            conversationId,
-            requestId,
-            conversationId,
-            agentId,
-            JSON.stringify(checkpoint),
-            actor.sessionHash,
-          ],
-        )
+        await db.getRepository(AgentTaskEntity).insert({
+          id,
+          user_id: actor.user.id,
+          conversation_id: conversationId,
+          request_id: requestId,
+          status: 'queued',
+          active_key: conversationId,
+          agent_id: agentId,
+          checkpoint_json: JSON.stringify(checkpoint),
+          recovery_auth_hash: actor.sessionHash,
+          recovery_ready: true,
+          recovery_after: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 SECOND)',
+        })
       })
     } catch (error) {
       if ((error as { code?: string }).code === 'ER_DUP_ENTRY') {
-        throw new ApiError(
-          409,
-          'TASK_IN_PROGRESS',
+        throw ErrorCode.TASK_IN_PROGRESS(
           '此会话已有待处理任务，请继续或结束该任务',
         )
       }
@@ -127,54 +152,81 @@ export class TaskStore implements TaskPort {
 
   async claim(actor: Actor, id: string, owner: string, recoveryClaim?: string) {
     await this.recover()
-    const result = await this.source.query(
-      `UPDATE agent_tasks SET status='running',reason=NULL,lease_owner=?,lease_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 90 SECOND),
-       recovery_auth_hash=?,recovery_ready=FALSE,recovery_claim=NULL,recovery_claim_until=NULL,updated_at=UTC_TIMESTAMP(3)
-       WHERE id=? AND user_id=? AND status IN ('queued','paused','waiting_client') AND cancel_requested=FALSE
-       ${recoveryClaim ? 'AND recovery_ready=TRUE AND recovery_claim=? AND recovery_claim_until>=UTC_TIMESTAMP(3)' : ''}`,
-      [owner, actor.sessionHash, id, actor.user.id, ...(recoveryClaim ? [recoveryClaim] : [])],
-    )
-    if (!result.affectedRows) {
-      throw new ApiError(
-        409,
-        'TASK_NOT_RESUMABLE',
+    const claim = this.source
+      .createQueryBuilder()
+      .update('agent_tasks')
+      .set({
+        status: 'running',
+        reason: null,
+        lease_owner: owner,
+        lease_until: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 90 SECOND)',
+        recovery_auth_hash: actor.sessionHash,
+        recovery_ready: false,
+        recovery_claim: null,
+        recovery_claim_until: null,
+        updated_at: () => 'UTC_TIMESTAMP(3)',
+      })
+      .where(
+        'id=:id AND user_id=:userId AND status IN (\'queued\',\'paused\',\'waiting_client\') AND cancel_requested=FALSE',
+        { id, userId: actor.user.id },
+      )
+    if (recoveryClaim) {
+      claim.andWhere(
+        'recovery_ready=TRUE AND recovery_claim=:recoveryClaim AND recovery_claim_until>=UTC_TIMESTAMP(3)',
+        { recoveryClaim },
+      )
+    }
+    const result = await claim.execute()
+    if (!result.affected) {
+      throw ErrorCode.TASK_NOT_RESUMABLE(
         '任务正在执行、已结束或需要核对，不能重复运行',
       )
     }
   }
 
   async guard(id: string, owner: string) {
-    const result = await this.source.query(
-      `UPDATE agent_tasks SET lease_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 90 SECOND) WHERE id=? AND lease_owner=? AND status='running' AND cancel_requested=FALSE AND lease_until>=UTC_TIMESTAMP(3)`,
-      [id, owner],
+    const result = await this.source.getRepository(AgentTaskEntity).update(
+      {
+        id,
+        lease_owner: owner,
+        status: 'running',
+        cancel_requested: false,
+        lease_until: Raw((column) => `${column} >= UTC_TIMESTAMP(3)`),
+      },
+      { lease_until: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 90 SECOND)' },
     )
-    if (!result.affectedRows) {
-      const [task] = await this.source.query(
-        'SELECT cancel_requested FROM agent_tasks WHERE id=? AND lease_owner=?',
-        [id, owner],
-      )
+    if (!result.affected) {
+      const task = await this.source.getRepository(AgentTaskEntity).findOne({
+        select: { cancel_requested: true },
+        where: { id, lease_owner: owner },
+      })
       if (task?.cancel_requested) {
-        throw new ApiError(409, 'TASK_CANCELLED', '任务已结束')
+        throw ErrorCode.TASK_CANCELLED()
       }
-      throw new ApiError(409, 'TASK_LEASE_LOST', '任务已停止或执行租约失效')
+      throw ErrorCode.TASK_LEASE_LOST('任务已停止或执行租约失效')
     }
   }
 
   async checkpoint(id: string, owner: string, value: unknown, agentId: string) {
     const serialized = JSON.stringify(value)
     if (serialized.length > 2_000_000) {
-      throw new ApiError(
-        413,
-        'TASK_STATE_LIMIT',
-        '任务上下文过大，请结束任务后新建会话',
-      )
+      throw ErrorCode.TASK_STATE_LIMIT()
     }
-    const result = await this.source.query(
-      `UPDATE agent_tasks SET checkpoint_json=?,agent_id=?,updated_at=UTC_TIMESTAMP(3) WHERE id=? AND lease_owner=? AND status='running' AND lease_until>=UTC_TIMESTAMP(3)`,
-      [serialized, agentId, id, owner],
+    const result = await this.source.getRepository(AgentTaskEntity).update(
+      {
+        id,
+        lease_owner: owner,
+        status: 'running',
+        lease_until: Raw((column) => `${column} >= UTC_TIMESTAMP(3)`),
+      },
+      {
+        checkpoint_json: serialized,
+        agent_id: agentId,
+        updated_at: () => 'UTC_TIMESTAMP(3)',
+      },
     )
-    if (!result.affectedRows) {
-      throw new ApiError(409, 'TASK_LEASE_LOST', '任务执行租约已失效')
+    if (!result.affected) {
+      throw ErrorCode.TASK_LEASE_LOST('任务执行租约已失效')
     }
   }
 
@@ -188,6 +240,7 @@ export class TaskStore implements TaskPort {
     result?: import('@t-box/shared').ChatMessage,
   ) {
     const terminal = ['completed', 'cancelled'].includes(status)
+    // native-sql: atomic correlated update fenced against concurrent task/category changes
     await this.source.query(
       `UPDATE agent_tasks t SET
       status=IF(EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=t.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain')),'needs_review',IF(cancel_requested,'cancelled',?)),
@@ -203,7 +256,19 @@ export class TaskStore implements TaskPort {
         terminal,
         execution ? JSON.stringify(execution) : null,
         execution ? JSON.stringify(execution) : null,
-        result ? JSON.stringify({ id: result.id, role: result.role, content: result.content, error: result.error, attachments: result.attachments?.map((r) => ({ id: r.id, name: r.name, mimeType: r.mimeType })) }) : 'null',
+        result
+          ? JSON.stringify({
+              id: result.id,
+              role: result.role,
+              content: result.content,
+              error: result.error,
+              attachments: result.attachments?.map((r) => ({
+                id: r.id,
+                name: r.name,
+                mimeType: r.mimeType,
+              })),
+            })
+          : 'null',
         recoverAfterShutdown,
         status,
         reason?.slice(0, 200) || null,
@@ -214,31 +279,76 @@ export class TaskStore implements TaskPort {
   }
 
   /** Reserve a preparation slot without executing anything; abandoned preparations expire. */
-  async takeRecovery(claim: string): Promise<{ id: string, userId: string, conversationId: string, sessionHash: string } | undefined> {
+  async takeRecovery(claim: string): Promise<
+    | {
+      id: string
+      userId: string
+      conversationId: string
+      sessionHash: string
+    } |
+    undefined
+  > {
     await this.recover()
     return this.source.transaction('READ COMMITTED', async (db) => {
-      const [row] = await db.query(`SELECT id,user_id,conversation_id,recovery_auth_hash FROM agent_tasks
-        WHERE recovery_ready=TRUE AND status IN ('queued','paused') AND cancel_requested=FALSE
-          AND recovery_attempts<5 AND recovery_after<=UTC_TIMESTAMP(3)
-          AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3))
-          AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=agent_tasks.id AND x.effect IN ('write','external') AND x.status IN ('dispatched','uncertain'))
-        ORDER BY recovery_after,id LIMIT 1 FOR UPDATE SKIP LOCKED`)
+      const [row] = await db
+        .createQueryBuilder()
+        .select('id,user_id,conversation_id,recovery_auth_hash')
+        .from('agent_tasks', 'agent_tasks')
+        .where(
+          'recovery_ready=TRUE AND status IN (\'queued\',\'paused\') AND cancel_requested=FALSE\n          AND recovery_attempts<5 AND recovery_after<=UTC_TIMESTAMP(3)\n          AND (recovery_claim_until IS NULL OR recovery_claim_until<UTC_TIMESTAMP(3))\n          AND NOT EXISTS(SELECT 1 FROM agent_task_tools x WHERE x.task_id=agent_tasks.id AND x.effect IN (\'write\',\'external\') AND x.status IN (\'dispatched\',\'uncertain\'))',
+        )
+        .orderBy('recovery_after', 'ASC')
+        .addOrderBy('id', 'ASC')
+        .limit(1)
+        .setLock('pessimistic_write')
+        .setOnLocked('skip_locked')
+        .getRawMany()
       if (!row) {
         return undefined
       }
-      await db.query(`UPDATE agent_tasks SET recovery_claim=?,recovery_claim_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND),
-        recovery_attempts=recovery_attempts+1 WHERE id=?`, [claim, row.id])
-      return { id: row.id, userId: row.user_id, conversationId: row.conversation_id, sessionHash: row.recovery_auth_hash }
+      await db.getRepository(AgentTaskEntity).update(
+        { id: row.id },
+        {
+          recovery_claim: claim,
+          recovery_claim_until: () =>
+            'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND)',
+          recovery_attempts: () => 'recovery_attempts+1',
+        },
+      )
+      return {
+        id: row.id,
+        userId: row.user_id,
+        conversationId: row.conversation_id,
+        sessionHash: row.recovery_auth_hash,
+      }
     })
   }
 
-  async stopRecovery(id: string, claim: string, waitingClient: boolean, reason: string) {
-    await this.source.query(`UPDATE agent_tasks SET recovery_ready=FALSE,recovery_claim=NULL,recovery_claim_until=NULL,
-      status=?,reason=?,updated_at=UTC_TIMESTAMP(3)
-      WHERE id=? AND recovery_claim=? AND status IN ('queued','paused')`, [waitingClient ? 'waiting_client' : 'paused', reason.slice(0, 200), id, claim])
+  async stopRecovery(
+    id: string,
+    claim: string,
+    waitingClient: boolean,
+    reason: string,
+  ) {
+    await this.source.getRepository(AgentTaskEntity).update(
+      { id, recovery_claim: claim, status: In(['queued', 'paused']) },
+      {
+        recovery_ready: false,
+        recovery_claim: null,
+        recovery_claim_until: null,
+        status: waitingClient ? 'waiting_client' : 'paused',
+        reason: reason.slice(0, 200),
+        updated_at: () => 'UTC_TIMESTAMP(3)',
+      },
+    )
   }
 
-  private summary(row: any): TaskSummary {
+  private summary(
+    row: Pick<
+      StoredAgentTask,
+      'id' | 'conversation_id' | 'status' | 'agent_id' | 'updated_at' | 'reason'
+    >,
+  ): TaskSummary {
     return {
       id: row.id,
       conversationId: row.conversation_id,
@@ -258,72 +368,141 @@ export class TaskStore implements TaskPort {
     tools: TaskToolRecord[]
   }> {
     await this.recover()
-    const [row] = await this.source.query(
-      'SELECT * FROM agent_tasks WHERE id=? AND user_id=?',
-      [id, actor.user.id],
-    )
+    const row = await this.source.getRepository(AgentTaskEntity).findOne({
+      select: {
+        id: true,
+        user_id: true,
+        conversation_id: true,
+        request_id: true,
+        status: true,
+        active_key: true,
+        agent_id: true,
+        checkpoint_json: true,
+        lease_owner: true,
+        lease_until: true,
+        cancel_requested: true,
+        reason: true,
+        created_at: true,
+        updated_at: true,
+        recovery_auth_hash: true,
+        recovery_ready: true,
+        recovery_attempts: true,
+        recovery_after: true,
+        recovery_claim: true,
+        recovery_claim_until: true,
+      },
+      where: { id, user_id: actor.user.id },
+    })
     if (!row) {
-      throw new ApiError(404, 'TASK_NOT_FOUND', '任务不存在')
+      throw ErrorCode.TASK_NOT_FOUND()
     }
-    const tools = await this.source.query(
-      'SELECT call_id,name,agent_id,effect,status,result_json FROM agent_task_tools WHERE task_id=? ORDER BY updated_at,call_id',
-      [id],
-    )
+    const tools = await this.source.getRepository(AgentTaskToolEntity).find({
+      select: {
+        call_id: true,
+        name: true,
+        agent_id: true,
+        effect: true,
+        status: true,
+        result_json: true,
+      },
+      where: { task_id: id },
+      order: { updated_at: 'ASC', call_id: 'ASC' },
+    })
     return {
       summary: this.summary(row),
       checkpoint: decode(row.checkpoint_json),
-      tools: tools.map((x: any): TaskToolRecord => ({
+      tools: tools.map((x): TaskToolRecord => ({
         callId: x.call_id,
         name: x.name,
         agentId: x.agent_id,
         effect: x.effect,
         status: x.status,
-        ...(x.result_json ? { result: decode(x.result_json) } : {}),
+        ...(x.result_json
+          ? { result: parseToolResult(decode(x.result_json), 'journal') }
+          : {}),
       })),
     }
   }
 
   async current(actor: Actor, conversationId: string) {
     await this.recover()
-    const [row] = await this.source.query(
-      'SELECT id,conversation_id,status,agent_id,updated_at,reason FROM agent_tasks WHERE active_key=? AND user_id=?',
-      [conversationId, actor.user.id],
-    )
+    const row = await this.source.getRepository(AgentTaskEntity).findOne({
+      select: {
+        id: true,
+        conversation_id: true,
+        status: true,
+        agent_id: true,
+        updated_at: true,
+        reason: true,
+      },
+      where: { active_key: conversationId, user_id: actor.user.id },
+    })
     return row ? this.summary(row) : null
   }
 
   async list(actor: Actor): Promise<TaskSummary[]> {
     await this.recover()
-    const rows = await this.source.query(
-      'SELECT id,conversation_id,status,agent_id,updated_at,reason FROM agent_tasks WHERE user_id=? ORDER BY updated_at DESC,id LIMIT 100',
-      [actor.user.id],
-    )
-    return rows.map((row: any) => this.summary(row))
+    const rows = await this.source.getRepository(AgentTaskEntity).find({
+      select: {
+        id: true,
+        conversation_id: true,
+        status: true,
+        agent_id: true,
+        updated_at: true,
+        reason: true,
+      },
+      where: { user_id: actor.user.id },
+      order: { updated_at: 'DESC', id: 'ASC' },
+      take: 100,
+    })
+    return rows.map((row) => this.summary(row))
   }
 
   async cancel(actor: Actor, id: string) {
     await this.recover()
-    const result = await this.source.query(
-      `UPDATE agent_tasks SET cancel_requested=TRUE,
-      status=IF(status='running',status,'cancelled'), active_key=IF(status='running',active_key,NULL),updated_at=UTC_TIMESTAMP(3)
-      WHERE id=? AND user_id=? AND status IN ('queued','running','paused','waiting_client','needs_review')`,
-      [id, actor.user.id],
+    const result = await this.source.getRepository(AgentTaskEntity).update(
+      {
+        id,
+        user_id: actor.user.id,
+        status: In([
+          'queued',
+          'running',
+          'paused',
+          'waiting_client',
+          'needs_review',
+        ]),
+      },
+      {
+        cancel_requested: true,
+        status: () => 'IF(status=\'running\',status,\'cancelled\')',
+        active_key: () => 'IF(status=\'running\',active_key,NULL)',
+        updated_at: () => 'UTC_TIMESTAMP(3)',
+      },
     )
-    if (!result.affectedRows) {
-      throw new ApiError(409, 'TASK_NOT_CANCELLABLE', '任务已结束或不存在')
+    if (!result.affected) {
+      throw ErrorCode.TASK_NOT_CANCELLABLE()
     }
   }
 
   async cancelSuspended(actor: Actor, id: string) {
     await this.recover()
-    const result = await this.source.query(
-      `UPDATE agent_tasks SET cancel_requested=TRUE,status='cancelled',active_key=NULL,
-       reason='用户发送新消息或调整会话，旧任务已结束；实际工具结果仍保留',updated_at=UTC_TIMESTAMP(3)
-       WHERE id=? AND user_id=? AND status IN ('paused','waiting_client','needs_review') AND lease_owner IS NULL`,
-      [id, actor.user.id],
+    const result = await this.source.getRepository(AgentTaskEntity).update(
+      {
+        id,
+        user_id: actor.user.id,
+        status: In(['paused', 'waiting_client', 'needs_review']),
+        lease_owner: IsNull(),
+      },
+      {
+        cancel_requested: true,
+        status: 'cancelled',
+        active_key: null,
+        reason: '用户发送新消息或调整会话，旧任务已结束；实际工具结果仍保留',
+        updated_at: () => 'UTC_TIMESTAMP(3)',
+      },
     )
-    if (!result.affectedRows) {
-      throw new ApiError(409, 'TASK_CHANGED', '旧任务状态已改变，请刷新后重试')
+    if (!result.affected) {
+      throw ErrorCode.TASK_CHANGED()
     }
   }
 
@@ -332,25 +511,31 @@ export class TaskStore implements TaskPort {
       guard: () => this.guard(id, owner),
       lookup: async (call) => {
         await this.guard(id, owner)
-        const [row] = await this.source.query(
-          'SELECT call_id,fingerprint,effect,status,result_json FROM agent_task_tools WHERE task_id=? AND (call_id=? OR execution_key=?) ORDER BY (call_id=?) DESC LIMIT 1',
-          [id, call.id, executionKey(call.writeKey), call.id],
-        )
+        const [row] = await this.source
+          .createQueryBuilder()
+          .select('call_id,fingerprint,effect,status,result_json')
+          .from('agent_task_tools', 'agent_task_tools')
+          .where('task_id=:p0 AND (call_id=:p1 OR execution_key=:p2)')
+          .orderBy('(call_id=:p3)', 'DESC')
+          .limit(1)
+          .setParameters({
+            p0: id,
+            p1: call.id,
+            p2: executionKey(call.writeKey),
+            p3: call.id,
+          })
+          .getRawMany()
         if (!row) {
           return undefined
         }
         if (row.call_id === call.id && row.fingerprint !== hash(call)) {
-          throw new ApiError(409, 'CALL_ID_CONFLICT', '持久工具调用标识冲突')
+          throw ErrorCode.CALL_ID_CONFLICT('持久工具调用标识冲突')
         }
         if (row.status === 'completed') {
-          return decode(row.result_json) as ToolResult
+          return parseToolResult(decode(row.result_json), 'journal')
         }
         if (uncertain(row.effect)) {
-          throw new ApiError(
-            409,
-            'TOOL_OUTCOME_UNCERTAIN',
-            '工具结果需要核对，禁止自动重复写入',
-          )
+          throw ErrorCode.TOOL_OUTCOME_UNCERTAIN()
         }
         return undefined
       },
@@ -359,10 +544,16 @@ export class TaskStore implements TaskPort {
         // The parent row serializes this task's calls; do not gap-lock absent tool
         // receipts across unrelated tasks before their first INSERT.
         await this.source.transaction('READ COMMITTED', async (db) => {
-          const [task] = await db.query(
-            'SELECT lease_owner,cancel_requested,status,lease_until>=UTC_TIMESTAMP(3) AS valid FROM agent_tasks WHERE id=? FOR UPDATE',
-            [id],
-          )
+          const [task] = await db
+            .createQueryBuilder()
+            .select(
+              'lease_owner,cancel_requested,status,lease_until>=UTC_TIMESTAMP(3) AS valid',
+            )
+            .from('agent_tasks', 'agent_tasks')
+            .where('id=:p0')
+            .setLock('pessimistic_write')
+            .setParameters({ p0: id })
+            .getRawMany()
           if (
             !task ||
             task.lease_owner !== owner ||
@@ -370,36 +561,55 @@ export class TaskStore implements TaskPort {
             task.cancel_requested ||
             !task.valid
           ) {
-            throw new ApiError(409, 'TASK_LEASE_LOST', '任务已停止或租约失效')
+            throw ErrorCode.TASK_LEASE_LOST('任务已停止或租约失效')
           }
-          const [previous] = await db.query(
-            'SELECT fingerprint,effect,status FROM agent_task_tools WHERE task_id=? AND (call_id=? OR execution_key=?) FOR UPDATE',
-            [id, call.id, executionKey(call.writeKey)],
-          )
+          const [previous] = await db
+            .createQueryBuilder()
+            .select('fingerprint,effect,status')
+            .from('agent_task_tools', 'agent_task_tools')
+            .where('task_id=:p0 AND (call_id=:p1 OR execution_key=:p2)')
+            .setLock('pessimistic_write')
+            .setParameters({
+              p0: id,
+              p1: call.id,
+              p2: executionKey(call.writeKey),
+            })
+            .getRawMany()
           if (
             previous &&
             (previous.fingerprint !== hash(call) ||
               previous.status === 'completed' ||
               uncertain(previous.effect))
           ) {
-            throw new ApiError(
-              409,
-              'TOOL_ALREADY_DISPATCHED',
-              '同一工具操作已提交，不能重复执行',
-            )
+            throw ErrorCode.TOOL_ALREADY_DISPATCHED()
           }
-          await db.query(
-            `INSERT INTO agent_task_tools(task_id,call_id,name,agent_id,fingerprint,execution_key,effect,status) VALUES(?,?,?,?,?,?,?,'dispatched') ON DUPLICATE KEY UPDATE status='dispatched',updated_at=UTC_TIMESTAMP(3)`,
-            [
-              id,
-              call.id,
-              call.name,
-              agentId,
-              hash(call),
-              executionKey(call.writeKey),
-              effect,
-            ],
-          )
+          await db
+            .createQueryBuilder()
+            .insert()
+            .into('agent_task_tools')
+            .values({
+              task_id: () => ':p0',
+              call_id: () => ':p1',
+              name: () => ':p2',
+              agent_id: () => ':p3',
+              fingerprint: () => ':p4',
+              execution_key: () => ':p5',
+              effect: () => ':p6',
+              status: () => '\'dispatched\'',
+              updated_at: () => 'UTC_TIMESTAMP(3)',
+            })
+            .updateEntity(false)
+            .setParameters({
+              p0: id,
+              p1: call.id,
+              p2: call.name,
+              p3: agentId,
+              p4: hash(call),
+              p5: executionKey(call.writeKey),
+              p6: effect,
+            })
+            .orUpdate(['status', 'updated_at'])
+            .execute()
         })
       },
       complete: async (callId, result) => {
@@ -408,44 +618,47 @@ export class TaskStore implements TaskPort {
         const effect = await this.source.transaction(async (db) => {
           // Every journal mutation locks the parent before its tools, matching dispatch/recovery.
           // A multi-table UPDATE can choose the opposite order and deadlock concurrent recovery.
-          const [task] = await db.query(
-            'SELECT lease_owner,status,lease_until>=UTC_TIMESTAMP(3) AS valid FROM agent_tasks WHERE id=? FOR UPDATE',
-            [id],
-          )
+          const [task] = await db
+            .createQueryBuilder()
+            .select('lease_owner,status,lease_until>=UTC_TIMESTAMP(3) AS valid')
+            .from('agent_tasks', 'agent_tasks')
+            .where('id=:p0')
+            .setLock('pessimistic_write')
+            .setParameters({ p0: id })
+            .getRawMany()
           if (
             !task ||
             task.lease_owner !== owner ||
             task.status !== 'running' ||
             !task.valid
           ) {
-            throw new ApiError(
-              409,
-              'TASK_LEASE_LOST',
-              '工具执行结果未能持久保存，请核对操作',
-            )
+            throw ErrorCode.TASK_LEASE_LOST()
           }
-          const resultDB = await db.query(
-            'UPDATE agent_task_tools SET result_json=?,status=IF(effect IN (\'write\',\'external\'),?,\'completed\'),updated_at=UTC_TIMESTAMP(3) WHERE task_id=? AND call_id=?',
-            [JSON.stringify(result), outcome, id, callId],
-          )
-          if (!resultDB.affectedRows) {
-            throw new ApiError(
-              409,
-              'TASK_LEASE_LOST',
-              '工具执行结果未能持久保存，请核对操作',
-            )
+          const resultDB = await db
+            .createQueryBuilder()
+            .update('agent_task_tools')
+            .set({
+              result_json: JSON.stringify(result),
+              status: () =>
+                'IF(effect IN (\'write\',\'external\'),:p1,\'completed\')',
+              updated_at: () => 'UTC_TIMESTAMP(3)',
+            })
+            .updateEntity(false)
+            .where('task_id=:p2 AND call_id=:p3')
+            .setParameters({ p1: outcome, p2: id, p3: callId })
+            .execute()
+          if (!resultDB.affected) {
+            throw ErrorCode.TASK_LEASE_LOST()
           }
-          const [row] = await db.query(
-            'SELECT effect FROM agent_task_tools WHERE task_id=? AND call_id=?',
-            [id, callId],
-          )
+          const row = await db.getRepository(AgentTaskToolEntity).findOne({
+            select: { effect: true },
+            where: { task_id: id, call_id: callId },
+          })
           return row?.effect as string | undefined
         })
         if (!result.ok) {
           if (effect && uncertain(effect)) {
-            throw new ApiError(
-              409,
-              'TOOL_OUTCOME_UNCERTAIN',
+            throw ErrorCode.TOOL_OUTCOME_UNCERTAIN(
               `操作结果未能确认：${result.error.message.slice(0, 140)}；请核对后结束该任务`,
             )
           }

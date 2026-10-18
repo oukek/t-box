@@ -1,3 +1,8 @@
+import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
+import { In, IsNull } from 'typeorm'
+import { DebtPositionEntity } from '../domain-entities.js'
+import { BillEntity } from '../entities.js'
+import { LedgerReimbursementEntity } from '../persistence/refunds-entities.js'
 /** Human-readable confirmation stays in the app, alongside its domain operations. */
 export function confirmationLines(
   name: string,
@@ -137,28 +142,52 @@ export async function loadConfirmationLabels(
     return initial
   }
   const values = [...ids]
-  const markers = values.map(() => '?').join(',')
   if (userId) {
-    for (const r of await db.query(
-      `SELECT id,name FROM resources WHERE user_id=? AND deleted_at IS NULL AND id IN (${markers})`,
-      [userId, ...values],
-    )) {
+    for (const r of await db.getRepository(ResourceEntity).find({
+      select: { id: true, name: true },
+      where: { user_id: userId, deleted_at: IsNull(), id: In(values) },
+    })) {
       initial.set(r.id, r.name)
     }
   }
   const [bills, debts, reimbursements] = await Promise.all([
-    db.query(
-      `SELECT id,bill_date AS date,amount,note FROM bills WHERE ledger_id=? AND id IN (${markers})`,
-      [book, ...values],
-    ),
-    db.query(
-      `SELECT id,counterparty,direction,remaining FROM debt_positions WHERE ledger_id=? AND id IN (${markers})`,
-      [book, ...values],
-    ),
-    db.query(
-      `SELECT id,counterparty,amount,received FROM ledger_reimbursements WHERE ledger_id=? AND id IN (${markers})`,
-      [book, ...values],
-    ),
+    db
+      .getRepository(BillEntity)
+      .find({
+        select: { id: true, date: true, amount: true, note: true },
+        where: { ledgerId: book, id: In(values) },
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          date: row.date,
+          amount: row.amount,
+          note: row.note,
+        })),
+      ),
+    db
+      .getRepository(DebtPositionEntity)
+      .find({
+        select: {
+          id: true,
+          counterparty: true,
+          direction: true,
+          remaining: true,
+        },
+        where: { ledgerId: book, id: In(values) },
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          counterparty: row.counterparty,
+          direction: row.direction,
+          remaining: row.remaining,
+        })),
+      ),
+    db.getRepository(LedgerReimbursementEntity).find({
+      select: { id: true, counterparty: true, amount: true, received: true },
+      where: { ledger_id: book, id: In(values) },
+    }),
   ])
   for (const r of bills) {
     initial.set(r.id, `${r.date} ${r.note || '支出'} ¥ ${r.amount}`)

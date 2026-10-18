@@ -1,7 +1,7 @@
 import type { ConfigurationSnapshot } from '@t-box/shared'
 import type { ChatProvider, ProviderInput } from '../chat/provider.js'
 import type { ProviderConcurrency } from './concurrency.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 export class LimitedChatProvider implements ChatProvider {
   readonly mode
@@ -41,7 +41,7 @@ export class LimitedChatProvider implements ChatProvider {
 
   compact(input: ProviderInput) {
     if (!this.inner.compact) {
-      throw new ApiError(409, 'COMPACTION_DISABLED', '服务商不支持上下文压缩')
+      throw ErrorCode.COMPACTION_DISABLED()
     }
     return this.execute(input.signal, (signal) =>
       this.inner.compact!({ ...input, signal }))
@@ -49,7 +49,7 @@ export class LimitedChatProvider implements ChatProvider {
 
   summarize(input: ProviderInput) {
     if (!this.inner.summarize) {
-      throw new ApiError(409, 'SUMMARY_UNSUPPORTED', '服务商不支持摘要压缩')
+      throw ErrorCode.SUMMARY_UNSUPPORTED()
     }
     return this.execute(input.signal, (signal) =>
       this.inner.summarize!({ ...input, signal }))
@@ -57,11 +57,7 @@ export class LimitedChatProvider implements ChatProvider {
 
   countInputTokens(input: ProviderInput) {
     if (!this.inner.countInputTokens) {
-      throw new ApiError(
-        409,
-        'TOKEN_COUNT_UNSUPPORTED',
-        '服务商不支持输入 token 计数',
-      )
+      throw ErrorCode.TOKEN_COUNT_UNSUPPORTED()
     }
     return this.execute(input.signal, (signal) =>
       this.inner.countInputTokens!({ ...input, signal }))

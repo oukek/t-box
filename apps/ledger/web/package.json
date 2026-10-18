@@ -18,6 +18,7 @@
     "@t-box/app-contracts": "workspace:*",
     "@t-box/app-sdk": "workspace:*",
     "@t-box/app-web-sdk": "workspace:*",
+    "@t-box/errors": "workspace:*",
     "@t-box/ledger-contracts": "workspace:*",
     "@t-box/shared": "workspace:*",
     "@t-box/ui-kit": "workspace:*",

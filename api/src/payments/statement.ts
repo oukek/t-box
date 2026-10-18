@@ -1,12 +1,7 @@
 import type { MerchantStatement } from './gateway.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
-const invalid = () =>
-  new ApiError(
-    502,
-    'STATEMENT_INVALID',
-    '微信账单格式或金额无法校验，请核对原账单',
-  )
+const invalid = () => ErrorCode.STATEMENT_INVALID()
 /** Quoted CSV cells plus WeChat's leading backtick; personal/bank fields never leave this parser. */
 export function parseStatementCSV(
   text: string,

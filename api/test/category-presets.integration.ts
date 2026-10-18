@@ -16,6 +16,8 @@ await runner.startTransaction()
 const db = runner.manager
 const transactionalSource = {
   query: db.query.bind(db),
+  getRepository: db.getRepository.bind(db),
+  createQueryBuilder: db.createQueryBuilder.bind(db),
   transaction: (work: (manager: typeof db) => Promise<unknown>) => work(db),
 } as unknown as DataSource
 const service = new CategoryPresetAdministration(transactionalSource)

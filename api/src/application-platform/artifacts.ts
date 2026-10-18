@@ -10,17 +10,16 @@ import {
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validId } from '@t-box/app-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { applicationSettings } from '../config.js'
+import { ErrorCode } from '../error-codes.js'
 import { OssApplicationArtifacts } from './oss-artifacts.js'
 
 export const applicationArtifactRoot = fileURLToPath(
   new URL('../../../output/app-artifacts/', import.meta.url),
 )
-const sha = (v: string | Buffer) =>
-  createHash('sha256').update(v).digest('hex')
+const sha = (v: string | Buffer) => createHash('sha256').update(v).digest('hex')
 const bad = (message: string): never => {
-  throw new ApiError(400, 'INVALID_APP_ARTIFACT', message)
+  throw ErrorCode.INVALID_APP_ARTIFACT(message)
 }
 const pathValid = (p: unknown): p is string =>
   typeof p === 'string' &&
@@ -36,14 +35,24 @@ export interface ArtifactSummary {
 /** Publisher uploads a static build directory. No archive extraction, shell execution or network fetch. */
 export class ApplicationArtifacts {
   readonly remote?: OssApplicationArtifacts
-  constructor(readonly root = applicationArtifactRoot, options: { delivery?: string, origin?: string, fetcher?: typeof fetch } = {}) {
+  constructor(
+    readonly root = applicationArtifactRoot,
+    options: {
+      delivery?: string
+      origin?: string
+      fetcher?: typeof fetch
+    } = {},
+  ) {
     const settings = applicationSettings()
     const delivery = options.delivery || settings.delivery
     if (process.env.NODE_ENV === 'production' && delivery !== 'oss') {
-      throw new Error('Production application files must be stored in OSS')
+      throw ErrorCode.INTERNAL_PRODUCTION_APPLICATION_FILES_MUST_BE_STORED_IN_OSS()
     }
     if (delivery === 'oss') {
-      this.remote = new OssApplicationArtifacts(options.origin || settings.origin, options.fetcher)
+      this.remote = new OssApplicationArtifacts(
+        options.origin || settings.origin,
+        options.fetcher,
+      )
     }
   }
 
@@ -188,12 +197,19 @@ export class ApplicationArtifacts {
     return { digest, bytes, fileCount: scanned.size }
   }
 
-  async list(appId: string, digests: readonly string[] = []): Promise<ArtifactSummary[]> {
+  async list(
+    appId: string,
+    digests: readonly string[] = [],
+  ): Promise<ArtifactSummary[]> {
     if (!validId(appId)) {
       bad('应用标识无效')
     }
     if (this.remote) {
-      return Promise.all([...new Set(digests)].map((digest) => this.remote!.verify(appId, digest)))
+      return Promise.all(
+        [...new Set(digests)].map((digest) =>
+          this.remote!.verify(appId, digest),
+        ),
+      )
     }
     let entries: string[]
     try {

@@ -13,9 +13,19 @@ export interface LedgerRuntimeServices extends LedgerServices {
   ledgers: LedgerService
   identity: LedgerIdentityPort
   resources?: {
-    writeApplicationAsset(id: string, bytes: Buffer, file: { name: string, mimeType: string }): Promise<{ path: string, storageBackend: string }>
-    readApplicationAsset(location: { path: string, storageBackend: string }): Promise<Buffer>
-    removeApplicationAsset(location: { path: string, storageBackend: string }): Promise<void>
+    writeApplicationAsset(
+      id: string,
+      bytes: Buffer,
+      file: { name: string, mimeType: string },
+    ): Promise<{ path: string, storageBackend: string }>
+    readApplicationAsset(location: {
+      path: string
+      storageBackend: string
+    }): Promise<Buffer>
+    removeApplicationAsset(location: {
+      path: string
+      storageBackend: string
+    }): Promise<void>
     createFile(
       actor: Principal,
       name: string,
@@ -30,6 +40,7 @@ export interface LedgerRuntimeServices extends LedgerServices {
       actor: Principal,
       id: string,
     ): Promise<{ id: string, name: string, mimeType: string, size: number }>
+    remove(actor: Principal, id: string): Promise<void>
     readForApplication(
       id: string,
       authorize: () => Promise<unknown>,

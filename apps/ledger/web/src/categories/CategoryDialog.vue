@@ -135,7 +135,7 @@ async function save() {
       `category:${props.category?.id ?? 'new'}`,
       body,
       (key) =>
-        featureApi(props.ledgerId).write(
+        featureApi(props.ledgerId).write<{ id: string }>(
           props.category ? `/categories/${props.category.id}` : '/categories',
           body,
           props.category ? 'PATCH' : 'POST',

@@ -6,6 +6,7 @@ import type {
 import type { LedgerAccess } from '../ledgers/access.js'
 import type { Principal } from '../ledgers/types.js'
 import { invalid } from '@t-box/server-foundation/errors'
+import { LedgerEntity } from '../domain-entities.js'
 import { cents, money } from '../finance/money.js'
 import { audit } from '../ledgers/audit.js'
 import { date, object, today } from '../ledgers/validation.js'
@@ -87,10 +88,16 @@ export class StatisticsService {
         false,
         db,
       )
-      const rows = await db.query(
-        'SELECT stat_date AS date,income,expense,cash_in AS cashIn,cash_out AS cashOut,receivable_delta AS receivableChange,payable_delta AS payableChange,record_count AS count FROM ledger_daily_stats WHERE ledger_id=? AND stat_date BETWEEN ? AND ? ORDER BY stat_date',
-        [ledgerId, period.start, period.end],
-      )
+      const rows = await db
+        .createQueryBuilder()
+        .select(
+          'stat_date AS date,income,expense,cash_in AS cashIn,cash_out AS cashOut,receivable_delta AS receivableChange,payable_delta AS payableChange,record_count AS count',
+        )
+        .from('ledger_daily_stats', 'ledger_daily_stats')
+        .where('ledger_id=:p0 AND stat_date BETWEEN :p1 AND :p2')
+        .orderBy('stat_date', 'ASC')
+        .setParameters({ p0: ledgerId, p1: period.start, p2: period.end })
+        .getRawMany()
       const totals = {
         income: 0n,
         expense: 0n,
@@ -105,26 +112,40 @@ export class StatisticsService {
         totals.cashOut += numeric(row.cashOut)
         totals.count += Number(row.count)
       }
-      const [balances] = await db.query(
-        `SELECT
-        SUM(IF(stat_date<?,receivable_delta,0)) AS openingReceivable,SUM(IF(stat_date<?,payable_delta,0)) AS openingPayable,
-        SUM(IF(stat_date<=?,receivable_delta,0)) AS closingReceivable,SUM(IF(stat_date<=?,payable_delta,0)) AS closingPayable,
-        SUM(IF(stat_date<=?,receivable_delta,0)) AS currentReceivable,SUM(IF(stat_date<=?,payable_delta,0)) AS currentPayable
-        FROM ledger_daily_stats WHERE ledger_id=?`,
-        [
-          period.start,
-          period.start,
-          period.end,
-          period.end,
-          today(),
-          today(),
+      const [balances] = await db
+        .createQueryBuilder()
+        .select(
+          'SUM(IF(stat_date<:p0,receivable_delta,0)) AS openingReceivable,SUM(IF(stat_date<:p1,payable_delta,0)) AS openingPayable,\n        SUM(IF(stat_date<=:p2,receivable_delta,0)) AS closingReceivable,SUM(IF(stat_date<=:p3,payable_delta,0)) AS closingPayable,\n        SUM(IF(stat_date<=:p4,receivable_delta,0)) AS currentReceivable,SUM(IF(stat_date<=:p5,payable_delta,0)) AS currentPayable',
+        )
+        .from('ledger_daily_stats', 'ledger_daily_stats')
+        .where('ledger_id=:p6')
+        .setParameters({
+          p0: period.start,
+          p1: period.start,
+          p2: period.end,
+          p3: period.end,
+          p4: today(),
+          p5: today(),
+          p6: ledgerId,
+        })
+        .getRawMany()
+      const categories = await db
+        .createQueryBuilder()
+        .select('category_id', 'category')
+        .addSelect('type')
+        .addSelect('SUM(amount)', 'amount')
+        .addSelect('SUM(record_count)', 'count')
+        .from('ledger_daily_categories', 'categories')
+        .where('ledger_id=:ledgerId AND stat_date BETWEEN :start AND :end', {
           ledgerId,
-        ],
-      )
-      const categories = await db.query(
-        'SELECT category_id AS category,type,SUM(amount) AS amount,SUM(record_count) AS count FROM ledger_daily_categories WHERE ledger_id=? AND stat_date BETWEEN ? AND ? GROUP BY category_id,type HAVING SUM(amount)<>0 ORDER BY SUM(amount) DESC',
-        [ledgerId, period.start, period.end],
-      )
+          start: period.start,
+          end: period.end,
+        })
+        .groupBy('category_id')
+        .addGroupBy('type')
+        .having('SUM(amount)<>0')
+        .orderBy('SUM(amount)', 'DESC')
+        .getRawMany()
       const byDate = new Map<string, LedgerStatisticPoint>(
         rows.map((row: LedgerStatisticPoint) => [
           row.date,
@@ -153,6 +174,7 @@ export class StatisticsService {
         next.setUTCDate(next.getUTCDate() + 1)
         cursor = next.toISOString().slice(0, 10)
       }
+      // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
       const [deductions] = await db.query(
         'SELECT (SELECT COALESCE(SUM(amount),0) FROM ledger_refunds WHERE ledger_id=? AND reversed=FALSE AND refund_date BETWEEN ? AND ?) AS refunded,(SELECT COALESCE(SUM(amount),0) FROM ledger_reimbursement_receipts WHERE ledger_id=? AND reversed=FALSE AND receipt_date BETWEEN ? AND ?) AS reimbursed',
         [
@@ -203,9 +225,9 @@ export class StatisticsService {
   async rebuild(principal: Principal, ledgerId: string) {
     await this.access.transaction(principal, ledgerId, 'manage', async (db) => {
       await rebuild(db, ledgerId)
-      await db.query('UPDATE ledgers SET revision=revision+1 WHERE id=?', [
-        ledgerId,
-      ])
+      await db
+        .getRepository(LedgerEntity)
+        .update({ id: ledgerId }, { revision: () => 'revision+1' })
       await audit(db, ledgerId, principal.user.id, 'statistics.rebuilt', null)
     })
     return { rebuilt: true }

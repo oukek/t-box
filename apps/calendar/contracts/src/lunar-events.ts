@@ -1,5 +1,6 @@
 import type { CalendarEventInput, CalendarLunarDate } from './types.js'
-import { DateTimeError, dayjs, validDate } from '@t-box/time-contracts'
+import { DateTimeErrorCode } from '@t-box/dayjs'
+import { dayjs, validDate } from '@t-box/time-contracts'
 import { Lunar, LunarMonth, LunarYear, Solar } from 'lunar-typescript'
 
 export const lunarYearMin = 1900
@@ -11,7 +12,7 @@ const monthCache = new Map<
 const dateCache = new Map<string, CalendarLunarDate>()
 export function lunarMonths(year: number) {
   if (!Number.isInteger(year) || year < lunarYearMin || year > lunarYearMax) {
-    throw new DateTimeError('农历年份支持 1900 至 2100 年')
+    throw DateTimeErrorCode.INVALID_DATETIME('农历年份支持 1900 至 2100 年')
   }
   let months = monthCache.get(year)
   if (!months) {
@@ -29,7 +30,7 @@ export function lunarMonths(year: number) {
 export function lunarDays(year: number, month: number) {
   const selected = lunarMonths(year).find((m) => m.value === month)
   if (!selected) {
-    throw new DateTimeError('该农历年份没有所选月份或闰月')
+    throw DateTimeErrorCode.INVALID_DATETIME('该农历年份没有所选月份或闰月')
   }
   return Array.from({ length: selected.days }, (_, i) => ({
     value: i + 1,
@@ -46,20 +47,24 @@ export function lunarToSolar(value: CalendarLunarDate): string {
     value.day < 1 ||
     value.day > month.days
   ) {
-    throw new DateTimeError('农历日期不存在，请检查闰月和当月天数')
+    throw DateTimeErrorCode.INVALID_DATETIME(
+      '农历日期不存在，请检查闰月和当月天数',
+    )
   }
   const date = Lunar.fromYmd(value.year, month.value, value.day)
     .getSolar()
     .toYmd()
   if (date < '1900-01-01' || date > '2100-12-31') {
-    throw new DateTimeError('农历事件对应的公历日期需在 1900 至 2100 年内')
+    throw DateTimeErrorCode.INVALID_DATETIME(
+      '农历事件对应的公历日期需在 1900 至 2100 年内',
+    )
   }
   return date
 }
 export function solarToLunar(date: string): CalendarLunarDate {
   validDate(date)
   if (date < '1900-01-01' || date > '2100-12-31') {
-    throw new DateTimeError('农历事件支持公历 1900 至 2100 年')
+    throw DateTimeErrorCode.INVALID_DATETIME('农历事件支持公历 1900 至 2100 年')
   }
   let result = dateCache.get(date)
   if (!result) {

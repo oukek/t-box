@@ -1,9 +1,6 @@
 import type { ContextPolicy } from '@t-box/shared'
-import { ApiError } from '@t-box/server-foundation/errors'
-import {
-  contextOutputBudget,
-  DEFAULT_CONTEXT_POLICY,
-} from '@t-box/shared'
+import { contextOutputBudget, DEFAULT_CONTEXT_POLICY } from '@t-box/shared'
+import { ErrorCode } from '../error-codes.js'
 
 export function contextPolicy(
   value: unknown,
@@ -13,13 +10,13 @@ export function contextPolicy(
   try {
     v = typeof value === 'string' ? JSON.parse(value) : value
   } catch {
-    throw new ApiError(400, 'INVALID_CONTEXT_POLICY', '上下文配置无效')
+    throw ErrorCode.INVALID_CONTEXT_POLICY()
   }
   if (v == null) {
     return { ...DEFAULT_CONTEXT_POLICY }
   }
   if (typeof v !== 'object' || Array.isArray(v)) {
-    throw new ApiError(400, 'INVALID_CONTEXT_POLICY', '上下文配置无效')
+    throw ErrorCode.INVALID_CONTEXT_POLICY()
   }
   const raw = v as Record<string, unknown>
   // Existing records with native compression disabled gain portable summarization.
@@ -51,9 +48,7 @@ export function contextPolicy(
       (v) => typeof v !== 'boolean',
     )
   ) {
-    throw new ApiError(
-      400,
-      'INVALID_CONTEXT_POLICY',
+    throw ErrorCode.INVALID_CONTEXT_POLICY(
       '上下文预算或压缩配置无效，请检查字段范围',
     )
   }
@@ -61,9 +56,7 @@ export function contextPolicy(
     x.contextWindowTokens &&
     x.contextWindowTokens - contextOutputBudget(x, reasoning) - 1024 < 8192
   ) {
-    throw new ApiError(
-      400,
-      'INVALID_CONTEXT_POLICY',
+    throw ErrorCode.INVALID_CONTEXT_POLICY(
       '总窗口需至少容纳输出预算、8192 输入 token 及 1024 安全余量',
     )
   }

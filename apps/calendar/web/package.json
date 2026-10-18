@@ -20,6 +20,7 @@
     "@t-box/app-web-sdk": "workspace:*",
     "@t-box/calendar-contracts": "workspace:*",
     "@t-box/device-reminders": "workspace:*",
+    "@t-box/errors": "workspace:*",
     "@t-box/shared": "workspace:*",
     "@t-box/time-contracts": "workspace:*",
     "@t-box/ui-kit": "workspace:*",

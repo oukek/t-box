@@ -8,7 +8,7 @@ import type {
   LifecycleRequest,
 } from '@t-box/app-contracts'
 import type { ApplicationBackend } from './contracts.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../../error-codes.js'
 /** Bound by trusted deployment configuration. Credentials never enter catalog or model prompts. */
 export class RemoteApplicationBackend implements ApplicationBackend {
   private readonly base: URL
@@ -29,12 +29,10 @@ export class RemoteApplicationBackend implements ApplicationBackend {
           ['localhost', '127.0.0.1', '[::1]'].includes(this.base.hostname)
         ))
     ) {
-      throw new Error(
-        'Remote applications require HTTPS or loopback development endpoint',
-      )
+      throw ErrorCode.INTERNAL_REMOTE_APPLICATIONS_REQUIRE_HTTPS_OR_LOOPBACK_DEVELOPMENT_ENDPOINT()
     }
     if (!credential) {
-      throw new Error('Remote service credential is required')
+      throw ErrorCode.INTERNAL_REMOTE_SERVICE_CREDENTIAL_IS_REQUIRED()
     }
   }
 
@@ -56,14 +54,14 @@ export class RemoteApplicationBackend implements ApplicationBackend {
         : AbortSignal.timeout(this.timeout),
     })
     if (!response.ok) {
-      throw new ApiError(502, 'APP_BACKEND_UNAVAILABLE', '应用后端暂时不可用')
+      throw ErrorCode.APP_BACKEND_UNAVAILABLE()
     }
     const reader = response.body?.getReader()
     const chunks: Uint8Array[] = []
     let size = 0
     try {
       if (!reader) {
-        throw new Error('Empty application response')
+        throw ErrorCode.INTERNAL_EMPTY_APPLICATION_RESPONSE()
       }
       while (true) {
         const { done, value } = await reader.read()
@@ -72,7 +70,7 @@ export class RemoteApplicationBackend implements ApplicationBackend {
         }
         size += value.byteLength
         if (size > 256_000) {
-          throw new Error('Application response too large')
+          throw ErrorCode.INTERNAL_APPLICATION_RESPONSE_TOO_LARGE()
         }
         chunks.push(value)
       }
@@ -87,7 +85,7 @@ export class RemoteApplicationBackend implements ApplicationBackend {
       return null
     }
     if (!value || typeof value !== 'object') {
-      throw new Error('Invalid lifecycle receipt')
+      throw ErrorCode.INTERNAL_INVALID_LIFECYCLE_RECEIPT()
     }
     const r = value as LifecycleReceipt
     if (r.status === 'pending') {
@@ -104,7 +102,7 @@ export class RemoteApplicationBackend implements ApplicationBackend {
     if (r.status === 'rejected' && typeof r.message === 'string') {
       return { status: 'rejected', message: r.message.slice(0, 300) }
     }
-    throw new Error('Invalid lifecycle receipt')
+    throw ErrorCode.INTERNAL_INVALID_LIFECYCLE_RECEIPT()
   }
 
   async lifecycle(request: LifecycleRequest) {
@@ -123,22 +121,62 @@ export class RemoteApplicationBackend implements ApplicationBackend {
     return this.request('invoke', request, signal)
   }
 
-  async prepare(request: BackendPreparation, signal?: AbortSignal): Promise<BackendPreparationResult> {
-    const value = await this.request('prepare', request, signal) as BackendPreparationResult
-    const opaque = (text: unknown) => typeof text === 'string' && text.length > 0 && text.length <= 4096
-    if (value?.status === 'ready' && (value.ticket === undefined || opaque(value.ticket))) {
-      return { status: 'ready', ...(value.ticket ? { ticket: value.ticket } : {}) }
+  async prepare(
+    request: BackendPreparation,
+    signal?: AbortSignal,
+  ): Promise<BackendPreparationResult> {
+    const value = (await this.request(
+      'prepare',
+      request,
+      signal,
+    )) as BackendPreparationResult
+    const opaque = (text: unknown) =>
+      typeof text === 'string' && text.length > 0 && text.length <= 4096
+    if (
+      value?.status === 'ready' &&
+      (value.ticket === undefined || opaque(value.ticket))
+    ) {
+      return {
+        status: 'ready',
+        ...(value.ticket ? { ticket: value.ticket } : {}),
+      }
     }
-    if (value?.status === 'interaction' && opaque(value.continuation) && typeof value.request?.name === 'string' && value.request.name.length <= 128 && JSON.stringify(value.request.arguments ?? null).length <= 64_000) {
-      return { status: 'interaction', continuation: value.continuation, request: { name: value.request.name, arguments: value.request.arguments } }
+    if (
+      value?.status === 'interaction' &&
+      opaque(value.continuation) &&
+      typeof value.request?.name === 'string' &&
+      value.request.name.length <= 128 &&
+      JSON.stringify(value.request.arguments ?? null).length <= 64_000
+    ) {
+      return {
+        status: 'interaction',
+        continuation: value.continuation,
+        request: {
+          name: value.request.name,
+          arguments: value.request.arguments,
+        },
+      }
     }
-    throw new ApiError(502, 'APP_PROTOCOL_INVALID', '应用交互协议无效')
+    throw ErrorCode.APP_PROTOCOL_INVALID('应用交互协议无效')
   }
 
-  async events(request: BackendEventRequest, signal?: AbortSignal): Promise<BackendEventBatch> {
-    const value = await this.request('events/poll', request, signal) as BackendEventBatch
-    if (!value || typeof value.cursor !== 'string' || value.cursor.length > 4096 || !Array.isArray(value.events) || value.events.length > 50) {
-      throw new ApiError(502, 'APP_PROTOCOL_INVALID', '应用事件协议无效')
+  async events(
+    request: BackendEventRequest,
+    signal?: AbortSignal,
+  ): Promise<BackendEventBatch> {
+    const value = (await this.request(
+      'events/poll',
+      request,
+      signal,
+    )) as BackendEventBatch
+    if (
+      !value ||
+      typeof value.cursor !== 'string' ||
+      value.cursor.length > 4096 ||
+      !Array.isArray(value.events) ||
+      value.events.length > 50
+    ) {
+      throw ErrorCode.APP_PROTOCOL_INVALID()
     }
     return { cursor: value.cursor, events: value.events }
   }

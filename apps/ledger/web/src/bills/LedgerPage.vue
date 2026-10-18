@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LedgerAccount } from '@t-box/ledger-contracts'
+import type { LedgerAccount, LedgerMember } from '@t-box/ledger-contracts'
 import type { FormValues, LedgerFormField } from '../features/form'
 import { AppIcon, BottomSheet, SheetSelect } from '@t-box/ui-kit'
 import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
@@ -77,7 +77,7 @@ const featureAction = useFeatureAction()
 const uploadingAttachments = ref(false)
 const detailId = ref<string | null>(null)
 const accounts = ref<LedgerAccount[]>([])
-const members = ref<any[]>([])
+const members = ref<LedgerMember[]>([])
 const filterOpen = ref(false)
 const filterForm = ref<FormValues>({})
 const multi = ref(false)
@@ -169,9 +169,9 @@ watch(bills, () => {
 })
 onMounted(async () => {
   try {
-    [accounts.value, members.value] = await Promise.all([
-      api.get('/accounts'),
-      api.get('/members'),
+    ;[accounts.value, members.value] = await Promise.all([
+      api.get<LedgerAccount[]>('/accounts'),
+      api.get<LedgerMember[]>('/members'),
     ])
   } catch {
     /* The main list displays access errors; optional pickers remain empty. */

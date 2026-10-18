@@ -1,11 +1,15 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { Principal } from '../ledgers/types.js'
 import type { LedgerRuntimeServices } from '../ports.js'
 import { randomUUID } from 'node:crypto'
 import { LEDGER_ATTACHMENT_MAX_BYTES } from '@t-box/ledger-contracts'
 import { digest } from '@t-box/server-foundation/crypto'
-import { ApiError, invalid } from '@t-box/server-foundation/errors'
+import { invalid } from '@t-box/server-foundation/errors'
 import { categoryIconBytes } from '../categories/icons.js'
+import { ErrorCode } from '../error-codes.js'
 import { object, text, today } from '../ledgers/validation.js'
+import { LedgerAttachmentEntity } from '../persistence/attachments-entities.js'
+import { LedgerCategoryIconEntity } from '../persistence/categories-entities.js'
 import { parseId } from '../validation.js'
 import {
   attachmentIds,
@@ -18,21 +22,21 @@ import { LedgerScheduler } from './worker.js'
 export function registerLedgerFeatures(
   app: FastifyInstance,
   p: LedgerRuntimeServices,
-  actor: (
-    req: FastifyRequest,
-  ) => Promise<import('../ledgers/types.js').Principal>,
+  actor: (req: FastifyRequest) => Promise<Principal>,
 ) {
   const f = p.finance.features
   const root = '/api/v1/ledgers/:id'
-  const book = (r: FastifyRequest) => parseId((r.params as any).id)
-  const id = (r: FastifyRequest) => parseId((r.params as any).subject)
+  const params = (r: FastifyRequest) =>
+    object(r.params, ['id', 'subject', 'kind', 'record', 'bill'])
+  const book = (r: FastifyRequest) => parseId(params(r).id)
+  const id = (r: FastifyRequest) => parseId(params(r).subject)
   const key = (r: FastifyRequest) =>
     typeof r.headers['idempotency-key'] === 'string'
       ? r.headers['idempotency-key']
       : undefined
   const get = (
     path: string,
-    fn: (a: any, b: string, r: FastifyRequest) => Promise<unknown>,
+    fn: (a: Principal, b: string, r: FastifyRequest) => Promise<unknown>,
   ) =>
     app.get(root + path, async (r) => ({
       data: await fn(await actor(r), book(r), r),
@@ -40,7 +44,7 @@ export function registerLedgerFeatures(
   const post = (
     path: string,
     fn: (
-      a: any,
+      a: Principal,
       b: string,
       k: string | undefined,
       r: FastifyRequest,
@@ -52,7 +56,7 @@ export function registerLedgerFeatures(
   const patch = (
     path: string,
     fn: (
-      a: any,
+      a: Principal,
       b: string,
       k: string | undefined,
       r: FastifyRequest,
@@ -64,7 +68,7 @@ export function registerLedgerFeatures(
   const del = (
     path: string,
     fn: (
-      a: any,
+      a: Principal,
       b: string,
       k: string | undefined,
       r: FastifyRequest,
@@ -120,7 +124,7 @@ export function registerLedgerFeatures(
     f.planning.budgets(
       a,
       b,
-      String((r.query as any).month ?? today().slice(0, 7)),
+      String(object(r.query, ['month']).month ?? today().slice(0, 7)),
     ))
   post('/budgets', (a, b, k, r) => f.planning.budget(a, b, k, r.body))
   del('/budgets/:subject', (a, b, k, r) =>
@@ -130,8 +134,7 @@ export function registerLedgerFeatures(
   patch('/rules/:subject', (a, b, k, r) =>
     f.planning.toggleRule(a, b, id(r), k, r.body))
   get('/notices', (a, b) => f.planning.notices(a, b))
-  patch('/notices/:subject', (a, b, k, r) =>
-    f.planning.readNotice(a, b, id(r)))
+  patch('/notices/:subject', (a, b, k, r) => f.planning.readNotice(a, b, id(r)))
   get('/contacts', (a, b) => f.contacts.list(a, b))
   post('/contacts', (a, b, k, r) => f.contacts.create(a, b, k, r.body))
   patch('/contacts/:subject', (a, b, k, r) =>
@@ -151,8 +154,8 @@ export function registerLedgerFeatures(
     f.imports.commit(a, b, id(r), k, r.body))
   get('/export', (a, b, r) => f.imports.export(a, b, r.query))
   const record = (r: FastifyRequest) => ({
-    kind: recordKind((r.params as any).kind),
-    id: parseId((r.params as any).record),
+    kind: recordKind(params(r).kind),
+    id: parseId(params(r).record),
   })
   const decodeFile = (value: Record<string, unknown>) => {
     if (
@@ -174,62 +177,78 @@ export function registerLedgerFeatures(
     const b = book(r)
     const v = object(r.body, ['base64'])
     const bytes = categoryIconBytes(v.base64)
-    return {
-      data: await p.finance.operations.run(
+    if (!p.resources) {
+      throw ErrorCode.RESOURCE_UNAVAILABLE()
+    }
+    await p.access.check(a, b, 'write')
+    p.finance.operations.validateKey(key(r))
+    const stagedId = randomUUID()
+    // Upload before acquiring the financial transaction's ledger lock.
+    const location = await p.resources.writeApplicationAsset(stagedId, bytes, {
+      name: '分类图标.png',
+      mimeType: 'image/png',
+    })
+    try {
+      const data = await p.finance.operations.run(
         a,
         b,
         key(r),
         'category.icon.uploaded',
         { hash: digest(v.base64 as string) },
         async (db) => {
-          const [{ n }] = await db.query(
-            'SELECT COUNT(*) n FROM ledger_category_icons WHERE ledger_id=?',
-            [b],
-          )
-          if (Number(n) >= 2000) {
-            throw new ApiError(
-              409,
-              'CATEGORY_ICON_QUOTA',
-              '账本图标数量已达上限',
-            )
+          const count = await db
+            .getRepository(LedgerCategoryIconEntity)
+            .count({ where: { ledger_id: b } })
+          if (count >= 2000) {
+            throw ErrorCode.CATEGORY_ICON_QUOTA()
           }
-          const id = randomUUID()
-          if (!p.resources) {
-            throw new ApiError(503, 'RESOURCE_UNAVAILABLE', '资源服务不可用')
-          }
-          const location = await p.resources.writeApplicationAsset(id, bytes, { name: '分类图标.png', mimeType: 'image/png' })
-          try {
-            await db.query(
-              'INSERT INTO ledger_category_icons(id,ledger_id,created_by,object_path,storage_backend) VALUES(?,?,?,?,?)',
-              [id, b, a.user.id, location.path, location.storageBackend],
-            )
-          } catch (error) {
-            await p.resources.removeApplicationAsset(location).catch(() => {})
-            throw error
-          }
-          return { id }
+          await db.getRepository(LedgerCategoryIconEntity).insert({
+            id: stagedId,
+            ledger_id: b,
+            created_by: a.user.id,
+            object_path: location.path,
+            storage_backend: location.storageBackend,
+          })
+          return { id: stagedId }
         },
-      ),
+      )
+      if (data.id !== stagedId) {
+        await p.resources.removeApplicationAsset(location).catch(() => {})
+      }
+      return { data }
+    } catch (error) {
+      // An unknown COMMIT outcome must never delete a committed icon. If the
+      // database is unavailable, retain the staged object for later cleanup.
+      const retained = await p.access.source
+        .getRepository(LedgerCategoryIconEntity)
+        .existsBy({ id: stagedId })
+        .catch(() => true)
+      if (!retained) {
+        await p.resources.removeApplicationAsset(location).catch(() => {})
+      }
+      throw error
     }
   })
   get('/category-icons/:subject', async (a, b, r) => {
     await p.access.check(a, b)
-    const [row] = await p.access.source.query(
-      `SELECT content,object_path AS path,storage_backend AS storageBackend FROM ledger_category_icons i WHERE i.ledger_id=? AND i.id=?
-      AND (i.created_by=? OR EXISTS(SELECT 1 FROM bill_categories c WHERE c.ledger_id=? AND c.icon_id=i.id))`,
-      [b, id(r), a.user.id, b],
-    )
-    if (!row) {
-      throw new ApiError(
-        404,
-        'CATEGORY_ICON_NOT_FOUND',
-        '分类图标不存在或不可访问',
+    const [row] = await p.access.source
+      .createQueryBuilder()
+      .select('content,object_path AS path,storage_backend AS storageBackend')
+      .from('ledger_category_icons', 'i')
+      .where(
+        'i.ledger_id=:p0 AND i.id=:p1\n      AND (i.created_by=:p2 OR EXISTS(SELECT 1 FROM bill_categories c WHERE c.ledger_id=:p3 AND c.icon_id=i.id))',
       )
+      .setParameters({ p0: b, p1: id(r), p2: a.user.id, p3: b })
+      .getRawMany()
+    if (!row) {
+      throw ErrorCode.CATEGORY_ICON_NOT_FOUND('分类图标不存在或不可访问')
     }
     if (row.path && !p.resources) {
-      throw new ApiError(503, 'RESOURCE_UNAVAILABLE', '资源服务不可用')
+      throw ErrorCode.RESOURCE_UNAVAILABLE()
     }
-    const bytes = row.path ? await p.resources!.readApplicationAsset(row) : Buffer.from(row.content)
+    const bytes = row.path
+      ? await p.resources!.readApplicationAsset(row)
+      : Buffer.from(row.content)
     return {
       mimeType: 'image/png',
       base64: bytes.toString('base64'),
@@ -244,26 +263,36 @@ export function registerLedgerFeatures(
       const b = book(r)
       const v = object(r.body, ['name', 'base64'])
       if (!p.resources) {
-        throw new ApiError(503, 'RESOURCE_UNAVAILABLE', '资源服务不可用')
+        throw ErrorCode.RESOURCE_UNAVAILABLE()
       }
       const bytes = decodeFile(v)
-      return {
-        data: await p.finance.operations.run(
-          a,
-          b,
-          key(r),
-          'attachment.uploaded',
-          { name: v.name, contentHash: digest(v.base64 as string) },
-          async () =>
-            p.resources!.createFile(a, text(v.name, '文件名', 200), bytes),
-        ),
+      await p.access.check(a, b, 'write')
+      p.finance.operations.validateKey(key(r))
+      const resource = await p.resources.createFile(
+        a,
+        text(v.name, '文件名', 200),
+        bytes,
+      )
+      // Personal uploads are durable independently of a financial submission.
+      // A failed submission retains its file in My Resources for reuse.
+      const data = await p.finance.operations.run(
+        a,
+        b,
+        key(r),
+        'attachment.uploaded',
+        { name: v.name, contentHash: digest(v.base64 as string) },
+        async () => resource,
+      )
+      if (data.id !== resource.id) {
+        await p.resources.remove(a, resource.id).catch(() => {})
       }
+      return { data }
     },
   )
   get('/attachment-resources/:subject', async (a, b, r) => {
     await p.access.check(a, b, 'write')
     if (!p.resources) {
-      throw new ApiError(503, 'RESOURCE_UNAVAILABLE', '资源服务不可用')
+      throw ErrorCode.RESOURCE_UNAVAILABLE()
     }
     return p.resources.get(a, id(r))
   })
@@ -296,63 +325,75 @@ export function registerLedgerFeatures(
       const bill = id(r)
       const v = object(r.body, ['name', 'base64', 'resourceId'])
       if (!p.resources) {
-        throw new ApiError(503, 'RESOURCE_UNAVAILABLE', '资源服务不可用')
+        throw ErrorCode.RESOURCE_UNAVAILABLE()
       }
-      return {
-        data: await p.finance.operations.run(
-          a,
-          b,
-          key(r),
-          'attachment.added',
-          {
-            bill,
-            name: v.name,
-            resourceId: v.resourceId,
-            contentHash: typeof v.base64 === 'string' ? digest(v.base64) : null,
-          },
-          async (db, access) => {
-            const row = await attachmentSubject(db, b, 'bill', bill)
-            p.access.assertAuthor(access.role, row.created_by, a.user.id)
-            const resource = v.resourceId
-              ? await p.resources!.get(a, parseId(v.resourceId))
-              : await p.resources!.createFile(
-                  a,
-                  text(v.name, '文件名', 200),
-                  decodeFile(v),
-                )
-            await bindAttachments(db, a, b, 'bill', bill, [resource.id])
-            const [linked] = await db.query(
-              'SELECT id FROM ledger_attachments WHERE ledger_id=? AND subject_kind=\'bill\' AND subject_id=? AND resource_id=?',
-              [b, bill, resource.id],
-            )
-            return {
-              id: linked.id,
-              resourceId: resource.id,
-              name: resource.name,
-            }
-          },
-        ),
+      const access = await p.access.check(a, b, 'write')
+      const subject = await attachmentSubject(
+        p.access.source.manager,
+        b,
+        'bill',
+        bill,
+      )
+      p.access.assertAuthor(access.role, subject.created_by, a.user.id)
+      p.finance.operations.validateKey(key(r))
+      const resource = v.resourceId
+        ? await p.resources.get(a, parseId(v.resourceId))
+        : await p.resources.createFile(
+            a,
+            text(v.name, '文件名', 200),
+            decodeFile(v),
+          )
+      const data = await p.finance.operations.run(
+        a,
+        b,
+        key(r),
+        'attachment.added',
+        {
+          bill,
+          name: v.name,
+          resourceId: v.resourceId,
+          contentHash: typeof v.base64 === 'string' ? digest(v.base64) : null,
+        },
+        async (db, currentAccess) => {
+          const row = await attachmentSubject(db, b, 'bill', bill)
+          p.access.assertAuthor(currentAccess.role, row.created_by, a.user.id)
+          await bindAttachments(db, a, b, 'bill', bill, [resource.id])
+          const linked = await db
+            .getRepository(LedgerAttachmentEntity)
+            .findOne({
+              select: { id: true },
+              where: {
+                ledger_id: b,
+                subject_kind: 'bill',
+                subject_id: bill,
+                resource_id: resource.id,
+              },
+            })
+          if (!linked) {
+            invalid('resource', '附件关联未完成')
+          }
+          return { id: linked.id, resourceId: resource.id, name: resource.name }
+        },
+      )
+      if (!v.resourceId && data.resourceId !== resource.id) {
+        await p.resources.remove(a, resource.id).catch(() => {})
       }
+      return { data }
     },
   )
   del('/bills/:bill/attachments/:subject', (a, b, k, r) =>
-    f.attachments.remove(
-      a,
-      b,
-      'bill',
-      parseId((r.params as any).bill),
-      id(r),
-      k,
-    ))
+    f.attachments.remove(a, b, 'bill', parseId(params(r).bill), id(r), k))
   get('/attachments/:subject/content', async (a, b, r) => {
     if (!p.resources) {
-      throw new ApiError(503, 'RESOURCE_UNAVAILABLE', '资源服务不可用')
+      throw ErrorCode.RESOURCE_UNAVAILABLE()
     }
     await p.access.check(a, b)
-    const [linked] = await p.access.source.query(
-      'SELECT resource_id,subject_kind,subject_id FROM ledger_attachments WHERE ledger_id=? AND id=?',
-      [b, id(r)],
-    )
+    const linked = await p.access.source
+      .getRepository(LedgerAttachmentEntity)
+      .findOne({
+        select: { resource_id: true, subject_kind: true, subject_id: true },
+        where: { ledger_id: b, id: id(r) },
+      })
     if (!linked) {
       invalid('attachment', '附件不存在')
     }

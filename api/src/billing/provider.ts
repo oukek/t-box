@@ -4,6 +4,7 @@ import type { BillingService } from './service.js'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { estimateInputTokens } from '../agent/context.js'
 import { settingNumber } from '../configuration/defaults.js'
+import { ErrorCode } from '../error-codes.js'
 import { money, tokenFee } from './money.js'
 
 export class MeteredChatProvider implements ChatProvider {
@@ -33,7 +34,7 @@ export class MeteredChatProvider implements ChatProvider {
 
   async compact(input: ProviderInput) {
     if (!this.provider.compact) {
-      throw new ApiError(409, 'COMPACTION_DISABLED', '服务商不支持上下文压缩')
+      throw ErrorCode.COMPACTION_DISABLED()
     }
     return this.meter(
       input,
@@ -44,9 +45,7 @@ export class MeteredChatProvider implements ChatProvider {
 
   async countInputTokens(input: ProviderInput) {
     if (!this.provider.countInputTokens) {
-      throw new ApiError(
-        409,
-        'TOKEN_COUNT_UNSUPPORTED',
+      throw ErrorCode.TOKEN_COUNT_UNSUPPORTED(
         '服务商不支持输入 token 计数，请关闭此能力',
       )
     }
@@ -55,7 +54,7 @@ export class MeteredChatProvider implements ChatProvider {
 
   async summarize(input: ProviderInput) {
     if (!this.provider.summarize) {
-      throw new ApiError(409, 'SUMMARY_UNSUPPORTED', '服务商不支持摘要压缩')
+      throw ErrorCode.SUMMARY_UNSUPPORTED()
     }
     return this.meter(
       input,
@@ -71,11 +70,7 @@ export class MeteredChatProvider implements ChatProvider {
   ): Promise<T> {
     const execution = input.execution
     if (!execution) {
-      throw new ApiError(
-        401,
-        'BILLING_IDENTITY_REQUIRED',
-        '请登录后使用 AI 会话',
-      )
+      throw ErrorCode.BILLING_IDENTITY_REQUIRED()
     }
     input.signal.throwIfAborted()
     // Conservative admission budget, not billable usage. JSON/UTF-8 includes
@@ -129,11 +124,7 @@ export class MeteredChatProvider implements ChatProvider {
         ) {
           return turn
         }
-        throw new ApiError(
-          502,
-          'USAGE_MISSING',
-          '服务商未返回有效用量，本次费用待核对；不会自动重试',
-        )
+        throw ErrorCode.USAGE_MISSING()
       }
       return turn
     } catch (error) {
@@ -153,16 +144,39 @@ export class MeteredChatProvider implements ChatProvider {
       return this.provider.title(input)
     }
     const execution = input.execution
-    const output = input.outputTokenBudget ?? settingNumber(input.configuration, 'ai.title.reasoningTokens', 1024)
-    const estimate = estimateInputTokens({ history: [{ role: 'user', content: input.text.slice(0, 2000) }], tools: [], instructions: input.instructions || '' })
-    await this.billing.begin({ id: execution.operationId, userId: execution.userId, taskId: execution.taskId, modelId: this.modelId, prices: this.prices, kind: 'conversation', purpose: 'title', free: true, reserve: tokenFee(this.prices, estimate, output) })
+    const output =
+      input.outputTokenBudget ??
+      settingNumber(input.configuration, 'ai.title.reasoningTokens', 1024)
+    const estimate = estimateInputTokens({
+      history: [{ role: 'user', content: input.text.slice(0, 2000) }],
+      tools: [],
+      instructions: input.instructions || '',
+    })
+    await this.billing.begin({
+      id: execution.operationId,
+      userId: execution.userId,
+      taskId: execution.taskId,
+      modelId: this.modelId,
+      prices: this.prices,
+      kind: 'conversation',
+      purpose: 'title',
+      free: true,
+      reserve: tokenFee(this.prices, estimate, output),
+    })
     let settled = false
     try {
-      const title = await this.provider.title({ ...input, onUsage: async (usage) => {
-        await this.billing.settle(execution.userId, execution.operationId, usage)
-        settled = true
-        await input.onUsage?.(usage)
-      } })
+      const title = await this.provider.title({
+        ...input,
+        onUsage: async (usage) => {
+          await this.billing.settle(
+            execution.userId,
+            execution.operationId,
+            usage,
+          )
+          settled = true
+          await input.onUsage?.(usage)
+        },
+      })
       if (!settled) {
         await this.billing.uncertain(execution.userId, execution.operationId)
       }

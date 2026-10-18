@@ -1,16 +1,113 @@
-import type { OperationsModelCall, OperationsModelCallDetail, OperationsPage, OperationsTaskRow } from '@t-box/shared'
+import type {
+  OperationsModelCall,
+  OperationsModelCallDetail,
+  OperationsPage,
+  OperationsTaskRow,
+} from '@t-box/shared'
 import type { DataSource } from 'typeorm'
-import { ApiError } from '@t-box/server-foundation/errors'
+import type { StoredAiModelCall } from '../db/records/models-entities.js'
+import type { StoredAgentTask } from '../db/records/tasks-entities.js'
 import { isoTime } from '@t-box/server-foundation/time'
 import { decimal } from '../billing/money.js'
+import { ErrorCode } from '../error-codes.js'
 import { ModelCallAudit } from '../models/audit.js'
 import { jsonValue, operationFilters } from './queries.js'
 
+type SqlNumber = string | number
+interface ModelSnapshot {
+  model_id: string
+  model_name: string
+  remote_model: string
+  provider_id: string
+  provider_name: string
+}
+interface UserSnapshot {
+  user_id: string
+  username: string
+  nickname: string
+}
+type CallRow = Pick<
+  StoredAiModelCall,
+  | 'id' |
+  'logical_id' |
+  'retry_index' |
+  'task_id' |
+  'message_id' |
+  'purpose' |
+  'method' |
+  'invocation_mode' |
+  'status' |
+  'user_error' |
+  'input_tokens' |
+  'output_tokens' |
+  'cached_tokens' |
+  'reasoning_tokens' |
+  'images' |
+  'duration_ms' |
+  'queue_ms'
+> &
+ModelSnapshot &
+UserSnapshot & {
+  billing_status: string | null
+  fee_micro: string | null
+  charged_micro: string | null
+  cache_write_tokens: SqlNumber | null
+  created_at: Date | string
+  started_at: Date | string | null
+  finished_at: Date | string | null
+}
+type CallDetailRow = CallRow &
+  Pick<
+    StoredAiModelCall,
+    | 'input_json' |
+    'output_json' |
+    'diagnostics_json' |
+    'provider_request_id' |
+    'response_id'
+  > & { prices_json: unknown }
+type TaskRow = Pick<
+  StoredAgentTask,
+  | 'id' |
+  'conversation_id' |
+  'request_id' |
+  'status' |
+  'agent_id' |
+  'reason' |
+  'recovery_attempts'
+> &
+UserSnapshot & { created_at: Date | string, updated_at: Date | string }
+interface TaskCharges {
+  task_id: string
+  calls: SqlNumber
+  legacy_calls: SqlNumber
+  cost: string | null
+  charged: string | null
+  unresolved: SqlNumber | null
+  input_tokens: SqlNumber | null
+  output_tokens: SqlNumber | null
+}
+interface TaskCalls {
+  task_id: string
+  calls: SqlNumber
+  retries: SqlNumber | null
+  failures: SqlNumber | null
+}
 const amount = (value: unknown) => decimal(BigInt(String(value || 0)))
-const nullableNumber = (value: unknown) => value == null ? null : Number(value)
-const model = (row: any) => ({ id: row.model_id, name: row.model_name, remoteModel: row.remote_model, providerId: row.provider_id, providerName: row.provider_name })
-const user = (row: any) => ({ id: row.user_id, username: row.username, nickname: row.nickname })
-function callView(row: any): OperationsModelCall {
+const nullableNumber = (value: unknown) =>
+  value == null ? null : Number(value)
+const model = (row: ModelSnapshot) => ({
+  id: row.model_id,
+  name: row.model_name,
+  remoteModel: row.remote_model,
+  providerId: row.provider_id,
+  providerName: row.provider_name,
+})
+const user = (row: UserSnapshot) => ({
+  id: row.user_id,
+  username: row.username,
+  nickname: row.nickname,
+})
+function callView(row: CallRow): OperationsModelCall {
   return {
     ...model(row),
     user: user(row),
@@ -44,62 +141,141 @@ const summaryColumns = `c.id,c.logical_id,c.retry_index,c.task_id,c.message_id,c
   c.provider_id,c.provider_name,c.model_id,c.model_name,c.remote_model,c.invocation_mode,c.purpose,c.method,c.status,
   c.user_error,c.input_tokens,c.output_tokens,c.cached_tokens,c.reasoning_tokens,c.images,c.duration_ms,c.queue_ms,c.created_at,c.started_at,c.finished_at,
   b.status AS billing_status,b.fee_micro,b.charged_micro,b.cache_write_tokens`
-const callJoins = 'FROM ai_model_calls c JOIN app_users u ON u.id=c.user_id LEFT JOIN billing_usage b ON b.id=c.id'
 /** Immutable model/provider snapshots survive configuration edits and removal. Large payloads are detail-only. */
 export class ModelOperations {
   constructor(readonly source: DataSource) {}
 
+  private callSelection() {
+    return this.source
+      .createQueryBuilder()
+      .select(summaryColumns)
+      .from('ai_model_calls', 'c')
+      .innerJoin('app_users', 'u', 'u.id=c.user_id')
+      .leftJoin('billing_usage', 'b', 'b.id=c.id')
+  }
+
   async calls(query: unknown): Promise<OperationsPage<OperationsModelCall>> {
     await new ModelCallAudit(this.source).recover()
     const filter = operationFilters(query, 'call')
-    const [[count], rows] = await Promise.all([
-      this.source.query(`SELECT COUNT(*) AS total ${callJoins} ${filter.where}`, filter.parameters),
-      this.source.query(`SELECT ${summaryColumns} ${callJoins} ${filter.where} ORDER BY c.created_at DESC,c.id DESC LIMIT ? OFFSET ?`, [...filter.parameters, filter.pageSize, filter.offset]),
+    const selection = this.callSelection().where(
+      filter.condition,
+      filter.bindings,
+    )
+    const [count, rows] = await Promise.all([
+      selection
+        .clone()
+        .select('COUNT(*)', 'total')
+        .getRawOne<{ total: string | number }>(),
+      selection
+        .orderBy('c.created_at', 'DESC')
+        .addOrderBy('c.id', 'DESC')
+        .limit(filter.pageSize)
+        .offset(filter.offset)
+        .getRawMany<CallRow>(),
     ])
-    return { items: rows.map(callView), total: Number(count.total), page: filter.page, pageSize: filter.pageSize }
+    return {
+      items: rows.map(callView),
+      total: Number(count?.total ?? 0),
+      page: filter.page,
+      pageSize: filter.pageSize,
+    }
   }
 
   async call(id: string): Promise<OperationsModelCallDetail> {
-    const [row] = await this.source.query(`SELECT ${summaryColumns},c.input_json,c.output_json,c.diagnostics_json,c.provider_request_id,c.response_id,b.prices_json ${callJoins} WHERE c.id=?`, [id])
+    const row = await this.callSelection()
+      .addSelect(
+        'c.input_json,c.output_json,c.diagnostics_json,c.provider_request_id,c.response_id,b.prices_json',
+      )
+      .where('c.id=:id', { id })
+      .getRawOne<CallDetailRow>()
     if (!row) {
-      throw new ApiError(404, 'MODEL_CALL_NOT_FOUND', '模型调用记录不存在')
+      throw ErrorCode.MODEL_CALL_NOT_FOUND()
     }
-    return { ...callView(row), input: jsonValue(row.input_json), output: jsonValue(row.output_json), diagnostics: jsonValue(row.diagnostics_json), providerRequestId: row.provider_request_id, responseId: row.response_id, prices: jsonValue(row.prices_json) }
+    return {
+      ...callView(row),
+      input: jsonValue(row.input_json),
+      output: jsonValue(row.output_json),
+      diagnostics: jsonValue(row.diagnostics_json),
+      providerRequestId: row.provider_request_id,
+      responseId: row.response_id,
+      prices: jsonValue(row.prices_json),
+    }
   }
 
   async forTask(id: string): Promise<OperationsModelCall[]> {
-    const rows = await this.source.query(`SELECT ${summaryColumns} ${callJoins} WHERE c.task_id=? ORDER BY c.created_at,c.id LIMIT 1000`, [id])
+    const rows = await this.callSelection()
+      .where('c.task_id=:id', { id })
+      .orderBy('c.created_at', 'ASC')
+      .addOrderBy('c.id', 'ASC')
+      .limit(1000)
+      .getRawMany<CallRow>()
     return rows.map(callView)
   }
 
   async tasks(query: unknown): Promise<OperationsPage<OperationsTaskRow>> {
     await new ModelCallAudit(this.source).recover()
     const filter = operationFilters(query, 'task')
-    const joins = 'FROM agent_tasks t JOIN app_users u ON u.id=t.user_id'
-    const [[count], rows] = await Promise.all([
-      this.source.query(`SELECT COUNT(*) AS total ${joins} ${filter.where}`, filter.parameters),
-      this.source.query(`SELECT t.id,t.user_id,u.username,u.nickname,t.conversation_id,t.request_id,t.status,t.agent_id,t.reason,t.recovery_attempts,t.created_at,t.updated_at
-        ${joins} ${filter.where} ORDER BY t.created_at DESC,t.id DESC LIMIT ? OFFSET ?`, [...filter.parameters, filter.pageSize, filter.offset]),
+    const selection = this.source
+      .createQueryBuilder()
+      .from('agent_tasks', 't')
+      .innerJoin('app_users', 'u', 'u.id=t.user_id')
+      .where(filter.condition, filter.bindings)
+    const [count, rows] = await Promise.all([
+      selection
+        .clone()
+        .select('COUNT(*)', 'total')
+        .getRawOne<{ total: string | number }>(),
+      selection
+        .select(
+          't.id,t.user_id,u.username,u.nickname,t.conversation_id,t.request_id,t.status,t.agent_id,t.reason,t.recovery_attempts,t.created_at,t.updated_at',
+        )
+        .orderBy('t.created_at', 'DESC')
+        .addOrderBy('t.id', 'DESC')
+        .limit(filter.pageSize)
+        .offset(filter.offset)
+        .getRawMany<TaskRow>(),
     ])
-    const ids = rows.map((row: any) => row.id)
+    const ids = rows.map((row) => row.id)
     if (!ids.length) {
-      return { items: [], total: Number(count.total), page: filter.page, pageSize: filter.pageSize }
+      return {
+        items: [],
+        total: Number(count?.total ?? 0),
+        page: filter.page,
+        pageSize: filter.pageSize,
+      }
     }
     const placeholders = ids.map(() => '?').join(',')
     // Pre-aggregate each source independently: joining tool/call/usage rows would multiply fees.
     const [charges, calls, models] = await Promise.all([
-      this.source.query(`SELECT b.task_id,COUNT(*) AS calls,SUM(c.id IS NULL) AS legacy_calls,SUM(b.fee_micro) AS cost,SUM(b.charged_micro) AS charged,SUM(b.status IN ('reserved','review')) AS unresolved,
-        SUM(b.input_tokens) AS input_tokens,SUM(b.output_tokens) AS output_tokens FROM billing_usage b LEFT JOIN ai_model_calls c ON c.id=b.id WHERE b.task_id IN (${placeholders}) GROUP BY b.task_id`, ids),
-      this.source.query(`SELECT task_id,COUNT(*) AS calls,SUM(retry_index>0) AS retries,SUM(status IN ('failed','interrupted')) AS failures FROM ai_model_calls WHERE task_id IN (${placeholders}) GROUP BY task_id`, ids),
-      this.source.query(`SELECT DISTINCT task_id,model_id,model_name,remote_model,provider_id,provider_name FROM ai_model_calls WHERE task_id IN (${placeholders})
+      // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
+      this.source.query<TaskCharges[]>(
+        `SELECT b.task_id,COUNT(*) AS calls,SUM(c.id IS NULL) AS legacy_calls,SUM(b.fee_micro) AS cost,SUM(b.charged_micro) AS charged,SUM(b.status IN ('reserved','review')) AS unresolved,
+        SUM(b.input_tokens) AS input_tokens,SUM(b.output_tokens) AS output_tokens FROM billing_usage b LEFT JOIN ai_model_calls c ON c.id=b.id WHERE b.task_id IN (${placeholders}) GROUP BY b.task_id`,
+        ids,
+      ),
+      this.source
+        .createQueryBuilder()
+        .select('task_id')
+        .addSelect('COUNT(*)', 'calls')
+        .addSelect('SUM(retry_index>0)', 'retries')
+        .addSelect('SUM(status IN (\'failed\',\'interrupted\'))', 'failures')
+        .from('ai_model_calls', 'calls')
+        .where('task_id IN (:...ids)', { ids })
+        .groupBy('task_id')
+        .getRawMany<TaskCalls>(),
+      // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
+      this.source.query<(ModelSnapshot & { task_id: string })[]>(
+        `SELECT DISTINCT task_id,model_id,model_name,remote_model,provider_id,provider_name FROM ai_model_calls WHERE task_id IN (${placeholders})
         UNION SELECT DISTINCT b.task_id,m.id AS model_id,m.name AS model_name,m.model_id AS remote_model,p.id AS provider_id,p.name AS provider_name
         FROM billing_usage b JOIN ai_models m ON m.id=b.model_config_id JOIN ai_providers p ON p.id=m.provider_id
-        WHERE b.task_id IN (${placeholders}) AND NOT EXISTS(SELECT 1 FROM ai_model_calls c WHERE c.id=b.id)`, [...ids, ...ids]),
+        WHERE b.task_id IN (${placeholders}) AND NOT EXISTS(SELECT 1 FROM ai_model_calls c WHERE c.id=b.id)`,
+        [...ids, ...ids],
+      ),
     ])
     return {
-      items: rows.map((row: any) => {
-        const billed = charges.find((value: any) => value.task_id === row.id)
-        const invoked = calls.find((value: any) => value.task_id === row.id)
+      items: rows.map((row) => {
+        const billed = charges.find((value) => value.task_id === row.id)
+        const invoked = calls.find((value) => value.task_id === row.id)
         return {
           id: row.id,
           user: user(row),
@@ -110,9 +286,10 @@ export class ModelOperations {
           reason: row.reason,
           recoveryAttempts: Number(row.recovery_attempts),
           retryCount: Number(invoked?.retries || 0),
-          calls: Number(invoked?.calls || 0) + Number(billed?.legacy_calls || 0),
+          calls:
+            Number(invoked?.calls || 0) + Number(billed?.legacy_calls || 0),
           failedCalls: Number(invoked?.failures || 0),
-          models: models.filter((value: any) => value.task_id === row.id).map(model),
+          models: models.filter((value) => value.task_id === row.id).map(model),
           cost: amount(billed?.cost),
           charged: amount(billed?.charged),
           unresolved: Number(billed?.unresolved || 0),
@@ -122,7 +299,7 @@ export class ModelOperations {
           updatedAt: isoTime(row.updated_at),
         }
       }),
-      total: Number(count.total),
+      total: Number(count?.total ?? 0),
       page: filter.page,
       pageSize: filter.pageSize,
     }

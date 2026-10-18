@@ -1,6 +1,6 @@
 import type { CalendarEventInput } from './types.js'
+import { DateTimeErrorCode } from '@t-box/dayjs'
 import {
-  DateTimeError,
   dayjs,
   localInstant,
   validDate,
@@ -33,17 +33,17 @@ export function calendarObject(
   fields: readonly string[],
 ): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new DateTimeError('参数必须为对象')
+    throw DateTimeErrorCode.INVALID_DATETIME('参数必须为对象')
   }
   const result = value as Record<string, unknown>
   if (Object.keys(result).some((k) => !fields.includes(k))) {
-    throw new DateTimeError('参数包含未知字段')
+    throw DateTimeErrorCode.INVALID_DATETIME('参数包含未知字段')
   }
   return result
 }
 const string = (v: unknown, label: string, max: number, required = false) => {
   if (typeof v !== 'string' || v.length > max || (required && !v.trim())) {
-    throw new DateTimeError(
+    throw DateTimeErrorCode.INVALID_DATETIME(
       `${label}${required ? '不能为空，且' : ''}最多 ${max} 个字符`,
     )
   }
@@ -68,7 +68,7 @@ export function parseCalendarLunarDate(
     typeof l.leapMonth !== 'boolean' ||
     !['regular', 'skip'].includes(String(l.leapPolicy))
   ) {
-    throw new DateTimeError('农历日期或闰月规则无效')
+    throw DateTimeErrorCode.INVALID_DATETIME('农历日期或闰月规则无效')
   }
   const lunar = {
     year: Number(l.year),
@@ -104,16 +104,18 @@ export function parseCalendarEvent(value: unknown): CalendarEventInput {
     !calendarColors.some((k) => k.value === a.color) ||
     typeof a.allDay !== 'boolean'
   ) {
-    throw new DateTimeError('事件类型、颜色或全天设置无效')
+    throw DateTimeErrorCode.INVALID_DATETIME('事件类型、颜色或全天设置无效')
   }
   if (typeof a.start !== 'string' || typeof a.end !== 'string') {
-    throw new DateTimeError('开始和结束时间无效')
+    throw DateTimeErrorCode.INVALID_DATETIME('开始和结束时间无效')
   }
   let lunar: CalendarEventInput['lunar'] = null
   if (a.lunar != null) {
     lunar = parseCalendarLunarDate(a.lunar)
     if (lunarToSolar(lunar) !== a.start.slice(0, 10)) {
-      throw new DateTimeError('开始日期与农历日期对应的公历日期不一致')
+      throw DateTimeErrorCode.INVALID_DATETIME(
+        '开始日期与农历日期对应的公历日期不一致',
+      )
     }
   }
   let days: number
@@ -122,7 +124,7 @@ export function parseCalendarEvent(value: unknown): CalendarEventInput {
     validDate(a.end)
     days = dayjs.utc(a.end).diff(dayjs.utc(a.start), 'day')
     if (days < 1 || days > 31) {
-      throw new DateTimeError(
+      throw DateTimeErrorCode.INVALID_DATETIME(
         '全天事件结束日期不包含当天，需比开始晚 1 至 31 天',
       )
     }
@@ -133,7 +135,9 @@ export function parseCalendarEvent(value: unknown): CalendarEventInput {
       end.valueOf() <= start.valueOf() ||
       end.valueOf() - start.valueOf() > 31 * 86400000
     ) {
-      throw new DateTimeError('结束时间应晚于开始，跨度最多 31 天')
+      throw DateTimeErrorCode.INVALID_DATETIME(
+        '结束时间应晚于开始，跨度最多 31 天',
+      )
     }
   }
   const r = calendarObject(a.recurrence, [
@@ -150,7 +154,7 @@ export function parseCalendarEvent(value: unknown): CalendarEventInput {
     Number(r.interval) > 99 ||
     !['skip', 'last_day'].includes(String(r.monthPolicy))
   ) {
-    throw new DateTimeError('重复规则无效')
+    throw DateTimeErrorCode.INVALID_DATETIME('重复规则无效')
   }
   if (
     !Array.isArray(r.weekdays) ||
@@ -158,11 +162,11 @@ export function parseCalendarEvent(value: unknown): CalendarEventInput {
     r.weekdays.some((d) => !Number.isInteger(d) || d < 1 || d > 7) ||
     new Set(r.weekdays).size !== r.weekdays.length
   ) {
-    throw new DateTimeError('星期需为 1 至 7 的不重复整数')
+    throw DateTimeErrorCode.INVALID_DATETIME('星期需为 1 至 7 的不重复整数')
   }
   const until = r.until === null ? null : validDate(r.until)
   if (until && until < a.start.slice(0, 10)) {
-    throw new DateTimeError('重复结束日期不能早于开始日期')
+    throw DateTimeErrorCode.INVALID_DATETIME('重复结束日期不能早于开始日期')
   }
   if (
     !Array.isArray(a.reminders) ||
@@ -170,7 +174,9 @@ export function parseCalendarEvent(value: unknown): CalendarEventInput {
     a.reminders.some((n) => !Number.isInteger(n) || n < 0 || n > 43200) ||
     new Set(a.reminders).size !== a.reminders.length
   ) {
-    throw new DateTimeError('提醒最多 3 个，提前分钟数范围 0 至 43200')
+    throw DateTimeErrorCode.INVALID_DATETIME(
+      '提醒最多 3 个，提前分钟数范围 0 至 43200',
+    )
   }
   return {
     title,
@@ -201,7 +207,7 @@ export function parseCalendarParams(value: unknown): Record<string, string> {
   }
   if (args.view != null) {
     if (!['month', 'agenda', 'anniversaries'].includes(String(args.view))) {
-      throw new DateTimeError('日历视图不存在')
+      throw DateTimeErrorCode.INVALID_DATETIME('日历视图不存在')
     }
     result.view = String(args.view)
   }
@@ -210,7 +216,7 @@ export function parseCalendarParams(value: unknown): Record<string, string> {
       typeof args.eventId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(args.eventId)
     ) {
-      throw new DateTimeError('事件 ID 无效')
+      throw DateTimeErrorCode.INVALID_DATETIME('事件 ID 无效')
     }
     result.eventId = args.eventId
   }

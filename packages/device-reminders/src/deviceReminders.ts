@@ -3,6 +3,7 @@ import type { ReminderPlan } from './planner'
 import { Capacitor } from '@capacitor/core'
 import { identity, request } from '@t-box/app-shell-sdk'
 import { reactive, ref, watch } from 'vue'
+import { ErrorCode } from './error-codes.js'
 import { mergeReminderSources, planReminders } from './planner'
 
 export const reminderStatus = reactive({
@@ -161,27 +162,49 @@ export async function syncDeviceReminders(force = false): Promise<SyncResult> {
       return failed('account_changed')
     }
     if (calendar.status === 'rejected' && time.status === 'rejected') {
-      throw new Error('提醒服务暂不可用，已保留上次计划')
+      throw ErrorCode.INTERNAL_REMINDER_SERVICE_UNAVAILABLE()
     }
-    const syncError = calendar.status === 'rejected' || time.status === 'rejected' ? '部分提醒同步失败，已保留上次计划' : ''
-    const serverNow = time.status === 'fulfilled' ? time.value.data.serverNow : calendar.status === 'fulfilled' ? calendar.value.data.serverNow : ''
+    const syncError =
+      calendar.status === 'rejected' || time.status === 'rejected'
+        ? '部分提醒同步失败，已保留上次计划'
+        : ''
+    const serverNow =
+      time.status === 'fulfilled'
+        ? time.value.data.serverNow
+        : calendar.status === 'fulfilled'
+          ? calendar.value.data.serverNow
+          : ''
     serverOffset = Date.parse(serverNow) - Date.now()
     const now = Date.now() + serverOffset
-    const timers: ReminderItem[] | null = time.status === 'fulfilled'
-      ? time.value.data.timers
-          .filter((t) => t.deadline && ['running', 'completed'].includes(t.status))
-          .map((t) => ({
-            key: `time:${t.id}:${t.deadline}`,
-            title: t.label,
-            body: '倒计时已结束',
-            at: t.deadline!,
-            destination: { appId: 'time', params: { tab: 'timers' } },
-          }))
-      : null
-    items = mergeReminderSources(uid, [
-      { appId: 'calendar', items: calendar.status === 'fulfilled' ? calendar.value.data.reminders : null },
-      { appId: 'time', items: timers },
-    ], items, readPlan())
+    const timers: ReminderItem[] | null =
+      time.status === 'fulfilled'
+        ? time.value.data.timers
+            .filter(
+              (t) => t.deadline && ['running', 'completed'].includes(t.status),
+            )
+            .map((t) => ({
+              key: `time:${t.id}:${t.deadline}`,
+              title: t.label,
+              body: '倒计时已结束',
+              at: t.deadline!,
+              destination: { appId: 'time', params: { tab: 'timers' } },
+            }))
+        : null
+    items = mergeReminderSources(
+      uid,
+      [
+        {
+          appId: 'calendar',
+          items:
+            calendar.status === 'fulfilled'
+              ? calendar.value.data.reminders
+              : null,
+        },
+        { appId: 'time', items: timers },
+      ],
+      items,
+      readPlan(),
+    )
     if (calendar.status === 'fulfilled') {
       reminderStatus.truncated = calendar.value.data.truncated
     }
@@ -298,7 +321,7 @@ export function validateSyncArguments(value: unknown) {
     Array.isArray(value) ||
     Object.keys(value).length
   ) {
-    throw new Error('提醒同步参数无效')
+    throw ErrorCode.INTERNAL_INVALID_REMINDER_PLAN()
   }
   return syncDeviceReminders(true)
 }

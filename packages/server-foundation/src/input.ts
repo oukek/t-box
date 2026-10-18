@@ -18,3 +18,21 @@ export function text(value: unknown, label: string, max = 80): string {
   }
   return value.trim()
 }
+
+export function booleanValue(value: unknown, field: string): boolean {
+  if (typeof value !== 'boolean') {
+    invalid(field, '请选择有效状态')
+  }
+  return value
+}
+
+export function choice<const T extends readonly string[]>(
+  value: unknown,
+  field: string,
+  options: T,
+): T[number] {
+  if (typeof value !== 'string' || !options.includes(value)) {
+    invalid(field, '请选择有效类型')
+  }
+  return value as T[number]
+}

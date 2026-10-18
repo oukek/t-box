@@ -15,12 +15,15 @@ exec 8>"$script_dir/.deploy.lock"
 flock -n 8 || fail 'Another deployment is already running'
 temporary_env=''
 trap 'if [[ -n "$temporary_env" ]]; then rm -f -- "$temporary_env"; fi' EXIT
-trap 'printf "Deployment failed. Inspect container status, .env and current-release before retrying; database migrations are never automatically reverted.\n" >&2' ERR
+trap 'printf "Deployment failed. Inspect container status, .env and current-release before retrying; database initialization is never automatically reverted.\n" >&2' ERR
 bash "$script_dir/download-release.sh" "$release_id"
 export API_IMAGE="t-box-api:$release_id"
 compose() { docker compose --project-directory "$script_dir" --env-file "$script_dir/.env" -f "$script_dir/compose.yaml" "$@"; }
 compose config --quiet
 compose run --rm --no-deps --pull never api node --input-type=module -e 'import("./dist/config.js").then(({resourceStorageSettings})=>resourceStorageSettings())'
+if [[ "$mode" != '--rollback' ]]; then
+  compose run --rm --no-deps --pull never api node dist/init-db.js --check
+fi
 # No application downtime until archive verification/import and config validation succeed.
 compose stop api
 if [[ "$mode" != '--rollback' ]]; then

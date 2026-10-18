@@ -2,10 +2,18 @@ import type { BillInput } from '@t-box/ledger-contracts'
 import type { LedgerAccess } from '../ledgers/access.js'
 import { randomUUID } from 'node:crypto'
 import { invalid } from '@t-box/server-foundation/errors'
+import { sqlClock } from '@t-box/server-foundation/persistence/columns'
+import { LessThanOrEqual } from 'typeorm'
+import { LedgerEntity } from '../domain-entities.js'
+import { BillEntity, CategoryEntity } from '../entities.js'
 import { cents } from '../finance/money.js'
 import { billDelta } from '../finance/service.js'
 import { audit } from '../ledgers/audit.js'
 import { today } from '../ledgers/validation.js'
+import {
+  LedgerRuleEntity,
+  LedgerRuleRunEntity,
+} from '../persistence/planning-entities.js'
 import { monthBounds, parseBillInput } from '../validation.js'
 import { activeAccount } from './account-posting.js'
 import { json } from './base.js'
@@ -56,18 +64,37 @@ export class LedgerScheduler {
   }
 
   private async execute() {
-    const rules = await this.access.source.query(
-      'SELECT id,ledger_id,created_by FROM ledger_rules WHERE enabled=TRUE AND next_date<=? ORDER BY next_date LIMIT 100',
-      [today()],
-    )
+    const rules = await this.access.source
+      .getRepository(LedgerRuleEntity)
+      .find({
+        select: { id: true, ledger_id: true, created_by: true },
+        where: { enabled: true, next_date: LessThanOrEqual(today()) },
+        order: { next_date: 'ASC' },
+        take: 100,
+      })
     for (const row of rules) {
+      if (!row.created_by) {
+        await this.access.source
+          .getRepository(LedgerRuleEntity)
+          .update(
+            { id: row.id },
+            { enabled: false, last_error: '创建账号已注销' },
+          )
+        continue
+      }
       try {
         await this.active?.(row.created_by)
         await this.runRule(row.id, row.ledger_id)
       } catch (e) {
-        await this.access.source.query(
-          'UPDATE ledger_rules SET enabled=FALSE,last_error=? WHERE id=?',
-          [(e instanceof Error ? e.message : '执行失败').slice(0, 200), row.id],
+        await this.access.source.getRepository(LedgerRuleEntity).update(
+          { id: row.id },
+          {
+            enabled: false,
+            last_error: (e instanceof Error ? e.message : '执行失败').slice(
+              0,
+              200,
+            ),
+          },
         )
         await this.notice(
           row.ledger_id,
@@ -80,6 +107,7 @@ export class LedgerScheduler {
     }
     const month = today().slice(0, 7)
     const [start, end] = monthBounds(month)
+    // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
     const budgets = await this.access.source.query(
       'SELECT b.id,b.ledger_id,b.created_by,b.amount,c.label,COALESCE((SELECT SUM(s.amount) FROM ledger_daily_categories s WHERE s.ledger_id=b.ledger_id AND s.type=\'expense\' AND s.stat_date BETWEEN ? AND ? AND (b.category_id=\'\' OR s.category_id=b.category_id)),0) AS spent FROM ledger_budgets b JOIN ledgers l ON l.id=b.ledger_id AND l.archived=FALSE JOIN ledger_members m ON m.ledger_id=b.ledger_id AND m.user_id=b.created_by LEFT JOIN bill_categories c ON c.id=b.category_id WHERE b.budget_month=?',
       [start, end, month],
@@ -98,10 +126,19 @@ export class LedgerScheduler {
         )
       }
     }
-    const debts = await this.access.source.query(
-      'SELECT ledger_id,id,created_by,counterparty,direction,remaining,due_date FROM debt_positions WHERE remaining>0 AND due_date<=DATE_ADD(?,INTERVAL 3 DAY) AND created_by IS NOT NULL ORDER BY due_date LIMIT 1000',
-      [today()],
-    )
+    const debts = await this.access.source
+      .createQueryBuilder()
+      .select(
+        'ledger_id,id,created_by,counterparty,direction,remaining,due_date',
+      )
+      .from('debt_positions', 'debt_positions')
+      .where(
+        'remaining>0 AND due_date<=DATE_ADD(:p0,INTERVAL 3 DAY) AND created_by IS NOT NULL',
+      )
+      .orderBy('due_date', 'ASC')
+      .limit(1000)
+      .setParameters({ p0: today() })
+      .getRawMany()
     for (const d of debts) {
       await this.notice(
         d.ledger_id,
@@ -120,29 +157,91 @@ export class LedgerScheduler {
     title: string,
     body: string,
   ) {
-    await this.access.source.query(
-      'INSERT IGNORE INTO ledger_notices(id,ledger_id,user_id,dedupe_key,title,body) VALUES(?,?,?,?,?,?)',
-      [randomUUID(), book, user, key, title.slice(0, 100), body.slice(0, 400)],
-    )
+    await this.access.source
+      .createQueryBuilder()
+      .insert()
+      .into('ledger_notices')
+      .values({
+        id: randomUUID(),
+        ledger_id: book,
+        user_id: user,
+        dedupe_key: key,
+        title: title.slice(0, 100),
+        body: body.slice(0, 400),
+      })
+      .updateEntity(false)
+      .orIgnore()
+      .execute()
   }
 
   private async runRule(id: string, bookId: string) {
     await this.access.source.transaction(async (db) => {
-      const [book] = await db.query(
-        'SELECT * FROM ledgers WHERE id=? FOR UPDATE',
-        [bookId],
-      )
-      const [r] = await db.query(
-        'SELECT * FROM ledger_rules WHERE id=? AND enabled=TRUE FOR UPDATE',
-        [id],
-      )
-      if (!book || !r || r.next_date > today()) {
+      const book = await db
+        .getRepository(LedgerEntity)
+        .findOne({
+          select: {
+            id: true,
+            name: true,
+            template: true,
+            currency: true,
+            ownerId: true,
+            archived: true,
+            passwordHash: true,
+            passwordVersion: true,
+            revision: true,
+            createdAt: true,
+          },
+          where: { id: bookId },
+          lock: { mode: 'pessimistic_write' },
+        })
+        .then((row) =>
+          row
+            ? {
+                id: row.id,
+                name: row.name,
+                template: row.template,
+                currency: row.currency,
+                owner_id: row.ownerId,
+                archived: row.archived,
+                password_hash: row.passwordHash,
+                password_version: row.passwordVersion,
+                revision: row.revision,
+                created_at: sqlClock(row.createdAt),
+              }
+            : null,
+        )
+      const r = await db.getRepository(LedgerRuleEntity).findOne({
+        select: {
+          id: true,
+          ledger_id: true,
+          name: true,
+          bill_json: true,
+          frequency: true,
+          interval_count: true,
+          start_date: true,
+          next_date: true,
+          end_date: true,
+          mode: true,
+          grant_version: true,
+          enabled: true,
+          last_error: true,
+          created_by: true,
+          created_at: true,
+        },
+        where: { id, enabled: true },
+        lock: { mode: 'pessimistic_write' },
+      })
+      if (!book || !r || !r.created_by || r.next_date > today()) {
         return
       }
-      const [member] = await db.query(
-        'SELECT m.role FROM ledger_members m JOIN app_users u ON u.id=m.user_id WHERE m.ledger_id=? AND m.user_id=? AND u.enabled=TRUE',
-        [bookId, r.created_by],
-      )
+      const [member] = await db
+        .createQueryBuilder()
+        .select('m.role', 'role')
+        .from('ledger_members', 'm')
+        .innerJoin('app_users', 'u', 'u.id=m.user_id')
+        .where('m.ledger_id=:p0 AND m.user_id=:p1 AND u.enabled=TRUE')
+        .setParameters({ p0: bookId, p1: r.created_by })
+        .getRawMany()
       if (!member || member.role === 'viewer' || Number(book.archived)) {
         invalid('authorization', '创建人已无写入权限或账本已归档')
       }
@@ -150,10 +249,18 @@ export class LedgerScheduler {
         invalid('authorization', '账本密码已变更，请重新授权周期规则')
       }
       const template = parseBillInput(json(r.bill_json)) as BillInput
-      const [c] = await db.query(
-        'SELECT id FROM bill_categories WHERE ledger_id=? AND id=? AND type=? AND active=TRUE',
-        [bookId, template.category, template.type],
-      )
+      const c = await db
+        .getRepository(CategoryEntity)
+        .findOne({
+          select: { id: true },
+          where: {
+            ledgerId: bookId,
+            id: template.category,
+            type: template.type,
+            active: true,
+          },
+        })
+        .then((row) => (row ? { id: row.id } : null))
       if (!c) {
         invalid('category', '周期账单分类已停用')
       }
@@ -165,27 +272,26 @@ export class LedgerScheduler {
           enabled = false
           break
         }
-        const [done] = await db.query(
-          'SELECT id FROM ledger_rule_runs WHERE rule_id=? AND occurrence_date=?',
-          [id, next],
-        )
+        const done = await db.getRepository(LedgerRuleRunEntity).findOne({
+          select: { id: true },
+          where: { rule_id: id, occurrence_date: next },
+        })
         if (!done) {
           const billId = r.mode === 'automatic' ? randomUUID() : null
           if (billId) {
-            await db.query(
-              'INSERT INTO bills(id,ledger_id,type,amount,category,bill_date,note,created_by,account_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))',
-              [
-                billId,
-                bookId,
-                template.type,
-                template.amount,
-                template.category,
-                next,
-                template.note,
-                r.created_by,
-                template.accountId ?? null,
-              ],
-            )
+            await db.getRepository(BillEntity).insert({
+              id: billId,
+              ledgerId: bookId,
+              type: template.type,
+              amount: template.amount,
+              category: template.category,
+              date: next,
+              note: template.note,
+              createdBy: r.created_by,
+              accountId: template.accountId ?? null,
+              createdAt: () => 'UTC_TIMESTAMP(3)',
+              updatedAt: () => 'UTC_TIMESTAMP(3)',
+            })
             await billDelta(
               db,
               bookId,
@@ -203,39 +309,41 @@ export class LedgerScheduler {
               date: next,
             })
           }
-          await db.query(
-            'INSERT INTO ledger_rule_runs(id,ledger_id,rule_id,occurrence_date,bill_id,created_by) VALUES(?,?,?,?,?,?)',
-            [randomUUID(), bookId, id, next, billId, r.created_by],
-          )
-          await db.query(
-            'INSERT IGNORE INTO ledger_notices(id,ledger_id,user_id,dedupe_key,title,body) VALUES(?,?,?,?,?,?)',
-            [
-              randomUUID(),
-              bookId,
-              r.created_by,
-              `rule:${id}:${next}`,
-              r.mode === 'automatic' ? '周期账单已生成' : '周期记账提醒',
-              `${r.name} · ${next} · ${template.amount} 元`,
-            ],
-          )
+          await db.getRepository(LedgerRuleRunEntity).insert({
+            id: randomUUID(),
+            ledger_id: bookId,
+            rule_id: id,
+            occurrence_date: next,
+            bill_id: billId,
+            created_by: r.created_by,
+          })
+          await db
+            .createQueryBuilder()
+            .insert()
+            .into('ledger_notices')
+            .values({
+              id: randomUUID(),
+              ledger_id: bookId,
+              user_id: r.created_by,
+              dedupe_key: `rule:${id}:${next}`,
+              title: r.mode === 'automatic' ? '周期账单已生成' : '周期记账提醒',
+              body: `${r.name} · ${next} · ${template.amount} 元`,
+            })
+            .updateEntity(false)
+            .orIgnore()
+            .execute()
         }
-        next = nextOccurrence(
-          r.start_date,
-          r.frequency,
-          r.interval_count,
-          next,
-        )
+        next = nextOccurrence(r.start_date, r.frequency, r.interval_count, next)
         if (r.end_date && next > r.end_date) {
           enabled = false
         }
       }
-      await db.query(
-        'UPDATE ledger_rules SET next_date=?,enabled=?,last_error=NULL WHERE id=?',
-        [next, enabled, id],
-      )
-      await db.query('UPDATE ledgers SET revision=revision+1 WHERE id=?', [
-        bookId,
-      ])
+      await db
+        .getRepository(LedgerRuleEntity)
+        .update({ id }, { next_date: next, enabled, last_error: null })
+      await db
+        .getRepository(LedgerEntity)
+        .update({ id: bookId }, { revision: () => 'revision+1' })
     })
     this.access.notify(bookId)
   }

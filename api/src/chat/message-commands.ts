@@ -2,10 +2,10 @@ import type { ChatMessage } from '@t-box/shared'
 import type { Actor, AgentRuntimeOptions } from '../agent/contracts.js'
 import type { ChatSession, SessionRepository } from './session.js'
 import { createHash, randomUUID } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { closeInterruptedHistory } from '../agent/checkpoint.js'
 import { receiptEvidence } from '../agent/evidence.js'
 import { rebuildConversationHistory } from '../agent/history.js'
+import { ErrorCode } from '../error-codes.js'
 
 export function messagePair(
   messages: readonly ChatMessage[],
@@ -13,32 +13,20 @@ export function messagePair(
 ) {
   let start = messages.findIndex((m) => m.id === messageId)
   if (start < 0) {
-    throw new ApiError(
-      404,
-      'MESSAGE_NOT_FOUND',
-      '这条消息已删除或不存在，请刷新对话',
-    )
+    throw ErrorCode.MESSAGE_NOT_FOUND()
   }
   if (messages[start]!.role === 'assistant') {
     start--
   }
   if (start < 0 || messages[start]!.role !== 'user') {
-    throw new ApiError(
-      409,
-      'MESSAGE_PAIR_INVALID',
-      '消息缺少对应的问题，不能处理',
-    )
+    throw ErrorCode.MESSAGE_PAIR_INVALID()
   }
   let end = start + 1
   while (end < messages.length && messages[end]!.role === 'assistant') {
     end++
   }
   if (end === start + 1) {
-    throw new ApiError(
-      409,
-      'MESSAGE_PAIR_INCOMPLETE',
-      '回复尚未保存完整，请稍后重试',
-    )
+    throw ErrorCode.MESSAGE_PAIR_INCOMPLETE()
   }
   return { start, end, messages: messages.slice(start, end) }
 }
@@ -47,14 +35,10 @@ export function checkMessageRevision(current: ChatSession, value: unknown) {
     return
   }
   if (!Number.isSafeInteger(value) || Number(value) < 1) {
-    throw new ApiError(400, 'INVALID_EVENT', '会话版本无效')
+    throw ErrorCode.INVALID_EVENT('会话版本无效')
   }
   if (current.archiveRevision !== value) {
-    throw new ApiError(
-      409,
-      'CONVERSATION_STALE',
-      '会话已更新，请重新连接后再修改或删除',
-    )
+    throw ErrorCode.CONVERSATION_STALE('会话已更新，请重新连接后再修改或删除')
   }
 }
 /** Caller holds the in-memory finishing lock. Durable revision/lease checks protect other processes. */
@@ -106,11 +90,7 @@ export async function retireSuspendedTask(
       : null
   if (task && ['running', 'queued'].includes(task.status)) {
     current.task = task
-    throw new ApiError(
-      409,
-      'TASK_IN_PROGRESS',
-      '后端正在执行，请等待任务结束或先停止',
-    )
+    throw ErrorCode.TASK_IN_PROGRESS()
   }
   if (task && actor && options.host?.tasks) {
     if (options.host.tasks.cancelSuspended) {
@@ -158,11 +138,7 @@ export async function deleteMessagePair(
       : undefined
   if (previous) {
     if (previous.fingerprint !== fingerprint) {
-      throw new ApiError(
-        409,
-        'REQUEST_ID_CONFLICT',
-        '同一请求标识不能用于不同删除操作',
-      )
+      throw ErrorCode.REQUEST_ID_CONFLICT.conflict()
     }
     return previous.messageIds
   }
@@ -174,22 +150,14 @@ export async function deleteMessagePair(
       : undefined
   if (saved) {
     if (saved.fingerprint !== fingerprint) {
-      throw new ApiError(
-        409,
-        'REQUEST_ID_CONFLICT',
-        '同一请求标识不能用于不同删除操作',
-      )
+      throw ErrorCode.REQUEST_ID_CONFLICT.conflict()
     }
     return saved.messageIds
   }
   checkMessageRevision(current, event.expectedRevision)
   const pair = messagePair(current.messages, event.messageId)
   if (Object.keys(current.messageCommands || {}).length >= 1000) {
-    throw new ApiError(
-      409,
-      'MESSAGE_COMMAND_LIMIT',
-      '消息调整次数达到上限，请新建会话',
-    )
+    throw ErrorCode.MESSAGE_COMMAND_LIMIT()
   }
   await retireSuspendedTask(options, current, actor)
   const before = {
@@ -238,7 +206,7 @@ export function forkMessageConversation(
 ) {
   const pair = messagePair(source.messages, messageId)
   if (pair.messages[0]!.id !== messageId) {
-    throw new ApiError(400, 'MESSAGE_ROLE_INVALID', '只能修改用户发送的问题')
+    throw ErrorCode.MESSAGE_ROLE_INVALID()
   }
   const branch = sessions.create()
   branch.userId = source.userId

@@ -34,6 +34,8 @@ async function scalar(source: ReturnType<typeof createDataSource>, sql: string) 
 
 try {
   const fresh = await freshDatabase()
+  await initializeDatabase(fresh, databaseSchemas, { checkOnly: true })
+  assert.equal((await fresh.query('SHOW TABLES')).length, 0)
   const result = await initializeDatabase(fresh, databaseSchemas)
   assert.equal(result.initialized, true)
   assert.equal(result.baseline, DATABASE_BASELINE)
@@ -91,6 +93,7 @@ try {
   await legacy.query('CREATE TABLE bills(id INT PRIMARY KEY,note VARCHAR(40))')
   await legacy.query('INSERT INTO bills VALUES(1,\'保留原始数据\')')
   await assert.rejects(initializeDatabase(legacy, databaseSchemas), /已有旧表/)
+  await assert.rejects(initializeDatabase(legacy, databaseSchemas, { checkOnly: true }), /已有旧表/)
   assert.equal(await scalar(legacy, 'SELECT note FROM bills WHERE id=1'), '保留原始数据')
   assert.equal((await legacy.query('SHOW TABLES')).length, 1)
 

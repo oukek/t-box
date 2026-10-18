@@ -18,10 +18,10 @@ import {
   parseCalendarLunarDate,
   parseCalendarParams,
 } from '@t-box/calendar-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { temporalDomain } from '@t-box/server-foundation/persistence/errors'
 import { fingerprint } from '@t-box/server-foundation/persistence/operations'
 import { timeSnapshot, validDate } from '@t-box/time-contracts'
+import { ErrorCode } from './error-codes.js'
 
 const str = (description: string, maxLength = 200) => ({
   type: 'string',
@@ -101,7 +101,7 @@ export function calendarAccessAdapter(
         resource.resourceType !== 'event' ||
         !['read', 'write'].includes(action)
       ) {
-        throw new ApiError(400, 'INVALID_SCOPE', '不支持的日历资源')
+        throw ErrorCode.INVALID_SCOPE('不支持的日历资源')
       }
       await service.get(actor.user.id, resource.resourceId)
       return {}
@@ -113,7 +113,7 @@ export function createCalendarModule(
 ): ApplicationModule {
   const actor = (ctx: ApplicationToolContext) => {
     if (!service || !ctx.actor) {
-      throw new ApiError(503, 'CALENDAR_UNAVAILABLE', '请登录后使用日历')
+      throw ErrorCode.CALENDAR_UNAVAILABLE()
     }
     ctx.signal.throwIfAborted()
     return ctx.actor.user.id
@@ -176,9 +176,7 @@ export function createCalendarModule(
     async (value, ctx) => {
       actor(ctx)
       const a = args(value, ['date'])
-      return service!.holidays.dateInfo(
-        temporalDomain(() => validDate(a.date)),
-      )
+      return service!.holidays.dateInfo(temporalDomain(() => validDate(a.date)))
     },
   )
   read(

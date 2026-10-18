@@ -1,7 +1,9 @@
-import type { AdminRechargeConfiguration, RechargeConfiguration } from '@t-box/shared'
+import type {
+  AdminRechargeConfiguration,
+  RechargeConfiguration,
+} from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { ConfigurationCache } from '../configuration/cache.js'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { object } from '@t-box/server-foundation/input'
 import {
   rechargeBonusCents,
@@ -10,6 +12,8 @@ import {
 } from '@t-box/shared'
 import { EntitySchema } from 'typeorm'
 import { money } from '../billing/money.js'
+import { PlatformConfigurationStateEntity } from '../db/records/configuration-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 const defaults: RechargeConfiguration = {
   presets: [],
@@ -42,7 +46,7 @@ export const RechargeSettingsEntity = new EntitySchema<RechargeRow>({
   },
 })
 const invalid = (message: string): never => {
-  throw new ApiError(400, 'INVALID_RECHARGE_CONFIG', message)
+  throw ErrorCode.INVALID_RECHARGE_CONFIG(message)
 }
 const yuan = (cents: number) => (cents / 100).toFixed(2)
 export function parseRechargeConfiguration(
@@ -134,7 +138,7 @@ export class RechargeSettingsService {
       .getRepository(RechargeSettingsEntity)
       .findOneBy({ id: 1 })
     if (!row) {
-      throw new ApiError(503, 'SCHEMA_REQUIRED', '请先初始化充值配置数据库')
+      throw ErrorCode.SCHEMA_REQUIRED('请先初始化充值配置数据库')
     }
     return {
       ...structuredClone(row.configuration),
@@ -144,11 +148,7 @@ export class RechargeSettingsService {
   }
 
   async publicConfiguration(): Promise<RechargeConfiguration> {
-    const {
-      revision: _,
-      updatedAt: __,
-      ...config
-    } = await this.configuration()
+    const { revision: _, updatedAt: __, ...config } = await this.configuration()
     return {
       ...config,
       presets: config.presets.filter((preset) => preset.enabled),
@@ -175,19 +175,15 @@ export class RechargeSettingsService {
       ? await (this.source as DataSource).transaction(async (db) => {
           const result = await update(db)
           if (result.affected) {
-            await db.query(
-              'UPDATE platform_configuration_state SET revision=revision+1 WHERE id=1',
-            )
+            await db
+              .getRepository(PlatformConfigurationStateEntity)
+              .update({ id: 1 }, { revision: () => 'revision+1' })
           }
           return result
         })
       : await update(this.source)
     if (!result.affected) {
-      throw new ApiError(
-        409,
-        'CONFIGURATION_CHANGED',
-        '配置已被更新，请刷新后重试',
-      )
+      throw ErrorCode.CONFIGURATION_CHANGED('配置已被更新，请刷新后重试')
     }
     return this.configuration()
   }
@@ -196,11 +192,7 @@ export class RechargeSettingsService {
     const config = await this.configuration()
     const bonus = rechargeOfferBonusCents(amountCents, config)
     if (bonus === null) {
-      throw new ApiError(
-        403,
-        'CUSTOM_RECHARGE_DISABLED',
-        '自定义充值未开启，请选择已上架的充值套餐',
-      )
+      throw ErrorCode.CUSTOM_RECHARGE_DISABLED()
     }
     return bonus
   }

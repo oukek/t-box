@@ -1,12 +1,10 @@
-import type { ChatServerEvent, ToolResult } from '@t-box/shared'
+import type { ChatServerEvent } from '@t-box/shared'
 import type { RunCheckpoint } from '../agent/checkpoint.js'
 import type { Actor, AgentRuntimeOptions } from '../agent/contracts.js'
 import type { AgentRunInput } from '../agent/runner.js'
 import type { ChatSession, SessionRepository } from './session.js'
 import { ApiError } from '@t-box/server-foundation/errors'
-import {
-  CHAT_LIMITS,
-} from '@t-box/shared'
+import { CHAT_LIMITS } from '@t-box/shared'
 import { ResourceAuthorizationRequired } from '../agent/access.js'
 import { restoreCheckpoint } from '../agent/checkpoint.js'
 import { rebuildConversationHistory } from '../agent/history.js'
@@ -15,7 +13,9 @@ import { runConversation } from '../agent/runner.js'
 import { object, parseDate, parseIdentifier } from '../agent/schema.js'
 import { authorizedSnapshot } from '../agent/snapshot.js'
 import { handleTaskCommand } from '../agent/task-commands.js'
+import { parseToolResult } from '../agent/tool-result-schema.js'
 import { settingNumber } from '../configuration/defaults.js'
+import { ErrorCode } from '../error-codes.js'
 import { retryPair } from './answer-retry.js'
 import {
   checkMessageRevision,
@@ -25,42 +25,15 @@ import {
   refreshMessageState,
   retireSuspendedTask,
 } from './message-commands.js'
-import {
-  MemorySessionRepository,
-  snapshot,
-} from './session.js'
+import { MemorySessionRepository, snapshot } from './session.js'
 
 export type ChatServiceOptions = AgentRuntimeOptions
-const fail = (code: string, message: string): never => {
-  throw new ApiError(400, code, message)
-}
+
 function id(value: unknown): string {
   if (typeof value !== 'string' || !/^[\w-]{1,100}$/.test(value)) {
-    fail('INVALID_EVENT', '请求标识格式不正确')
+    throw ErrorCode.INVALID_EVENT()
   }
   return value as string
-}
-function toolResult(value: unknown): ToolResult {
-  const result = object(value, ['ok', 'data', 'error'])
-  if (result.ok === true) {
-    return { ok: true, data: result.data }
-  }
-  if (result.ok !== false) {
-    fail('INVALID_TOOL_RESULT', '工具回执格式不正确')
-  }
-  const error = object(result.error, ['code', 'message'])
-  if (
-    typeof error.code !== 'string' ||
-    error.code.length > 80 ||
-    typeof error.message !== 'string' ||
-    error.message.length > 200
-  ) {
-    fail('INVALID_TOOL_RESULT', '工具错误回执格式不正确')
-  }
-  return {
-    ok: false,
-    error: { code: error.code as string, message: error.message as string },
-  }
 }
 
 export class ChatService {
@@ -87,13 +60,23 @@ export class ChatService {
   }
 
   /** No fake socket or blanket permissions: required device interactions pause naturally. */
-  async resumeInBackground(task: { id: string, userId: string, conversationId: string, sessionHash: string }, recoveryClaim: string) {
+  async resumeInBackground(
+    task: {
+      id: string
+      userId: string
+      conversationId: string
+      sessionHash: string
+    },
+    recoveryClaim: string,
+  ) {
     if (!this.options.host) {
-      throw new ApiError(503, 'TASKS_UNAVAILABLE', '持久任务服务不可用')
+      throw ErrorCode.TASKS_UNAVAILABLE.unavailable()
     }
-    const principal = await this.options.host.identity.authenticateHash(task.sessionHash)
+    const principal = await this.options.host.identity.authenticateHash(
+      task.sessionHash,
+    )
     if (!principal || principal.user.id !== task.userId) {
-      throw new ApiError(403, 'TASK_IDENTITY_CHANGED', '任务身份已改变，请重新打开会话')
+      throw ErrorCode.TASK_IDENTITY_CHANGED()
     }
     // Keep recovery state separate from socket subscriber objects. Otherwise an
     // async restore can replace a live UI session while another command uses it.
@@ -102,10 +85,18 @@ export class ChatService {
     session.conversationId = task.conversationId
     try {
       const conversations = this.options.host.conversations
-      if (conversations && await conversations.exists(principal, task.conversationId)) {
+      if (
+        conversations &&
+        (await conversations.exists(principal, task.conversationId))
+      ) {
         await conversations.restore(principal, task.conversationId, session)
       }
-      const input = await prepareTaskResume(this.options, session, principal, task.id)
+      const input = await prepareTaskResume(
+        this.options,
+        session,
+        principal,
+        task.id,
+      )
       await this.startRun({ ...input, recoveryClaim }, this.backgroundSessions)
     } finally {
       if (!session.owner) {
@@ -128,7 +119,7 @@ export class ChatService {
       let requestId: string | undefined
       try {
         if (!input || typeof input !== 'object' || Array.isArray(input)) {
-          fail('INVALID_EVENT', '消息必须为 JSON 对象')
+          throw ErrorCode.INVALID_EVENT('消息必须为 JSON 对象')
         }
         const event = this.options.registry.decodeEvent(
           input as Record<string, unknown>,
@@ -151,7 +142,13 @@ export class ChatService {
               principal,
               session.conversationId,
             )
-            await this.options.host.conversations?.restore(principal, session.conversationId, session, false, session.task?.status === 'running')
+            await this.options.host.conversations?.restore(
+              principal,
+              session.conversationId,
+              session,
+              false,
+              session.task?.status === 'running',
+            )
             send({
               type: 'session.snapshot',
               snapshot: await authorizedSnapshot(
@@ -175,7 +172,7 @@ export class ChatService {
             'clientCapabilities',
           ])
           if (session || opening) {
-            fail('SESSION_ALREADY_OPEN', '此连接已绑定会话或正在建立会话')
+            throw ErrorCode.SESSION_ALREADY_OPEN()
           }
           opening = true
           try {
@@ -186,12 +183,11 @@ export class ChatService {
                 capabilities.length > 128 ||
                 capabilities.some(
                   (name) =>
-                    typeof name !== 'string' ||
-                    !/^[\w-]{1,64}$/.test(name),
+                    typeof name !== 'string' || !/^[\w-]{1,64}$/.test(name),
                 ) ||
                 new Set(capabilities).size !== capabilities.length)
             ) {
-              fail('INVALID_EVENT', '客户端能力列表无效')
+              throw ErrorCode.INVALID_EVENT('客户端能力列表无效')
             }
             if (this.options.host) {
               principal = await this.options.host.identity.authenticate(
@@ -206,7 +202,9 @@ export class ChatService {
                 typeof event.token !== 'string' ||
                 event.token.length > 128)
             ) {
-              fail('SESSION_INVALID', '恢复会话需要有效的会话 ID 和凭据')
+              throw ErrorCode.SESSION_INVALID(
+                '恢复会话需要有效的会话 ID 和凭据',
+              )
             }
             const conversationId =
               event.conversationId === undefined
@@ -247,7 +245,7 @@ export class ChatService {
               candidate = live ?? this.sessions.create()
             }
             if (candidate.owner) {
-              fail('SESSION_IN_USE', '此会话正在另一个连接中使用')
+              throw ErrorCode.SESSION_IN_USE()
             }
             if (
               conversationId &&
@@ -259,14 +257,14 @@ export class ChatService {
                   candidate.conversationId &&
                   candidate.conversationId !== conversationId
                 ) {
-                  fail('SESSION_INVALID', '会话记录与恢复参数不一致')
+                  throw ErrorCode.SESSION_INVALID()
                 }
-                if (
-                  !candidate.active &&
-                  !candidate.finishing
-                ) {
+                if (!candidate.active && !candidate.finishing) {
                   try {
-                    const durable = await this.options.host.tasks?.current(principal, conversationId)
+                    const durable = await this.options.host.tasks?.current(
+                      principal,
+                      conversationId,
+                    )
                     await this.options.host.conversations.restore(
                       principal,
                       conversationId,
@@ -316,7 +314,7 @@ export class ChatService {
                   candidate.title = saved?.title
                 }
                 if (candidate.conversationId !== conversationId) {
-                  fail('SESSION_INVALID', '会话记录与恢复参数不一致')
+                  throw ErrorCode.SESSION_INVALID()
                 }
               } catch (error) {
                 if (!candidate.conversationId) {
@@ -330,7 +328,7 @@ export class ChatService {
               candidate.userId &&
               candidate.userId !== principal.user.id
             ) {
-              fail('SESSION_INVALID', '会话不属于当前用户')
+              throw ErrorCode.SESSION_INVALID('会话不属于当前用户')
             }
             if (principal) {
               candidate.userId = principal.user.id
@@ -352,10 +350,14 @@ export class ChatService {
               )
             }
             if (candidate.owner) {
-              fail('SESSION_IN_USE', '此会话正在另一个连接中使用')
+              throw ErrorCode.SESSION_IN_USE()
             }
             if (closed) {
-              if (!candidate.owner && !candidate.active && !candidate.finishing) {
+              if (
+                !candidate.owner &&
+                !candidate.active &&
+                !candidate.finishing
+              ) {
                 this.sessions.remove?.(candidate.id)
               }
               return
@@ -369,12 +371,18 @@ export class ChatService {
               }
             }
             if (this.options.provider.forRun) {
-              session.mode = (await this.options.provider.forRun({ peek: true })).mode
+              session.mode = (
+                await this.options.provider.forRun({ peek: true })
+              ).mode
             }
             if (closed) {
               return
             }
-            if (principal && session.conversationId && this.options.host?.tasks) {
+            if (
+              principal &&
+              session.conversationId &&
+              this.options.host?.tasks
+            ) {
               session.task = await this.options.host.tasks.current(
                 principal,
                 session.conversationId,
@@ -412,7 +420,7 @@ export class ChatService {
           }
         }
         if (!ready || !session || session.owner !== owner) {
-          fail('SESSION_REQUIRED', '请先建立会话')
+          throw ErrorCode.SESSION_REQUIRED()
         }
         let current = session!
         this.sessions.touch(current)
@@ -432,7 +440,7 @@ export class ChatService {
           requestId = id(event.requestId)
           const messageId = id(event.messageId)
           if (current.active || current.finishing) {
-            fail('RUN_IN_PROGRESS', '请等待生成结束后再删除')
+            throw ErrorCode.RUN_IN_PROGRESS()
           }
           current.finishing = true
           try {
@@ -467,7 +475,7 @@ export class ChatService {
           requestId = id(event.requestId)
           const messageId = id(event.messageId)
           if (current.active || current.finishing) {
-            fail('RUN_IN_PROGRESS', '请等待生成结束后再重试')
+            throw ErrorCode.RUN_IN_PROGRESS('请等待生成结束后再重试')
           }
           current.finishing = true
           let retryInput: AgentRunInput | undefined
@@ -479,7 +487,9 @@ export class ChatService {
             const duplicate = current.requests.get(requestId)
             if (duplicate) {
               if (duplicate.retryMessageId !== messageId) {
-                fail('REQUEST_ID_CONFLICT', '同一请求 ID 不可用于不同重试')
+                throw ErrorCode.REQUEST_ID_CONFLICT(
+                  '同一请求 ID 不可用于不同重试',
+                )
               }
               send({
                 type: 'session.snapshot',
@@ -490,17 +500,20 @@ export class ChatService {
             checkMessageRevision(current, event.expectedRevision)
             const pair = retryPair(current, messageId)
             const provider = this.options.provider.forRun
-              ? await this.options.provider.forRun({ preferredConfigurationKey: current.configurationKey, supportsVision: pair.messages.some((message) => message.attachments?.some((file) => file.mimeType.startsWith('image/'))) })
+              ? await this.options.provider.forRun({
+                  preferredConfigurationKey: current.configurationKey,
+                  supportsVision: pair.messages.some((message) =>
+                    message.attachments?.some((file) =>
+                      file.mimeType.startsWith('image/'),
+                    ),
+                  ),
+                })
               : this.options.provider
             if (provider.mode === 'unconfigured') {
-              throw new ApiError(
-                503,
-                'AI_NOT_CONFIGURED',
-                '尚未接入 AI，请先在后台配置并启用普通会话模型。',
-              )
+              throw ErrorCode.AI_NOT_CONFIGURED()
             }
             if (current.requests.size >= 1000) {
-              fail('SESSION_LIMIT', '当前会话已达长度上限，请新建对话')
+              throw ErrorCode.SESSION_LIMIT()
             }
             await retireSuspendedTask(this.options, current, principal)
             if (closed || current.owner !== owner) {
@@ -579,7 +592,7 @@ export class ChatService {
             !event.text.trim() ||
             event.text.length > maxLength
           ) {
-            fail('INVALID_EVENT', `消息长度应为 1–${maxLength} 字`)
+            throw ErrorCode.INVALID_EVENT(`消息长度应为 1–${maxLength} 字`)
           }
           const localDate = parseDate(event.localDate)
           const text = (event.text as string).trim()
@@ -618,11 +631,19 @@ export class ChatService {
               current.conversationId,
             )
             if (!exists) {
-              fail('CONVERSATION_NOT_FOUND', '会话已删除，请新建会话')
+              throw ErrorCode.CONVERSATION_NOT_FOUND.invalid()
             }
           }
           const provider = this.options.provider.forRun
-            ? await this.options.provider.forRun({ preferredConfigurationKey: current.configurationKey, supportsVision: [...attachments, ...current.messages.flatMap((message) => message.attachments || [])].some((file) => file.mimeType.startsWith('image/')) })
+            ? await this.options.provider.forRun({
+                preferredConfigurationKey: current.configurationKey,
+                supportsVision: [
+                  ...attachments,
+                  ...current.messages.flatMap(
+                    (message) => message.attachments || [],
+                  ),
+                ].some((file) => file.mimeType.startsWith('image/')),
+              })
             : this.options.provider
           if (closed || current.owner !== owner) {
             return
@@ -652,7 +673,7 @@ export class ChatService {
               JSON.stringify(duplicate.applicationIds || []) !==
               JSON.stringify(applicationIds)
             ) {
-              fail('REQUEST_ID_CONFLICT', '同一请求 ID 不可用于不同消息')
+              throw ErrorCode.REQUEST_ID_CONFLICT()
             }
             send({
               type: 'session.snapshot',
@@ -665,14 +686,10 @@ export class ChatService {
               type: 'session.snapshot',
               snapshot: snapshot(current, provider.mode),
             })
-            throw new ApiError(
-              503,
-              'AI_NOT_CONFIGURED',
-              '尚未接入 AI，请先在后台配置并启用普通会话模型。',
-            )
+            throw ErrorCode.AI_NOT_CONFIGURED()
           }
           if (current.active || current.finishing) {
-            fail('RUN_IN_PROGRESS', '当前任务尚未结束，请等待或停止')
+            throw ErrorCode.RUN_IN_PROGRESS('当前任务尚未结束，请等待或停止')
           }
           const locked = current
           locked.finishing = true
@@ -701,7 +718,7 @@ export class ChatService {
                 JSON.stringify(savedRequest.applicationIds || []) !==
                 JSON.stringify(applicationIds)
               ) {
-                fail('REQUEST_ID_CONFLICT', '同一请求 ID 不可用于不同消息')
+                throw ErrorCode.REQUEST_ID_CONFLICT()
               }
               send({
                 type: 'session.snapshot',
@@ -713,7 +730,7 @@ export class ChatService {
               checkMessageRevision(current, event.expectedRevision)
               const pair = messagePair(current.messages, sourceMessageId)
               if (pair.messages[0]!.id !== sourceMessageId) {
-                fail('MESSAGE_ROLE_INVALID', '只能修改用户发送的问题')
+                throw ErrorCode.MESSAGE_ROLE_INVALID()
               }
             }
             await retireSuspendedTask(this.options, current, principal)
@@ -745,8 +762,7 @@ export class ChatService {
             })
           }
           if (current.requests.size >= 1000) {
-            fail(
-              'SESSION_LIMIT',
+            throw ErrorCode.SESSION_LIMIT(
               '当前会话已达长度上限，请新建对话；已完成的操作会保留',
             )
           }
@@ -776,7 +792,7 @@ export class ChatService {
         if (event.type === 'run.cancel') {
           object(event, ['type', 'runId'])
           if (!current.active || event.runId !== current.active.view.id) {
-            fail('RUN_NOT_FOUND', '任务已结束或不存在')
+            throw ErrorCode.RUN_NOT_FOUND()
           }
           current.active!.abort.abort('CANCELLED')
           return
@@ -791,15 +807,14 @@ export class ChatService {
             event.callId !== run.pending?.callId ||
             run.pending?.owner !== owner
           ) {
-            fail(
-              'INVALID_TOOL_RESULT',
+            throw ErrorCode.INVALID_TOOL_RESULT(
               '回执不属于此连接的待执行工具，或已经过期',
             )
           }
-          run!.pending!.settle(toolResult(event.result))
+          run!.pending!.settle(parseToolResult(event.result))
           return
         }
-        fail('INVALID_EVENT', '未知的消息类型')
+        throw ErrorCode.INVALID_EVENT('未知的消息类型')
       } catch (error) {
         send({
           type: 'error',
@@ -827,7 +842,10 @@ export class ChatService {
   }
 
   async close() {
-    for (const session of [...this.sessions.all(), ...this.backgroundSessions.all()]) {
+    for (const session of [
+      ...this.sessions.all(),
+      ...this.backgroundSessions.all(),
+    ]) {
       session.active?.abort.abort('SERVER_SHUTDOWN')
     }
     await Promise.allSettled(this.jobs)

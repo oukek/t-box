@@ -15,6 +15,7 @@
   "dependencies": {
     "@t-box/app-contracts": "workspace:*",
     "@t-box/app-sdk": "workspace:*",
+    "@t-box/errors": "workspace:*",
     "@t-box/shared": "workspace:*",
     "vue": "3.5.43"
   },

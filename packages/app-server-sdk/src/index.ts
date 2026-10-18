@@ -1,15 +1,11 @@
+export { ApplicationError } from './application-error.js'
 export * from './backend.js'
-export class ApplicationError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message)
-  }
-}
+
 export * from './contracts.js'
+export { ApplicationErrorCode } from './error-codes.js'
 export * from './remote-tools.js'
 export * from './schema.js'
+
 export type {
   BackendInvocation,
   LifecycleReceipt,

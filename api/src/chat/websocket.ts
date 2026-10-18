@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { ChatService } from './engine.js'
 import { networkInterfaces } from 'node:os'
 import websocket from '@fastify/websocket'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 export function registerChatSocket(
   app: FastifyInstance,
@@ -34,15 +34,14 @@ export function registerChatSocket(
       {
         websocket: true,
         preValidation: async (request) => {
-          if (!allowed.has('*') && (!request.headers.origin || !allowed.has(request.headers.origin))) {
-            throw new ApiError(
-              403,
-              'ORIGIN_NOT_ALLOWED',
-              '此网页来源不允许连接对话服务',
-            )
+          if (
+            !allowed.has('*') &&
+            (!request.headers.origin || !allowed.has(request.headers.origin))
+          ) {
+            throw ErrorCode.ORIGIN_NOT_ALLOWED('此网页来源不允许连接对话服务')
           }
           if (scope.websocketServer.clients.size >= 200) {
-            throw new ApiError(429, 'CONNECTION_LIMIT', '连接数量已达上限')
+            throw ErrorCode.CONNECTION_LIMIT()
           }
         },
       },

@@ -1,5 +1,6 @@
 import { reactive, readonly } from 'vue'
 import { bookState } from './books/bookStore'
+import { ErrorCode } from './error-codes.js'
 
 const state = reactive<{
   title: string
@@ -14,10 +15,10 @@ export function requestFinancialConsent(
   value: unknown,
 ): Promise<{ approved: boolean }> {
   if (settle) {
-    throw new Error('已有一项操作等待确认。')
+    throw ErrorCode.INTERNAL_CONFIRMATION_PENDING()
   }
   if (!value || typeof value !== 'object') {
-    throw new Error('确认内容无效。')
+    throw ErrorCode.INTERNAL_INVALID_CONFIRMATION_CONTENT()
   }
   const proposal = value as typeof state
   if (
@@ -31,7 +32,7 @@ export function requestFinancialConsent(
       (line) => typeof line !== 'string' || line.length > 4000,
     )
   ) {
-    throw new Error('确认内容无效或账本已切换。')
+    throw ErrorCode.INTERNAL_CONFIRMATION_SCOPE_CHANGED()
   }
   Object.assign(state, {
     title: proposal.title,

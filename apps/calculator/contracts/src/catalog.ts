@@ -5,8 +5,8 @@ import type {
   CalculatorKind,
   CalculatorOption,
 } from './types.js'
+import { CalculationErrorCode } from './error-codes.js'
 import { applicationIcon } from './icon.js'
-import { CalculationError } from './types.js'
 
 const choices = (items: [string, string][]): CalculatorOption[] =>
   items.map(([value, label]) => ({ value, label }))
@@ -309,31 +309,33 @@ export const calculatorManifest = {
 export function getCalculatorDefinition(id: string): CalculatorDefinition {
   const found = calculatorCatalog.find((c) => c.id === id)
   if (!found) {
-    throw new CalculationError('不支持此计算类型')
+    throw CalculationErrorCode.INVALID_CALCULATION('不支持此计算类型')
   }
   return found
 }
 export function parseCalculatorParams(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new CalculationError('计算器页面参数无效')
+    throw CalculationErrorCode.INVALID_CALCULATION('计算器页面参数无效')
   }
   const args = value as Record<string, unknown>
   if (Object.keys(args).some((key) => !['kind', 'expression'].includes(key))) {
-    throw new CalculationError('计算器页面包含未知参数')
+    throw CalculationErrorCode.INVALID_CALCULATION('计算器页面包含未知参数')
   }
   const result: Record<string, string> = {}
   if (args.kind != null) {
     if (typeof args.kind !== 'string') {
-      throw new CalculationError('计算类型无效')
+      throw CalculationErrorCode.INVALID_CALCULATION('计算类型无效')
     }
     result.kind = getCalculatorDefinition(args.kind).id
   }
   if (args.expression != null) {
     if (typeof args.expression !== 'string' || args.expression.length > 2000) {
-      throw new CalculationError('公式参数无效')
+      throw CalculationErrorCode.INVALID_CALCULATION('公式参数无效')
     }
     if (result.kind && !['basic', 'scientific'].includes(result.kind)) {
-      throw new CalculationError('只有基础与科学计算支持公式参数')
+      throw CalculationErrorCode.INVALID_CALCULATION(
+        '只有基础与科学计算支持公式参数',
+      )
     }
     result.kind ||= 'scientific'
     result.expression = args.expression

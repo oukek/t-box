@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import type { BillCategory, LedgerAccount } from '@t-box/ledger-contracts'
+import type {
+  Bill,
+  BillCategory,
+  Debt,
+  LedgerAccount,
+  LedgerBatchItem,
+  LedgerBatchResult,
+} from '@t-box/ledger-contracts'
 import type { FormValues, LedgerFormField } from './form'
 import { BottomSheet } from '@t-box/ui-kit'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -16,9 +23,9 @@ const api = featureApi(props.ledgerId)
 const action = useFeatureAction()
 const categories = ref<BillCategory[]>([])
 const accounts = ref<LedgerAccount[]>([])
-const debts = ref<any[]>([])
-const bills = ref<any[]>([])
-const items = ref<{ kind: string, input: any }[]>([])
+const debts = ref<Debt[]>([])
+const bills = ref<Bill[]>([])
+const items = ref<LedgerBatchItem[]>([])
 const editor = ref(false)
 const editing = ref(-1)
 const confirmation = ref(false)
@@ -176,7 +183,18 @@ watch(
 function open(index = -1) {
   editing.value = index
   const row = items.value[index]
-  const input = row?.input ?? {}
+  const input: FormValues = {}
+  if (row) {
+    for (const [key, value] of Object.entries(row.input)) {
+      if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        input[key] = value
+      }
+    }
+  }
   form.value = {
     kind: row?.kind ?? kindOptions.value[0]?.value ?? 'bill',
     type: 'expense',
@@ -198,76 +216,111 @@ function open(index = -1) {
     ...input,
     ...(row?.kind === 'settlement'
       ? {
-          debtId: input.allocations[0].debtId,
-          amount: input.allocations[0].amount,
+          debtId: row.input.allocations[0]?.debtId ?? '',
+          amount: row.input.allocations[0]?.amount ?? '',
         }
       : {}),
   }
-  attachmentResourceIds.value = [...(input.attachmentResourceIds ?? [])]
+  attachmentResourceIds.value = [...(row?.input.attachmentResourceIds ?? [])]
   editor.value = true
   action.error.value = ''
 }
 function saveRow() {
   const v = form.value
-  const kind = String(v.kind)
   const base = {
     amount: String(v.amount),
     date: String(v.date),
-    note: String(v.note),
-  }
-  const accountId = v.accountId || null
-  const input =
-    kind === 'bill'
-      ? { ...base, type: v.type, category: v.category, accountId }
-      : kind === 'debt'
-        ? {
-            ...base,
-            direction: v.direction,
-            counterparty: v.counterparty,
-            dueDate: v.dueDate || null,
-            cashMovement: v.cashMovement,
-            accountId: v.cashMovement ? accountId : null,
-          }
-        : kind === 'settlement'
-          ? {
-              date: v.date,
-              note: v.note,
-              accountId,
-              allocations: [{ debtId: v.debtId, amount: String(v.amount) }],
-            }
-          : kind === 'refund'
-            ? { ...base, billId: v.billId, accountId }
-            : {
-                ...base,
-                fromAccountId: v.fromAccountId,
-                toAccountId: v.toAccountId,
-              }
-  Object.assign(input, {
+    note: String(v.note ?? ''),
     attachmentResourceIds: [...attachmentResourceIds.value],
-  })
-  if (editing.value < 0) {
-    items.value.push({ kind, input })
+  }
+  const accountId =
+    typeof v.accountId === 'string' && v.accountId ? v.accountId : null
+  let item: LedgerBatchItem
+  if (v.kind === 'bill') {
+    if (v.type !== 'income' && v.type !== 'expense') {
+      action.error.value = '请选择收支类型'
+      return
+    }
+    item = {
+      kind: 'bill',
+      input: {
+        ...base,
+        type: v.type,
+        category: String(v.category ?? ''),
+        accountId,
+      },
+    }
+  } else if (v.kind === 'debt') {
+    if (v.direction !== 'receivable' && v.direction !== 'payable') {
+      action.error.value = '请选择往来方向'
+      return
+    }
+    const cashMovement = v.cashMovement === true
+    item = {
+      kind: 'debt',
+      input: {
+        ...base,
+        direction: v.direction,
+        counterparty: String(v.counterparty ?? ''),
+        dueDate: typeof v.dueDate === 'string' && v.dueDate ? v.dueDate : null,
+        cashMovement,
+        accountId: cashMovement ? accountId : null,
+      },
+    }
+  } else if (v.kind === 'settlement') {
+    item = {
+      kind: 'settlement',
+      input: {
+        date: base.date,
+        note: base.note,
+        accountId,
+        attachmentResourceIds: base.attachmentResourceIds,
+        allocations: [{ debtId: String(v.debtId ?? ''), amount: base.amount }],
+      },
+    }
+  } else if (v.kind === 'refund') {
+    item = {
+      kind: 'refund',
+      input: { ...base, billId: String(v.billId ?? ''), accountId },
+    }
+  } else if (v.kind === 'transfer') {
+    item = {
+      kind: 'transfer',
+      input: {
+        ...base,
+        fromAccountId: String(v.fromAccountId ?? ''),
+        toAccountId: String(v.toAccountId ?? ''),
+      },
+    }
   } else {
-    items.value[editing.value] = { kind, input }
+    action.error.value = '请选择记录类型'
+    return
+  }
+  if (editing.value < 0) {
+    items.value.push(item)
+  } else {
+    items.value[editing.value] = item
   }
   editor.value = false
 }
-function describe(row: { kind: string, input: any }) {
-  const v = row.input
-  return row.kind === 'bill'
-    ? `${v.type === 'income' ? '收入' : '支出'} · ${categories.value.find((c) => c.id === v.category)?.label ?? '请选择分类'}`
-    : row.kind === 'debt'
-      ? `${v.direction === 'receivable' ? '应收' : '应付'} · ${v.counterparty}`
-      : row.kind === 'settlement'
-        ? '登记收还款'
-        : row.kind === 'refund'
-          ? '登记退款'
-          : '账户转账'
+function describe(row: LedgerBatchItem) {
+  switch (row.kind) {
+    case 'bill':
+      return `${row.input.type === 'income' ? '收入' : '支出'} · ${categories.value.find((c) => c.id === row.input.category)?.label ?? '请选择分类'}`
+    case 'debt':
+      return `${row.input.direction === 'receivable' ? '应收' : '应付'} · ${row.input.counterparty}`
+    case 'settlement':
+      return '登记收还款'
+    case 'refund':
+      return '登记退款'
+    case 'transfer':
+      return '账户转账'
+  }
 }
 async function submit() {
   const input = { items: items.value }
   const r = await action.run('batch', input, (k) =>
-    api.write('/batch', input, 'POST', k))
+    api.write<LedgerBatchResult>('/batch', input, 'POST', k))
   if (r) {
     confirmation.value = false
     items.value = []
@@ -276,16 +329,16 @@ async function submit() {
 }
 onMounted(async () => {
   try {
-    [categories.value, accounts.value, debts.value, bills.value] =
+    ;[categories.value, accounts.value, debts.value, bills.value] =
       await Promise.all([
-        api.get('/categories'),
-        api.get('/accounts'),
+        api.get<BillCategory[]>('/categories'),
+        api.get<LedgerAccount[]>('/accounts'),
         props.template === 'daily'
           ? Promise.resolve([])
-          : api.get('/debts?status=open&pageSize=100'),
+          : api.get<Debt[]>('/debts?status=open&pageSize=100'),
         props.template === 'debt'
           ? Promise.resolve([])
-          : api.get('/bills?pageSize=100'),
+          : api.get<Bill[]>('/bills?pageSize=100'),
       ])
   } catch (e) {
     action.error.value = (e as Error).message
@@ -318,7 +371,7 @@ onMounted(async () => {
       >
         <div>
           <strong>{{ index + 1 }}. {{ describe(row) }}</strong><small>{{ row.input.date }} ·
-            {{ row.input.amount ?? row.input.allocations?.[0]?.amount }} 元 ·
+            {{ row.kind === 'settlement' ? row.input.allocations[0]?.amount : row.input.amount }} 元 ·
             {{ row.input.note }}</small>
         </div>
         <div class="feature-actions">
@@ -366,7 +419,7 @@ onMounted(async () => {
       >
         <div>
           <strong>{{ index + 1 }}. {{ describe(row) }}</strong><small>{{ row.input.date }} ·
-            {{ row.input.amount ?? row.input.allocations?.[0]?.amount }} 元 ·
+            {{ row.kind === 'settlement' ? row.input.allocations[0]?.amount : row.input.amount }} 元 ·
             {{ row.input.note }}</small>
         </div>
       </div>

@@ -6,12 +6,12 @@ const createdAt = {
   type: 'datetime' as const,
   precision: 3,
   name: 'created_at',
-  default: () => 'CURRENT_TIMESTAMP(3)',
 }
 export interface StoredBill extends Omit<Bill, 'createdAt' | 'updatedAt'> {
-  ledgerId?: string
-  createdBy?: string | null
-  deletedAt?: Date | null
+  accountId: string | null
+  ledgerId: string
+  createdBy: string | null
+  deletedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -24,9 +24,9 @@ export const BillEntity = new EntitySchema<StoredBill>({
       type: 'char',
       length: 36,
       name: 'ledger_id',
-      default: '00000000-0000-4000-8000-000000000001',
     },
     createdBy: { type: 'char', length: 36, name: 'created_by', nullable: true },
+    accountId: { type: 'char', length: 36, name: 'account_id', nullable: true },
     deletedAt: {
       type: 'datetime',
       precision: 3,
@@ -57,7 +57,14 @@ export const BillEntity = new EntitySchema<StoredBill>({
   ],
 })
 export const CategoryEntity = new EntitySchema<
-  BillCategory & { ledgerId?: string, sortOrder?: number }
+  BillCategory & {
+    ledgerId: string
+    sortOrder: number
+    active: boolean
+    pinned: boolean
+    presetId: string | null
+    iconId: string | null
+  }
 >({
   name: 'BillCategory',
   tableName: 'bill_categories',
@@ -67,16 +74,22 @@ export const CategoryEntity = new EntitySchema<
       type: 'char',
       length: 36,
       name: 'ledger_id',
-      default: '00000000-0000-4000-8000-000000000001',
     },
     sortOrder: { type: Number, name: 'sort_order', default: 0 },
+    active: { type: Boolean, default: true },
+    pinned: { type: Boolean, default: false },
+    presetId: { type: 'char', length: 36, name: 'preset_id', nullable: true },
+    iconId: { type: 'char', length: 36, name: 'icon_id', nullable: true },
     type: { type: 'enum', enum: ['income', 'expense'] },
     label: { type: 'varchar', length: 40 },
     icon: { type: 'varchar', length: 32, default: 'other' },
     isDefault: { type: Boolean, name: 'is_default', default: false },
   },
   uniques: [
-    { name: 'uq_book_category_label', columns: ['ledgerId', 'type', 'label'] },
+    {
+      name: 'uq_book_category_label',
+      columns: ['ledgerId', 'type', 'label', 'isDefault'],
+    },
     { name: 'uq_category_id_type', columns: ['id', 'type'] },
   ],
 })

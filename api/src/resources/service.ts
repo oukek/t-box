@@ -2,12 +2,19 @@ import type { Actor as Principal } from '@t-box/app-server-sdk'
 import type { Resource } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { ProviderItem } from '../chat/provider.js'
-import type { ResourceFileMetadata, ResourceStorageRegistry } from './storage.js'
+import type {
+  ResourceFileMetadata,
+  ResourceStorageRegistry,
+} from './storage.js'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
+import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
 import { isoTime } from '@t-box/server-foundation/time'
 import { parseId } from '@t-box/server-foundation/validation'
+import { IsNull, Not } from 'typeorm'
+import { ErrorCode } from '../error-codes.js'
 import { runtimeResourceStorage } from './runtime-storage.js'
 
 export const MAX_RESOURCE_SIZE = 10 * 1024 * 1024
@@ -38,13 +45,13 @@ export function detectMime(bytes: Buffer): string {
   ) {
     return 'text/plain'
   }
-  throw new ApiError(
-    415,
-    'UNSUPPORTED_RESOURCE',
-    '支持 PNG、JPEG、WebP、PDF 和 UTF-8 文本文件',
-  )
+  throw ErrorCode.UNSUPPORTED_RESOURCE()
 }
-const dto = (r: Resource): Resource => ({ ...r, size: Number(r.size), createdAt: isoTime(r.createdAt) })
+const dto = (r: Resource): Resource => ({
+  ...r,
+  size: Number(r.size),
+  createdAt: isoTime(r.createdAt),
+})
 const columns =
   'id,name,mime_type AS mimeType,size,source,object_path AS path,created_at AS createdAt'
 export class ResourceService {
@@ -71,7 +78,7 @@ export class ResourceService {
     allowAnyFile = false,
   ): Promise<Resource> {
     if (!bytes.length || bytes.length > MAX_RESOURCE_SIZE) {
-      throw new ApiError(413, 'RESOURCE_SIZE', '每个文件需为 1 字节至 10 MB')
+      throw ErrorCode.RESOURCE_SIZE()
     }
     let mimeType: string
     try {
@@ -100,30 +107,47 @@ export class ResourceService {
     await backend.write(path, bytes, { name, mimeType })
     try {
       await this.source.transaction(async (db) => {
-        await db.query('SELECT id FROM app_users WHERE id=? FOR UPDATE', [
-          principal.user.id,
-        ])
-        const [quota] = await db.query(
-          'SELECT COUNT(*) AS count,COALESCE(SUM(size),0) AS bytes FROM resources WHERE user_id=? AND deleted_at IS NULL',
-          [principal.user.id],
-        )
+        await db
+          .getRepository(AppUserEntity)
+          .find({
+            select: { id: true },
+            where: { id: principal.user.id },
+            lock: { mode: 'pessimistic_write' },
+          })
+          .then((rows) => rows.map((row) => ({ id: row.id })))
+        const [quota] = await db
+          .createQueryBuilder()
+          .select('COUNT(*) AS count,COALESCE(SUM(size),0) AS bytes')
+          .from('resources', 'resources')
+          .where('user_id=:p0 AND deleted_at IS NULL')
+          .setParameters({ p0: principal.user.id })
+          .getRawMany()
         if (
           Number(quota.count) >= 500 ||
           Number(quota.bytes) + bytes.length > 300 * 1024 * 1024
         ) {
-          throw new ApiError(
-            409,
-            'RESOURCE_QUOTA',
-            '资源空间已满（最多 500 个文件、300 MB）',
-          )
+          throw ErrorCode.RESOURCE_QUOTA()
         }
-        await db.query(
-          'INSERT INTO resources(id,user_id,name,mime_type,size,source,storage_backend,object_path) VALUES(?,?,?,?,?,?,?,?)',
-          [id, principal.user.id, name, mimeType, bytes.length, source, this.storage.activeId, path],
-        )
+        await db.getRepository(ResourceEntity).insert({
+          id,
+          user_id: principal.user.id,
+          name,
+          mime_type: mimeType,
+          size: bytes.length,
+          source,
+          storage_backend: this.storage.activeId,
+          object_path: path,
+        })
       })
     } catch (cause) {
-      await backend.remove(path).catch(() => {})
+      // COMMIT may have succeeded even if its reply was lost. Keep committed
+      // resources (or an unknown outcome) instead of deleting their bytes.
+      const committed = await this.source.getRepository(ResourceEntity)
+        .existsBy({ id })
+        .catch(() => true)
+      if (!committed) {
+        await backend.remove(path).catch(() => {})
+      }
       throw cause
     }
     return this.get(principal, id)
@@ -135,12 +159,39 @@ export class ResourceService {
   }
 
   async get(principal: Principal, value: string): Promise<Resource> {
-    const [row] = await this.source.query(
-      `SELECT ${columns} FROM resources WHERE id=? AND user_id=? AND deleted_at IS NULL`,
-      [parseId(value), principal.user.id],
-    )
+    const row = await this.source
+      .getRepository(ResourceEntity)
+      .findOne({
+        select: {
+          id: true,
+          name: true,
+          mime_type: true,
+          size: true,
+          source: true,
+          object_path: true,
+          created_at: true,
+        },
+        where: {
+          id: parseId(value),
+          user_id: principal.user.id,
+          deleted_at: IsNull(),
+        },
+      })
+      .then((row) =>
+        row
+          ? {
+              id: row.id,
+              name: row.name,
+              mimeType: row.mime_type,
+              size: row.size,
+              source: row.source,
+              path: row.object_path,
+              createdAt: row.created_at,
+            }
+          : null,
+      )
     if (!row) {
-      throw new ApiError(404, 'RESOURCE_NOT_FOUND', '资源不存在或不可访问')
+      throw ErrorCode.RESOURCE_NOT_FOUND('资源不存在或不可访问')
     }
     return dto(row)
   }
@@ -148,12 +199,35 @@ export class ResourceService {
   /** Server-only scoped sharing port. The caller must authorize its domain link before bytes are read. */
   async readForApplication(id: string, authorize: () => Promise<unknown>) {
     await authorize()
-    const [row] = await this.source.query(
-      `SELECT ${columns} FROM resources WHERE id=? AND deleted_at IS NULL`,
-      [parseId(id)],
-    )
+    const row = await this.source
+      .getRepository(ResourceEntity)
+      .findOne({
+        select: {
+          id: true,
+          name: true,
+          mime_type: true,
+          size: true,
+          source: true,
+          object_path: true,
+          created_at: true,
+        },
+        where: { id: parseId(id), deleted_at: IsNull() },
+      })
+      .then((row) =>
+        row
+          ? {
+              id: row.id,
+              name: row.name,
+              mimeType: row.mime_type,
+              size: row.size,
+              source: row.source,
+              path: row.object_path,
+              createdAt: row.created_at,
+            }
+          : null,
+      )
     if (!row) {
-      throw new ApiError(404, 'RESOURCE_NOT_FOUND', '文件不存在')
+      throw ErrorCode.RESOURCE_NOT_FOUND()
     }
     try {
       return {
@@ -164,7 +238,7 @@ export class ResourceService {
       if (error instanceof ApiError) {
         throw error
       }
-      throw new ApiError(404, 'RESOURCE_MISSING', '文件已不存在')
+      throw ErrorCode.RESOURCE_MISSING()
     }
   }
 
@@ -176,12 +250,16 @@ export class ResourceService {
       if (error instanceof ApiError) {
         throw error
       }
-      throw new ApiError(404, 'RESOURCE_MISSING', '文件已不存在')
+      throw ErrorCode.RESOURCE_MISSING()
     }
   }
 
   /** Internal application-owned assets have their own quotas and authorization, such as ledger icons. */
-  async writeApplicationAsset(id: string, bytes: Buffer, file: ResourceFileMetadata) {
+  async writeApplicationAsset(
+    id: string,
+    bytes: Buffer,
+    file: ResourceFileMetadata,
+  ) {
     const backend = this.storage.get(this.storage.activeId)
     const path = backend.path?.(parseId(id)) ?? id
     await backend.write(path, bytes, file)
@@ -205,78 +283,112 @@ export class ResourceService {
       page > 10000 ||
       Object.keys(q).some((k) => !['page', 'source', 'kind'].includes(k))
     ) {
-      throw new ApiError(400, 'INVALID_QUERY', '资源查询无效')
+      throw ErrorCode.INVALID_QUERY('资源查询无效')
     }
-    const where = ['user_id=?', 'deleted_at IS NULL']
-    const params: (string | number)[] = [principal.user.id]
+    const queryBuilder = this.source
+      .createQueryBuilder()
+      .from('resources', 'resources')
+      .where('user_id=:userId', { userId: principal.user.id })
+      .andWhere('deleted_at IS NULL')
     if (q.source) {
       if (!['uploaded', 'generated'].includes(q.source)) {
-        throw new ApiError(400, 'INVALID_QUERY', '资源来源无效')
+        throw ErrorCode.INVALID_QUERY('资源来源无效')
       }
-      where.push('source=?')
-      params.push(q.source)
+      queryBuilder.andWhere('source=:source', { source: q.source })
     }
     if (q.kind) {
       if (!['image', 'file'].includes(q.kind)) {
-        throw new ApiError(400, 'INVALID_QUERY', '资源类型无效')
+        throw ErrorCode.INVALID_QUERY('资源类型无效')
       }
-      where.push(
+      queryBuilder.andWhere(
         q.kind === 'image'
           ? 'mime_type LIKE \'image/%\''
           : 'mime_type NOT LIKE \'image/%\'',
       )
     }
-    const condition = where.join(' AND ')
-    const [count] = await this.source.query(
-      `SELECT COUNT(*) AS total FROM resources WHERE ${condition}`,
-      params,
-    )
-    const rows = await this.source.query(
-      `SELECT ${columns} FROM resources WHERE ${condition} ORDER BY created_at DESC,id DESC LIMIT 24 OFFSET ?`,
-      [...params, (page - 1) * 24],
-    )
+    const count = await queryBuilder
+      .clone()
+      .select('COUNT(*)', 'total')
+      .getRawOne<{ total: string | number }>()
+    const rows = await queryBuilder
+      .select(columns)
+      .orderBy('created_at', 'DESC')
+      .addOrderBy('id', 'DESC')
+      .limit(24)
+      .offset((page - 1) * 24)
+      .getRawMany()
     return {
       data: rows.map(dto),
-      meta: { total: Number(count.total), page, pageSize: 24 },
+      meta: { total: Number(count?.total ?? 0), page, pageSize: 24 },
     }
   }
 
   async remove(principal: Principal, id: string) {
     await this.get(principal, id)
-    await this.source.query(
-      'UPDATE resources SET deleted_at=UTC_TIMESTAMP(3) WHERE id=? AND user_id=?',
-      [id, principal.user.id],
-    )
+    await this.source
+      .getRepository(ResourceEntity)
+      .update(
+        { id, user_id: principal.user.id },
+        { deleted_at: () => 'UTC_TIMESTAMP(3)' },
+      )
     await this.purge(id).catch(() => {})
   }
 
   private async readStored(id: string) {
-    const [row] = await this.source.query('SELECT storage_backend,object_path FROM resources WHERE id=? AND deleted_at IS NULL', [id])
+    const row = await this.source.getRepository(ResourceEntity).findOne({
+      select: { storage_backend: true, object_path: true },
+      where: { id, deleted_at: IsNull() },
+    })
     if (!row) {
-      throw new ApiError(404, 'RESOURCE_NOT_FOUND', '文件不存在')
+      throw ErrorCode.RESOURCE_NOT_FOUND()
     }
     return this.storage.get(row.storage_backend).read(row.object_path || id)
   }
 
   private async purge(id: string) {
-    const [row] = await this.source.query('SELECT storage_backend,object_path FROM resources WHERE id=? AND deleted_at IS NOT NULL AND purged_at IS NULL', [id])
+    const row = await this.source.getRepository(ResourceEntity).findOne({
+      select: { storage_backend: true, object_path: true },
+      where: { id, deleted_at: Not(IsNull()), purged_at: IsNull() },
+    })
     if (!row) {
       return
     }
     await this.storage.get(row.storage_backend).remove(row.object_path || id)
-    await this.source.query('UPDATE resources SET purged_at=UTC_TIMESTAMP(3) WHERE id=? AND deleted_at IS NOT NULL', [id])
+    await this.source
+      .getRepository(ResourceEntity)
+      .update(
+        { id, deleted_at: Not(IsNull()) },
+        { purged_at: () => 'UTC_TIMESTAMP(3)' },
+      )
   }
 
   async purgeDeleted() {
-    const rows = await this.source.query('SELECT id FROM resources WHERE deleted_at IS NOT NULL AND purged_at IS NULL ORDER BY deleted_at LIMIT 100')
+    const rows = await this.source.getRepository(ResourceEntity).find({
+      select: { id: true },
+      where: { deleted_at: Not(IsNull()), purged_at: IsNull() },
+      order: { deleted_at: 'ASC' },
+      take: 100,
+    })
     for (const row of rows) {
       await this.purge(row.id)
     }
   }
 
   async quota(principal: Principal) {
-    const [row] = await this.source.query('SELECT COUNT(*) AS count,COALESCE(SUM(size),0) AS bytes FROM resources WHERE user_id=? AND deleted_at IS NULL', [principal.user.id])
-    return { files: Number(row.count), bytes: Number(row.bytes), maxFiles: 500, maxBytes: 300 * 1024 * 1024, maxFileBytes: MAX_RESOURCE_SIZE }
+    const [row] = await this.source
+      .createQueryBuilder()
+      .select('COUNT(*) AS count,COALESCE(SUM(size),0) AS bytes')
+      .from('resources', 'resources')
+      .where('user_id=:p0 AND deleted_at IS NULL')
+      .setParameters({ p0: principal.user.id })
+      .getRawMany()
+    return {
+      files: Number(row.count),
+      bytes: Number(row.bytes),
+      maxFiles: 500,
+      maxBytes: 300 * 1024 * 1024,
+      maxFileBytes: MAX_RESOURCE_SIZE,
+    }
   }
 
   async attachments(principal: Principal, value: unknown): Promise<Resource[]> {
@@ -289,21 +401,13 @@ export class ResourceService {
       value.some((id) => typeof id !== 'string') ||
       new Set(value).size !== value.length
     ) {
-      throw new ApiError(
-        400,
-        'INVALID_ATTACHMENTS',
-        '每条消息最多附加 4 个不同的文件',
-      )
+      throw ErrorCode.INVALID_ATTACHMENTS()
     }
     const resources = await Promise.all(
       value.map((id) => this.get(principal, id)),
     )
     if (resources.reduce((sum, r) => sum + r.size, 0) > 20 * 1024 * 1024) {
-      throw new ApiError(
-        413,
-        'ATTACHMENTS_SIZE',
-        '每条消息的附件合计最多 20 MB',
-      )
+      throw ErrorCode.ATTACHMENTS_SIZE()
     }
     return resources
   }

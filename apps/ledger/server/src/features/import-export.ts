@@ -4,8 +4,12 @@ import type { LedgerFeatures } from './service.js'
 import { randomUUID } from 'node:crypto'
 /** RFC 4180 fields, including quoted newlines and escaped quotes. */
 import { parseCsv as readCsv } from '@t-box/ledger-contracts'
-import { ApiError, invalid } from '@t-box/server-foundation/errors'
+import { invalid } from '@t-box/server-foundation/errors'
+import { In, Raw } from 'typeorm'
+import { SettlementAllocationEntity } from '../domain-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { date, object } from '../ledgers/validation.js'
+import { LedgerImportDraftEntity } from '../persistence/records-entities.js'
 import { parseBillInput } from '../validation.js'
 import { FeatureService, json, notFound } from './base.js'
 
@@ -26,6 +30,34 @@ export function csvText(rows: unknown[][]) {
   }
   return '\uFEFF' + rows.map((r) => r.map(safe).join(',')).join('\r\n')
 }
+interface ExportBillRow {
+  id: string
+  type: 'income' | 'expense'
+  amount: string
+  label: string
+  bill_date: string
+  note: string
+  account_id: string | null
+}
+interface ExportRecordBase {
+  id: string
+  direction: 'receivable' | 'payable'
+  counterparty: string
+  amount: string
+  note: string
+}
+interface ExportDebtRow extends ExportRecordBase {
+  occurred_date: string
+  settled: string
+  adjusted: string
+  remaining: string
+  due_date: string | null
+}
+interface ExportSettlementRow extends ExportRecordBase {
+  settled_date: string
+  reversed: number | boolean
+}
+
 export class ImportExportService extends FeatureService {
   constructor(
     finance: FeatureService['finance'],
@@ -111,18 +143,24 @@ export class ImportExportService extends FeatureService {
           note: v.note ?? '',
           ...(v.accountId ? {} : { accountId: null }),
         }) as BillInput
-        const [duplicate] = await this.db.query(
-          'SELECT id FROM bills WHERE ledger_id=? AND deleted_at IS NULL AND type=? AND amount=? AND category=? AND bill_date=? AND note=? AND account_id <=> ? LIMIT 1',
-          [
-            book,
-            bill.type,
-            bill.amount,
-            bill.category,
-            bill.date,
-            bill.note,
-            bill.accountId ?? null,
-          ],
-        )
+        const [duplicate] = await this.db
+          .createQueryBuilder()
+          .select('id')
+          .from('bills', 'bills')
+          .where(
+            'ledger_id=:p0 AND deleted_at IS NULL AND type=:p1 AND amount=:p2 AND category=:p3 AND bill_date=:p4 AND note=:p5 AND account_id <=> :p6',
+          )
+          .limit(1)
+          .setParameters({
+            p0: book,
+            p1: bill.type,
+            p2: bill.amount,
+            p3: bill.category,
+            p4: bill.date,
+            p5: bill.note,
+            p6: bill.accountId ?? null,
+          })
+          .getRawMany()
         rows.push({
           index: i + 1,
           input: bill,
@@ -164,10 +202,14 @@ export class ImportExportService extends FeatureService {
       { rows },
       async (db) => {
         const id = randomUUID()
-        await db.query(
-          'INSERT INTO ledger_import_drafts(id,ledger_id,user_id,rows_json,expires_at,created_by) VALUES(?,?,?,?,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 1 DAY),?)',
-          [id, book, actor.user.id, JSON.stringify(rows), actor.user.id],
-        )
+        await db.getRepository(LedgerImportDraftEntity).insert({
+          id,
+          ledger_id: book,
+          user_id: actor.user.id,
+          rows_json: rows,
+          expires_at: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 1 DAY)',
+          created_by: actor.user.id,
+        })
         return { id, rows, status: 'draft', result: null }
       },
     )
@@ -196,10 +238,25 @@ export class ImportExportService extends FeatureService {
       'import.committed',
       { id, ...v },
       async (db) => {
-        const [draft] = await db.query(
-          'SELECT * FROM ledger_import_drafts WHERE id=? AND ledger_id=? AND user_id=? AND expires_at>UTC_TIMESTAMP(3)',
-          [id, book, actor.user.id],
-        )
+        const draft = await db.getRepository(LedgerImportDraftEntity).findOne({
+          select: {
+            id: true,
+            ledger_id: true,
+            user_id: true,
+            rows_json: true,
+            status: true,
+            result_json: true,
+            expires_at: true,
+            created_by: true,
+            created_at: true,
+          },
+          where: {
+            id,
+            ledger_id: book,
+            user_id: actor.user.id,
+            expires_at: Raw((column) => `${column} > UTC_TIMESTAMP(3)`),
+          },
+        })
         if (!draft) {
           notFound()
         }
@@ -221,24 +278,26 @@ export class ImportExportService extends FeatureService {
           seen.add(r.index)
           const input = parseBillInput(r.input) as BillInput
           if (!v.allowDuplicates) {
-            const [duplicate] = await db.query(
-              'SELECT id FROM bills WHERE ledger_id=? AND deleted_at IS NULL AND type=? AND amount=? AND category=? AND bill_date=? AND note=? AND account_id <=> ? LIMIT 1',
-              [
-                book,
-                input.type,
-                input.amount,
-                input.category,
-                input.date,
-                input.note,
-                input.accountId ?? null,
-              ],
-            )
-            if (duplicate) {
-              throw new ApiError(
-                409,
-                'IMPORT_DUPLICATE',
-                `第 ${r.index} 行已存在相同记录`,
+            const [duplicate] = await db
+              .createQueryBuilder()
+              .select('id')
+              .from('bills', 'bills')
+              .where(
+                'ledger_id=:p0 AND deleted_at IS NULL AND type=:p1 AND amount=:p2 AND category=:p3 AND bill_date=:p4 AND note=:p5 AND account_id <=> :p6',
               )
+              .limit(1)
+              .setParameters({
+                p0: book,
+                p1: input.type,
+                p2: input.amount,
+                p3: input.category,
+                p4: input.date,
+                p5: input.note,
+                p6: input.accountId ?? null,
+              })
+              .getRawMany()
+            if (duplicate) {
+              throw ErrorCode.IMPORT_DUPLICATE(`第 ${r.index} 行已存在相同记录`)
             }
             const fingerprint = JSON.stringify(input)
             if (entries.some((e) => JSON.stringify(e.input) === fingerprint)) {
@@ -253,10 +312,9 @@ export class ImportExportService extends FeatureService {
           `import:${id}`,
           { items: entries },
         )
-        await db.query(
-          'UPDATE ledger_import_drafts SET status=\'committed\',result_json=? WHERE id=?',
-          [JSON.stringify(result), id],
-        )
+        await db
+          .getRepository(LedgerImportDraftEntity)
+          .update({ id }, { status: 'committed', result_json: result })
         return result
       },
     )
@@ -415,10 +473,16 @@ export class ImportExportService extends FeatureService {
         },
       }
       const spec = specs[String(v.kind)]!
-      const rows = await this.db.query(
-        `SELECT * FROM ${spec.table} WHERE ledger_id=? AND ${spec.date} BETWEEN ? AND ? ORDER BY ${spec.date},created_at LIMIT 10001`,
-        [book, from, to],
-      )
+      const rows = await this.db
+        .createQueryBuilder()
+        .select(spec.columns.join(','))
+        .from(`${spec.table}`, `${spec.table}`)
+        .where(`ledger_id=:p0 AND ${spec.date} BETWEEN :p1 AND :p2`)
+        .orderBy(`${spec.date}`, 'ASC')
+        .addOrderBy('created_at', 'ASC')
+        .limit(10001)
+        .setParameters({ p0: book, p1: from, p2: to })
+        .getRawMany<Record<string, string | number | null>>()
       if (rows.length > 10000) {
         invalid('export', '请缩小日期范围（每次最多 10000 条）')
       }
@@ -426,31 +490,36 @@ export class ImportExportService extends FeatureService {
         filename: `${spec.title}-${from}-${to}.csv`,
         csv: csvText([
           spec.labels,
-          ...rows.map((r: any) => spec.columns.map((c) => r[c])),
+          ...rows.map((r) => spec.columns.map((c) => r[c])),
         ]),
       }
     }
     if (v.kind === 'bills') {
-      const where = [
-        'b.ledger_id=?',
-        'b.bill_date BETWEEN ? AND ?',
-        'b.deleted_at IS NULL',
-      ]
-      const args: unknown[] = [book, from, to]
+      const selection = this.db
+        .createQueryBuilder()
+        .select('b.id,b.type,b.amount,c.label,b.bill_date,b.note,b.account_id')
+        .from('bills', 'b')
+        .innerJoin('bill_categories', 'c', 'c.id=b.category')
+        .where('b.ledger_id=:book AND b.bill_date BETWEEN :from AND :to', {
+          book,
+          from,
+          to,
+        })
+        .andWhere('b.deleted_at IS NULL')
       for (const [k, col] of [
         ['type', 'b.type'],
         ['categoryId', 'b.category'],
         ['memberId', 'b.created_by'],
       ]) {
         if (v[k!]) {
-          where.push(`${col}=?`)
-          args.push(v[k!])
+          selection.andWhere(`${col}=:${k}`, { [k!]: v[k!] })
         }
       }
-      const rows = await this.db.query(
-        `SELECT b.*,c.label FROM bills b JOIN bill_categories c ON c.id=b.category WHERE ${where.join(' AND ')} ORDER BY b.bill_date,b.created_at LIMIT 10001`,
-        args,
-      )
+      const rows = await selection
+        .orderBy('b.bill_date', 'ASC')
+        .addOrderBy('b.created_at', 'ASC')
+        .limit(10001)
+        .getRawMany<ExportBillRow>()
       if (rows.length > 10000) {
         invalid('export', '请缩小日期范围（每次最多 10000 条）')
       }
@@ -458,7 +527,7 @@ export class ImportExportService extends FeatureService {
         filename: `收支-${from}-${to}.csv`,
         csv: csvText([
           ['类型', '金额', '分类', '日期', '备注', '账户ID', '记录ID'],
-          ...rows.map((r: any) => [
+          ...rows.map((r) => [
             r.type === 'income' ? '收入' : '支出',
             r.amount,
             r.label,
@@ -471,27 +540,50 @@ export class ImportExportService extends FeatureService {
       }
     }
     const debt = v.kind === 'debts'
-    const rows = await this.db.query(
-      `SELECT * FROM ${debt ? 'debt_positions' : 'debt_settlements'} WHERE ledger_id=? AND ${debt ? 'occurred_date' : 'settled_date'} BETWEEN ? AND ? ORDER BY created_at LIMIT 10001`,
-      [book, from, to],
-    )
+    const rows = await this.db
+      .createQueryBuilder()
+      .select(
+        debt
+          ? 'id,direction,counterparty,amount,occurred_date,note,settled,adjusted,remaining,due_date'
+          : 'id,direction,counterparty,amount,settled_date,note,reversed',
+      )
+      .from(
+        `${debt ? 'debt_positions' : 'debt_settlements'}`,
+        `${debt ? 'debt_positions' : 'debt_settlements'}`,
+      )
+      .where(
+        `ledger_id=:p0 AND ${debt ? 'occurred_date' : 'settled_date'} BETWEEN :p1 AND :p2`,
+      )
+      .orderBy('created_at', 'ASC')
+      .limit(10001)
+      .setParameters({ p0: book, p1: from, p2: to })
+      .getRawMany<ExportDebtRow | ExportSettlementRow>()
     if (rows.length > 10000) {
       invalid('export', '请缩小日期范围')
     }
     const allocations = new Map<string, string>()
     if (!debt && rows.length) {
-      const ids = rows.map((r: any) => r.id)
-      const parts = await this.db.query(
-        `SELECT settlement_id,debt_id,amount FROM settlement_allocations WHERE ledger_id=? AND settlement_id IN (${ids.map(() => '?').join(',')})`,
-        [book, ...ids],
-      )
+      const ids = rows.map((r) => r.id)
+      const parts = await this.db
+        .getRepository(SettlementAllocationEntity)
+        .find({
+          select: { settlementId: true, debtId: true, amount: true },
+          where: { ledgerId: book, settlementId: In(ids) },
+        })
+        .then((rows) =>
+          rows.map((row) => ({
+            settlement_id: row.settlementId,
+            debt_id: row.debtId,
+            amount: row.amount,
+          })),
+        )
       for (const r of rows) {
         allocations.set(
           r.id,
           JSON.stringify(
             parts
-              .filter((p: any) => p.settlement_id === r.id)
-              .map((p: any) => ({ debtId: p.debt_id, amount: p.amount })),
+              .filter((p) => p.settlement_id === r.id)
+              .map((p) => ({ debtId: p.debt_id, amount: p.amount })),
           ),
         )
       }
@@ -510,14 +602,14 @@ export class ImportExportService extends FeatureService {
             ? ['已结算', '减免核销', '剩余', '到期日']
             : ['已撤销', '关联往来分配']),
         ],
-        ...rows.map((r: any) => [
+        ...rows.map((r) => [
           r.id,
           r.direction,
           r.counterparty,
           r.amount,
-          r[debt ? 'occurred_date' : 'settled_date'],
+          'occurred_date' in r ? r.occurred_date : r.settled_date,
           r.note,
-          ...(debt
+          ...('occurred_date' in r
             ? [r.settled, r.adjusted, r.remaining, r.due_date]
             : [r.reversed, allocations.get(r.id) ?? '[]']),
         ]),

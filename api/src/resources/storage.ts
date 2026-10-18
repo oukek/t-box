@@ -1,7 +1,7 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { parseId } from '@t-box/server-foundation/validation'
+import { ErrorCode } from '../error-codes.js'
 
 export interface ResourceFileMetadata {
   name: string
@@ -49,7 +49,7 @@ export class ResourceStorageRegistry {
         !/^[a-z][\w.-]{0,63}$/.test(entry.id) ||
         this.backends.has(entry.id)
       ) {
-        throw new Error('Resource storage IDs must be unique and immutable')
+        throw ErrorCode.INTERNAL_RESOURCE_STORAGE_IDS_MUST_BE_UNIQUE_AND_IMMUTABLE()
       }
       this.backends.set(entry.id, entry.storage)
     }
@@ -59,9 +59,7 @@ export class ResourceStorageRegistry {
   get(id: string) {
     const storage = this.backends.get(id)
     if (!storage) {
-      throw new ApiError(
-        503,
-        'RESOURCE_STORAGE_UNAVAILABLE',
+      throw ErrorCode.RESOURCE_STORAGE_UNAVAILABLE(
         '文件存储暂时不可用，请联系管理员核对原存储配置',
       )
     }

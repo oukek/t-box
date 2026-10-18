@@ -41,6 +41,6 @@ test('Administrative filters validate pagination, IDs and states, and parameteri
   assert.throws(() => operationFilters({ modelId: 'bad-id' }, 'call'))
   const result = operationFilters({ search: 'x%_\' OR 1=1', page: '2' }, 'call')
   assert.equal(result.offset, 20)
-  assert.equal(result.where.includes('OR 1=1'), false)
-  assert.equal(result.parameters[0], '%x!%!_\' OR 1=1%')
+  assert.equal(result.condition.includes('OR 1=1'), false)
+  assert.equal(result.bindings.search, '%x!%!_\' OR 1=1%')
 })

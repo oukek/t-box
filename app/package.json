@@ -22,6 +22,7 @@
     "@t-box/capacitor-native-scanner": "workspace:*",
     "@t-box/capacitor-wechat-pay": "workspace:*",
     "@t-box/device-reminders": "workspace:*",
+    "@t-box/errors": "workspace:*",
     "@t-box/ledger-shell": "workspace:*",
     "@t-box/market-web": "workspace:*",
     "@t-box/settings-contracts": "workspace:*",

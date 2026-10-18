@@ -5,8 +5,14 @@ export class RequestError extends Error {
   ) {
     super(message)
   }
+
+  static fromResponse(status: number, value?: { message?: string }) {
+    return new RequestError(value?.message ?? '请求失败', status)
+  }
 }
-const apiBase = (import.meta.env.VITE_API_BASE_URL?.trim() || '/api/v1').replace(/\/+$/, '')
+const apiBase = (
+  import.meta.env.VITE_API_BASE_URL?.trim() || '/api/v1'
+).replace(/\/+$/, '')
 export async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -33,7 +39,7 @@ export async function request<T>(
     if (response.status === 401 && path !== '/session') {
       window.dispatchEvent(new Event('admin-session-expired'))
     }
-    throw new RequestError(body.error?.message ?? '请求失败', response.status)
+    throw RequestError.fromResponse(response.status, body.error)
   }
   return body.data as T
 }

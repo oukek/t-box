@@ -1,4 +1,5 @@
 import { RequestError } from '@t-box/app-shell-sdk'
+import { ErrorCode } from '../error-codes.js'
 import { createRequestId } from './identifiers'
 import { identity, setSession } from './session'
 
@@ -18,7 +19,7 @@ export async function request<T>(
   options: RequestInit & { timeoutMs?: number } = {},
 ): Promise<T> {
   if (configurationError) {
-    throw new Error(configurationError)
+    throw ErrorCode.INTERNAL_CLIENT_CONFIGURATION_REQUIRED(configurationError)
   }
   const { timeoutMs = 15000, ...fetchOptions } = options
   const controller = new AbortController()
@@ -61,7 +62,7 @@ export async function request<T>(
       if (controller.signal.aborted) {
         throw error
       }
-      throw new Error('服务返回了无法读取的数据，请稍后重试。')
+      throw ErrorCode.INTERNAL_INVALID_SERVER_RESPONSE()
     }
     if (!response.ok) {
       const errorBody = body as {
@@ -74,26 +75,18 @@ export async function request<T>(
       if (response.status === 401 && path !== '/auth/login') {
         setSession(null)
       }
-      throw new RequestError(
-        errorBody.error?.details
-          ? Object.values(errorBody.error.details).join('；')
-          : errorBody.error?.message || `请求失败（${response.status}）`,
-        response.status,
-        errorBody.error?.code ?? 'UNKNOWN',
-      )
+      throw RequestError.fromResponse(response.status, errorBody.error)
     }
     return body as T
   } catch (error) {
     if (timedOut) {
-      throw new Error(
-        '服务响应超时，请稍后重试。保存或删除前可先刷新账单，确认上一次操作结果。',
-      )
+      throw ErrorCode.INTERNAL_REQUEST_TIMED_OUT()
     }
     if (controller.signal.aborted) {
       throw error
     }
     if (error instanceof TypeError) {
-      throw new Error('暂时无法连接服务，请检查网络或稍后重试。')
+      throw ErrorCode.INTERNAL_SERVER_UNREACHABLE()
     }
     throw error
   } finally {
@@ -104,11 +97,11 @@ export async function request<T>(
 
 export function chatWebSocketUrl(path = '/chat/ws'): string {
   if (configurationError) {
-    throw new Error(configurationError)
+    throw ErrorCode.INTERNAL_CLIENT_CONFIGURATION_REQUIRED(configurationError)
   }
   const url = new URL(`${apiBase}${path}`, window.location.href)
   if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new Error('请配置有效的 HTTP 或 HTTPS 服务地址。')
+    throw ErrorCode.INTERNAL_HTTP_HTTPS()
   }
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   return url.href

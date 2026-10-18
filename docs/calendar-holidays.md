@@ -4,9 +4,9 @@
 
 ## 数据与同步
 
-应用自己的 `apps/calendar/server` 提供 TypeORM 实体、数据库迁移、同步服务、数据源适配器和后台路由。平台仅注册其实体、迁移及路由；AI 核心没有节假日业务。`calendar_holiday_years` 分开保存候选与已发布年度 JSON、版本、手动保护、最近检查、错误和来源。`calendar_holiday_settings` 保存同步开关，`calendar_holiday_audit` 记录同步和管理员变更。
+应用自己的 `apps/calendar/server` 提供 TypeORM 实体、首次建表定义、同步服务、数据源适配器和后台路由。平台仅组合其实体、初始化 schema 及路由；AI 核心没有节假日业务。`calendar_holiday_years` 分开保存候选与已发布年度 JSON、版本、手动保护、最近检查、错误和来源。`calendar_holiday_settings` 保存同步开关，`calendar_holiday_audit` 记录同步和管理员变更。
 
-默认数据源是 [NateScarlet/holiday-cn](https://github.com/NateScarlet/holiday-cn)，它根据国务院公告整理年度数据并保留 `papers` 官方原文链接。该项目属于第三方数据源，不是政府提供的官方 API。适配器位于 `holiday-provider.ts`，可替换数据源，不影响 API、界面或 AI 工具。初始化迁移仅导入此前核实的 2026 年安排，后续年度和变更不再随前端打包。
+默认数据源是 [NateScarlet/holiday-cn](https://github.com/NateScarlet/holiday-cn)，它根据国务院公告整理年度数据并保留 `papers` 官方原文链接。该项目属于第三方数据源，不是政府提供的官方 API。适配器位于 `holiday-provider.ts`，可替换数据源，不影响 API、界面或 AI 工具。首次初始化仅导入此前核实的 2026 年安排，后续年度和变更不再随前端打包。
 
 后台启动时检查上一年、本年和下一年，之后每 6 小时检查；成功年度 24 小时内不重复同步，失败年度最少间隔 1 小时重试。用户查看其他年度时按需同步。MySQL 命名锁防止多个 API 实例并发同步同一年，进程内请求也合并；关闭服务时取消网络请求并等待清理。网络有超时与 64 KiB 数据上限；GitHub 原始地址失败时尝试同一仓库的 jsDelivr 镜像，每个地址最多 6 秒。
 

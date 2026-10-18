@@ -6,6 +6,7 @@ import { ApiError } from '@t-box/server-foundation/errors'
 import OpenAI from 'openai'
 import { publicRunError } from '../chat/errors.js'
 import { settingNumber } from '../configuration/defaults.js'
+import { ErrorCode } from '../error-codes.js'
 
 export const MAX_MODEL_RETRIES = 5
 /** Stored with the frame, including successful compaction parts until the turn commits. */
@@ -121,9 +122,7 @@ export async function modelRequest<T>(
     if (record.retries >= maxRetries) {
       record.status = 'failed'
       record.error = failure
-      throw new ApiError(
-        503,
-        'MODEL_RETRIES_EXHAUSTED',
+      throw ErrorCode.MODEL_RETRIES_EXHAUSTED(
         `${failure.message}；已自动重试 ${maxRetries} 次仍未成功`,
       )
     }
@@ -176,7 +175,12 @@ export async function modelRequest<T>(
       const result = await invoke({
         ...input,
         execution: input.execution
-          ? { ...input.execution, operationId, logicalRequestId: record.id, retryIndex: record.retries }
+          ? {
+              ...input.execution,
+              operationId,
+              logicalRequestId: record.id,
+              retryIndex: record.retries,
+            }
           : undefined,
         onUsage: async (usage) => {
           try {

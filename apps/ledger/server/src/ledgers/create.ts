@@ -1,6 +1,12 @@
 import type { LedgerInput } from '@t-box/ledger-contracts'
 import type { EntityManager } from 'typeorm'
 import { randomUUID } from 'node:crypto'
+import { LedgerEntity, LedgerMemberEntity } from '../domain-entities.js'
+import { CategoryEntity } from '../entities.js'
+import {
+  LedgerCategoryCatalogEntity,
+  LedgerCategoryPresetEntity,
+} from '../persistence/categories-entities.js'
 
 export async function createLedgerRows(
   db: EntityManager,
@@ -8,35 +14,48 @@ export async function createLedgerRows(
   input: LedgerInput,
   passwordHash: string | null = null,
 ) {
-  await db.query(
-    'SELECT id FROM ledger_category_catalog WHERE id=1 FOR UPDATE',
-  )
-  const categories = await db.query(
-    'SELECT * FROM ledger_category_presets ORDER BY sort_order,id FOR UPDATE',
-  )
+  await db.getRepository(LedgerCategoryCatalogEntity).find({
+    select: { id: true },
+    where: { id: 1 },
+    lock: { mode: 'pessimistic_write' },
+  })
+  const categories = await db.getRepository(LedgerCategoryPresetEntity).find({
+    select: {
+      id: true,
+      type: true,
+      label: true,
+      icon: true,
+      active: true,
+      sort_order: true,
+      revision: true,
+      updated_at: true,
+    },
+    order: { sort_order: 'ASC', id: 'ASC' },
+    lock: { mode: 'pessimistic_write' },
+  })
   const id = randomUUID()
-  await db.query(
-    'INSERT INTO ledgers(id,name,template,owner_id,password_hash) VALUES(?,?,?,?,?)',
-    [id, input.name, input.template, userId, passwordHash],
-  )
-  await db.query(
-    'INSERT INTO ledger_members(ledger_id,user_id,role) VALUES(?,?,\'owner\')',
-    [id, userId],
-  )
+  await db.getRepository(LedgerEntity).insert({
+    id,
+    name: input.name,
+    template: input.template,
+    ownerId: userId,
+    passwordHash,
+  })
+  await db
+    .getRepository(LedgerMemberEntity)
+    .insert({ ledgerId: id, userId, role: 'owner' })
   for (const category of categories) {
-    await db.query(
-      'INSERT INTO bill_categories(id,ledger_id,type,label,icon,is_default,sort_order,active,preset_id) VALUES(?,?,?,?,?,TRUE,?,?,?)',
-      [
-        randomUUID(),
-        id,
-        category.type,
-        category.label,
-        category.icon,
-        category.sort_order,
-        category.active,
-        category.id,
-      ],
-    )
+    await db.getRepository(CategoryEntity).insert({
+      id: randomUUID(),
+      ledgerId: id,
+      type: category.type,
+      label: category.label,
+      icon: category.icon,
+      isDefault: true,
+      sortOrder: category.sort_order,
+      active: Boolean(Number(category.active)),
+      presetId: category.id,
+    })
   }
   return id
 }

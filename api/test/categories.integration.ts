@@ -25,6 +25,7 @@ try {
     template: 'daily',
   })
   const defaults = await p.finance.categories(actor, book.id)
+  assert.ok(defaults.length > 0 && defaults.every((row) => row.active === true), 'new ledgers preserve enabled preset booleans through the ORM')
   assert(
     defaults.some((row) => row.type === 'income' && row.label === '其他收入'),
   )
@@ -50,6 +51,11 @@ try {
     type: 'expense',
     label,
   })
+  await p.finance.features.categories.update(actor, book.id, expense.id, randomUUID(), { pinned: true })
+  await p.finance.features.categories.update(actor, book.id, expense.id, randomUUID(), { label: `${label}更新` })
+  const updatedCategory = (await p.finance.categories(actor, book.id)).find((row) => row.id === expense.id)!
+  assert.equal(updatedCategory.active, true, 'partial updates preserve enabled status')
+  assert.equal(updatedCategory.pinned, true, 'partial updates preserve pinned status')
   const context = await chatContext(p, actor, book.id, randomUUID())
   const skills = new Set(['bookkeeping'])
   const input = {

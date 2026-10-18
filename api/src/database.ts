@@ -2,6 +2,7 @@ import type { DependencyHealth } from './app.js'
 import type { getConfig } from './config.js'
 import { createClient } from 'redis'
 import { createDataSource } from './db/data-source.js'
+import { ErrorCode } from './error-codes.js'
 
 export async function createDatabase(config: ReturnType<typeof getConfig>) {
   const source = await createDataSource(config.mysql).initialize()
@@ -28,10 +29,11 @@ export async function createDatabase(config: ReturnType<typeof getConfig>) {
     redis,
     async health(): Promise<DependencyHealth> {
       const [mysqlResult, redisResult] = await Promise.allSettled([
+        // native-sql: database health probe without entity access
         source.query('SELECT 1'),
         redis?.isReady
           ? redis.ping()
-          : Promise.reject(new Error('Redis unavailable')),
+          : Promise.reject(ErrorCode.INTERNAL_REDIS_UNAVAILABLE()),
       ])
       return {
         mysql: mysqlResult.status === 'fulfilled' ? 'up' : 'down',

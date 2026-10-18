@@ -1,7 +1,8 @@
 import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 export function bad(message: string): never {
-  throw new ApiError(400, 'INVALID_CONFIG', message)
+  throw ErrorCode.INVALID_CONFIG(message)
 }
 export function body(value: unknown, keys: string[]) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {

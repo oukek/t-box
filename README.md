@@ -191,7 +191,7 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
 
 普通响应为 `{ "data": ... }`，分页另含 `meta`；错误为 `{ "error": { "code": "...", "message": "..." } }`。财务写入需 `Idempotency-Key`，同键同参数返回原结果，同键不同参数返回 409。密码锁未解锁返回 423，非成员访问返回 404。
 
-数据库使用 TypeORM DataSource、EntitySchema、Repository 和显式建表初始化。历史 migrations 已合并为当前完整基线；`pnpm db:init` 通过 `schema_initialization` 记录初始化状态；`synchronize` 始终关闭。首次正式部署后保留基线，后续结构变化使用增量升级脚本。财务加锁、投影更新和成员管理使用参数化 SQL，通过同一 TypeORM 事务 EntityManager 执行。`mysql2` 是 TypeORM 驱动，另仅用于创建尚不存在的数据库。
+数据库使用 TypeORM DataSource、EntitySchema、Repository 和显式建表初始化。历史 migrations 已合并为当前完整基线；`pnpm db:init` 通过 `schema_initialization` 记录初始化状态；`synchronize` 始终关闭。首次正式部署后保留基线，后续结构变化使用增量升级脚本。普通增删改查、筛选分页和事务行锁使用 Repository / QueryBuilder；复杂财务投影、关联更新及数据库命名锁保留参数化 SQL，通过同一 TypeORM 事务 EntityManager / QueryRunner 执行。`mysql2` 是 TypeORM 驱动，另仅用于创建尚不存在的数据库。
 
 `api` / `shared` 采用原生 ESM + TypeScript NodeNext，`.ts` 源码相对导入写 `.js` 对应编译产物的扩展名，生产由 `node dist/server.js` 运行。若省略后缀，需要增加构建打包或模块解析重写；仅改 TypeScript 解析选项不会让 Node 支持无后缀相对导入。
 
@@ -221,6 +221,8 @@ API 默认监听 `127.0.0.1`，HTTP 和 WebSocket 来源默认开放，后台回
 
 ## 运行与验收基线
 
-本轮完善及验收范围见 [平台完善清单](docs/platform-hardening.md)。后端开发启动使用 `pnpm dev:api`；生产通过统一 PM2 发布入口初始化数据库并启动 API、独立恢复 worker 和静态产物服务。所有工作流保持手动触发，PM2 发布默认在上传后自动启动，也可选择只上传。运行概况、备份和恢复步骤见 [运维手册](docs/operations-and-recovery.md)。
+本轮完善及验收范围见 [平台完善清单](docs/platform-hardening.md)。后端开发启动使用 `pnpm dev:api`；生产通过统一 PM2 发布入口预检、初始化数据库并启动 API 和独立恢复 worker；应用产物与业务文件使用 OSS。所有工作流保持手动触发，PM2 发布默认在上传后自动启动，也可选择只上传。运行概况、备份和恢复步骤见 [运维手册](docs/operations-and-recovery.md)。
 
 [统一 SDK 与应用脚手架](docs/application-sdk.md)、[成本与并发](docs/ai-cost-controls.md)、[退款与渠道对账](docs/payment-refunds-and-reconciliation.md)、[账号、通知、离线与存储](docs/account-and-offline.md)说明各自的权限、故障与验收边界。
+
+错误工厂、TypeORM 访问边界与自动检查见 [错误与数据访问规范](docs/errors-and-data-access.md)。

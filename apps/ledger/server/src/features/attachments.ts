@@ -7,7 +7,11 @@ import {
   LEDGER_ATTACHMENT_MAX_BYTES,
   ledgerRecordKinds,
 } from '@t-box/ledger-contracts'
-import { ApiError, invalid } from '@t-box/server-foundation/errors'
+import { invalid } from '@t-box/server-foundation/errors'
+import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
+import { In, IsNull } from 'typeorm'
+import { ErrorCode } from '../error-codes.js'
+import { LedgerAttachmentEntity } from '../persistence/attachments-entities.js'
 import { parseId } from '../validation.js'
 import { attachmentIds } from './attachment-input.js'
 import { FeatureService } from './base.js'
@@ -37,12 +41,17 @@ export async function attachmentSubject(
   kind: LedgerRecordKind,
   id: string,
 ) {
-  const [row] = await db.query(
-    `SELECT created_by FROM ${tables[kind]} WHERE ledger_id=? AND id=?${kind === 'bill' ? ' AND deleted_at IS NULL' : ''}`,
-    [book, id],
-  )
+  const [row] = await db
+    .createQueryBuilder()
+    .select('created_by')
+    .from(`${tables[kind]}`, `${tables[kind]}`)
+    .where(
+      `ledger_id=:p0 AND id=:p1${kind === 'bill' ? ' AND deleted_at IS NULL' : ''}`,
+    )
+    .setParameters({ p0: book, p1: id })
+    .getRawMany()
   if (!row) {
-    throw new ApiError(404, 'RECORD_NOT_FOUND', '记录不存在或不可访问')
+    throw ErrorCode.RECORD_NOT_FOUND()
   }
   return row
 }
@@ -60,39 +69,48 @@ export async function bindAttachments(
     return
   }
   await attachmentSubject(db, book, kind, id)
-  const [count] = await db.query(
-    'SELECT COUNT(*) n FROM ledger_attachments WHERE ledger_id=? AND subject_kind=? AND subject_id=?',
-    [book, kind, id],
-  )
-  const [already] = await db.query(
-    `SELECT COUNT(*) n FROM ledger_attachments WHERE ledger_id=? AND subject_kind=? AND subject_id=? AND resource_id IN (${ids.map(() => '?').join(',')})`,
-    [book, kind, id, ...ids],
-  )
-  if (
-    Number(count.n) + ids.length - Number(already.n) >
-    LEDGER_ATTACHMENT_LIMIT
-  ) {
+  const attachments = db.getRepository(LedgerAttachmentEntity)
+  const target = { ledger_id: book, subject_kind: kind, subject_id: id }
+  const count = await attachments.countBy(target)
+  const already = await attachments.countBy({ ...target, resource_id: In(ids) })
+  if (count + ids.length - already > LEDGER_ATTACHMENT_LIMIT) {
     invalid('attachments', '每笔最多 20 个附件')
   }
   for (const resource of ids) {
-    const [r] = await db.query(
-      'SELECT id,size FROM resources WHERE id=? AND user_id=? AND deleted_at IS NULL FOR SHARE',
-      [resource, actor.user.id],
-    )
+    const r = await db.getRepository(ResourceEntity).findOne({
+      select: { id: true, size: true },
+      where: { id: resource, user_id: actor.user.id, deleted_at: IsNull() },
+      lock: { mode: 'pessimistic_read' },
+    })
     if (!r) {
-      throw new ApiError(
-        404,
-        'RESOURCE_NOT_FOUND',
-        '附件不存在或不属于当前用户',
-      )
+      throw ErrorCode.RESOURCE_NOT_FOUND('附件不存在或不属于当前用户')
     }
     if (Number(r.size) > LEDGER_ATTACHMENT_MAX_BYTES) {
       invalid('attachments', '每个附件最大 10 MB')
     }
-    await db.query(
-      'INSERT INTO ledger_attachments(id,ledger_id,subject_kind,subject_id,resource_id,created_by) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE resource_id=VALUES(resource_id)',
-      [randomUUID(), book, kind, id, resource, actor.user.id],
-    )
+    await db
+      .createQueryBuilder()
+      .insert()
+      .into('ledger_attachments')
+      .values({
+        id: () => ':p0',
+        ledger_id: () => ':p1',
+        subject_kind: () => ':p2',
+        subject_id: () => ':p3',
+        resource_id: () => ':p4',
+        created_by: () => ':p5',
+      })
+      .updateEntity(false)
+      .setParameters({
+        p0: randomUUID(),
+        p1: book,
+        p2: kind,
+        p3: id,
+        p4: resource,
+        p5: actor.user.id,
+      })
+      .orUpdate(['resource_id'])
+      .execute()
   }
 }
 
@@ -105,10 +123,22 @@ export class AttachmentService extends FeatureService {
   ) {
     await this.read(actor, book)
     await attachmentSubject(this.db, book, kind, id)
-    return this.db.query(
-      'SELECT a.id,a.resource_id AS resourceId,r.name,r.mime_type AS mimeType,r.size FROM ledger_attachments a JOIN resources r ON r.id=a.resource_id AND r.deleted_at IS NULL WHERE a.ledger_id=? AND a.subject_kind=? AND a.subject_id=? ORDER BY a.created_at,a.id',
-      [book, kind, id],
-    )
+    return this.db
+      .createQueryBuilder()
+      .select(
+        'a.id,a.resource_id AS resourceId,r.name,r.mime_type AS mimeType,r.size',
+      )
+      .from('ledger_attachments', 'a')
+      .innerJoin(
+        'resources',
+        'r',
+        'r.id=a.resource_id AND r.deleted_at IS NULL',
+      )
+      .where('a.ledger_id=:p0 AND a.subject_kind=:p1 AND a.subject_id=:p2')
+      .orderBy('a.created_at', 'ASC')
+      .addOrderBy('a.id', 'ASC')
+      .setParameters({ p0: book, p1: kind, p2: id })
+      .getRawMany()
   }
 
   async add(
@@ -151,10 +181,12 @@ export class AttachmentService extends FeatureService {
       async (db, access) => {
         const record = await attachmentSubject(db, book, kind, id)
         this.access.assertAuthor(access.role, record.created_by, actor.user.id)
-        await db.query(
-          'DELETE FROM ledger_attachments WHERE ledger_id=? AND subject_kind=? AND subject_id=? AND id=?',
-          [book, kind, id, attachment],
-        )
+        await db.getRepository(LedgerAttachmentEntity).delete({
+          ledger_id: book,
+          subject_kind: kind,
+          subject_id: id,
+          id: attachment,
+        })
         return { id: attachment }
       },
     )

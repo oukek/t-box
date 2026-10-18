@@ -1,17 +1,12 @@
 import type { ChatSession } from '../chat/session.js'
 import type { Actor, AgentRuntimeOptions } from './contracts.js'
 import type { AgentRunInput } from './runner.js'
-import { ApiError } from '@t-box/server-foundation/errors'
-import {
-  closeInterruptedHistory,
-} from './checkpoint.js'
+import { ErrorCode } from '../error-codes.js'
+import { closeInterruptedHistory } from './checkpoint.js'
 import { prepareTaskResume } from './resume.js'
 import { object, parseIdentifier } from './schema.js'
 import { authorizedSnapshot } from './snapshot.js'
 
-const fail = (code: string, message: string): never => {
-  throw new ApiError(400, code, message)
-}
 /** Transport-independent commands for durable task ownership, compatibility and resume. */
 export async function handleTaskCommand(
   options: AgentRuntimeOptions,
@@ -25,7 +20,7 @@ export async function handleTaskCommand(
     object(event, ['type', 'taskId'])
     const taskId = parseIdentifier(event.taskId)
     if (!principal || !options.host?.tasks) {
-      fail('TASKS_UNAVAILABLE', '持久任务服务不可用')
+      throw ErrorCode.TASKS_UNAVAILABLE()
     }
     await options.host!.identity.authenticateHash(principal!.sessionHash)
     await options.host!.tasks!.cancel(principal!, taskId)
@@ -60,9 +55,14 @@ export async function handleTaskCommand(
   if (event.type === 'task.resume') {
     object(event, ['type', 'taskId'])
     if (!principal || !options.host?.tasks) {
-      fail('TASKS_UNAVAILABLE', '持久任务服务不可用')
+      throw ErrorCode.TASKS_UNAVAILABLE()
     }
-    const input = await prepareTaskResume(options, current, principal!, parseIdentifier(event.taskId))
+    const input = await prepareTaskResume(
+      options,
+      current,
+      principal!,
+      parseIdentifier(event.taskId),
+    )
     if (isConnected()) {
       launch(input)
     }

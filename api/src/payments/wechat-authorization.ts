@@ -1,7 +1,13 @@
 import type { PaymentConfiguration, WechatRuntime } from './configuration.js'
 import { randomBytes } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
+import { Raw } from 'typeorm'
 import { digest } from '../admin/crypto.js'
+import {
+  PaymentOauthStateEntity,
+  PaymentWechatUserEntity,
+} from '../db/records/payments-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 export class WechatAuthorization {
   constructor(
@@ -14,31 +20,52 @@ export class WechatAuthorization {
   }
 
   async openid(userId: string, appId: string) {
-    const [row] = await this.configuration.source.query(
-      'SELECT openid_cipher FROM payment_wechat_users WHERE user_id=? AND app_id=?',
-      [userId, appId],
-    )
+    const row = await this.configuration.source
+      .getRepository(PaymentWechatUserEntity)
+      .findOne({
+        select: { openid_cipher: true },
+        where: { user_id: userId, app_id: appId },
+      })
     return row ? this.configuration.vault.decrypt(row.openid_cipher) : null
   }
 
   async start(userId: string, orderId: string, c: WechatRuntime) {
-    await this.configuration.source.query(
-      'DELETE FROM payment_oauth_states WHERE user_id=? AND expires_at<DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 1 DAY)',
-      [userId],
-    )
-    const [pending] = await this.configuration.source.query(
-      'SELECT COUNT(*) n FROM payment_oauth_states WHERE user_id=? AND consumed=FALSE AND expires_at>UTC_TIMESTAMP(3)',
-      [userId],
-    )
-    if (Number(pending.n) >= 20) {
-      throw new ApiError(429, 'OAUTH_LIMIT', '授权请求过多，请稍后再试')
-    }
     const state = randomBytes(24).toString('hex')
-    // Bound to the authenticated local user and order; never accept a client-supplied openid.
-    await this.configuration.source.query(
-      'INSERT INTO payment_oauth_states(state_hash,user_id,order_id,configuration_id,expires_at) VALUES(?,?,?,?,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 10 MINUTE))',
-      [digest(state), userId, orderId, c.id],
-    )
+    await this.configuration.source.transaction(async (db) => {
+      // Serialize quota checks for the same user; external OAuth starts after commit.
+      const user = await db.getRepository(AppUserEntity).findOne({
+        select: { id: true },
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      })
+      if (!user) {
+        throw ErrorCode.OAUTH_INVALID()
+      }
+      await db.getRepository(PaymentOauthStateEntity).delete({
+        user_id: userId,
+        expires_at: Raw(
+          (column) => `${column} < DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 1 DAY)`,
+        ),
+      })
+      const pending = await db.getRepository(PaymentOauthStateEntity).count({
+        where: {
+          user_id: userId,
+          consumed: false,
+          expires_at: Raw((column) => `${column} > UTC_TIMESTAMP(3)`),
+        },
+      })
+      if (pending >= 20) {
+        throw ErrorCode.OAUTH_LIMIT()
+      }
+      // Bound to the authenticated local user and order; never accept a client-supplied openid.
+      await db.getRepository(PaymentOauthStateEntity).insert({
+        state_hash: digest(state),
+        user_id: userId,
+        order_id: orderId,
+        configuration_id: c.id,
+        expires_at: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 10 MINUTE)',
+      })
+    })
     const url = new URL('https://open.weixin.qq.com/connect/oauth2/authorize')
     url.search = new URLSearchParams({
       appid: c.appId,
@@ -58,30 +85,37 @@ export class WechatAuthorization {
       typeof code !== 'string' ||
       !/^[\w-]{1,256}$/.test(code)
     ) {
-      throw new ApiError(400, 'OAUTH_INVALID', '微信授权参数无效')
+      throw ErrorCode.OAUTH_INVALID()
     }
     const row = await this.configuration.source.transaction(async (db) => {
-      const [r] = await db.query(
-        'SELECT * FROM payment_oauth_states WHERE state_hash=? AND consumed=FALSE AND expires_at>UTC_TIMESTAMP(3) FOR UPDATE',
-        [digest(state)],
-      )
+      const r = await db.getRepository(PaymentOauthStateEntity).findOne({
+        select: {
+          state_hash: true,
+          user_id: true,
+          order_id: true,
+          configuration_id: true,
+          consumed: true,
+          expires_at: true,
+        },
+        where: {
+          state_hash: digest(state),
+          consumed: false,
+          expires_at: Raw((column) => `${column} > UTC_TIMESTAMP(3)`),
+        },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (!r) {
-        throw new ApiError(
-          400,
-          'OAUTH_EXPIRED',
-          '微信授权已过期，请从充值订单重新发起',
-        )
+        throw ErrorCode.OAUTH_EXPIRED()
       }
-      await db.query(
-        'UPDATE payment_oauth_states SET consumed=TRUE WHERE state_hash=?',
-        [digest(state)],
-      )
+      await db
+        .getRepository(PaymentOauthStateEntity)
+        .update({ state_hash: digest(state) }, { consumed: true })
       return r
     })
     const bound = await this.configuration.runtime(row.configuration_id)
     const c = bound ? await this.configuration.credentials(bound) : null
     if (!c?.appSecret) {
-      throw new ApiError(503, 'OAUTH_UNAVAILABLE', '公众号网页授权尚未配置')
+      throw ErrorCode.OAUTH_UNAVAILABLE()
     }
     let openid: string
     try {
@@ -105,20 +139,30 @@ export class WechatAuthorization {
         typeof result.openid !== 'string' ||
         !/^[\w-]{10,128}$/.test(result.openid)
       ) {
-        throw new Error('Invalid Wechat OAuth response')
+        throw ErrorCode.INTERNAL_INVALID_WECHAT_OAUTH_RESPONSE()
       }
       openid = result.openid
     } catch {
-      throw new ApiError(
-        502,
-        'OAUTH_FAILED',
-        '微信网页授权失败，请重新发起支付',
-      )
+      throw ErrorCode.OAUTH_FAILED()
     }
-    await this.configuration.source.query(
-      'INSERT INTO payment_wechat_users(user_id,app_id,openid_cipher) VALUES(?,?,?) ON DUPLICATE KEY UPDATE openid_cipher=VALUES(openid_cipher),updated_at=UTC_TIMESTAMP(3)',
-      [row.user_id, c.appId, this.configuration.vault.encrypt(openid)],
-    )
+    await this.configuration.source
+      .createQueryBuilder()
+      .insert()
+      .into('payment_wechat_users')
+      .values({
+        user_id: () => ':p0',
+        app_id: () => ':p1',
+        openid_cipher: () => ':p2',
+        updated_at: () => 'UTC_TIMESTAMP(3)',
+      })
+      .updateEntity(false)
+      .setParameters({
+        p0: row.user_id,
+        p1: c.appId,
+        p2: this.configuration.vault.encrypt(openid),
+      })
+      .orUpdate(['openid_cipher', 'updated_at'])
+      .execute()
     return this.returnUrl(c, row.order_id, true)
   }
 }

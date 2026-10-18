@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { ApplicationPublishing } from './publishing.js'
 import { validId } from '@t-box/app-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 export function registerApplicationPublishing(
   app: FastifyInstance,
@@ -10,7 +10,7 @@ export function registerApplicationPublishing(
 ) {
   const appId = (id: string) => {
     if (!validId(id)) {
-      throw new ApiError(400, 'INVALID_APP_ID', '应用标识无效')
+      throw ErrorCode.INVALID_APP_ID()
     }
     return id
   }
@@ -28,7 +28,11 @@ export function registerApplicationPublishing(
   app.patch<{ Params: { id: string } }>(
     '/application-releases/:id/metadata',
     async (r) => ({
-      data: await service.updateMetadata(r.params.id, r.body, (await actor(r)).id),
+      data: await service.updateMetadata(
+        r.params.id,
+        r.body,
+        (await actor(r)).id,
+      ),
     }),
   )
   app.post<{ Params: { id: string } }>(
@@ -37,13 +41,11 @@ export function registerApplicationPublishing(
     async (r, reply) => {
       await actor(r)
       if (service.delivery === 'oss') {
-        throw new ApiError(409, 'APP_USE_OSS_WORKFLOW', '当前使用 OSS 静态发布，请通过应用发布工作流上传，再在后台审核上架')
+        throw ErrorCode.APP_USE_OSS_WORKFLOW()
       }
-      return reply
-        .code(201)
-        .send({
-          data: await service.artifacts.upload(appId(r.params.id), r.body),
-        })
+      return reply.code(201).send({
+        data: await service.artifacts.upload(appId(r.params.id), r.body),
+      })
     },
   )
   app.get<{ Params: { id: string } }>(

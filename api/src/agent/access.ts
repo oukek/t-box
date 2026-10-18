@@ -1,9 +1,8 @@
 import type { ChatMessage, ResourceRef } from '@t-box/shared'
 import type { Actor, Interact, ResourceAdapter } from './contracts.js'
 import { ApiError } from '@t-box/server-foundation/errors'
-import {
-  uniqueResources,
-} from '@t-box/shared'
+import { uniqueResources } from '@t-box/shared'
+import { ErrorCode } from '../error-codes.js'
 import { object, parseIdentifier } from './schema.js'
 /** Resource identity is safe metadata only after the adapter has verified membership. */
 export class ResourceAuthorizationRequired extends ApiError {
@@ -16,7 +15,9 @@ export class ResourceAccessRegistry {
   constructor(adapters: ResourceAdapter[]) {
     for (const adapter of adapters) {
       if (this.adapters.has(adapter.appId)) {
-        throw new Error(`Duplicate resource adapter: ${adapter.appId}`)
+        throw ErrorCode.INTERNAL_DUPLICATE_RESOURCE_ADAPTER(
+          `Duplicate resource adapter: ${adapter.appId}`,
+        )
       }
       this.adapters.set(adapter.appId, adapter)
     }
@@ -27,11 +28,7 @@ export class ResourceAccessRegistry {
       return []
     }
     if (!Array.isArray(value) || value.length > 16) {
-      throw new ApiError(
-        400,
-        'INVALID_SCOPE',
-        '资源作用域应为最多 16 个资源的数组',
-      )
+      throw ErrorCode.INVALID_SCOPE()
     }
     const refs = value.map((raw) => {
       const row = object(raw, ['appId', 'resourceType', 'resourceId'])
@@ -41,12 +38,12 @@ export class ResourceAccessRegistry {
         resourceId: parseIdentifier(row.resourceId),
       }
       if (!this.adapters.has(ref.appId)) {
-        throw new ApiError(400, 'INVALID_SCOPE', '资源应用未注册')
+        throw ErrorCode.INVALID_SCOPE('资源应用未注册')
       }
       return ref
     })
     if (uniqueResources(refs).length !== refs.length) {
-      throw new ApiError(400, 'INVALID_SCOPE', '资源作用域不可重复')
+      throw ErrorCode.INVALID_SCOPE('资源作用域不可重复')
     }
     return refs
   }
@@ -70,7 +67,7 @@ export class ResourceAccessRegistry {
   ) {
     const adapter = this.adapters.get(ref.appId)
     if (!adapter) {
-      throw new ApiError(403, 'RESOURCE_UNAVAILABLE', '资源应用未注册或已停用')
+      throw ErrorCode.RESOURCE_UNAVAILABLE.forbidden()
     }
     return adapter.inspect(actor, ref, action, purpose)
   }
@@ -94,15 +91,11 @@ export class ResourceAccessRegistry {
       !result.ok ||
       (result.data as { authorized?: boolean })?.authorized !== true
     ) {
-      throw new ApiError(
-        403,
-        'AUTHORIZATION_CANCELLED',
-        '未授权，操作不会继续',
-      )
+      throw ErrorCode.AUTHORIZATION_CANCELLED()
     }
     // The UI ACK never authorizes the resource. Recheck the trusted adapter.
     if ((await this.inspect(actor, ref, action, purpose)).challenge) {
-      throw new ApiError(423, 'RESOURCE_LOCKED', '资源授权尚未生效')
+      throw ErrorCode.RESOURCE_LOCKED()
     }
   }
 

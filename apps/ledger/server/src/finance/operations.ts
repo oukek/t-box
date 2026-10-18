@@ -4,7 +4,10 @@ import type { Access, Principal } from '../ledgers/types.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { digest } from '@t-box/server-foundation/crypto'
-import { ApiError, invalid } from '@t-box/server-foundation/errors'
+import { invalid } from '@t-box/server-foundation/errors'
+import { jsonDocument } from '@t-box/server-foundation/persistence/columns'
+import { LedgerEntity, LedgerOperationEntity } from '../domain-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { bindOperationAttachments } from '../features/attachments.js'
 import { audit } from '../ledgers/audit.js'
 /** One committed result per actor + book + request key, surviving reconnection/restarts. */
@@ -21,6 +24,12 @@ export class FinancialOperations {
     return this.context.getStore()?.db ?? this.access.source.manager
   }
 
+  validateKey(key: string | undefined): asserts key is string {
+    if (!key || !/^[\w:.\-]{1,128}$/.test(key)) {
+      invalid('Idempotency-Key', '请提供有效的操作标识')
+    }
+  }
+
   async run<T>(
     principal: Principal,
     ledgerId: string,
@@ -29,22 +38,30 @@ export class FinancialOperations {
     payload: unknown,
     work: (db: EntityManager, access: Access) => Promise<T>,
   ): Promise<T> {
-    if (!key || !/^[\w:.\-]{1,128}$/.test(key)) {
-      invalid('Idempotency-Key', '请提供有效的操作标识')
-    }
+    this.validateKey(key)
     const hash = digest(JSON.stringify({ action, payload }))
     const execute = async (db: EntityManager, access: Access) => {
-      const [previous] = await db.query(
-        'SELECT payload_hash,result_json FROM ledger_operations WHERE ledger_id=? AND user_id=? AND request_key=?',
-        [ledgerId, principal.user.id, key],
-      )
+      const previous = await db
+        .getRepository(LedgerOperationEntity)
+        .findOne({
+          select: { payloadHash: true, result: true },
+          where: {
+            ledgerId,
+            userId: principal.user.id,
+            requestKey: key,
+          },
+        })
+        .then((row) =>
+          row
+            ? {
+                payload_hash: row.payloadHash,
+                result_json: row.result,
+              }
+            : null,
+        )
       if (previous) {
         if (previous.payload_hash !== hash) {
-          throw new ApiError(
-            409,
-            'REQUEST_CONFLICT',
-            '同一操作标识不能用于不同内容',
-          )
+          throw ErrorCode.REQUEST_CONFLICT()
         }
         return typeof previous.result_json === 'string'
           ? JSON.parse(previous.result_json)
@@ -62,21 +79,18 @@ export class FinancialOperations {
         payload,
         result,
       )
-      await db.query(
-        'INSERT INTO ledger_operations(id,ledger_id,user_id,request_key,payload_hash,action,result_json) VALUES(?,?,?,?,?,?,?)',
-        [
-          randomUUID(),
-          ledgerId,
-          principal.user.id,
-          key,
-          hash,
-          action,
-          JSON.stringify(result),
-        ],
-      )
-      await db.query('UPDATE ledgers SET revision=revision+1 WHERE id=?', [
+      await db.getRepository(LedgerOperationEntity).insert({
+        id: randomUUID(),
         ledgerId,
-      ])
+        userId: principal.user.id,
+        requestKey: key,
+        payloadHash: hash,
+        action,
+        result: jsonDocument(result),
+      })
+      await db
+        .getRepository(LedgerEntity)
+        .update({ id: ledgerId }, { revision: () => 'revision+1' })
       await audit(
         db,
         ledgerId,
@@ -98,7 +112,7 @@ export class FinancialOperations {
         current.ledgerId !== ledgerId ||
         current.sessionHash !== principal.sessionHash
       ) {
-        throw new ApiError(403, 'BATCH_SCOPE', '批量操作不能跨账本或用户')
+        throw ErrorCode.BATCH_SCOPE()
       }
       return execute(current.db, current.access)
     }

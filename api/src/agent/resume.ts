@@ -2,7 +2,7 @@ import type { ChatSession } from '../chat/session.js'
 import type { RunCheckpoint } from './checkpoint.js'
 import type { Actor, AgentRuntimeOptions } from './contracts.js'
 import type { AgentRunInput } from './runner.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { restoreCheckpoint } from './checkpoint.js'
 
 /** Both user and background resumption pass exactly the same compatibility and access checks. */
@@ -14,26 +14,18 @@ export async function prepareTaskResume(
 ): Promise<AgentRunInput> {
   const host = options.host
   if (!host?.tasks) {
-    throw new ApiError(400, 'TASKS_UNAVAILABLE', '持久任务服务不可用')
+    throw ErrorCode.TASKS_UNAVAILABLE()
   }
   if (current.active || current.finishing) {
-    throw new ApiError(409, 'RUN_IN_PROGRESS', '请等待当前任务结束')
+    throw ErrorCode.RUN_IN_PROGRESS.conflict()
   }
   await host.identity.authenticateHash(principal.sessionHash)
   const task = await host.tasks.get(principal, taskId)
   if (task.summary.conversationId !== current.conversationId) {
-    throw new ApiError(
-      400,
-      'TASK_CONVERSATION_MISMATCH',
-      '请打开此任务所属会话后继续',
-    )
+    throw ErrorCode.TASK_CONVERSATION_MISMATCH()
   }
   if (!['queued', 'paused', 'waiting_client'].includes(task.summary.status)) {
-    throw new ApiError(
-      409,
-      'TASK_NOT_RESUMABLE',
-      '此任务不能继续，结果不确定的操作请先核对',
-    )
+    throw ErrorCode.TASK_NOT_RESUMABLE()
   }
   const checkpoint = task.checkpoint as RunCheckpoint
   if (
@@ -44,11 +36,7 @@ export async function prepareTaskResume(
       (message) => message.id === checkpoint.assistantId,
     )
   ) {
-    throw new ApiError(
-      409,
-      'TASK_VERSION_MISMATCH',
-      '任务格式不兼容，请核对后结束任务',
-    )
+    throw ErrorCode.TASK_VERSION_MISMATCH()
   }
   if (
     checkpoint.modulePins
@@ -57,11 +45,7 @@ export async function prepareTaskResume(
         )
       : checkpoint.registryRevision !== options.registry.revision
   ) {
-    throw new ApiError(
-      409,
-      'TASK_CAPABILITIES_CHANGED',
-      '任务的应用或技能版本已改变，请核对后结束旧任务',
-    )
+    throw ErrorCode.TASK_CAPABILITIES_CHANGED()
   }
   await options.registry.access.history(principal, checkpoint.session.messages)
   if (
@@ -69,11 +53,7 @@ export async function prepareTaskResume(
     !(await host.conversations.exists(principal, task.summary.conversationId))
   ) {
     if (current.archived) {
-      throw new ApiError(
-        404,
-        'CONVERSATION_NOT_FOUND',
-        '会话已删除，不能继续任务',
-      )
+      throw ErrorCode.CONVERSATION_NOT_FOUND('会话已删除，不能继续任务')
     }
     current.finishing = true
     try {
@@ -87,24 +67,20 @@ export async function prepareTaskResume(
     await options.registry.access.inspect(principal, ref, 'read', '继续任务')
   }
   const provider = options.provider.forRun
-    ? await options.provider.forRun({ configurationKey: checkpoint.session.configurationKey })
+    ? await options.provider.forRun({
+        configurationKey: checkpoint.session.configurationKey,
+      })
     : options.provider
   if (provider.mode === 'unconfigured') {
-    throw new ApiError(
-      400,
-      'AI_NOT_CONFIGURED',
-      '尚未接入 AI，请在后台配置普通会话模型',
-    )
+    throw ErrorCode.AI_NOT_CONFIGURED.invalid()
   }
   if (checkpoint.session.configurationKey !== provider.configurationKey) {
-    throw new ApiError(
-      409,
-      'TASK_MODEL_CHANGED',
+    throw ErrorCode.TASK_MODEL_CHANGED(
       '任务使用的模型配置已改变，请恢复原配置或核对后结束任务',
     )
   }
   if (current.active || current.finishing) {
-    throw new ApiError(409, 'RUN_IN_PROGRESS', '当前任务尚未结束')
+    throw ErrorCode.RUN_IN_PROGRESS.conflict('当前任务尚未结束')
   }
   return {
     session: current,

@@ -1,4 +1,9 @@
-import type { HolidayDataset, HolidaySyncSettings, HolidayYearAdmin, HolidayYearSnapshot } from '@t-box/calendar-contracts'
+import type {
+  HolidayDataset,
+  HolidaySyncSettings,
+  HolidayYearAdmin,
+  HolidayYearSnapshot,
+} from '@t-box/calendar-contracts'
 import type { DataSource, EntityManager } from 'typeorm'
 import type { HolidayYearRow } from './holiday-entity.js'
 import type { HolidayFetcher } from './holiday-provider.js'
@@ -8,9 +13,9 @@ import {
   holidayYear,
   parseHolidayDataset,
 } from '@t-box/calendar-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { temporalDomain } from '@t-box/server-foundation/persistence/errors'
 import { dayjs } from '@t-box/time-contracts'
+import { ErrorCode } from './error-codes.js'
 import {
   HolidayAuditEntity,
   HolidaySettingsEntity,
@@ -86,7 +91,7 @@ export class HolidayService {
       typeof v.autoPublish !== 'boolean' ||
       Object.keys(v).some((k) => !['enabled', 'autoPublish'].includes(k))
     ) {
-      throw new ApiError(400, 'INVALID_SETTINGS', '同步配置无效')
+      throw ErrorCode.INVALID_SETTINGS()
     }
     await this.source.transaction(async (db) => {
       await db
@@ -184,6 +189,7 @@ export class HolidayService {
     const lock = `calendar:holidays:CN:${year}`
     let acquired = false
     try {
+      // native-sql: MySQL advisory lock must use this exact connection
       const [result] = await runner.query('SELECT GET_LOCK(?,0) AS acquired', [
         lock,
       ])
@@ -256,6 +262,7 @@ export class HolidayService {
       })
     } finally {
       if (acquired) {
+        // native-sql: MySQL advisory lock must use this exact connection
         await runner.query('SELECT RELEASE_LOCK(?)', [lock]).catch(() => {})
       }
       await runner.release()
@@ -292,14 +299,14 @@ export class HolidayService {
   ) {
     const year = temporalDomain(() => holidayYear(value))
     if (!Number.isInteger(revision) || Number(revision) < 0) {
-      throw new ApiError(400, 'INVALID_REVISION', '版本号无效')
+      throw ErrorCode.INVALID_REVISION()
     }
     const dataset =
       action === 'draft'
         ? temporalDomain(() => parseHolidayDataset(input))
         : null
     if (dataset && dataset.year !== year) {
-      throw new ApiError(400, 'INVALID_YEAR', '数据年度与所选年度不一致')
+      throw ErrorCode.INVALID_YEAR()
     }
     return this.source.transaction(async (db) => {
       const repo = db.getRepository(HolidayYearEntity)
@@ -309,11 +316,7 @@ export class HolidayService {
           lock: { mode: 'pessimistic_write' },
         })) ?? empty(year)
       if (row.revision !== revision) {
-        throw new ApiError(
-          409,
-          'HOLIDAY_REVISION_CONFLICT',
-          '年度数据已更新，请刷新后再操作',
-        )
+        throw ErrorCode.HOLIDAY_REVISION_CONFLICT()
       }
       if (action === 'draft') {
         row.candidate = dataset

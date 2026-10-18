@@ -76,7 +76,7 @@ export interface Debt extends DebtInput {
   adjusted?: string
   remaining: string
   status: 'open' | 'settled'
-  createdBy: string
+  createdBy: string | null
   createdAt: string
 }
 export interface SettlementInput extends LedgerAttachmentInput {
@@ -92,7 +92,7 @@ export interface Settlement {
   amount: string
   date: string
   note: string
-  createdBy: string
+  createdBy: string | null
   reversed: boolean
   allocations: { debtId: string, amount: string }[]
 }

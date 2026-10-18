@@ -1,8 +1,8 @@
 import type { ChatMessage, ToolResult } from '@t-box/shared'
 import type { AgentRuntimeOptions } from '../agent/contracts.js'
 import type { ChatSession } from './session.js'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { rebuildConversationHistory } from '../agent/history.js'
+import { ErrorCode } from '../error-codes.js'
 import { messagePair } from './message-commands.js'
 
 export function retryPair(session: ChatSession, id: string) {
@@ -11,7 +11,7 @@ export function retryPair(session: ChatSession, id: string) {
     (m) => m.id === id && m.role === 'assistant',
   )
   if (!answer || pair.messages.length !== 2) {
-    throw new ApiError(400, 'MESSAGE_ROLE_INVALID', '请选择需要重试的回答')
+    throw ErrorCode.MESSAGE_ROLE_INVALID('请选择需要重试的回答')
   }
   return { ...pair, user: pair.messages[0]!, answer }
 }

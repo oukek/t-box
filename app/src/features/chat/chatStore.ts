@@ -1,7 +1,17 @@
-import type { ApplicationId, ChatClientEvent, ChatMessage, ChatMode, ChatRun, ChatServerEvent, ChatSnapshot, Resource, ResourceRef, TaskSummary, ToolResult } from '@t-box/shared'
-import {
-  CHAT_LIMITS,
+import type {
+  ApplicationId,
+  ChatClientEvent,
+  ChatMessage,
+  ChatMode,
+  ChatRun,
+  ChatServerEvent,
+  ChatSnapshot,
+  Resource,
+  ResourceRef,
+  TaskSummary,
+  ToolResult,
 } from '@t-box/shared'
+import { CHAT_LIMITS } from '@t-box/shared'
 import { computed, reactive, readonly } from 'vue'
 import {
   authorizeResources,
@@ -12,6 +22,7 @@ import { clientCapabilities, executeClientTool } from '../../core/clientTools'
 import { createRequestId } from '../../core/identifiers'
 import { apiBase, chatWebSocketUrl } from '../../core/network'
 import { identity } from '../../core/session'
+import { ErrorCode } from '../../error-codes.js'
 import { taskBlocksNewMessage } from './messagePolicy'
 import { ClientTaskRecovery } from './taskRecovery'
 import { applyTimelineDelta, applyTimelineItem } from './timelineReducer'
@@ -59,13 +70,12 @@ const state = reactive({
 function rejectMutations(message: string) {
   for (const mutation of messageMutations.values()) {
     clearTimeout(mutation.timer)
-    mutation.reject(new Error(message))
+    mutation.reject(ErrorCode.INTERNAL_REMOTE_OPERATION_FAILED(message))
   }
   messageMutations.clear()
   state.mutationRequestId = ''
 }
-const storageKey = () =>
-  `t-box.chat.session.v2:${apiBase}:${identity.user?.id}`
+const storageKey = () => `t-box.chat.session.v2:${apiBase}:${identity.user?.id}`
 let sessionToken = ''
 let socket: WebSocket | null = null
 let started = false
@@ -321,9 +331,7 @@ function receive(event: ChatServerEvent, currentGeneration: number) {
       if (state.activeRun?.id !== event.runId) {
         break
       }
-      const message = state.messages.find(
-        (item) => item.id === event.messageId,
-      )
+      const message = state.messages.find((item) => item.id === event.messageId)
       if (message) {
         message.content = event.content
       }
@@ -333,18 +341,14 @@ function receive(event: ChatServerEvent, currentGeneration: number) {
       if (state.activeRun?.id !== event.runId) {
         break
       }
-      const message = state.messages.find(
-        (item) => item.id === event.messageId,
-      )
+      const message = state.messages.find((item) => item.id === event.messageId)
       if (message) {
         message.content += event.delta
       }
       break
     }
     case 'tool.update': {
-      const message = state.messages.find(
-        (item) => item.id === event.messageId,
-      )
+      const message = state.messages.find((item) => item.id === event.messageId)
       if (!message || state.activeRun?.id !== event.runId) {
         break
       }
@@ -390,7 +394,7 @@ function receive(event: ChatServerEvent, currentGeneration: number) {
         clearTimeout(mutation.timer)
         messageMutations.delete(event.requestId)
         state.mutationRequestId = ''
-        mutation.reject(new Error(event.message))
+        mutation.reject(ErrorCode.INTERNAL_REMOTE_CHAT_FAILED(event.message))
       }
       if (pendingDraft && event.requestId === pendingDraft.requestId) {
         state.failedDraft = pendingDraft
@@ -478,9 +482,7 @@ async function connect() {
         return
       }
       if (!authorized) {
-        throw new Error(
-          '尚未授权受保护资源，任务会保持暂停。可重新连接后继续。',
-        )
+        throw ErrorCode.INTERNAL_RESOURCE_AUTHORIZATION_REQUIRED()
       }
       pendingAuthorization = []
     } catch (cause) {
@@ -535,8 +537,12 @@ async function connect() {
     lastReceivedAt = Date.now()
     try {
       const event = JSON.parse(message.data) as ChatServerEvent
-      if (!event || typeof event !== 'object' || typeof event.type !== 'string') {
-        throw new Error('invalid event')
+      if (
+        !event ||
+        typeof event !== 'object' ||
+        typeof event.type !== 'string'
+      ) {
+        throw ErrorCode.INTERNAL_INVALID_EVENT()
       }
       receive(event, currentGeneration)
     } catch {
@@ -623,7 +629,11 @@ export function sendMessage(
   revision?: { sourceMessageId: string, expectedRevision?: number },
 ): boolean {
   const value = text.trim() || (attachments.length ? '请查看附件。' : '')
-  if (!value || value.length > state.maxMessageLength || !canSendMessage.value) {
+  if (
+    !value ||
+    value.length > state.maxMessageLength ||
+    !canSendMessage.value
+  ) {
     return false
   }
   const date = new Date()
@@ -717,7 +727,7 @@ export async function deleteMessage(messageId: string): Promise<void> {
     state.connection !== 'connected' ||
     taskBlocksNewMessage(state.task)
   ) {
-    throw new Error('请等待生成结束后再删除')
+    throw ErrorCode.INTERNAL_MESSAGE_GENERATION_IN_PROGRESS()
   }
   taskRecovery.clear()
   const requestId = createRequestId()
@@ -726,9 +736,7 @@ export async function deleteMessage(messageId: string): Promise<void> {
     const timer = setTimeout(() => {
       messageMutations.delete(requestId)
       state.mutationRequestId = ''
-      reject(
-        new Error('删除结果尚未确认，请重新连接后查看对话；不要重复操作。'),
-      )
+      reject(ErrorCode.INTERNAL_MESSAGE_DELETE_UNCONFIRMED())
       socket?.close()
     }, 15000)
     messageMutations.set(requestId, { resolve, reject, timer })
@@ -743,7 +751,7 @@ export async function deleteMessage(messageId: string): Promise<void> {
       clearTimeout(timer)
       messageMutations.delete(requestId)
       state.mutationRequestId = ''
-      reject(new Error('对话服务尚未连接'))
+      reject(ErrorCode.INTERNAL_CHAT_NOT_CONNECTED())
     }
   })
 }

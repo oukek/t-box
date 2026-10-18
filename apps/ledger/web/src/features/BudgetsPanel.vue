@@ -36,7 +36,7 @@ const fields = computed<LedgerFormField[]>(() =>
       ],
 )
 async function load() {
-  rows.value = await api.get(`/budgets?month=${month.value}`)
+  rows.value = await api.get<LedgerBudget[]>(`/budgets?month=${month.value}`)
 }
 function open(row?: LedgerBudget) {
   removeId.value = ''
@@ -63,7 +63,7 @@ async function save() {
 watch(month, () => load().catch((e) => (action.error.value = e.message)))
 onMounted(async () => {
   try {
-    categories.value = await api.get('/categories')
+    categories.value = await api.get<BillCategory[]>('/categories')
     await load()
   } catch (e) {
     action.error.value = (e as Error).message

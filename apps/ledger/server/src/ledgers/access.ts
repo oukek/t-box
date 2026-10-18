@@ -2,7 +2,9 @@ import type { LedgerRole } from '@t-box/ledger-contracts'
 import type { DataSource, EntityManager } from 'typeorm'
 import type { LedgerIdentityPort } from '../ports.js'
 import type { Access, LedgerRow, Principal } from './types.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { Raw } from 'typeorm'
+import { LedgerEntity, LedgerMemberEntity, LedgerUnlockEntity } from '../domain-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 export type Capability = 'read' | 'write' | 'manage' | 'own'
 const rank: Record<LedgerRole, number> = {
@@ -39,40 +41,50 @@ export class LedgerAccess {
     lock = false,
   ): Promise<Access> {
     await this.identity.authenticateHash(principal.sessionHash, db)
-    const [book] = (await db.query(
-      `SELECT * FROM ledgers WHERE id=?${lock ? ' FOR UPDATE' : ''}`,
-      [ledgerId],
-    )) as LedgerRow[]
-    const [membership] = book
-      ? await db.query(
-          'SELECT role FROM ledger_members WHERE ledger_id=? AND user_id=?',
-          [ledgerId, principal.user.id],
-        )
-      : []
+    const stored = await db.getRepository(LedgerEntity).findOne({
+      select: { id: true, name: true, template: true, currency: true, ownerId: true, archived: true, passwordHash: true, passwordVersion: true, revision: true },
+      where: { id: ledgerId },
+      ...(lock ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+    })
+    const book: LedgerRow | null = stored
+      ? {
+          id: stored.id,
+          name: stored.name,
+          template: stored.template,
+          currency: stored.currency,
+          owner_id: stored.ownerId,
+          archived: Number(stored.archived),
+          password_hash: stored.passwordHash,
+          password_version: stored.passwordVersion,
+          revision: stored.revision,
+        }
+      : null
+    const membership = book
+      ? await db.getRepository(LedgerMemberEntity).findOne({
+          select: { role: true },
+          where: { ledgerId, userId: principal.user.id },
+        })
+      : null
     if (!book || !membership) {
-      throw new ApiError(404, 'LEDGER_NOT_FOUND', '账本不存在或你已不再是成员')
+      throw ErrorCode.LEDGER_NOT_FOUND()
     }
     const role = membership.role as LedgerRole
     if (rank[role] < required[capability]) {
-      throw new ApiError(403, 'FORBIDDEN', '当前角色没有此操作权限')
+      throw ErrorCode.FORBIDDEN('当前角色没有此操作权限')
     }
     if (book.archived && capability === 'write') {
-      throw new ApiError(409, 'LEDGER_ARCHIVED', '账本已归档，仅可查看')
+      throw ErrorCode.LEDGER_ARCHIVED()
     }
-    const unlocked = book.password_hash
-      ? await db.query(
-          'SELECT 1 FROM ledger_unlocks WHERE ledger_id=? AND session_hash=? AND password_version=? AND expires_at>UTC_TIMESTAMP(3) AND (?=\'read\' OR scope=\'write\')',
-          [
-            ledgerId,
-            principal.sessionHash,
-            book.password_version,
-            capability === 'read' ? 'read' : 'write',
-          ],
-        )
-      : [{}]
-    const locked = !unlocked.length
+    const unlocked = !book.password_hash || await db.getRepository(LedgerUnlockEntity).existsBy({
+      ledgerId,
+      sessionHash: principal.sessionHash,
+      passwordVersion: book.password_version,
+      expiresAt: Raw((column) => `${column} > UTC_TIMESTAMP(3)`),
+      ...(capability === 'read' ? {} : { scope: 'write' }),
+    })
+    const locked = !unlocked
     if (locked && !allowLocked) {
-      throw new ApiError(423, 'LEDGER_LOCKED', '请先输入账本密码解锁')
+      throw ErrorCode.LEDGER_LOCKED()
     }
     return { book, role, locked }
   }
@@ -99,7 +111,7 @@ export class LedgerAccess {
 
   assertAuthor(role: LedgerRole, creator: string | null, userId: string) {
     if (role === 'editor' && creator !== userId) {
-      throw new ApiError(403, 'FORBIDDEN', '记账成员只能修正自己创建的记录')
+      throw ErrorCode.FORBIDDEN('记账成员只能修正自己创建的记录')
     }
   }
 }

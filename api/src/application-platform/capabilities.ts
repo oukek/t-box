@@ -1,6 +1,6 @@
 import type { ApplicationModule } from '../agent/contracts.js'
 import type { ApplicationPlatform } from './service.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 /** Install policy is applied uniformly to local modules and independently deployed applications. */
 export function bindInstalledCapabilities(
   module: ApplicationModule,
@@ -13,7 +13,7 @@ export function bindInstalledCapabilities(
     ...module,
     availability: async (actor) => {
       if (!actor) {
-        throw new ApiError(401, 'AUTH_REQUIRED', '请先登录')
+        throw ErrorCode.AUTH_REQUIRED()
       }
       const current = await platform.assertActive(actor.user.id, module.id)
       await module.availability?.(actor)
@@ -27,7 +27,7 @@ export function bindInstalledCapabilities(
               ...tool,
               normalizeClientArguments: async (value, context) => {
                 if (!context.actor) {
-                  throw new ApiError(401, 'AUTH_REQUIRED', '请先登录')
+                  throw ErrorCode.AUTH_REQUIRED()
                 }
                 const runtime = await platform.runtime(
                   context.actor.user.id,
@@ -35,11 +35,7 @@ export function bindInstalledCapabilities(
                   'web',
                 )
                 if (!runtime.clientTools.includes(name)) {
-                  throw new ApiError(
-                    403,
-                    'APP_TOOL_UNAVAILABLE',
-                    '此版本未提供该前端工具',
-                  )
+                  throw ErrorCode.APP_TOOL_UNAVAILABLE()
                 }
                 return {
                   appId: module.id,

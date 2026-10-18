@@ -9,27 +9,46 @@ import { profileModule } from '@t-box/settings-web'
 import { APPLICATION_CONTRACT_VERSION } from '@t-box/shared'
 import { createTimeShellModule } from '@t-box/time-shell'
 import { defineAsyncComponent, shallowReactive } from 'vue'
-import { cancelApplicationInteractions, invokeDeclaredApplicationTool } from '../core/app-runtime/bridge'
-import { getApplicationBindings, setApplicationBindings } from '../core/app-runtime/resourceBindings'
+import {
+  cancelApplicationInteractions,
+  invokeDeclaredApplicationTool,
+} from '../core/app-runtime/bridge'
+import {
+  getApplicationBindings,
+  setApplicationBindings,
+} from '../core/app-runtime/resourceBindings'
 import { openApplication } from '../core/navigation'
+import { ErrorCode } from '../error-codes.js'
 
 const calculatorModule = createCalculatorShellModule(
   () => import('../core/app-runtime/WebApplication.vue'),
 )
-const ledgerModule = createLedgerShellModule(() => import('../core/app-runtime/WebApplication.vue'), {
-  invoke: (tool, args) => invokeDeclaredApplicationTool('ledger', tool, args, openApplication),
-  bindings: () => getApplicationBindings('ledger'),
-  setBindings: (value) => setApplicationBindings('ledger', value),
-  cancel: () => cancelApplicationInteractions('ledger'),
-})
-const calendarModule = createCalendarShellModule(() => import('../core/app-runtime/WebApplication.vue'), {
-  invoke: (tool, args) => invokeDeclaredApplicationTool('calendar', tool, args, openApplication),
-  cancel: () => cancelApplicationInteractions('calendar'),
-})
-const timeModule = createTimeShellModule(() => import('../core/app-runtime/WebApplication.vue'), {
-  invoke: (tool, args) => invokeDeclaredApplicationTool('time', tool, args, openApplication),
-  cancel: () => cancelApplicationInteractions('time'),
-})
+const ledgerModule = createLedgerShellModule(
+  () => import('../core/app-runtime/WebApplication.vue'),
+  {
+    invoke: (tool, args) =>
+      invokeDeclaredApplicationTool('ledger', tool, args, openApplication),
+    bindings: () => getApplicationBindings('ledger'),
+    setBindings: (value) => setApplicationBindings('ledger', value),
+    cancel: () => cancelApplicationInteractions('ledger'),
+  },
+)
+const calendarModule = createCalendarShellModule(
+  () => import('../core/app-runtime/WebApplication.vue'),
+  {
+    invoke: (tool, args) =>
+      invokeDeclaredApplicationTool('calendar', tool, args, openApplication),
+    cancel: () => cancelApplicationInteractions('calendar'),
+  },
+)
+const timeModule = createTimeShellModule(
+  () => import('../core/app-runtime/WebApplication.vue'),
+  {
+    invoke: (tool, args) =>
+      invokeDeclaredApplicationTool('time', tool, args, openApplication),
+    cancel: () => cancelApplicationInteractions('time'),
+  },
+)
 /** Static first-party composition. Neither model output nor database config can import code. */
 export const applicationModules = shallowReactive<ClientApplicationModule[]>([
   ledgerModule,
@@ -43,10 +62,14 @@ const ids = new Set<string>()
 const actions = new Set<string>()
 for (const module of applicationModules) {
   if (module.contractVersion !== APPLICATION_CONTRACT_VERSION) {
-    throw new Error(`应用 ${module.manifest.id} 的协议版本不兼容`)
+    throw ErrorCode.INTERNAL_UNSUPPORTED_APPLICATION_PROTOCOL(
+      `应用 ${module.manifest.id} 的协议版本不兼容`,
+    )
   }
   if (ids.has(module.manifest.id)) {
-    throw new Error(`重复应用 ${module.manifest.id}`)
+    throw ErrorCode.INTERNAL_DUPLICATE_APPLICATION(
+      `重复应用 ${module.manifest.id}`,
+    )
   }
   ids.add(module.manifest.id)
   const ai = module.ai
@@ -59,11 +82,13 @@ for (const module of applicationModules) {
     Object.keys(ai.clientTools).some((name) => !declared.has(name)) ||
     ai.interactions.some((item) => !Object.hasOwn(ai.clientTools, item.name))
   ) {
-    throw new Error(`应用 ${module.manifest.id} 的前端交互声明与处理器不一致`)
+    throw ErrorCode.INTERNAL_INVALID_FRONTEND_INTERACTION_CONTRACT(
+      `应用 ${module.manifest.id} 的前端交互声明与处理器不一致`,
+    )
   }
   for (const name of Object.keys(ai.clientTools)) {
     if (actions.has(name) || name === 'app_open') {
-      throw new Error(`重复客户端工具 ${name}`)
+      throw ErrorCode.INTERNAL_DUPLICATE_CLIENT_TOOL(`重复客户端工具 ${name}`)
     }
     actions.add(name)
   }
@@ -89,7 +114,7 @@ export async function authorizeResources(
       (module) => module.manifest.id === ref.appId,
     )
     if (!module?.ai) {
-      throw new Error('资源所属应用暂不可用')
+      throw ErrorCode.INTERNAL_RESOURCE_APPLICATION_UNAVAILABLE()
     }
     if (!(await module.ai.authorize(ref, purpose))) {
       return false
@@ -123,18 +148,16 @@ export function syncCatalogModules(entries: readonly MarketEntry[]) {
           Array.isArray(value) ||
           Object.keys(value).length > 20
         ) {
-          throw new Error('应用导航参数无效')
+          throw ErrorCode.INTERNAL_INVALID_APPLICATION_NAVIGATION()
         }
         const params = value as Record<string, unknown>
         if (
           Object.entries(params).some(
             ([k, v]) =>
-              !/^\w{1,40}$/.test(k) ||
-              typeof v !== 'string' ||
-              v.length > 2000,
+              !/^\w{1,40}$/.test(k) || typeof v !== 'string' || v.length > 2000,
           )
         ) {
-          throw new Error('应用导航参数无效')
+          throw ErrorCode.INTERNAL_INVALID_APPLICATION_NAVIGATION()
         }
         return params as Record<string, string>
       },

@@ -25,6 +25,10 @@ export default antfu(
     },
   },
   {
+    files: ['**/src/**/*.{ts,vue}'],
+    rules: { 'ts/no-explicit-any': 'error' },
+  },
+  {
     files: ['**/*.{ts,vue,js,mjs}'],
     rules: {
       'one-var': ['error', 'never'],
@@ -33,7 +37,11 @@ export default antfu(
       'style/arrow-parens': ['error', 'always'],
       // ASI guards belong at the start of the following line.
       'style/semi-style': ['error', 'first'],
-      'style/operator-linebreak': ['error', 'after', { overrides: { '?': 'before', ':': 'before' } }],
+      'style/operator-linebreak': [
+        'error',
+        'after',
+        { overrides: { '?': 'before', ':': 'before' } },
+      ],
       // Preserve the variance of existing SDK method contracts.
       'ts/method-signature-style': 'off',
       // Keep the existing string-coercion behavior during this style migration.
@@ -44,7 +52,10 @@ export default antfu(
     files: ['**/*.vue'],
     rules: {
       'vue/max-attributes-per-line': ['error', { singleline: 2, multiline: 1 }],
-      'vue/html-closing-bracket-newline': ['error', { singleline: 'never', multiline: 'always' }],
+      'vue/html-closing-bracket-newline': [
+        'error',
+        { singleline: 'never', multiline: 'always' },
+      ],
       // Keep rendered text spacing when expanding attributes across lines.
       'vue/singleline-html-element-content-newline': 'off',
       'vue/multiline-html-element-content-newline': 'off',
@@ -56,14 +67,17 @@ export default antfu(
     rules: {
       // typescript-eslint 8.71 misclassifies Espree value references as types.
       'unused-imports/no-unused-vars': 'off',
-      'no-unused-vars': ['error', {
-        args: 'after-used',
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-        caughtErrors: 'all',
-        caughtErrorsIgnorePattern: '^_',
-        ignoreRestSiblings: true,
-      }],
+      'no-unused-vars': [
+        'error',
+        {
+          args: 'after-used',
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrors: 'all',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
   {

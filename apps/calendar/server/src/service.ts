@@ -1,4 +1,7 @@
-import type { CalendarEvent, CalendarOccurrence } from '@t-box/calendar-contracts'
+import type {
+  CalendarEvent,
+  CalendarOccurrence,
+} from '@t-box/calendar-contracts'
 import type { DataSource, EntityManager } from 'typeorm'
 import type { StoredCalendarEvent } from './entity.js'
 import { randomUUID } from 'node:crypto'
@@ -9,7 +12,6 @@ import {
   occursOn,
   parseCalendarEvent,
 } from '@t-box/calendar-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
 import {
   revision,
   temporalDomain,
@@ -26,10 +28,8 @@ import {
   validTimezone,
 } from '@t-box/time-contracts'
 import { In } from 'typeorm'
-import {
-  CalendarEventEntity,
-  CalendarExceptionEntity,
-} from './entity.js'
+import { CalendarEventEntity, CalendarExceptionEntity } from './entity.js'
+import { ErrorCode } from './error-codes.js'
 import { HolidayService } from './holiday-service.js'
 
 const view = (row: StoredCalendarEvent): CalendarEvent => ({
@@ -64,11 +64,7 @@ export class CalendarService {
       .getRepository(CalendarEventEntity)
       .findOneBy({ id: parseId(id), userId, deleted: false })
     if (!row) {
-      throw new ApiError(
-        404,
-        'CALENDAR_EVENT_NOT_FOUND',
-        '事件不存在或无权访问',
-      )
+      throw ErrorCode.CALENDAR_EVENT_NOT_FOUND()
     }
     return view(row)
   }
@@ -82,7 +78,7 @@ export class CalendarService {
 
   async events(userId: string, search = '') {
     if (typeof search !== 'string' || search.length > 100) {
-      throw new ApiError(400, 'INVALID_SEARCH', '搜索关键词最多 100 个字符')
+      throw ErrorCode.INVALID_SEARCH()
     }
     const rows = await this.source.getRepository(CalendarEventEntity).find({
       where: { userId, deleted: false },
@@ -90,7 +86,7 @@ export class CalendarService {
       take: 1001,
     })
     if (rows.length > 1000) {
-      throw new ApiError(409, 'CALENDAR_LIMIT', '事件数量超出当前应用容量')
+      throw ErrorCode.CALENDAR_LIMIT()
     }
     return rows
       .filter(
@@ -113,14 +109,14 @@ export class CalendarService {
     temporalDomain(() => {
       const days = dayjs.utc(to).diff(dayjs.utc(from), 'day')
       if (days < 0 || days > 370) {
-        throw new ApiError(400, 'INVALID_RANGE', '查询范围需为 0 至 370 天')
+        throw ErrorCode.INVALID_RANGE()
       }
     })
     if (
       q.kind != null &&
       !['event', 'anniversary', 'birthday', 'task'].includes(String(q.kind))
     ) {
-      throw new ApiError(400, 'INVALID_KIND', '事件类型无效')
+      throw ErrorCode.INVALID_KIND()
     }
     const events = (
       await this.events(userId, q.search == null ? '' : String(q.search))
@@ -186,11 +182,7 @@ export class CalendarService {
       async (db) => {
         const repo = db.getRepository(CalendarEventEntity)
         if ((await repo.countBy({ userId, deleted: false })) >= 1000) {
-          throw new ApiError(
-            409,
-            'CALENDAR_LIMIT',
-            '最多保留 1000 个事件，请先整理旧事件',
-          )
+          throw ErrorCode.CALENDAR_LIMIT('最多保留 1000 个事件，请先整理旧事件')
         }
         const now = new Date()
         const row = {
@@ -235,7 +227,7 @@ export class CalendarService {
           },
         )
         if (!result.affected) {
-          throw new ApiError(409, 'STALE_REVISION', '事件已更新，请刷新后重试')
+          throw ErrorCode.STALE_REVISION()
         }
         if (
           ['allDay', 'start', 'end', 'timezone', 'recurrence', 'lunar'].some(
@@ -273,7 +265,7 @@ export class CalendarService {
             { deleted: true, revision: version + 1, updatedAt: new Date() },
           )
         if (!result.affected) {
-          throw new ApiError(409, 'STALE_REVISION', '事件已更新，请刷新后重试')
+          throw ErrorCode.STALE_REVISION()
         }
         return { deleted: true, id }
       },
@@ -288,7 +280,7 @@ export class CalendarService {
     const date = temporalDomain(() => validDate(raw.date))
     parseId(id)
     if (!['skipped', 'completed', 'normal'].includes(String(raw.state))) {
-      throw new ApiError(400, 'INVALID_OCCURRENCE_STATE', '事件状态无效')
+      throw ErrorCode.INVALID_OCCURRENCE_STATE()
     }
     return mutateApplication(
       this.source,
@@ -300,7 +292,7 @@ export class CalendarService {
       async (db) => {
         const event = await this.get(userId, id, db)
         if (!temporalDomain(() => occursOn(event, date))) {
-          throw new ApiError(400, 'OCCURRENCE_NOT_FOUND', '此日期没有该事件')
+          throw ErrorCode.OCCURRENCE_NOT_FOUND()
         }
         const result = await db
           .getRepository(CalendarEventEntity)
@@ -309,7 +301,7 @@ export class CalendarService {
             { revision: version + 1, updatedAt: new Date() },
           )
         if (!result.affected) {
-          throw new ApiError(409, 'STALE_REVISION', '事件已更新，请刷新后重试')
+          throw ErrorCode.STALE_REVISION()
         }
         const repo = db.getRepository(CalendarExceptionEntity)
         if (raw.state === 'normal') {

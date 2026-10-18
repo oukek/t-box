@@ -16,6 +16,12 @@ await import('./dist/db/data-source.js')
 await import('./dist/chat/provider.js')
 await import('./dist/resources/service.js')
 await import('./dist/app.js')
+const { ApiError } = await import('@t-box/errors')
+const { ApiError: foundationApiError } = await import('@t-box/server-foundation/errors')
+const { ErrorCode } = await import('./dist/error-codes.js')
+if (ApiError !== foundationApiError || !(ErrorCode.NOT_FOUND() instanceof ApiError)) {
+  throw new Error('Production packages must share the same ApiError class')
+}
 const { applicationBootstrapArtifacts, applicationSettings } = await import('./dist/config.js')
 if (process.env.NODE_ENV === 'production' && applicationSettings().delivery === 'oss') {
   const bootstrap = applicationBootstrapArtifacts()

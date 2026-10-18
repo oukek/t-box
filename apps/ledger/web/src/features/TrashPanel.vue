@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { LedgerTrashBill } from '@t-box/ledger-contracts'
 import type { FormValues } from './form'
 import { onMounted, ref } from 'vue'
 import { featureApi, useFeatureAction } from './api'
@@ -7,13 +8,16 @@ import LedgerFormSheet from './LedgerFormSheet.vue'
 const props = defineProps<{ ledgerId: string, canWrite: boolean }>()
 const api = featureApi(props.ledgerId)
 const action = useFeatureAction()
-const rows = ref<any[]>([])
-const target = ref<any>()
+const rows = ref<LedgerTrashBill[]>([])
+const target = ref<LedgerTrashBill>()
 const form = ref<FormValues>({})
 async function load() {
-  rows.value = await api.get('/bills/trash')
+  rows.value = await api.get<LedgerTrashBill[]>('/bills/trash')
 }
 async function restore() {
+  if (!target.value) {
+    return
+  }
   const path = `/bills/${target.value.id}/restore`
   const r = await action.run(path, {}, (k) => api.write(path, {}, 'POST', k))
   if (r) {

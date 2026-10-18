@@ -1,5 +1,5 @@
 import type { EntityManager } from 'typeorm'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { parseId } from '../validation.js'
 // Preserve the existing thumbnail limit, including compatibility with legacy MySQL BLOBs.
 export const CATEGORY_ICON_MAX_BYTES = 64 * 1024 - 1
@@ -11,7 +11,7 @@ export function categoryIconBytes(value: unknown): Buffer {
     value.length % 4 ||
     !/^[A-Z0-9+/]+={0,2}$/i.test(value)
   ) {
-    throw new ApiError(400, 'INVALID_CATEGORY_ICON', '图标图片编码无效')
+    throw ErrorCode.INVALID_CATEGORY_ICON()
   }
   const bytes = Buffer.from(value, 'base64')
   if (
@@ -27,9 +27,7 @@ export function categoryIconBytes(value: unknown): Buffer {
       bytes.readUInt32BE(16) > 128 ||
       bytes.readUInt32BE(20) > 128
   ) {
-    throw new ApiError(
-      400,
-      'INVALID_CATEGORY_ICON',
+    throw ErrorCode.INVALID_CATEGORY_ICON(
       '请上传不超过 128×128、64 KB 的 PNG 图标',
     )
   }
@@ -45,17 +43,18 @@ export async function validateCategoryIcon(
     return null
   }
   const id = parseId(value)
-  const [row] = await db.query(
-    `SELECT id FROM ledger_category_icons i WHERE i.id=? AND i.ledger_id=?
-    AND (i.created_by=? OR EXISTS(SELECT 1 FROM bill_categories c WHERE c.ledger_id=? AND c.icon_id=i.id)) FOR SHARE`,
-    [id, book, user, book],
-  )
-  if (!row) {
-    throw new ApiError(
-      404,
-      'CATEGORY_ICON_NOT_FOUND',
-      '图标不存在或不属于当前账本',
+  const [row] = await db
+    .createQueryBuilder()
+    .select('id')
+    .from('ledger_category_icons', 'i')
+    .where(
+      'i.id=:p0 AND i.ledger_id=:p1\n    AND (i.created_by=:p2 OR EXISTS(SELECT 1 FROM bill_categories c WHERE c.ledger_id=:p3 AND c.icon_id=i.id))',
     )
+    .setLock('pessimistic_read')
+    .setParameters({ p0: id, p1: book, p2: user, p3: book })
+    .getRawMany()
+  if (!row) {
+    throw ErrorCode.CATEGORY_ICON_NOT_FOUND()
   }
   return id
 }

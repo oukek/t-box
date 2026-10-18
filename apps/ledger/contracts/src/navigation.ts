@@ -1,7 +1,8 @@
+import { ErrorCode } from './error-codes.js'
 /** Ledger routes, including query-string bookmarks, are validated by the ledger module. */
 export function parseLedgerParams(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('记账页面参数无效')
+    throw ErrorCode.INTERNAL_INVALID_LEDGER_NAVIGATION()
   }
   const args = value as Record<string, unknown>
   if (
@@ -9,7 +10,7 @@ export function parseLedgerParams(value: unknown): Record<string, string> {
       (key) => !['ledgerId', 'month', 'billId', 'inviteToken'].includes(key),
     )
   ) {
-    throw new Error('记账页面包含未支持的参数')
+    throw ErrorCode.INTERNAL_UNSUPPORTED_LEDGER_NAVIGATION()
   }
   const result: Record<string, string> = {}
   for (const key of ['ledgerId', 'billId']) {
@@ -23,7 +24,7 @@ export function parseLedgerParams(value: unknown): Record<string, string> {
         entry,
       )
     ) {
-      throw new Error('账本或账单标识无效')
+      throw ErrorCode.INTERNAL_INVALID_LEDGER_RESOURCE_ID()
     }
     result[key] = entry
   }
@@ -32,13 +33,16 @@ export function parseLedgerParams(value: unknown): Record<string, string> {
       typeof args.month !== 'string' ||
       !/^[1-9]\d{3}-(?:0[1-9]|1[0-2])$/.test(args.month)
     ) {
-      throw new Error('账单月份无效')
+      throw ErrorCode.INTERNAL_INVALID_BILL_MONTH()
     }
     result.month = args.month
   }
   if (args.inviteToken !== undefined) {
-    if (typeof args.inviteToken !== 'string' || !/^[\w-]{16,200}$/.test(args.inviteToken)) {
-      throw new Error('邀请口令无效')
+    if (
+      typeof args.inviteToken !== 'string' ||
+      !/^[\w-]{16,200}$/.test(args.inviteToken)
+    ) {
+      throw ErrorCode.INTERNAL_INVALID_INVITATION_TOKEN()
     }
     result.inviteToken = args.inviteToken
   }

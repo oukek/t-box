@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type {
   LedgerAttachment,
+  LedgerAttachmentContent,
   LedgerRecordKind,
 } from '@t-box/ledger-contracts'
 import { AppIcon, BottomSheet } from '@t-box/ui-kit'
@@ -35,7 +36,7 @@ async function content(file: LedgerAttachment) {
     return urls.value[file.id]!
   }
   const version = generation
-  const data = await featureApi(props.ledgerId).get(
+  const data = await featureApi(props.ledgerId).get<LedgerAttachmentContent>(
     `/attachments/${file.id}/content`,
   )
   if (version !== generation) {

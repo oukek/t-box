@@ -38,6 +38,7 @@ for (const name of [
   'app-contracts',
   'server-foundation',
   'dayjs',
+  'errors',
   'device-reminders',
 ]) {
   packages.push({ path: resolve(root, 'packages', name), layer: 'sdk' })
@@ -102,7 +103,7 @@ for (const { path, layer } of packages) {
           errors.push(`Browser depends on server code: ${label}`)
         }
         if (
-          ['ui-kit', 'server-foundation', 'dayjs', 'app-contracts'].some(
+          ['ui-kit', 'server-foundation', 'dayjs', 'errors', 'app-contracts'].some(
             (n) => manifest.name === `@t-box/${n}`,
           ) &&
           /^@t-box\/.+-(?:contracts|web|server)$/.test(name) &&

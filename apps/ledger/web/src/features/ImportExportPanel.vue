@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import type { BillCategory, LedgerImportRow } from '@t-box/ledger-contracts'
-import type { FormValues, LedgerFormField } from './form'
-import {
-  parseCsv,
+import type {
+  BillCategory,
+  LedgerBatchResult,
+  LedgerExport,
+  LedgerImportDraft,
+  LedgerImportRow,
 } from '@t-box/ledger-contracts'
+import type { FormValues, LedgerFormField } from './form'
+import { parseCsv } from '@t-box/ledger-contracts'
 import { BottomSheet, SheetSelect } from '@t-box/ui-kit'
 import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
 import { computed, onMounted, ref } from 'vue'
 import { localDate } from '../bills/format'
+import { ErrorCode } from '../error-codes.js'
 import { featureApi, useFeatureAction } from './api'
 import LedgerFormSheet from './LedgerFormSheet.vue'
 
@@ -18,7 +23,7 @@ const csv = ref('')
 const headers = ref<string[]>([])
 const mapping = ref<FormValues>({})
 const mappingOpen = ref(false)
-const draft = ref<any>()
+const draft = ref<LedgerImportDraft>()
 const rows = ref<
   (LedgerImportRow & {
     selected: boolean
@@ -109,7 +114,7 @@ async function file(e: Event) {
     csv.value = await f.text()
     headers.value = parseCsv(csv.value.replace(/^\ufeff/, ''))[0] ?? []
     if (!headers.value.length) {
-      throw new Error('文件没有表头')
+      throw ErrorCode.INTERNAL_CSV_HEADER_REQUIRED()
     }
     mapping.value = Object.fromEntries(
       Object.entries({
@@ -131,7 +136,7 @@ async function file(e: Event) {
 async function preview() {
   const body = { csv: csv.value, mapping: mapping.value }
   const r = await action.run('import-preview', body, (k) =>
-    api.write('/imports', body, 'POST', k))
+    api.write<LedgerImportDraft>('/imports', body, 'POST', k))
   if (r) {
     draft.value = r
     rows.value = r.rows.map((row: LedgerImportRow) => ({
@@ -170,6 +175,9 @@ async function preview() {
   }
 }
 async function commit() {
+  if (!draft.value) {
+    return
+  }
   const chosen = rows.value.filter((r) => r.selected)
   if (!chosen.length) {
     action.error.value = '请至少选择一行'
@@ -181,7 +189,7 @@ async function commit() {
   }
   const path = `/imports/${draft.value.id}/commit`
   const r = await action.run(path, body, (k) =>
-    api.write(path, body, 'POST', k))
+    api.write<LedgerBatchResult>(path, body, 'POST', k))
   if (r) {
     previewOpen.value = false
     action.success.value = `已导入 ${r.items.length} 笔记录`
@@ -204,7 +212,7 @@ async function exportCsv() {
         .filter(([, v]) => v !== '')
         .map(([k, v]) => [k, String(v)]),
     )
-    const result = await api.get('/export?' + params)
+    const result = await api.get<LedgerExport>('/export?' + params)
     download(result.filename, result.csv)
     exportOpen.value = false
   } catch (e) {
@@ -213,7 +221,7 @@ async function exportCsv() {
 }
 onMounted(async () => {
   try {
-    categories.value = await api.get('/categories')
+    categories.value = await api.get<BillCategory[]>('/categories')
   } catch (e) {
     action.error.value = (e as Error).message
   }

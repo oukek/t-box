@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { LedgerAccount } from '@t-box/ledger-contracts'
+import type {
+  LedgerAccount,
+  LedgerAccountEntry,
+  LedgerTransfer,
+} from '@t-box/ledger-contracts'
 import type { FormValues, LedgerFormField } from './form'
 import { BottomSheet } from '@t-box/ui-kit'
 import { computed, onMounted, ref } from 'vue'
@@ -16,13 +20,13 @@ const props = defineProps<{
 const api = featureApi(props.ledgerId)
 const action = useFeatureAction()
 const rows = ref<LedgerAccount[]>([])
-const transfers = ref<any[]>([])
-const entries = ref<any[]>([])
+const transfers = ref<LedgerTransfer[]>([])
+const entries = ref<LedgerAccountEntry[]>([])
 const entryOpen = ref(false)
-const editor = ref<'create' | 'edit' | 'reconcile' | 'transfer' | 'reverse' | null>(
-  null,
-)
-const target = ref<any>()
+const editor = ref<
+  'create' | 'edit' | 'reconcile' | 'transfer' | 'reverse' | null
+>(null)
+const target = ref<{ id: string, name?: string }>()
 const attachmentResourceIds = ref<string[]>([])
 const form = ref<FormValues>({})
 const accountOptions = computed(() =>
@@ -94,44 +98,62 @@ const fields = computed<LedgerFormField[]>(() =>
           : [],
 )
 async function load() {
-  [rows.value, transfers.value] = await Promise.all([
-    api.get('/accounts'),
-    api.get('/transfers'),
+  ;[rows.value, transfers.value] = await Promise.all([
+    api.get<LedgerAccount[]>('/accounts'),
+    api.get<LedgerTransfer[]>('/transfers'),
   ])
 }
-function open(mode: typeof editor.value, row?: any) {
+function open(mode: typeof editor.value, row?: LedgerAccount | LedgerTransfer) {
   target.value = row
   attachmentResourceIds.value = []
   editor.value = mode
   action.error.value = ''
-  form.value =
-    mode === 'create'
-      ? { name: '', kind: 'cash', openingBalance: '0', date: localDate() }
-      : mode === 'edit'
+  if (mode === 'edit' || mode === 'reconcile') {
+    if (!row || !('balance' in row)) {
+      return
+    }
+    form.value =
+      mode === 'edit'
         ? { name: row.name, archived: row.archived }
-        : mode === 'reconcile'
-          ? { balance: row.balance, date: localDate(), note: '' }
-          : mode === 'transfer'
-            ? {
-                fromAccountId: accountOptions.value[0]?.value ?? '',
-                toAccountId: accountOptions.value[1]?.value ?? '',
-                amount: '',
-                date: localDate(),
-                note: '',
-              }
-            : {}
+        : { balance: row.balance, date: localDate(), note: '' }
+  } else if (mode === 'create') {
+    form.value = {
+      name: '',
+      kind: 'cash',
+      openingBalance: '0',
+      date: localDate(),
+    }
+  } else if (mode === 'transfer') {
+    form.value = {
+      fromAccountId: accountOptions.value[0]?.value ?? '',
+      toAccountId: accountOptions.value[1]?.value ?? '',
+      amount: '',
+      date: localDate(),
+      note: '',
+    }
+  } else {
+    form.value = {}
+  }
 }
 async function save() {
   const mode = editor.value
+  if (
+    !mode ||
+    ((mode === 'edit' || mode === 'reconcile' || mode === 'reverse') &&
+      !target.value)
+  ) {
+    return
+  }
+  const targetId = target.value?.id
   const path =
     mode === 'create'
       ? '/accounts'
       : mode === 'edit'
-        ? `/accounts/${target.value.id}`
+        ? `/accounts/${targetId}`
         : mode === 'reconcile'
-          ? `/accounts/${target.value.id}/reconcile`
+          ? `/accounts/${targetId}/reconcile`
           : mode === 'reverse'
-            ? `/transfers/${target.value.id}/reversal`
+            ? `/transfers/${targetId}/reversal`
             : '/transfers'
   const body =
     mode === 'transfer'
@@ -147,7 +169,9 @@ async function save() {
 async function show(row: LedgerAccount) {
   target.value = row
   try {
-    entries.value = await api.get(`/accounts/${row.id}/entries`)
+    entries.value = await api.get<LedgerAccountEntry[]>(
+      `/accounts/${row.id}/entries`,
+    )
     entryOpen.value = true
   } catch (e) {
     action.error.value = (e as Error).message

@@ -25,7 +25,7 @@ erDiagram
 | `admin/src/features` | 服务商、模型、管理员各自页面 |
 | `admin/src/components` | 自研弹窗、可搜索下拉列表与 SVG 图标 |
 | `shared/src/admin.ts` | 无密钥的管理 DTO |
-| `api/src/db` | TypeORM 实体、数据源和显式迁移 |
+| `api/src/db` | TypeORM 实体、数据源、首次建表基线与初始化预检 |
 | `api/src/admin/store.ts` | TypeORM 数据访问、事务与配置锁 |
 | `api/src/admin/auth.ts` | 密码验证、会话、失败限制与撤销 |
 | `api/src/admin/crypto.ts` | 密码摘要及服务商凭据加解密 |

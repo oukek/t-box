@@ -1,9 +1,8 @@
 import type { HolidayYearSnapshot } from '@t-box/calendar-contracts'
-import {
-  parseHolidayDataset,
-} from '@t-box/calendar-contracts'
+import { parseHolidayDataset } from '@t-box/calendar-contracts'
 import { shallowRef } from 'vue'
 import { calendarApi } from './api'
+import { ErrorCode } from './error-codes.js'
 import { application } from './sdk'
 
 interface CachedYear {
@@ -73,7 +72,7 @@ export async function loadHolidayYears(
           }
           const entry = accept({ fetchedAt: Date.now(), snapshot: data }, year)
           if (!entry) {
-            throw new Error('节假日年度数据格式无效')
+            throw ErrorCode.INTERNAL_INVALID_HOLIDAY_YEAR()
           }
           update(entry)
           try {

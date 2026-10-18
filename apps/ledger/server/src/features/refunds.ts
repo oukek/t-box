@@ -1,8 +1,20 @@
+import type {
+  LedgerReimbursement,
+  LedgerReimbursementReceipt,
+} from '@t-box/ledger-contracts'
 import type { Principal } from '../ledgers/types.js'
 import { randomUUID } from 'node:crypto'
 import { invalid } from '@t-box/server-foundation/errors'
+import { sqlClock } from '@t-box/server-foundation/persistence/columns'
+import { IsNull } from 'typeorm'
+import { BillEntity } from '../entities.js'
 import { amount, cents } from '../finance/money.js'
 import { date, note, object, text } from '../ledgers/validation.js'
+import {
+  LedgerRefundEntity,
+  LedgerReimbursementEntity,
+  LedgerReimbursementReceiptEntity,
+} from '../persistence/refunds-entities.js'
 import { project } from '../statistics/projection.js'
 import { parseId } from '../validation.js'
 import { activeAccount, postAccount } from './account-posting.js'
@@ -35,16 +47,51 @@ export class RefundService extends FeatureService {
       'refund.created',
       v,
       async (db) => {
-        const [r] = await db.query(
-          'SELECT * FROM bills WHERE ledger_id=? AND id=? AND deleted_at IS NULL',
-          [book, billId],
-        )
+        const r = await db
+          .getRepository(BillEntity)
+          .findOne({
+            select: {
+              id: true,
+              ledgerId: true,
+              createdBy: true,
+              accountId: true,
+              deletedAt: true,
+              type: true,
+              amount: true,
+              category: true,
+              date: true,
+              note: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+            where: { ledgerId: book, id: billId, deletedAt: IsNull() },
+          })
+          .then((row) =>
+            row
+              ? {
+                  id: row.id,
+                  ledger_id: row.ledgerId,
+                  created_by: row.createdBy,
+                  account_id: row.accountId,
+                  deleted_at:
+                    row.deletedAt === null ? null : sqlClock(row.deletedAt),
+                  type: row.type,
+                  amount: row.amount,
+                  category: row.category,
+                  bill_date: row.date,
+                  note: row.note,
+                  created_at: sqlClock(row.createdAt),
+                  updated_at: sqlClock(row.updatedAt),
+                }
+              : null,
+          )
         if (!r || r.type !== 'expense') {
           invalid('billId', '请选择此账本的支出账单')
         }
         if (d < r.bill_date) {
           invalid('date', '退款日期不能早于消费日期')
         }
+        // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
         const [total] = await db.query(
           'SELECT (SELECT COALESCE(SUM(amount),0) FROM ledger_refunds WHERE ledger_id=? AND bill_id=? AND reversed=FALSE)+(SELECT COALESCE(SUM(amount),0) FROM ledger_reimbursements WHERE ledger_id=? AND bill_id=? AND status<>\'cancelled\') AS amount',
           [book, billId, book, billId],
@@ -54,10 +101,16 @@ export class RefundService extends FeatureService {
         }
         await activeAccount(db, book, account)
         const id = randomUUID()
-        await db.query(
-          'INSERT INTO ledger_refunds(id,ledger_id,bill_id,amount,refund_date,note,account_id,created_by) VALUES(?,?,?,?,?,?,?,?)',
-          [id, book, billId, sum, d, n, account, actor.user.id],
-        )
+        await db.getRepository(LedgerRefundEntity).insert({
+          id,
+          ledger_id: book,
+          bill_id: billId,
+          amount: sum,
+          refund_date: d,
+          note: n,
+          account_id: account,
+          created_by: actor.user.id,
+        })
         await project(db, book, {
           subjectId: id,
           kind: 'refund',
@@ -98,10 +151,16 @@ export class RefundService extends FeatureService {
       'refund.reversed',
       { id },
       async (db, a) => {
-        const [r] = await db.query(
-          'SELECT r.*,b.category FROM ledger_refunds r JOIN bills b ON b.id=r.bill_id WHERE r.ledger_id=? AND r.id=?',
-          [book, id],
-        )
+        const [r] = await db
+          .createQueryBuilder()
+          .select(
+            'r.id,r.ledger_id,r.bill_id,r.amount,r.refund_date,r.note,r.account_id,r.reversed,r.created_by,r.created_at,b.category',
+          )
+          .from('ledger_refunds', 'r')
+          .innerJoin('bills', 'b', 'b.id=r.bill_id')
+          .where('r.ledger_id=:p0 AND r.id=:p1')
+          .setParameters({ p0: book, p1: id })
+          .getRawMany()
         if (!r) {
           notFound()
         }
@@ -109,9 +168,9 @@ export class RefundService extends FeatureService {
         if (Number(r.reversed)) {
           return { id }
         }
-        await db.query('UPDATE ledger_refunds SET reversed=TRUE WHERE id=?', [
-          id,
-        ])
+        await db
+          .getRepository(LedgerRefundEntity)
+          .update({ id }, { reversed: true })
         await project(db, book, {
           subjectId: id,
           kind: 'correction',
@@ -160,13 +219,53 @@ export class RefundService extends FeatureService {
       'reimbursement.requested',
       v,
       async (db) => {
-        const [b] = await db.query(
-          'SELECT * FROM bills WHERE ledger_id=? AND id=? AND deleted_at IS NULL AND type=\'expense\'',
-          [book, billId],
-        )
+        const b = await db
+          .getRepository(BillEntity)
+          .findOne({
+            select: {
+              id: true,
+              ledgerId: true,
+              createdBy: true,
+              accountId: true,
+              deletedAt: true,
+              type: true,
+              amount: true,
+              category: true,
+              date: true,
+              note: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+            where: {
+              ledgerId: book,
+              id: billId,
+              deletedAt: IsNull(),
+              type: 'expense',
+            },
+          })
+          .then((row) =>
+            row
+              ? {
+                  id: row.id,
+                  ledger_id: row.ledgerId,
+                  created_by: row.createdBy,
+                  account_id: row.accountId,
+                  deleted_at:
+                    row.deletedAt === null ? null : sqlClock(row.deletedAt),
+                  type: row.type,
+                  amount: row.amount,
+                  category: row.category,
+                  bill_date: row.date,
+                  note: row.note,
+                  created_at: sqlClock(row.createdAt),
+                  updated_at: sqlClock(row.updatedAt),
+                }
+              : null,
+          )
         if (!b) {
           invalid('billId', '请选择支出账单')
         }
+        // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
         const [t] = await db.query(
           'SELECT (SELECT COALESCE(SUM(amount),0) FROM ledger_refunds WHERE ledger_id=? AND bill_id=? AND reversed=FALSE)+(SELECT COALESCE(SUM(amount),0) FROM ledger_reimbursements WHERE ledger_id=? AND bill_id=? AND status<>\'cancelled\') AS amount',
           [book, billId, book, billId],
@@ -175,10 +274,14 @@ export class RefundService extends FeatureService {
           invalid('amount', '报销与退款合计不能超过原支出')
         }
         const id = randomUUID()
-        await db.query(
-          'INSERT INTO ledger_reimbursements(id,ledger_id,bill_id,counterparty,amount,created_by) VALUES(?,?,?,?,?,?)',
-          [id, book, billId, party, sum, actor.user.id],
-        )
+        await db.getRepository(LedgerReimbursementEntity).insert({
+          id,
+          ledger_id: book,
+          bill_id: billId,
+          counterparty: party,
+          amount: sum,
+          created_by: actor.user.id,
+        })
         await project(db, book, {
           subjectId: id,
           kind: 'reimbursement',
@@ -223,10 +326,16 @@ export class RefundService extends FeatureService {
       'reimbursement.received',
       { id, ...v },
       async (db) => {
-        const [r] = await db.query(
-          'SELECT r.*,b.category,b.bill_date FROM ledger_reimbursements r JOIN bills b ON b.id=r.bill_id WHERE r.ledger_id=? AND r.id=?',
-          [book, id],
-        )
+        const [r] = await db
+          .createQueryBuilder()
+          .select(
+            'r.id,r.ledger_id,r.bill_id,r.counterparty,r.amount,r.received,r.status,r.created_by,r.created_at,b.category,b.bill_date',
+          )
+          .from('ledger_reimbursements', 'r')
+          .innerJoin('bills', 'b', 'b.id=r.bill_id')
+          .where('r.ledger_id=:p0 AND r.id=:p1')
+          .setParameters({ p0: book, p1: id })
+          .getRawMany()
         if (!r) {
           notFound()
         }
@@ -241,14 +350,27 @@ export class RefundService extends FeatureService {
         }
         await activeAccount(db, book, account)
         const receipt = randomUUID()
-        await db.query(
-          'INSERT INTO ledger_reimbursement_receipts(id,ledger_id,reimbursement_id,amount,receipt_date,account_id,note,created_by) VALUES(?,?,?,?,?,?,?,?)',
-          [receipt, book, id, sum, d, account, n, actor.user.id],
-        )
-        await db.query(
-          'UPDATE ledger_reimbursements SET received=received+?,status=IF(received=amount,\'received\',\'partial\') WHERE id=?',
-          [sum, id],
-        )
+        await db.getRepository(LedgerReimbursementReceiptEntity).insert({
+          id: receipt,
+          ledger_id: book,
+          reimbursement_id: id,
+          amount: sum,
+          receipt_date: d,
+          account_id: account,
+          note: n,
+          created_by: actor.user.id,
+        })
+        await db
+          .createQueryBuilder()
+          .update('ledger_reimbursements')
+          .set({
+            received: () => 'received+:p0',
+            status: () => 'IF(received=amount,\'received\',\'partial\')',
+          })
+          .updateEntity(false)
+          .where('id=:p1')
+          .setParameters({ p0: sum, p1: id })
+          .execute()
         await project(db, book, {
           subjectId: receipt,
           kind: 'reimbursement',
@@ -276,12 +398,38 @@ export class RefundService extends FeatureService {
     )
   }
 
-  async receipts(actor: Principal, book: string, id: string) {
+  async receipts(
+    actor: Principal,
+    book: string,
+    id: string,
+  ): Promise<LedgerReimbursementReceipt[]> {
     await this.read(actor, book)
-    return this.db.query(
-      'SELECT id,amount,receipt_date AS date,account_id AS accountId,note,reversed,created_by AS createdBy FROM ledger_reimbursement_receipts WHERE ledger_id=? AND reimbursement_id=? ORDER BY created_at DESC',
-      [book, id],
-    )
+    return this.db
+      .getRepository(LedgerReimbursementReceiptEntity)
+      .find({
+        select: {
+          id: true,
+          amount: true,
+          receipt_date: true,
+          account_id: true,
+          note: true,
+          reversed: true,
+          created_by: true,
+        },
+        where: { ledger_id: book, reimbursement_id: id },
+        order: { created_at: 'DESC' },
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          amount: row.amount,
+          date: row.receipt_date,
+          accountId: row.account_id,
+          note: row.note,
+          reversed: Boolean(Number(row.reversed)),
+          createdBy: row.created_by,
+        })),
+      )
   }
 
   async reverseReceipt(
@@ -297,10 +445,17 @@ export class RefundService extends FeatureService {
       'reimbursement.receipt_reversed',
       { id },
       async (db, a) => {
-        const [r] = await db.query(
-          'SELECT t.*,r.bill_id,b.category FROM ledger_reimbursement_receipts t JOIN ledger_reimbursements r ON r.id=t.reimbursement_id JOIN bills b ON b.id=r.bill_id WHERE t.ledger_id=? AND t.id=?',
-          [book, id],
-        )
+        const [r] = await db
+          .createQueryBuilder()
+          .select(
+            't.id,t.ledger_id,t.reimbursement_id,t.amount,t.receipt_date,t.account_id,t.note,t.reversed,t.created_by,t.created_at,r.bill_id,b.category',
+          )
+          .from('ledger_reimbursement_receipts', 't')
+          .innerJoin('ledger_reimbursements', 'r', 'r.id=t.reimbursement_id')
+          .innerJoin('bills', 'b', 'b.id=r.bill_id')
+          .where('t.ledger_id=:p0 AND t.id=:p1')
+          .setParameters({ p0: book, p1: id })
+          .getRawMany()
         if (!r) {
           notFound()
         }
@@ -308,14 +463,20 @@ export class RefundService extends FeatureService {
         if (Number(r.reversed)) {
           return { id }
         }
-        await db.query(
-          'UPDATE ledger_reimbursement_receipts SET reversed=TRUE WHERE id=?',
-          [id],
-        )
-        await db.query(
-          'UPDATE ledger_reimbursements SET received=received-?,status=IF(received=0,\'requested\',\'partial\') WHERE id=?',
-          [r.amount, r.reimbursement_id],
-        )
+        await db
+          .getRepository(LedgerReimbursementReceiptEntity)
+          .update({ id }, { reversed: true })
+        await db
+          .createQueryBuilder()
+          .update('ledger_reimbursements')
+          .set({
+            received: () => 'received-:p0',
+            status: () => 'IF(received=0,\'requested\',\'partial\')',
+          })
+          .updateEntity(false)
+          .where('id=:p1')
+          .setParameters({ p0: r.amount, p1: r.reimbursement_id })
+          .execute()
         await project(db, book, {
           subjectId: id,
           kind: 'correction',
@@ -356,10 +517,16 @@ export class RefundService extends FeatureService {
       'reimbursement.cancelled',
       { id },
       async (db, a) => {
-        const [r] = await db.query(
-          'SELECT r.*,b.bill_date FROM ledger_reimbursements r JOIN bills b ON b.id=r.bill_id WHERE r.ledger_id=? AND r.id=?',
-          [book, id],
-        )
+        const [r] = await db
+          .createQueryBuilder()
+          .select(
+            'r.id,r.ledger_id,r.bill_id,r.counterparty,r.amount,r.received,r.status,r.created_by,r.created_at,b.bill_date',
+          )
+          .from('ledger_reimbursements', 'r')
+          .innerJoin('bills', 'b', 'b.id=r.bill_id')
+          .where('r.ledger_id=:p0 AND r.id=:p1')
+          .setParameters({ p0: book, p1: id })
+          .getRawMany()
         if (!r) {
           notFound()
         }
@@ -370,10 +537,9 @@ export class RefundService extends FeatureService {
         if (cents(r.received) > 0n) {
           invalid('reimbursement', '请先撤销所有到账记录，再取消报销申请')
         }
-        await db.query(
-          'UPDATE ledger_reimbursements SET status=\'cancelled\' WHERE id=?',
-          [id],
-        )
+        await db
+          .getRepository(LedgerReimbursementEntity)
+          .update({ id }, { status: 'cancelled' })
         await project(db, book, {
           subjectId: id,
           kind: 'correction',
@@ -387,11 +553,37 @@ export class RefundService extends FeatureService {
     )
   }
 
-  async listReimbursements(actor: Principal, book: string) {
+  async listReimbursements(
+    actor: Principal,
+    book: string,
+  ): Promise<LedgerReimbursement[]> {
     await this.read(actor, book)
-    return this.db.query(
-      'SELECT id,bill_id AS billId,counterparty,amount,received,status,created_by AS createdBy FROM ledger_reimbursements WHERE ledger_id=? ORDER BY created_at DESC LIMIT 1000',
-      [book],
-    )
+    return this.db
+      .getRepository(LedgerReimbursementEntity)
+      .find({
+        select: {
+          id: true,
+          bill_id: true,
+          counterparty: true,
+          amount: true,
+          received: true,
+          status: true,
+          created_by: true,
+        },
+        where: { ledger_id: book },
+        order: { created_at: 'DESC' },
+        take: 1000,
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          billId: row.bill_id,
+          counterparty: row.counterparty,
+          amount: row.amount,
+          received: row.received,
+          status: row.status,
+          createdBy: row.created_by,
+        })),
+      )
   }
 }

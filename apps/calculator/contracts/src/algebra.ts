@@ -1,20 +1,17 @@
 import type { CalculationResult } from './types.js'
-import {
-  CalculationError,
-  formatNumber as f,
-  numeric,
-} from './types.js'
+import { CalculationErrorCode } from './error-codes.js'
+import { formatNumber as f, numeric } from './types.js'
 
 export function numberList(
   source: string | null | undefined,
   max = 1000,
 ): number[] {
   if (typeof source !== 'string' || source.length > 16000) {
-    throw new CalculationError('数字列表为空或过长')
+    throw CalculationErrorCode.INVALID_CALCULATION('数字列表为空或过长')
   }
   const parts = source.trim().split(/[\s,，;；]+/)
   if (!source.trim() || parts.length > max) {
-    throw new CalculationError(`请输入 1 至 ${max} 个数字`)
+    throw CalculationErrorCode.INVALID_CALCULATION(`请输入 1 至 ${max} 个数字`)
   }
   return parts.map((p) => numeric(p, '列表元素'))
 }
@@ -54,11 +51,7 @@ export function calculateAlgebra(
     const q = -0.5 * (bb + (bb < 0 ? -1 : 1) * Math.sqrt(disc))
     const x1 = q / aa
     const x2 = q === 0 ? 0 : cc / q
-    return [
-      item('x₁', x1),
-      item('x₂', x2),
-      item('判别式 Δ', b * b - 4 * a * c),
-    ]
+    return [item('x₁', x1), item('x₂', x2), item('判别式 Δ', b * b - 4 * a * c)]
   }
   if (kind === 'linear') {
     const a = n('a1')
@@ -84,7 +77,9 @@ export function calculateAlgebra(
       ]
     }
     if (Math.abs(det) <= scale * 1e-12) {
-      throw new CalculationError('系数矩阵接近奇异，无法可靠求解')
+      throw CalculationErrorCode.INVALID_CALCULATION(
+        '系数矩阵接近奇异，无法可靠求解',
+      )
     }
     return [item('x', (c * e - b * g) / det), item('y', (a * g - c * d) / det)]
   }
@@ -107,12 +102,12 @@ export function calculateAlgebra(
     } else if (v.operation === 'divide') {
       const den = c * c + d * d
       if (den === 0) {
-        throw new CalculationError('不能除以零复数')
+        throw CalculationErrorCode.INVALID_CALCULATION('不能除以零复数')
       }
       real = (a * c + b * d) / den
       imag = (b * c - a * d) / den
     } else {
-      throw new CalculationError('复数运算方式无效')
+      throw CalculationErrorCode.INVALID_CALCULATION('复数运算方式无效')
     }
     const angle = Math.atan2(imag, real)
     return [
@@ -131,7 +126,7 @@ export function calculateAlgebra(
     const a = numberList(v.a, 20)
     const b = numberList(v.b, 20)
     if (a.length !== b.length) {
-      throw new CalculationError('两个向量的维度需一致')
+      throw CalculationErrorCode.INVALID_CALCULATION('两个向量的维度需一致')
     }
     const dot = a.reduce((s, x, i) => s + x * b[i]!, 0)
     const an = Math.hypot(...a)
@@ -181,7 +176,7 @@ export function calculateAlgebra(
       ]
     }
     if (v.type !== 'geometric') {
-      throw new CalculationError('数列类型无效')
+      throw CalculationErrorCode.INVALID_CALCULATION('数列类型无效')
     }
     let sum = 0
     let term = a

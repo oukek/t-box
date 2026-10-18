@@ -8,7 +8,6 @@ import type { TimeService } from './service.js'
 import { APPLICATION_CONTRACT_VERSION } from '@t-box/app-contracts'
 import { definition, nullable } from '@t-box/app-server-sdk'
 import { calendarObject } from '@t-box/calendar-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { temporalDomain } from '@t-box/server-foundation/persistence/errors'
 import { fingerprint } from '@t-box/server-foundation/persistence/operations'
 import {
@@ -18,13 +17,14 @@ import {
   timeManifest,
   timeSnapshot,
 } from '@t-box/time-contracts'
+import { ErrorCode } from './error-codes.js'
 
 export function timeAccessAdapter(service: TimeService): ResourceAdapter {
   return {
     appId: 'time',
     async inspect(actor, ref, action) {
       if (ref.resourceType !== 'timer' || !['read', 'write'].includes(action)) {
-        throw new ApiError(400, 'INVALID_SCOPE', '不支持的时间资源')
+        throw ErrorCode.INVALID_SCOPE('不支持的时间资源')
       }
       await service.get(actor.user.id, ref.resourceId)
       return {}
@@ -34,7 +34,7 @@ export function timeAccessAdapter(service: TimeService): ResourceAdapter {
 export function createTimeModule(service?: TimeService): ApplicationModule {
   const user = (ctx: ApplicationToolContext) => {
     if (!service || !ctx.actor) {
-      throw new ApiError(503, 'TIME_UNAVAILABLE', '请登录后使用时间应用')
+      throw ErrorCode.TIME_UNAVAILABLE()
     }
     ctx.signal.throwIfAborted()
     return ctx.actor.user.id

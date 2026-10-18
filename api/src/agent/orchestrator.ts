@@ -9,9 +9,9 @@ import type { SessionRun } from '../chat/session.js'
 import type { AgentFrame, RunCheckpoint } from './checkpoint.js'
 import type { AgentRuntimeOptions, ToolContext } from './contracts.js'
 import { randomUUID } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { resolveContextPolicy } from '@t-box/shared'
 import { settingNumber } from '../configuration/defaults.js'
+import { ErrorCode } from '../error-codes.js'
 import { discoveryTools } from './capability-loading.js'
 import { receiptCompletion } from './completion.js'
 import { prepareContext } from './context.js'
@@ -43,11 +43,20 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
       .finally(() => signal.removeEventListener('abort', abort))
   })
 }
-const output = (frame: AgentFrame, call: ModelCall, result: ToolResult, configuration?: import('@t-box/shared').ConfigurationSnapshot) => {
+const output = (
+  frame: AgentFrame,
+  call: ModelCall,
+  result: ToolResult,
+  configuration?: import('@t-box/shared').ConfigurationSnapshot,
+) => {
   frame.history.push({
     type: 'function_call_output',
     call_id: call.id,
-    output: JSON.stringify(frame.capabilities ? modelToolResult(result, call.id, configuration) : result),
+    output: JSON.stringify(
+      frame.capabilities
+        ? modelToolResult(result, call.id, configuration)
+        : result,
+    ),
   })
   frame.calls.shift()
 }
@@ -77,16 +86,27 @@ export async function orchestrate(
     const scope = options.registry.agentScope(frame.agentId)
     const contextPolicy = resolveContextPolicy(provider.contextPolicy)
     const inputBudget = contextPolicy.contextWindowTokens
-      ? Math.min(contextPolicy.maxInputTokens, contextPolicy.contextWindowTokens - (provider.maxOutputTokens ?? 8192) - 1024)
+      ? Math.min(
+          contextPolicy.maxInputTokens,
+          contextPolicy.contextWindowTokens -
+          (provider.maxOutputTokens ?? 8192) -
+          1024,
+        )
       : contextPolicy.maxInputTokens
     const current: ToolContext = {
       modulePins: state.modulePins,
       ...ctx,
       agentId: frame.agentId,
       skills: new Set(frame.skills),
-      capabilities: state.capabilityLoading === 'deferred'
-        ? (frame.capabilities ||= { loadedTools: [], applications: scope ? [scope.agent.moduleId] : state.applicationIds })
-        : undefined,
+      capabilities:
+        state.capabilityLoading === 'deferred'
+          ? (frame.capabilities ||= {
+              loadedTools: [],
+              applications: scope
+                ? [scope.agent.moduleId]
+                : state.applicationIds,
+            })
+          : undefined,
       toolSchemaBudget: Math.max(1024, Math.floor(inputBudget / 4)),
       capabilityAvailability: {},
       toolAllowlist: scope?.tools,
@@ -122,7 +142,7 @@ export async function orchestrate(
       const parent = state.frames.at(-1)!
       const call = parent.calls[0]!
       if (call.id !== frame.parentCallId) {
-        throw new Error('Invalid delegation checkpoint')
+        throw ErrorCode.INTERNAL_INVALID_DELEGATION_CHECKPOINT()
       }
       const result: ToolResult = {
         ok: true,
@@ -167,11 +187,7 @@ export async function orchestrate(
             !args.task.trim() ||
             args.task.length > 2000
           ) {
-            throw new ApiError(
-              400,
-              'INVALID_ARGUMENTS',
-              '请提供明确的专业 Agent 子任务',
-            )
+            throw ErrorCode.INVALID_ARGUMENTS('请提供明确的专业 Agent 子任务')
           }
           const child = options.registry.agentScope(args.agentId)
           if (
@@ -179,16 +195,12 @@ export async function orchestrate(
             state.delegations >=
             settingNumber(state.configuration, 'ai.run.delegations', 4)
           ) {
-            throw new ApiError(
-              400,
-              'DELEGATION_LIMIT',
-              '专业 Agent 委派次数已达上限',
-            )
+            throw ErrorCode.DELEGATION_LIMIT()
           }
           if (ctx.session.calls.has(call.id)) {
             const prior = ctx.session.calls.get(call.id)!
             if (prior.fingerprint !== `${call.name}:${call.arguments}`) {
-              throw new ApiError(409, 'CALL_ID_CONFLICT', '工具调用标识冲突')
+              throw ErrorCode.CALL_ID_CONFLICT()
             }
             output(frame, call, prior.result, state.configuration)
             await save()
@@ -228,14 +240,28 @@ export async function orchestrate(
             (history[0] as { content: string }).content,
             user.attachments || [],
           )
-          const childTools = frame.capabilities?.loadedTools.filter((name) => child.tools.has(name)) || []
+          const childTools =
+            frame.capabilities?.loadedTools.filter((name) =>
+              child.tools.has(name),
+            ) || []
           state.frames.push({
             agentId: child.agent.id,
             history,
-            skills: state.capabilityLoading === 'deferred'
-              ? [...child.skills].filter((id) => options.registry.skills[id]!.tools.some((name) => childTools.includes(name)))
-              : [...child.skills],
-            capabilities: state.capabilityLoading === 'deferred' ? { loadedTools: childTools, applications: [child.agent.moduleId] } : undefined,
+            skills:
+              state.capabilityLoading === 'deferred'
+                ? [...child.skills].filter((id) =>
+                    options.registry.skills[id]!.tools.some((name) =>
+                      childTools.includes(name),
+                    ),
+                  )
+                : [...child.skills],
+            capabilities:
+              state.capabilityLoading === 'deferred'
+                ? {
+                    loadedTools: childTools,
+                    applications: [child.agent.moduleId],
+                  }
+                : undefined,
             rounds: 0,
             calls: [],
             content: '',
@@ -296,21 +322,20 @@ export async function orchestrate(
     }
     if (
       (!flow || flow.phase === 'execution') &&
-      (frame.rounds >=
-        settingNumber(
-          state.configuration,
-          'ai.run.agentRounds',
-          options.maxToolRounds ?? 8,
-        ))
-    ) {
-      throw new ApiError(
-        409,
-        'TOOL_ROUND_LIMIT',
-        '任务调用轮数已达上限，请结束后新建任务',
+      frame.rounds >=
+      settingNumber(
+        state.configuration,
+        'ai.run.agentRounds',
+        options.maxToolRounds ?? 8,
       )
+    ) {
+      throw ErrorCode.TOOL_ROUND_LIMIT()
     }
-    if (state.totalRounds >= settingNumber(state.configuration, 'ai.run.totalRounds', 24)) {
-      throw new ApiError(409, 'TOOL_ROUND_LIMIT', '任务调用轮数已达上限，请结束后新建任务')
+    if (
+      state.totalRounds >=
+      settingNumber(state.configuration, 'ai.run.totalRounds', 24)
+    ) {
+      throw ErrorCode.TOOL_ROUND_LIMIT()
     }
     // Checkpoint before provider work; incomplete streaming output is never replayed as a committed turn.
     await save()
@@ -454,7 +479,13 @@ export async function orchestrate(
               boundedToolHistory(frame.history, current),
             )
           : boundedToolHistory(frame.history, current),
-      tools: flow ? phaseTools(flow.phase, businessTools, state.capabilityLoading === 'deferred') : businessTools,
+      tools: flow
+        ? phaseTools(
+            flow.phase,
+            businessTools,
+            state.capabilityLoading === 'deferred',
+          )
+        : businessTools,
       toolChoice:
         flow?.phase === 'analysis' && state.capabilityLoading !== 'deferred'
           ? { type: 'function', name: 'workflow_plan' }
@@ -468,13 +499,19 @@ export async function orchestrate(
         baseInstructions +
         (flow
           ? '\n' +
-          phaseInstructions(state.workflow!, flow, catalog, {
-            tools: receipts.map((receipt) => ({
-              ...receipt,
-              result: receiptEvidence(receipt.result),
-            })),
-            resources: message.attachments || [],
-          }, state.capabilityLoading === 'deferred')
+          phaseInstructions(
+            state.workflow!,
+            flow,
+            catalog,
+            {
+              tools: receipts.map((receipt) => ({
+                ...receipt,
+                result: receiptEvidence(receipt.result),
+              })),
+              resources: message.attachments || [],
+            },
+            state.capabilityLoading === 'deferred',
+          )
           : ''),
       localDate: state.localDate,
       signal: run.abort.signal,
@@ -678,11 +715,7 @@ export async function orchestrate(
             turn.calls.length > 8 ||
             JSON.stringify(turn.output).length > 400_000
           ) {
-            throw new ApiError(
-              502,
-              'PROVIDER_OUTPUT_LIMIT',
-              '模型返回超过大小限制',
-            )
+            throw ErrorCode.PROVIDER_OUTPUT_LIMIT()
           }
           return turn
         },
@@ -692,14 +725,10 @@ export async function orchestrate(
     )
     run.abort.signal.throwIfAborted()
     if (turn.calls.length > 8 || JSON.stringify(turn.output).length > 400_000) {
-      throw new ApiError(502, 'PROVIDER_OUTPUT_LIMIT', '模型返回超过大小限制')
+      throw ErrorCode.PROVIDER_OUTPUT_LIMIT()
     }
     if (turn.calls.some((c) => !/^[-\w]{1,100}$/.test(c.id))) {
-      throw new ApiError(
-        502,
-        'PROVIDER_CALL_INVALID',
-        '模型返回无效的工具调用标识',
-      )
+      throw ErrorCode.PROVIDER_CALL_INVALID()
     }
     // Reconcile completed public output when a compatible service omits some/all deltas.
     // Encrypted reasoning stays exclusively in the internal provider history.
@@ -737,8 +766,8 @@ export async function orchestrate(
         publicText(phaseTextId, fullText, false)
       } else if (replyPhase || textIds.has(textKey())) {
         publicText(textKey(), fullText, false)
-      // Chat adapters can stream a provider-specific item ID while their final
-      // canonical message has no ID. Reuse the single stream item, not a second answer.
+        // Chat adapters can stream a provider-specific item ID while their final
+        // canonical message has no ID. Reuse the single stream item, not a second answer.
       } else if (textIds.size === 1) {
         publicText([...textIds][0]!, fullText, false)
       } else {
@@ -776,12 +805,23 @@ export async function orchestrate(
     // Provider receipts are temporary replay protection until this logical turn commits.
     delete frame.modelRequests
     state.totalRounds++
-    if (flow && state.capabilityLoading === 'deferred' && turn.calls.length && ['dispatch', 'analysis', 'review'].includes(flow.phase)) {
-      const permitted = flow.phase === 'review' ? new Set(['tool_result_read', 'conversation_history_read']) : discoveryTools
+    if (
+      flow &&
+      state.capabilityLoading === 'deferred' &&
+      turn.calls.length &&
+      ['dispatch', 'analysis', 'review'].includes(flow.phase)
+    ) {
+      const permitted =
+        flow.phase === 'review'
+          ? new Set(['tool_result_read', 'conversation_history_read'])
+          : discoveryTools
       if (turn.calls.every((call) => permitted.has(call.name))) {
         frame.discoveryRounds = (frame.discoveryRounds || 0) + 1
-        if (frame.discoveryRounds > settingNumber(state.configuration, 'ai.tools.discoveryRounds', 12)) {
-          throw new ApiError(409, 'CAPABILITY_DISCOVERY_LIMIT', '能力检索次数已达上限，请明确需要使用的应用或缩小任务范围')
+        if (
+          frame.discoveryRounds >
+          settingNumber(state.configuration, 'ai.tools.discoveryRounds', 12)
+        ) {
+          throw ErrorCode.CAPABILITY_DISCOVERY_LIMIT()
         }
         frame.history.push(...turn.output)
         frame.calls = [...turn.calls]
@@ -824,11 +864,7 @@ export async function orchestrate(
             flow.reviews >=
             settingNumber(state.configuration, 'ai.run.reviews', 3)
           ) {
-            throw new ApiError(
-              409,
-              'WORKFLOW_REVIEW_LIMIT',
-              '任务核对多次仍未完成，请检查工具执行结果',
-            )
+            throw ErrorCode.WORKFLOW_REVIEW_LIMIT()
           }
           flow.phase =
             flow.review.action === 'continue' ? 'execution' : 'answer'
@@ -857,18 +893,10 @@ export async function orchestrate(
       }
       if (phase === 'answer' || phase === 'dispatch') {
         if (turn.calls.length) {
-          throw new ApiError(
-            502,
-            'WORKFLOW_UNEXPECTED_TOOL',
-            '模型在最终回复阶段返回了工具调用，未执行',
-          )
+          throw ErrorCode.WORKFLOW_UNEXPECTED_TOOL()
         }
         if (!turnContent.trim()) {
-          throw new ApiError(
-            502,
-            'PROVIDER_EMPTY_ANSWER',
-            '模型未返回有效回复',
-          )
+          throw ErrorCode.PROVIDER_EMPTY_ANSWER()
         }
         frame.content = turnContent
         frame.history.push(...turn.output)

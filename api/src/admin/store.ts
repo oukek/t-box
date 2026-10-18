@@ -4,10 +4,21 @@ import type {
   AIProviderConfig,
   AISettings,
 } from '@t-box/shared'
-import type { DataSource, EntityManager } from 'typeorm'
+import type {
+  DataSource,
+  EntityManager,
+  EntityTarget,
+  ObjectLiteral,
+} from 'typeorm'
 import { randomUUID } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
-import { AdminUserEntity, ProviderEntity } from '../db/entities.js'
+import {
+  AdminUserEntity,
+  ProviderEntity,
+  SettingsEntity,
+} from '../db/entities.js'
+import { PlatformConfigurationStateEntity } from '../db/records/configuration-entities.js'
+import { AiModelPoolEntity } from '../db/records/models-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { contextPolicy } from './context-policy.js'
 
 export interface ProviderSecret extends AIProviderConfig {
@@ -19,50 +30,72 @@ export class AdminStore {
     private readonly manager: EntityManager = source.manager,
   ) {}
 
-  async rows<T>(
-    sql: string,
-    values: (string | number | boolean | null | Date)[] = [],
-  ): Promise<T[]> {
-    return this.manager.query(sql, values) as Promise<T[]>
+  queryBuilder() {
+    return this.manager.createQueryBuilder()
   }
 
-  async execute(
-    sql: string,
-    values: (string | number | boolean | null | Date)[] = [],
-  ) {
-    return this.manager.query(sql, values)
+  repository<T extends ObjectLiteral>(entity: EntityTarget<T>) {
+    return this.manager.getRepository(entity)
   }
 
   async providers(): Promise<AIProviderConfig[]> {
     const rows = await this.manager
       .getRepository(ProviderEntity)
       .find({ order: { createdAt: 'ASC', id: 'ASC' } })
-    return rows.map(({ id, name, baseUrl, enabled, revision, maxConcurrency }) => ({
-      id,
-      name,
-      baseUrl,
-      enabled,
-      revision,
-      hasKey: true,
-      maxConcurrency,
-    }))
+    return rows.map(
+      ({ id, name, baseUrl, enabled, revision, maxConcurrency }) => ({
+        id,
+        name,
+        baseUrl,
+        enabled,
+        revision,
+        hasKey: true,
+        maxConcurrency,
+      }),
+    )
   }
 
   async provider(id: string): Promise<ProviderSecret> {
-    const rows = await this.rows<ProviderSecret>(
-      'SELECT id,name,base_url AS baseUrl,enabled,revision,max_concurrency AS maxConcurrency,key_cipher AS keyCipher FROM ai_providers WHERE id=?',
-      [id],
-    )
+    const rows = await this.repository(ProviderEntity)
+      .find({
+        select: {
+          id: true,
+          name: true,
+          baseUrl: true,
+          enabled: true,
+          revision: true,
+          maxConcurrency: true,
+          keyCipher: true,
+        },
+        where: { id },
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          baseUrl: row.baseUrl,
+          enabled: row.enabled,
+          revision: row.revision,
+          maxConcurrency: row.maxConcurrency,
+          keyCipher: row.keyCipher,
+        })),
+      )
     if (!rows[0]) {
-      throw new ApiError(404, 'PROVIDER_NOT_FOUND', '服务商不存在')
+      throw ErrorCode.PROVIDER_NOT_FOUND()
     }
     return { ...rows[0], enabled: Boolean(rows[0].enabled), hasKey: true }
   }
 
   async models(): Promise<AIModelConfig[]> {
-    const rows = await this.rows<AIModelConfig>(
-      'SELECT m.id,m.provider_id AS providerId,p.name AS providerName,m.model_id AS modelId,m.name,m.enabled,m.max_concurrency AS maxConcurrency,m.purpose,m.invocation_mode AS invocationMode,m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy FROM ai_models m JOIN ai_providers p ON p.id=m.provider_id ORDER BY m.name,m.id',
-    )
+    const rows = await this.queryBuilder()
+      .select(
+        'm.id,m.provider_id AS providerId,p.name AS providerName,m.model_id AS modelId,m.name,m.enabled,m.max_concurrency AS maxConcurrency,m.purpose,m.invocation_mode AS invocationMode,m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy',
+      )
+      .from('ai_models', 'm')
+      .innerJoin('ai_providers', 'p', 'p.id=m.provider_id')
+      .orderBy('m.name', 'ASC')
+      .addOrderBy('m.id', 'ASC')
+      .getRawMany<AIModelConfig>()
     return rows.map((r) => ({
       ...r,
       contextPolicy: contextPolicy(
@@ -78,27 +111,48 @@ export class AdminStore {
   async model(id: string) {
     const model = (await this.models()).find((m) => m.id === id)
     if (!model) {
-      throw new ApiError(404, 'MODEL_NOT_FOUND', '模型配置不存在')
+      throw ErrorCode.MODEL_NOT_FOUND()
     }
     return model
   }
 
   async settings(): Promise<AISettings> {
-    const rows = await this.rows<AISettings>(
-      'SELECT model_id AS modelId,image_model_id AS imageModelId FROM ai_settings WHERE id=1',
-    )
+    const rows = await this.repository(SettingsEntity)
+      .find({
+        select: { id: true, modelId: true, imageModelId: true },
+        where: { id: 1 },
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          modelId: row.modelId,
+          imageModelId: row.imageModelId,
+        })),
+      )
     if (!rows[0]) {
-      throw new ApiError(503, 'SCHEMA_REQUIRED', '请先执行数据库初始化')
+      throw ErrorCode.SCHEMA_REQUIRED('请先执行数据库初始化')
     }
-    const pools = await this.rows<{ purpose: string, modelId: string }>('SELECT purpose,model_id AS modelId FROM ai_model_pool ORDER BY position,model_id')
+    const pools = await this.repository(AiModelPoolEntity)
+      .find({
+        select: { purpose: true, model_id: true },
+        order: { position: 'ASC', model_id: 'ASC' },
+      })
+      .then((rows) =>
+        rows.map((row) => ({ purpose: row.purpose, modelId: row.model_id })),
+      )
     const selected = (purpose: string, primary: string | null) => {
       if (!primary) {
         return []
       }
-      const ids = pools.filter((row) => row.purpose === purpose).map((row) => row.modelId)
+      const ids = pools
+        .filter((row) => row.purpose === purpose)
+        .map((row) => row.modelId)
       return ids.includes(primary) ? ids : [primary]
     }
-    return { ...rows[0], modelIds: selected('conversation', rows[0].modelId), imageModelIds: selected('image', rows[0].imageModelId) }
+    return {
+      ...rows[0],
+      modelIds: selected('conversation', rows[0].modelId),
+      imageModelIds: selected('image', rows[0].imageModelId),
+    }
   }
 
   async users(): Promise<Administrator[]> {
@@ -131,16 +185,28 @@ export class AdminStore {
     work: (db: AdminStore, settings: AISettings) => Promise<T>,
   ): Promise<T> {
     return this.transaction(async (db) => {
-      const [settings] = await db.rows<AISettings>(
-        'SELECT model_id AS modelId,image_model_id AS imageModelId FROM ai_settings WHERE id=1 FOR UPDATE',
-      )
+      const settings = await db
+        .repository(SettingsEntity)
+        .findOne({
+          select: { id: true, modelId: true, imageModelId: true },
+          where: { id: 1 },
+          lock: { mode: 'pessimistic_write' },
+        })
+        .then((row) =>
+          row
+            ? {
+                modelId: row.modelId,
+                imageModelId: row.imageModelId,
+              }
+            : null,
+        )
       if (!settings) {
-        throw new ApiError(503, 'SCHEMA_REQUIRED', '请先初始化数据库')
+        throw ErrorCode.SCHEMA_REQUIRED()
       }
       const result = await work(db, await db.settings())
-      await db.execute(
-        'UPDATE platform_configuration_state SET ai_revision=ai_revision+1 WHERE id=1',
-      )
+      await db
+        .repository(PlatformConfigurationStateEntity)
+        .update({ id: 1 }, { ai_revision: () => 'ai_revision+1' })
       return result
     })
   }

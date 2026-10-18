@@ -1,5 +1,4 @@
 import type {
-  ApplicationBridgeError,
   ApplicationBridgeEvent,
   ApplicationContext,
   ApplicationFile,
@@ -9,38 +8,17 @@ import type {
   FilePickOptions,
   HostMethod,
 } from '@t-box/app-contracts'
-import { APPLICATION_FILE_MAX_BYTES, createApplicationRequestId } from '@t-box/app-contracts'
-
-export type {
-  ApplicationContext,
-  ApplicationSession,
-  ApplicationUpdateInfo,
-  ApplicationUpdatePrompt,
-  HostMethod,
+import {
+  APPLICATION_FILE_MAX_BYTES,
+  createApplicationRequestId,
 } from '@t-box/app-contracts'
+import { SdkErrorCode } from './error-codes.js'
+import { AppSdkError } from './sdk-error.js'
 
-export class AppSdkError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly status?: number,
-  ) {
-    super(message)
-    this.name = 'AppSdkError'
-  }
+export { SdkErrorCode } from './error-codes.js'
 
-  static from(error: unknown): AppSdkError {
-    if (error instanceof AppSdkError) {
-      return error
-    }
-    const value = error as Partial<ApplicationBridgeError> | null
-    return new AppSdkError(
-      typeof value?.code === 'string' ? value.code : 'REQUEST_FAILED',
-      typeof value?.message === 'string' ? value.message : '应用请求失败',
-      typeof value?.status === 'number' ? value.status : undefined,
-    )
-  }
-}
+export { AppSdkError } from './sdk-error.js'
+
 export interface RequestOptions {
   signal?: AbortSignal
   timeoutMs?: number
@@ -60,13 +38,23 @@ export interface AppTransport {
 export type AppClient = ReturnType<typeof createAppClient>
 export function createAppClient(transport: AppTransport) {
   let closed = false
-  let updateHandler: { id: string, show(update: ApplicationUpdateInfo, options: { signal: AbortSignal }): boolean | void | Promise<boolean | void> } | undefined
+  let updateHandler:
+    | {
+      id: string
+      show(
+        update: ApplicationUpdateInfo,
+        options: { signal: AbortSignal },
+      ): boolean | void | Promise<boolean | void>
+    } |
+    undefined
   let updateAbort: AbortController | undefined
   const requests = new Set<AbortController>()
   const authListeners = new Set<(session: ApplicationSession) => void>()
   const closeListeners = new Set<(reason: AppSdkError) => void>()
   const interactionListeners = new Set<() => void>()
-  const navigationListeners = new Set<(params: Record<string, string>) => void>()
+  const navigationListeners = new Set<
+    (params: Record<string, string>) => void
+  >()
   const subscriptions = new Map<
     string,
     {
@@ -92,7 +80,10 @@ export function createAppClient(transport: AppTransport) {
       return
     }
     if (event.name === 'runtime.update') {
-      const data = event.data as { promptId: string, update: ApplicationUpdateInfo | null }
+      const data = event.data as {
+        promptId: string
+        update: ApplicationUpdateInfo | null
+      }
       updateAbort?.abort()
       updateAbort = undefined
       if (!data.update || !updateHandler) {
@@ -101,23 +92,27 @@ export function createAppClient(transport: AppTransport) {
       const handler = updateHandler
       const abort = new AbortController()
       updateAbort = abort
-      void Promise.resolve().then(() => {
-        if (closed || abort.signal.aborted || updateHandler !== handler) {
-          return false
-        }
-        return handler.show(data.update!, { signal: abort.signal })
-      }).then((result) => result !== false, () => false).then((shown) => {
-        if (!closed && !abort.signal.aborted && updateHandler === handler) {
-          return call('updates.respond', { promptId: data.promptId, shown })
-        }
-      }).catch(() => {})
+      void Promise.resolve()
+        .then(() => {
+          if (closed || abort.signal.aborted || updateHandler !== handler) {
+            return false
+          }
+          return handler.show(data.update!, { signal: abort.signal })
+        })
+        .then(
+          (result) => result !== false,
+          () => false,
+        )
+        .then((shown) => {
+          if (!closed && !abort.signal.aborted && updateHandler === handler) {
+            return call('updates.respond', { promptId: data.promptId, shown })
+          }
+        })
+        .catch(() => {})
     } else if (event.name === 'auth.changed') {
       updateAbort?.abort()
       updateHandler = undefined
-      const reason = new AppSdkError(
-        'SESSION_CHANGED',
-        '登录状态已改变，请重新操作',
-      )
+      const reason = SdkErrorCode.SESSION_CHANGED()
       abortRequests(reason)
       for (const subscription of subscriptions.values()) {
         if (subscription.error) {
@@ -155,7 +150,7 @@ export function createAppClient(transport: AppTransport) {
       }
     }
   })
-  function dispose(reason = new AppSdkError('APP_CLOSED', '应用已关闭')) {
+  function dispose(reason = SdkErrorCode.APP_CLOSED()) {
     if (closed) {
       return
     }
@@ -183,16 +178,15 @@ export function createAppClient(transport: AppTransport) {
     options: RequestOptions = {},
   ): Promise<T> {
     if (closed) {
-      throw new AppSdkError('APP_CLOSED', '应用已关闭')
+      throw SdkErrorCode.APP_CLOSED()
     }
     const timeoutMs = options.timeoutMs ?? 15000
     if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000) {
-      throw new AppSdkError('INVALID_TIMEOUT', '请求超时时间无效')
+      throw SdkErrorCode.INVALID_TIMEOUT()
     }
     const controller = new AbortController()
     requests.add(controller)
-    const abort = () =>
-      controller.abort(new AppSdkError('REQUEST_CANCELLED', '请求已取消'))
+    const abort = () => controller.abort(SdkErrorCode.REQUEST_CANCELLED())
     const signal = options.signal
     if (signal?.aborted) {
       abort()
@@ -206,10 +200,7 @@ export function createAppClient(transport: AppTransport) {
     const rejected = () => rejectAbort(controller.signal.reason)
     controller.signal.addEventListener('abort', rejected, { once: true })
     const timer = setTimeout(
-      () =>
-        controller.abort(
-          new AppSdkError('REQUEST_TIMEOUT', '请求超时；写入结果可能尚待确认'),
-        ),
+      () => controller.abort(SdkErrorCode.REQUEST_TIMEOUT()),
       timeoutMs,
     )
     try {
@@ -236,17 +227,13 @@ export function createAppClient(transport: AppTransport) {
       async ensureSignedIn() {
         const session = await call<ApplicationSession>('auth.session', {})
         if (session.status !== 'signed_in') {
-          throw new AppSdkError(
-            'AUTH_REQUIRED',
-            '请在宿主中登录后使用应用',
-            401,
-          )
+          throw SdkErrorCode.AUTH_REQUIRED(undefined, 401)
         }
         return session
       },
       onChange(listener: (session: ApplicationSession) => void) {
         if (closed) {
-          throw new AppSdkError('APP_CLOSED', '应用已关闭')
+          throw SdkErrorCode.APP_CLOSED()
         }
         authListeners.add(listener)
         return () => {
@@ -255,10 +242,21 @@ export function createAppClient(transport: AppTransport) {
       },
     },
     api: {
-      mutate<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', body: unknown) {
+      mutate<T>(
+        path: string,
+        method: 'POST' | 'PATCH' | 'DELETE',
+        body: unknown,
+      ) {
         return call<T>('api.request', { path, method, body, stable: true })
       },
-      request<T>(path: string, input: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT', body?: unknown } = {}, options?: RequestOptions) {
+      request<T>(
+        path: string,
+        input: {
+          method?: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT'
+          body?: unknown
+        } = {},
+        options?: RequestOptions,
+      ) {
         return call<T>('api.request', { path, ...input }, options)
       },
       invoke<T>(method: string, args: unknown, options?: RequestOptions) {
@@ -271,35 +269,58 @@ export function createAppClient(transport: AppTransport) {
       },
     },
     resources: {
-      async setBindings(bindings: { appId: string, resourceType: string, resourceId: string }[]) {
+      async setBindings(
+        bindings: { appId: string, resourceType: string, resourceId: string }[],
+      ) {
         await call('resources.bindings', { bindings })
       },
     },
     files: {
       /** Call from a user gesture. The host picker never exposes the account's entire library. */
       pick(options: FilePickOptions = {}, request: RequestOptions = {}) {
-        return call<ApplicationFile[]>('files.pick', options, { timeoutMs: 120000, ...request })
+        return call<ApplicationFile[]>('files.pick', options, {
+          timeoutMs: 120000,
+          ...request,
+        })
       },
-      async upload(file: Blob & { name?: string }, request: RequestOptions = {}) {
+      async upload(
+        file: Blob & { name?: string },
+        request: RequestOptions = {},
+      ) {
         if (!file.size || file.size > APPLICATION_FILE_MAX_BYTES) {
-          throw new AppSdkError('FILE_SIZE', '每个文件需为 1 字节至 10 MB')
+          throw SdkErrorCode.FILE_SIZE()
         }
         const bytes = new Uint8Array(await file.arrayBuffer())
         let binary = ''
         for (let offset = 0; offset < bytes.length; offset += 32768) {
-          binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768))
+          binary += String.fromCharCode(
+            ...bytes.subarray(offset, offset + 32768),
+          )
         }
-        return call<ApplicationFile>('files.upload', { name: file.name || '未命名文件', base64: btoa(binary) }, { timeoutMs: 120000, ...request })
+        return call<ApplicationFile>(
+          'files.upload',
+          { name: file.name || '未命名文件', base64: btoa(binary) },
+          { timeoutMs: 120000, ...request },
+        )
       },
       async read(id: string, request: RequestOptions = {}) {
-        const content = await call<ApplicationFileContent>('files.read', { id }, { timeoutMs: 60000, ...request })
+        const content = await call<ApplicationFileContent>(
+          'files.read',
+          { id },
+          { timeoutMs: 60000, ...request },
+        )
         const binary = atob(content.base64)
-        const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
-        return { file: content.file, blob: new Blob([bytes], { type: content.file.mimeType }) }
+        const bytes = Uint8Array.from(binary, (character) =>
+          character.charCodeAt(0))
+        return {
+          file: content.file,
+          blob: new Blob([bytes], { type: content.file.mimeType }),
+        }
       },
     },
     updates: {
-      getAvailable: () => call<ApplicationUpdateInfo | null>('updates.getAvailable', {}),
+      getAvailable: () =>
+        call<ApplicationUpdateInfo | null>('updates.getAvailable', {}),
       async openMarket() {
         await call('updates.openMarket', {})
       },
@@ -307,9 +328,14 @@ export function createAppClient(transport: AppTransport) {
        * Return false or throw for the host fallback. Resolve only after custom UI is visible.
        * Close custom UI when signal aborts (timeout, navigation or session change).
        */
-      async registerPrompt(show: (update: ApplicationUpdateInfo, options: { signal: AbortSignal }) => boolean | void | Promise<boolean | void>) {
+      async registerPrompt(
+        show: (
+          update: ApplicationUpdateInfo,
+          options: { signal: AbortSignal },
+        ) => boolean | void | Promise<boolean | void>,
+      ) {
         if (updateHandler) {
-          throw new AppSdkError('UPDATE_PROMPT_REGISTERED', '已注册更新提示处理器')
+          throw SdkErrorCode.UPDATE_PROMPT_REGISTERED()
         }
         const handler = { id: createApplicationRequestId(), show }
         updateHandler = handler
@@ -320,11 +346,17 @@ export function createAppClient(transport: AppTransport) {
           updateAbort?.abort()
           updateHandler = undefined
           if (!closed) {
-            void call('updates.presentation', { registrationId: handler.id, enabled: false }).catch(() => {})
+            void call('updates.presentation', {
+              registrationId: handler.id,
+              enabled: false,
+            }).catch(() => {})
           }
         }
         try {
-          await call('updates.presentation', { registrationId: handler.id, enabled: true })
+          await call('updates.presentation', {
+            registrationId: handler.id,
+            enabled: true,
+          })
           return stop
         } catch (error) {
           stop()
@@ -425,7 +457,7 @@ export function createAppClient(transport: AppTransport) {
       },
       onClose(listener: (reason: AppSdkError) => void) {
         if (closed) {
-          throw new AppSdkError('APP_CLOSED', '应用已关闭')
+          throw SdkErrorCode.APP_CLOSED()
         }
         closeListeners.add(listener)
         return () => {
@@ -436,3 +468,11 @@ export function createAppClient(transport: AppTransport) {
     dispose,
   }
 }
+
+export type {
+  ApplicationContext,
+  ApplicationSession,
+  ApplicationUpdateInfo,
+  ApplicationUpdatePrompt,
+  HostMethod,
+} from '@t-box/app-contracts'

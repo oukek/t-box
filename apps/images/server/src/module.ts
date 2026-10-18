@@ -5,13 +5,13 @@ import type {
 import type { Resource } from '@t-box/shared'
 import type { ImageToolPort } from './ports.js'
 import { definition } from '@t-box/app-server-sdk'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { APPLICATION_CONTRACT_VERSION } from '@t-box/shared'
+import { ErrorCode } from './error-codes.js'
 
 export function createImagesModule(images?: ImageToolPort): ApplicationModule {
   const operation = async (ctx: ToolContext) => {
     if (!images || !ctx.actor) {
-      throw new ApiError(503, 'IMAGE_MODEL_REQUIRED', '请先配置图片模型并登录')
+      throw ErrorCode.IMAGE_MODEL_REQUIRED('请先配置图片模型并登录')
     }
     return ctx.use('images.operation', async () =>
       images.forRun(ctx.actor!, ctx.signal, ctx.session.task?.id))
@@ -122,11 +122,7 @@ export function createImagesModule(images?: ImageToolPort): ApplicationModule {
           )
           const ids = (args as { resourceIds?: unknown }).resourceIds
           if (!Array.isArray(ids) || ids.some((id) => !visible.has(id))) {
-            throw new ApiError(
-              400,
-              'IMAGE_REFERENCE_REQUIRED',
-              '只能编辑本会话附加或生成的图片，请先附加所需图片',
-            )
+            throw ErrorCode.IMAGE_REFERENCE_REQUIRED()
           }
           await (await operation(ctx)).prepare(args, true)
         },

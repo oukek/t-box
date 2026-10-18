@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createDataSource } from '../db/data-source.js'
+import { ErrorCode } from '../error-codes.js'
 import { hashPassword } from './crypto.js'
 import { AdminStore } from './store.js'
 
@@ -8,11 +9,12 @@ const source = await createDataSource().initialize()
 const connection = source.createQueryRunner()
 await connection.connect()
 try {
+  // native-sql: MySQL advisory lock must use this exact connection
   const lockRows = await connection.query(
     'SELECT GET_LOCK(\'tbox_admin_bootstrap\',10) AS acquired',
   )
   if (!(lockRows as { acquired: number }[])[0]?.acquired) {
-    throw new Error('Unable to lock administrator bootstrap')
+    throw ErrorCode.INTERNAL_UNABLE_TO_LOCK_ADMINISTRATOR_BOOTSTRAP()
   }
   const store = new AdminStore(source, connection.manager)
   if ((await store.users()).length) {
@@ -33,6 +35,7 @@ try {
     )
   }
 } finally {
+  // native-sql: MySQL advisory lock must use this exact connection
   await connection.query('SELECT RELEASE_LOCK(\'tbox_admin_bootstrap\')')
   await connection.release()
   await source.destroy()

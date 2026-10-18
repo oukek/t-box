@@ -11,7 +11,7 @@ import type {
 } from '@t-box/shared'
 import type { ProviderItem } from './provider.js'
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 export interface SessionRun {
   view: ChatRun
@@ -119,7 +119,7 @@ export class MemorySessionRepository implements SessionRepository {
   create(): ChatSession {
     this.sweep()
     if (this.sessions.size >= this.maxSessions) {
-      throw new ApiError(429, 'SESSION_LIMIT', '会话数量已达上限，请稍后再试')
+      throw ErrorCode.SESSION_LIMIT.limited()
     }
     const session: ChatSession = {
       id: randomUUID(),
@@ -138,16 +138,15 @@ export class MemorySessionRepository implements SessionRepository {
     this.sweep()
     const session = this.sessions.get(id)
     if (!session) {
-      throw new ApiError(
-        404,
-        'SESSION_EXPIRED',
-        '会话已过期或服务已重启。请新建对话；已完成的操作仍然保留。',
-      )
+      throw ErrorCode.SESSION_EXPIRED()
     }
     const actual = Buffer.from(session.token)
     const incoming = Buffer.from(token)
-    if (incoming.length !== actual.length || !timingSafeEqual(incoming, actual)) {
-      throw new ApiError(403, 'SESSION_INVALID', '会话恢复凭据无效')
+    if (
+      incoming.length !== actual.length ||
+      !timingSafeEqual(incoming, actual)
+    ) {
+      throw ErrorCode.SESSION_INVALID.forbidden()
     }
     this.touch(session)
     return session

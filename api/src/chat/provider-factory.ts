@@ -1,11 +1,9 @@
 import type { ModelInvocationMode } from '@t-box/shared'
 import type OpenAI from 'openai'
 import type { ChatProvider, OpenAIProviderOptions } from './provider.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { OpenAIChatCompletionsProvider } from './chat-completions-provider.js'
-import {
-  OpenAIResponsesProvider,
-} from './provider.js'
+import { OpenAIResponsesProvider } from './provider.js'
 
 export function createConversationProvider(
   options: OpenAIProviderOptions & { invocationMode?: ModelInvocationMode },
@@ -17,10 +15,6 @@ export function createConversationProvider(
     case 'chat_completions':
       return new OpenAIChatCompletionsProvider(options, client)
     default:
-      throw new ApiError(
-        503,
-        'INVALID_INVOCATION_MODE',
-        '普通会话模型的调用方式配置无效',
-      )
+      throw ErrorCode.INVALID_INVOCATION_MODE.unavailable()
   }
 }

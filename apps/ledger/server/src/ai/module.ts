@@ -8,14 +8,12 @@ import type { CategoryRepository } from '../categories/repository.js'
 import type { BillRepository } from '../repository.js'
 import type { LedgerServices } from './ports.js'
 import type { LedgerContext } from './tools.js'
-import {
-  APPLICATION_CONTRACT_VERSION,
-} from '@t-box/app-contracts'
+import { APPLICATION_CONTRACT_VERSION } from '@t-box/app-contracts'
 import {
   ledgerClientInteractions,
   ledgerManifest,
 } from '@t-box/ledger-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import {
   decodeLedgerEvent,
   ledgerAccessAdapter,
@@ -36,7 +34,7 @@ function binding(ctx: ToolContext): ResourceRef | undefined {
     (ref) => ref.appId === 'ledger' && ref.resourceType === 'book',
   )
   if (refs.length > 1) {
-    throw new ApiError(409, 'RESOURCE_AMBIGUOUS', '请明确选择一个目标账本')
+    throw ErrorCode.RESOURCE_AMBIGUOUS()
   }
   return refs[0]
 }
@@ -49,11 +47,7 @@ export function createLedgerModule(
     }
     const ref = binding(ctx)
     if (!ctx.actor || !ref) {
-      throw new ApiError(
-        409,
-        'LEDGER_REQUIRED',
-        '请先到应用页打开并解锁要操作的账本，再继续此操作。',
-      )
+      throw ErrorCode.LEDGER_REQUIRED()
     }
     return ctx.use(`ledger:${ref.resourceId}`, () =>
       chatContext(options.platform!, ctx.actor!, ref.resourceId, ctx.requestId))
@@ -75,11 +69,7 @@ export function createLedgerModule(
         }
         const ref = binding(ctx)
         if (!ref || !ctx.actor) {
-          throw new ApiError(
-            409,
-            'LEDGER_REQUIRED',
-            '请先到应用页打开并解锁要操作的账本，再继续此操作。',
-          )
+          throw ErrorCode.LEDGER_REQUIRED()
         }
         return [{ resource: ref, action: capability }]
       },
@@ -98,11 +88,7 @@ export function createLedgerModule(
                 undefined
               )?.[`confirm_${name}`]
               if (!prepare) {
-                throw new ApiError(
-                  503,
-                  'UNAVAILABLE',
-                  '当前账本不支持此往来工具',
-                )
+                throw ErrorCode.UNAVAILABLE('当前账本不支持此往来工具')
               }
               return {
                 name: 'finance_confirm',

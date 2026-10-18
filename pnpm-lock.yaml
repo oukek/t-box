@@ -38,6 +38,9 @@ importers:
       '@t-box/calendar-contracts':
         specifier: workspace:*
         version: link:../apps/calendar/contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../packages/errors
       '@t-box/ledger-contracts':
         specifier: workspace:*
         version: link:../apps/ledger/contracts
@@ -84,6 +87,9 @@ importers:
       '@t-box/calendar-server':
         specifier: workspace:*
         version: link:../apps/calendar/server
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../packages/errors
       '@t-box/images-server':
         specifier: workspace:*
         version: link:../apps/images/server
@@ -184,6 +190,9 @@ importers:
       '@t-box/device-reminders':
         specifier: workspace:*
         version: link:../packages/device-reminders
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../packages/errors
       '@t-box/ledger-shell':
         specifier: workspace:*
         version: link:../apps/ledger/shell
@@ -264,6 +273,9 @@ importers:
       '@t-box/calculator-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/server-foundation':
         specifier: workspace:*
         version: link:../../../packages/server-foundation
@@ -314,6 +326,9 @@ importers:
       '@t-box/calculator-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/ui-kit':
         specifier: workspace:*
         version: link:../../../packages/ui-kit
@@ -342,6 +357,9 @@ importers:
       '@t-box/app-contracts':
         specifier: workspace:*
         version: link:../../../packages/app-contracts
+      '@t-box/dayjs':
+        specifier: workspace:*
+        version: link:../../../packages/dayjs
       '@t-box/time-contracts':
         specifier: workspace:*
         version: link:../../time/contracts
@@ -367,6 +385,9 @@ importers:
       '@t-box/calendar-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/server-foundation':
         specifier: workspace:*
         version: link:../../../packages/server-foundation
@@ -432,6 +453,9 @@ importers:
       '@t-box/device-reminders':
         specifier: workspace:*
         version: link:../../../packages/device-reminders
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/shared':
         specifier: workspace:*
         version: link:../../../shared
@@ -466,6 +490,9 @@ importers:
       '@t-box/app-server-sdk':
         specifier: workspace:*
         version: link:../../../packages/app-server-sdk
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/server-foundation':
         specifier: workspace:*
         version: link:../../../packages/server-foundation
@@ -491,6 +518,9 @@ importers:
       '@t-box/app-contracts':
         specifier: workspace:*
         version: link:../../../packages/app-contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
     devDependencies:
       '@types/node':
         specifier: ^24.10.0
@@ -513,6 +543,9 @@ importers:
       '@t-box/dayjs':
         specifier: workspace:*
         version: link:../../../packages/dayjs
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/ledger-contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -544,6 +577,9 @@ importers:
       '@t-box/app-shell-sdk':
         specifier: workspace:*
         version: link:../../../packages/app-shell-sdk
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/ledger-contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -569,6 +605,9 @@ importers:
       '@t-box/app-web-sdk':
         specifier: workspace:*
         version: link:../../../packages/app-web-sdk
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/ledger-contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -619,6 +658,9 @@ importers:
       '@t-box/app-shell-sdk':
         specifier: workspace:*
         version: link:../../../packages/app-shell-sdk
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/market-contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -660,6 +702,9 @@ importers:
       '@t-box/app-shell-sdk':
         specifier: workspace:*
         version: link:../../../packages/app-shell-sdk
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/settings-contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -707,6 +752,9 @@ importers:
       '@t-box/calendar-contracts':
         specifier: workspace:*
         version: link:../../calendar/contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/server-foundation':
         specifier: workspace:*
         version: link:../../../packages/server-foundation
@@ -769,6 +817,9 @@ importers:
       '@t-box/device-reminders':
         specifier: workspace:*
         version: link:../../../packages/device-reminders
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
       '@t-box/shared':
         specifier: workspace:*
         version: link:../../../shared
@@ -842,6 +893,10 @@ importers:
         version: 8.5.2
 
   packages/app-contracts:
+    dependencies:
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../errors
     devDependencies:
       typescript:
         specifier: ~5.9.3
@@ -862,6 +917,9 @@ importers:
       '@t-box/app-contracts':
         specifier: workspace:*
         version: link:../app-contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@t-box/server-foundation':
         specifier: workspace:*
         version: link:../server-foundation
@@ -881,6 +939,9 @@ importers:
       '@t-box/app-sdk':
         specifier: workspace:*
         version: link:../app-sdk
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@t-box/shared':
         specifier: workspace:*
         version: link:../../shared
@@ -903,6 +964,9 @@ importers:
       '@t-box/app-sdk':
         specifier: workspace:*
         version: link:../app-sdk
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../errors
     devDependencies:
       typescript:
         specifier: ~5.9.3
@@ -935,6 +999,9 @@ importers:
       '@t-box/app-shell-sdk':
         specifier: workspace:*
         version: link:../app-shell-sdk
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@t-box/shared':
         specifier: workspace:*
         version: link:../../shared
@@ -952,11 +1019,20 @@ importers:
         specifier: ^3.2.5
         version: 3.3.12(typescript@5.9.3)
 
+  packages/errors:
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
   packages/server-foundation:
     dependencies:
       '@t-box/dayjs':
         specifier: workspace:*
         version: link:../dayjs
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../errors
       typeorm:
         specifier: 1.1.1
         version: 1.1.1(mysql2@3.24.5(@types/node@24.19.1))(redis@5.12.1)(supports-color@10.2.2)

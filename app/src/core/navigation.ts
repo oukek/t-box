@@ -1,6 +1,7 @@
 import type { OpenAppArguments } from '@t-box/shared'
 import { nextTick, reactive, readonly } from 'vue'
 import { applicationModules } from '../applications/registry'
+import { ErrorCode } from '../error-codes.js'
 import { parseOpenAppArguments } from './applications'
 
 export const primaryTabs = [
@@ -46,7 +47,10 @@ function readHash() {
   for (const module of applicationModules) {
     const params = module.resolveLink?.(path || '', new URLSearchParams(query))
     if (params) {
-      state.application = { appId: module.manifest.id, params: module.parseParams(params) }
+      state.application = {
+        appId: module.manifest.id,
+        params: module.parseParams(params),
+      }
       state.screen = 'application'
       state.backTo = 'applications'
       state.revision++
@@ -180,7 +184,7 @@ export function openApplicationCapabilities(appId: string) {
       (module) => module.manifest.id === appId && module.ai,
     )
   ) {
-    throw new Error('此应用没有提供 AI 能力')
+    throw ErrorCode.INTERNAL_AI()
   }
   state.capabilityAppId = appId
   state.screen = 'capabilities'
@@ -236,10 +240,6 @@ export function openPricing() {
   const fromWallet = state.screen === 'wallet'
   state.screen = 'pricing'
   state.backTo = fromWallet ? 'wallet' : 'home'
-  history.pushState(
-    null,
-    '',
-    `#/ai/pricing${fromWallet ? '?from=wallet' : ''}`,
-  )
+  history.pushState(null, '', `#/ai/pricing${fromWallet ? '?from=wallet' : ''}`)
   window.scrollTo({ top: 0 })
 }

@@ -25,6 +25,7 @@
     "@t-box/app-contracts": "workspace:*",
     "@t-box/app-server-sdk": "workspace:*",
     "@t-box/calendar-contracts": "workspace:*",
+    "@t-box/errors": "workspace:*",
     "@t-box/server-foundation": "workspace:*",
     "@t-box/shared": "workspace:*",
     "@t-box/time-contracts": "workspace:*",

@@ -1,3 +1,4 @@
+import { ErrorCode } from './error-codes.js'
 import { validApplicationIcon } from './icons.js'
 
 export interface ApplicationManifest {
@@ -34,18 +35,34 @@ export interface ApplicationUpdateInfo {
   releaseNotes: string
   prompt: ApplicationUpdatePrompt
 }
-export function validateUpdatePrompt(value: unknown): asserts value is ApplicationUpdatePrompt {
+export function validateUpdatePrompt(
+  value: unknown,
+): asserts value is ApplicationUpdatePrompt {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Invalid update prompt')
+    throw ErrorCode.INTERNAL_INVALID_UPDATE_PROMPT()
   }
   const config = value as Record<string, unknown>
-  const limits: Record<string, number> = { title: 60, description: 400, confirmText: 24, deferText: 24 }
-  if (!['default', 'custom'].includes(String(config.mode)) || Object.keys(config).some((key) => key !== 'mode' && !Object.hasOwn(limits, key))) {
-    throw new Error('Invalid update prompt')
+  const limits: Record<string, number> = {
+    title: 60,
+    description: 400,
+    confirmText: 24,
+    deferText: 24,
+  }
+  if (
+    !['default', 'custom'].includes(String(config.mode)) ||
+    Object.keys(config).some(
+      (key) => key !== 'mode' && !Object.hasOwn(limits, key),
+    )
+  ) {
+    throw ErrorCode.INTERNAL_INVALID_UPDATE_PROMPT()
   }
   for (const [key, limit] of Object.entries(limits)) {
-    if (config[key] !== undefined && (typeof config[key] !== 'string' || (config[key] as string).length > limit)) {
-      throw new Error('Invalid update prompt text')
+    if (
+      config[key] !== undefined &&
+      (typeof config[key] !== 'string' ||
+        (config[key] as string).length > limit)
+    ) {
+      throw ErrorCode.INTERNAL_INVALID_UPDATE_PROMPT_TEXT()
     }
   }
 }
@@ -139,8 +156,11 @@ export function validateRelease(release: AppRelease): void {
   if (release.updatePrompt !== undefined) {
     validateUpdatePrompt(release.updatePrompt)
   }
-  if (release.manifest.iconVariant !== undefined && !['image', 'calendar', 'clock'].includes(release.manifest.iconVariant)) {
-    throw new Error('Invalid application icon presentation')
+  if (
+    release.manifest.iconVariant !== undefined &&
+    !['image', 'calendar', 'clock'].includes(release.manifest.iconVariant)
+  ) {
+    throw ErrorCode.INTERNAL_INVALID_APPLICATION_ICON_PRESENTATION()
   }
   if (
     !validId(release.appId) ||
@@ -152,10 +172,13 @@ export function validateRelease(release: AppRelease): void {
     new Set(release.permissions).size !== release.permissions.length ||
       new Set(release.clientTools).size !== release.clientTools.length
   ) {
-    throw new Error('Invalid application release')
+    throw ErrorCode.INTERNAL_INVALID_APPLICATION_RELEASE()
   }
-  if (release.manifest.iconAsset !== undefined && !validApplicationIcon(release.manifest.iconAsset)) {
-    throw new Error('Invalid application icon image')
+  if (
+    release.manifest.iconAsset !== undefined &&
+    !validApplicationIcon(release.manifest.iconAsset)
+  ) {
+    throw ErrorCode.INTERNAL_INVALID_APPLICATION_ICON_IMAGE()
   }
   if (release.runtime.type === 'web') {
     const url = new URL(release.runtime.entryUrl)
@@ -168,9 +191,7 @@ export function validateRelease(release: AppRelease): void {
         !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) ||
         !/^sha256-[a-f0-9]{64}$/.test(release.runtime.integrity)
     ) {
-      throw new Error(
-        'Application must use a trusted HTTPS artifact or loopback development origin',
-      )
+      throw ErrorCode.INTERNAL_UNTRUSTED_APPLICATION_ORIGIN()
     }
   }
 }

@@ -110,6 +110,7 @@ export async function startRelease({
     command(process.execPath, [join(release, 'control/prepare-release.mjs')])
     command(process.execPath, [join(api, 'check-runtime.mjs')])
     command(process.execPath, ['--input-type=module', '-e', 'import(\'./dist/config.js\').then(({ resourceStorageSettings }) => resourceStorageSettings())'], { cwd: api })
+    command(process.execPath, [join(api, 'dist/init-db.js'), '--check'])
     const existing = processes().filter((entry) => names.includes(entry.name))
     stopped = true
     // Stop the recovery worker before changing the database, as well as the HTTP API.

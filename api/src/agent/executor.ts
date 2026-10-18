@@ -5,6 +5,7 @@ import type { ToolContext } from './contracts.js'
 import { randomUUID } from 'node:crypto'
 import { ApplicationError } from '@t-box/app-server-sdk'
 import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { requestClient, requireClient } from './interaction.js'
 import { MessageTimeline } from './timeline.js'
 
@@ -47,7 +48,8 @@ export async function executeTool(
   const allowed =
     (!ctx.toolAllowlist || ctx.toolAllowlist.has(call.name)) &&
     registry.isToolLoaded(call.name, ctx) &&
-    (!!ctx.capabilities || registry.allowedTools(ctx.skills).some((t) => t.name === call.name))
+    (!!ctx.capabilities ||
+      registry.allowedTools(ctx.skills).some((t) => t.name === call.name))
   if (allowed) {
     try {
       await registry.requireTool(call.name, JSON.parse(call.arguments), ctx)
@@ -185,21 +187,22 @@ export async function executeTool(
     if (
       !tool ||
       (ctx.toolAllowlist && !ctx.toolAllowlist.has(call.name)) ||
-      (!ctx.capabilities && !registry
-        .allowedTools(ctx.skills)
-        .some((entry) => entry.name === call.name)) ||
-        !registry.isToolLoaded(call.name, ctx)
+      (!ctx.capabilities &&
+        !registry
+          .allowedTools(ctx.skills)
+          .some((entry) => entry.name === call.name)) ||
+          !registry.isToolLoaded(call.name, ctx)
     ) {
-      throw new ApiError(400, 'TOOL_NOT_ALLOWED', '工具未注册或尚未启用')
+      throw ErrorCode.TOOL_NOT_ALLOWED.invalid()
     }
     if (call.arguments.length > 8000) {
-      throw new ApiError(400, 'INVALID_ARGUMENTS', '工具参数过长')
+      throw ErrorCode.INVALID_ARGUMENTS()
     }
     const args: unknown = JSON.parse(call.arguments)
     run.abort.signal.throwIfAborted()
     const requirements = (await tool.resources?.(args, context)) ?? []
     if (requirements.length && !ctx.actor) {
-      throw new ApiError(401, 'AUTH_REQUIRED', '请先登录')
+      throw ErrorCode.AUTH_REQUIRED()
     }
     for (const requirement of requirements) {
       await registry.access.ensure(
@@ -272,7 +275,7 @@ export async function executeTool(
             !consent.ok ||
             (consent.data as { approved?: boolean })?.approved !== true
           ) {
-            throw new ApiError(400, 'USER_DECLINED', '用户未确认，操作未执行')
+            throw ErrorCode.USER_DECLINED()
           }
           run.abort.signal.throwIfAborted()
           await registry.requireTool(call.name, args, ctx)
@@ -288,7 +291,7 @@ export async function executeTool(
           }
         }
         if (!tool.handler) {
-          throw new ApiError(400, 'TOOL_NOT_ALLOWED', '工具没有服务端处理器')
+          throw ErrorCode.TOOL_NOT_ALLOWED.invalid('工具没有服务端处理器')
         }
         run.abort.signal.throwIfAborted()
         await tool.validate?.(args, context)
@@ -296,7 +299,13 @@ export async function executeTool(
         // Validation may now include remote preflight UI; recheck rights after the wait.
         await registry.requireTool(call.name, args, context)
         for (const requirement of requirements) {
-          await registry.access.ensure(ctx.actor!, requirement.resource, requirement.action, undefined, tool.title)
+          await registry.access.ensure(
+            ctx.actor!,
+            requirement.resource,
+            requirement.action,
+            undefined,
+            tool.title,
+          )
         }
         await ctx.journal?.guard()
         await ctx.journal?.dispatch(

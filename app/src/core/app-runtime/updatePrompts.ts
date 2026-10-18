@@ -1,8 +1,18 @@
 import type { ApplicationUpdateInfo, MarketEntry } from '@t-box/app-contracts'
+import { ErrorCode } from '../../error-codes.js'
 
-export function availableUpdate(entry: MarketEntry | undefined): ApplicationUpdateInfo | null {
+export function availableUpdate(
+  entry: MarketEntry | undefined,
+): ApplicationUpdateInfo | null {
   const installed = entry?.installation
-  if (!entry || !installed || installed.status !== 'active' || installed.operationId || installed.targetReleaseId || installed.releaseId === entry.release.releaseId) {
+  if (
+    !entry ||
+    !installed ||
+    installed.status !== 'active' ||
+    installed.operationId ||
+    installed.targetReleaseId ||
+    installed.releaseId === entry.release.releaseId
+  ) {
     return null
   }
   return {
@@ -21,15 +31,37 @@ export interface UpdatePromptEvent {
 }
 /** App-bound acknowledgement with a deadline; missing or broken custom UI falls back. */
 export class UpdatePromptRegistry {
-  private handlers = new Map<string, { owner: object, registrationId: string, emit(event: UpdatePromptEvent): void }>()
+  private handlers = new Map<
+    string,
+    {
+      owner: object
+      registrationId: string
+      emit(event: UpdatePromptEvent): void
+    }
+  >()
+
   private displayed = new Map<string, string>()
-  private pending = new Map<string, { id: string, update: ApplicationUpdateInfo, sent: boolean, finish(shown: boolean): void }>()
+  private pending = new Map<
+    string,
+    {
+      id: string
+      update: ApplicationUpdateInfo
+      sent: boolean
+      finish(shown: boolean): void
+    }
+  >()
+
   constructor(private readonly timeoutMs = 2000) {}
 
-  register(appId: string, owner: object, registrationId: string, emit: (event: UpdatePromptEvent) => void) {
+  register(
+    appId: string,
+    owner: object,
+    registrationId: string,
+    emit: (event: UpdatePromptEvent) => void,
+  ) {
     const previous = this.handlers.get(appId)
     if (previous && previous.owner !== owner) {
-      throw new Error('已有应用实例处理更新提示')
+      throw ErrorCode.INTERNAL_UPDATE_PROMPT_ALREADY_HANDLED()
     }
     if (previous) {
       this.cancel(appId)
@@ -40,7 +72,10 @@ export class UpdatePromptRegistry {
 
   unregister(appId: string, owner: object, registrationId?: string) {
     const handler = this.handlers.get(appId)
-    if (handler?.owner !== owner || (registrationId && registrationId !== handler.registrationId)) {
+    if (
+      handler?.owner !== owner ||
+      (registrationId && registrationId !== handler.registrationId)
+    ) {
       return
     }
     this.cancel(appId)
@@ -77,7 +112,11 @@ export class UpdatePromptRegistry {
 
   respond(appId: string, owner: object, promptId: string, shown: boolean) {
     const pending = this.pending.get(appId)
-    if (this.handlers.get(appId)?.owner !== owner || pending?.id !== promptId || !pending.sent) {
+    if (
+      this.handlers.get(appId)?.owner !== owner ||
+      pending?.id !== promptId ||
+      !pending.sent
+    ) {
       return false
     }
     pending.finish(shown)
@@ -96,7 +135,9 @@ export class UpdatePromptRegistry {
   private emitCancelled(appId: string, promptId: string) {
     try {
       this.handlers.get(appId)?.emit({ promptId, update: null })
-    } catch { /* A broken app cannot block the host fallback. */ }
+    } catch {
+      /* A broken app cannot block the host fallback. */
+    }
   }
 
   private deliver(appId: string) {

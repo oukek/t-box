@@ -22,7 +22,7 @@ const rows = ref<(LedgerRule | BillTemplate)[]>([])
 const categories = ref<BillCategory[]>([])
 const accounts = ref<LedgerAccount[]>([])
 const editor = ref<'create' | 'apply' | 'delete' | 'toggle' | null>(null)
-const target = ref<any>()
+const target = ref<LedgerRule | BillTemplate>()
 const form = ref<FormValues>({})
 const fields = computed<LedgerFormField[]>(() =>
   editor.value === 'delete' || editor.value === 'toggle'
@@ -103,9 +103,9 @@ const fields = computed<LedgerFormField[]>(() =>
       ],
 )
 async function load() {
-  rows.value = await api.get('/' + props.kind)
+  rows.value = await api.get<(LedgerRule | BillTemplate)[]>('/' + props.kind)
 }
-function open(mode: typeof editor.value, row?: any) {
+function open(mode: typeof editor.value, row?: LedgerRule | BillTemplate) {
   target.value = row
   editor.value = mode
   action.error.value = ''
@@ -124,8 +124,17 @@ function open(mode: typeof editor.value, row?: any) {
     startDate: localDate(),
     endDate: '',
     mode: 'remind',
-    ...(row?.bill ?? {}),
-    ...(mode === 'apply'
+    ...(row
+      ? {
+          type: row.bill.type,
+          amount: row.bill.amount,
+          category: row.bill.category,
+          date: row.bill.date,
+          note: row.bill.note,
+          accountId: row.bill.accountId ?? '',
+        }
+      : {}),
+    ...(mode === 'apply' && row
       ? { date: localDate(), accountId: row.bill.accountId ?? '' }
       : {}),
   }
@@ -161,11 +170,20 @@ async function save() {
   let path = '/' + props.kind
   let method: 'POST' | 'PATCH' | 'DELETE' = 'POST'
   let body: unknown
+  if (!editor.value) {
+    return
+  }
   if (editor.value === 'delete') {
+    if (!target.value) {
+      return
+    }
     path += `/${target.value.id}`
     method = 'DELETE'
     body = {}
   } else if (editor.value === 'toggle') {
+    if (!target.value || !('enabled' in target.value)) {
+      return
+    }
     path += `/${target.value.id}`
     method = 'PATCH'
     body = { enabled: !target.value.enabled }
@@ -195,9 +213,9 @@ async function save() {
 }
 onMounted(async () => {
   try {
-    [categories.value, accounts.value] = await Promise.all([
-      api.get('/categories'),
-      api.get('/accounts'),
+    ;[categories.value, accounts.value] = await Promise.all([
+      api.get<BillCategory[]>('/categories'),
+      api.get<LedgerAccount[]>('/accounts'),
     ])
     await load()
   } catch (e) {
@@ -243,7 +261,7 @@ onMounted(async () => {
           >{{ row.lastError }}</small>
         </div>
         <div v-if="canWrite" class="feature-actions">
-          <template v-if="kind === 'rules'">
+          <template v-if="'nextDate' in row">
             <button @click="open('toggle', row)">
               {{ "enabled" in row && row.enabled ? "暂停" : "重新授权开启" }}
             </button>

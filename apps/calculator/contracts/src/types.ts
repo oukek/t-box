@@ -1,3 +1,5 @@
+import { CalculationErrorCode } from './error-codes.js'
+
 export type CalculatorKind =
   | 'basic' |
   'scientific' |
@@ -63,7 +65,7 @@ export function numeric(
     typeof value !== 'string' ||
     !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())
   ) {
-    throw new CalculationError(`${label}请输入有效数字`)
+    throw CalculationErrorCode.INVALID_CALCULATION(`${label}请输入有效数字`)
   }
   const n = Number(value)
   if (
@@ -72,7 +74,7 @@ export function numeric(
     n > max ||
     (integer && !Number.isSafeInteger(n))
   ) {
-    throw new CalculationError(
+    throw CalculationErrorCode.INVALID_CALCULATION(
       `${label}需为${integer ? '整数，' : ''}范围 ${min} 至 ${max} 内的数字`,
     )
   }
@@ -80,7 +82,9 @@ export function numeric(
 }
 export function formatNumber(n: number): string {
   if (!Number.isFinite(n)) {
-    throw new CalculationError('结果超出可计算范围，或公式在实数范围内无定义')
+    throw CalculationErrorCode.INVALID_CALCULATION(
+      '结果超出可计算范围，或公式在实数范围内无定义',
+    )
   }
   return Object.is(n, -0) || n === 0 ? '0' : String(Number(n.toPrecision(15)))
 }

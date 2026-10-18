@@ -2,11 +2,18 @@ import type { Actor as Principal } from '@t-box/app-server-sdk'
 import type { AppUser, UserSession } from '@t-box/shared'
 import type { DataSource, EntityManager } from 'typeorm'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { ApiError, invalid } from '@t-box/server-foundation/errors'
+import { invalid } from '@t-box/server-foundation/errors'
 import { object, text } from '@t-box/server-foundation/input'
+import { sqlClock } from '@t-box/server-foundation/persistence/columns'
+import {
+  AppUserEntity,
+  UserSessionEntity,
+} from '@t-box/server-foundation/persistence/identity-entities'
 import { isoTime } from '@t-box/server-foundation/time'
+import { Raw } from 'typeorm'
 import { digest, hashPassword, verifyPassword } from '../admin/crypto.js'
 import { password } from '../admin/validation.js'
+import { ErrorCode } from '../error-codes.js'
 
 export class IdentityService {
   private readonly touched = new Map<string, number>()
@@ -18,7 +25,10 @@ export class IdentityService {
   private readonly dummy = hashPassword(randomBytes(32).toString('hex'))
   constructor(
     readonly source: DataSource,
-    private readonly onRegistered?: (db: EntityManager, userId: string) => Promise<unknown>,
+    private readonly onRegistered?: (
+      db: EntityManager,
+      userId: string,
+    ) => Promise<unknown>,
   ) {}
 
   limit(key: string, max = 20, ttl = 15 * 60_000) {
@@ -30,7 +40,7 @@ export class IdentityService {
     }
     const entry = this.attempts.get(key) ?? { count: 0, expires: now + ttl }
     if (++entry.count > max || this.attempts.size > 5000) {
-      throw new ApiError(429, 'RATE_LIMIT', '尝试次数过多，请稍后重试')
+      throw ErrorCode.RATE_LIMIT()
     }
     this.attempts.set(key, entry)
   }
@@ -41,10 +51,14 @@ export class IdentityService {
     device = '未知设备',
   ): Promise<UserSession> {
     const token = randomBytes(32).toString('hex')
-    await db.query(
-      'INSERT INTO user_sessions(token_hash,user_id,expires_at,device,last_seen_at,session_id) VALUES(?,?,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 7 DAY),?,UTC_TIMESTAMP(3),?)',
-      [digest(token), user.id, device, randomUUID()],
-    )
+    await db.getRepository(UserSessionEntity).insert({
+      tokenHash: digest(token),
+      userId: user.id,
+      expiresAt: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 7 DAY)',
+      device,
+      lastSeenAt: () => 'UTC_TIMESTAMP(3)',
+      sessionId: randomUUID(),
+    })
     return { token, user }
   }
 
@@ -62,16 +76,25 @@ export class IdentityService {
     const hash = await hashPassword(password(input.password))
     return this.source.transaction(async (db) => {
       const user = { id: randomUUID(), username, nickname }
-      await db.query(
-        'INSERT INTO app_users(id,username,nickname,password_hash) VALUES(?,?,?,?)',
-        [user.id, username, nickname, hash],
-      )
+      await db.getRepository(AppUserEntity).insert({
+        id: user.id,
+        username,
+        nickname,
+        passwordHash: hash,
+      })
       await this.onRegistered?.(db, user.id)
-      const [row] = await db.query(
-        'SELECT created_at AS createdAt FROM app_users WHERE id=?',
-        [user.id],
+      const row = await db
+        .getRepository(AppUserEntity)
+        .findOne({ select: { createdAt: true }, where: { id: user.id } })
+        .then((row) => (row ? { createdAt: sqlClock(row.createdAt) } : null))
+      if (!row) {
+        throw ErrorCode.SCHEMA_REQUIRED()
+      }
+      return this.session(
+        db,
+        { ...user, createdAt: isoTime(row.createdAt) },
+        device,
       )
-      return this.session(db, { ...user, createdAt: isoTime(row.createdAt) }, device)
     })
   }
 
@@ -88,44 +111,56 @@ export class IdentityService {
     }
     const secret = input.password
     const result = await this.source.transaction(async (db) => {
-      const [row] = await db.query(
-        'SELECT id,username,nickname,created_at AS createdAt,password_hash,enabled,(locked_until>UTC_TIMESTAMP(3)) AS locked FROM app_users WHERE username=? FOR UPDATE',
-        [username],
-      )
+      const [row] = await db
+        .createQueryBuilder()
+        .select(
+          'id,username,nickname,created_at AS createdAt,password_hash,enabled,(locked_until>UTC_TIMESTAMP(3)) AS locked',
+        )
+        .from('app_users', 'app_users')
+        .where('username=:p0')
+        .setLock('pessimistic_write')
+        .setParameters({ p0: username })
+        .getRawMany()
       const valid = await verifyPassword(
         secret,
         row?.password_hash ?? (await this.dummy),
       )
       if (!row || !row.enabled || Number(row.locked) || !valid) {
         if (row && !Number(row.locked)) {
-          await db.query(
-            'UPDATE app_users SET failed_attempts=failed_attempts+1,locked_until=IF(failed_attempts>=5,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 15 MINUTE),NULL) WHERE id=?',
-            [row.id],
+          await db.getRepository(AppUserEntity).update(
+            { id: row.id },
+            {
+              failedAttempts: () => 'failed_attempts+1',
+              lockedUntil: () =>
+                'IF(failed_attempts>=5,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 15 MINUTE),NULL)',
+            },
           )
         }
         return null
       }
-      await db.query(
-        'UPDATE app_users SET failed_attempts=0,locked_until=NULL WHERE id=?',
-        [row.id],
+      await db
+        .getRepository(AppUserEntity)
+        .update({ id: row.id }, { failedAttempts: 0, lockedUntil: null })
+      if (!row) {
+        throw ErrorCode.SCHEMA_REQUIRED()
+      }
+      return this.session(
+        db,
+        {
+          id: row.id,
+          username: row.username,
+          nickname: row.nickname,
+          createdAt: isoTime(row.createdAt),
+        },
+        device,
       )
-      return this.session(db, {
-        id: row.id,
-        username: row.username,
-        nickname: row.nickname,
-        createdAt: isoTime(row.createdAt),
-      }, device)
     })
     if (!result) {
-      throw new ApiError(
-        401,
-        'LOGIN_FAILED',
-        '账号或密码不正确，或账号已被锁定',
-      )
+      throw ErrorCode.LOGIN_FAILED()
     }
-    await this.source.query(
-      'DELETE FROM user_sessions WHERE expires_at<UTC_TIMESTAMP(3)',
-    )
+    await this.source
+      .getRepository(UserSessionEntity)
+      .delete({ expiresAt: Raw((column) => `${column} < UTC_TIMESTAMP(3)`) })
     return result
   }
 
@@ -134,7 +169,7 @@ export class IdentityService {
     db = this.source.manager,
   ): Promise<Principal> {
     if (!/^[a-f0-9]{64}$/.test(token)) {
-      throw new ApiError(401, 'UNAUTHENTICATED', '请登录 T Box')
+      throw ErrorCode.UNAUTHENTICATED('请登录 T Box')
     }
     return this.authenticateHash(digest(token), db)
   }
@@ -143,12 +178,18 @@ export class IdentityService {
     sessionHash: string,
     db = this.source.manager,
   ): Promise<Principal> {
-    const [user] = await db.query(
-      'SELECT u.id,u.username,u.nickname,u.created_at AS createdAt FROM user_sessions s JOIN app_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>UTC_TIMESTAMP(3) AND u.enabled=TRUE',
-      [sessionHash],
-    )
+    const [user] = await db
+      .createQueryBuilder()
+      .select('u.id,u.username,u.nickname,u.created_at AS createdAt')
+      .from('user_sessions', 's')
+      .innerJoin('app_users', 'u', 'u.id=s.user_id')
+      .where(
+        's.token_hash=:p0 AND s.expires_at>UTC_TIMESTAMP(3) AND u.enabled=TRUE',
+      )
+      .setParameters({ p0: sessionHash })
+      .getRawMany()
     if (!user) {
-      throw new ApiError(401, 'UNAUTHENTICATED', '登录已失效，请重新登录')
+      throw ErrorCode.UNAUTHENTICATED('登录已失效，请重新登录')
     }
     const now = Date.now()
     if (now - (this.touched.get(sessionHash) || 0) > 300000) {
@@ -156,7 +197,16 @@ export class IdentityService {
         this.touched.delete(this.touched.keys().next().value!)
       }
       this.touched.set(sessionHash, now)
-      await db.query('UPDATE user_sessions SET last_seen_at=UTC_TIMESTAMP(3) WHERE token_hash=? AND (last_seen_at IS NULL OR last_seen_at<DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 5 MINUTE))', [sessionHash])
+      await db
+        .createQueryBuilder()
+        .update('user_sessions')
+        .set({ lastSeenAt: () => 'UTC_TIMESTAMP(3)' })
+        .updateEntity(false)
+        .where(
+          'token_hash=:p0 AND (last_seen_at IS NULL OR last_seen_at<DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 5 MINUTE))',
+        )
+        .setParameters({ p0: sessionHash })
+        .execute()
     }
     return {
       user: { ...user, createdAt: isoTime(user.createdAt) },
@@ -165,9 +215,9 @@ export class IdentityService {
   }
 
   async logout(principal: Principal) {
-    await this.source.query('DELETE FROM user_sessions WHERE token_hash=?', [
-      principal.sessionHash,
-    ])
+    await this.source
+      .getRepository(UserSessionEntity)
+      .delete({ tokenHash: principal.sessionHash })
   }
 
   async updateProfile(principal: Principal, value: unknown): Promise<AppUser> {
@@ -175,10 +225,9 @@ export class IdentityService {
     const nickname = text(input.nickname, '昵称', 40)
     return this.source.transaction(async (db) => {
       const current = await this.authenticateHash(principal.sessionHash, db)
-      await db.query('UPDATE app_users SET nickname=? WHERE id=?', [
-        nickname,
-        current.user.id,
-      ])
+      await db
+        .getRepository(AppUserEntity)
+        .update({ id: current.user.id }, { nickname })
       return { ...current.user, nickname }
     })
   }
@@ -188,24 +237,31 @@ export class IdentityService {
     const next = await hashPassword(password(input.newPassword))
     await this.source.transaction(async (db) => {
       await this.authenticateHash(principal.sessionHash, db)
-      const [user] = await db.query(
-        'SELECT password_hash FROM app_users WHERE id=? FOR UPDATE',
-        [principal.user.id],
-      )
+      const user = await db
+        .getRepository(AppUserEntity)
+        .findOne({
+          select: { passwordHash: true },
+          where: { id: principal.user.id },
+          lock: { mode: 'pessimistic_write' },
+        })
+        .then((row) => (row ? { password_hash: row.passwordHash } : null))
       if (
+        !user ||
         typeof input.currentPassword !== 'string' ||
         input.currentPassword.length > 128 ||
         !(await verifyPassword(input.currentPassword, user.password_hash))
       ) {
         invalid('currentPassword', '当前密码不正确')
       }
-      await db.query(
-        'UPDATE app_users SET password_hash=?,failed_attempts=0,locked_until=NULL WHERE id=?',
-        [next, principal.user.id],
-      )
-      await db.query('DELETE FROM user_sessions WHERE user_id=?', [
-        principal.user.id,
-      ])
+      await db
+        .getRepository(AppUserEntity)
+        .update(
+          { id: principal.user.id },
+          { passwordHash: next, failedAttempts: 0, lockedUntil: null },
+        )
+      await db
+        .getRepository(UserSessionEntity)
+        .delete({ userId: principal.user.id })
     })
   }
 }

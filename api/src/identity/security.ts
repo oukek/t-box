@@ -8,9 +8,16 @@ import {
   hashPassword,
   verifyPassword,
 } from '@t-box/server-foundation/crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { object, text } from '@t-box/server-foundation/input'
+import { sqlClock } from '@t-box/server-foundation/persistence/columns'
+import {
+  AppUserEntity,
+  UserSessionEntity,
+} from '@t-box/server-foundation/persistence/identity-entities'
 import { isoTime } from '@t-box/server-foundation/time'
+import { IsNull, Not, Raw } from 'typeorm'
+import { UserRecoveryCodeEntity } from '../db/records/identity-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 export function deviceLabel(agent: unknown) {
   const value = typeof agent === 'string' ? agent.slice(0, 500) : ''
@@ -42,11 +49,36 @@ export class AccountSecurityService {
   constructor(readonly identity: IdentityService) {}
   async sessions(actor: Actor): Promise<AccountSession[]> {
     await this.identity.authenticateHash(actor.sessionHash)
-    const rows = await this.identity.source.query(
-      'SELECT session_id,token_hash,device,created_at,last_seen_at,expires_at FROM user_sessions WHERE user_id=? AND expires_at>UTC_TIMESTAMP(3) ORDER BY created_at DESC LIMIT 100',
-      [actor.user.id],
-    )
-    return rows.map((row: any) => ({
+    const rows = await this.identity.source
+      .getRepository(UserSessionEntity)
+      .find({
+        select: {
+          sessionId: true,
+          tokenHash: true,
+          device: true,
+          createdAt: true,
+          lastSeenAt: true,
+          expiresAt: true,
+        },
+        where: {
+          userId: actor.user.id,
+          expiresAt: Raw((column) => `${column} > UTC_TIMESTAMP(3)`),
+        },
+        order: { createdAt: 'DESC' },
+        take: 100,
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          session_id: row.sessionId,
+          token_hash: row.tokenHash,
+          device: row.device,
+          created_at: sqlClock(row.createdAt),
+          last_seen_at:
+            row.lastSeenAt === null ? null : sqlClock(row.lastSeenAt),
+          expires_at: sqlClock(row.expiresAt),
+        })),
+      )
+    return rows.map((row) => ({
       id: row.session_id,
       current: row.token_hash === actor.sessionHash,
       device: row.device,
@@ -59,35 +91,41 @@ export class AccountSecurityService {
   async revoke(actor: Actor, id: string) {
     await this.identity.authenticateHash(actor.sessionHash)
     if (!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)) {
-      throw new ApiError(400, 'SESSION_ID_INVALID', '登录设备标识无效')
+      throw ErrorCode.SESSION_ID_INVALID()
     }
-    const [row] = await this.identity.source.query(
-      'SELECT token_hash FROM user_sessions WHERE user_id=? AND session_id=?',
-      [actor.user.id, id],
-    )
+    const row = await this.identity.source
+      .getRepository(UserSessionEntity)
+      .findOne({
+        select: { tokenHash: true },
+        where: { userId: actor.user.id, sessionId: id },
+      })
+      .then((row) => (row ? { token_hash: row.tokenHash } : null))
     if (!row) {
-      throw new ApiError(404, 'SESSION_NOT_FOUND', '设备登录已失效或不存在')
+      throw ErrorCode.SESSION_NOT_FOUND()
     }
-    await this.identity.source.query(
-      'DELETE FROM user_sessions WHERE user_id=? AND session_id=?',
-      [actor.user.id, id],
-    )
+    await this.identity.source
+      .getRepository(UserSessionEntity)
+      .delete({ userId: actor.user.id, sessionId: id })
     return { current: row.token_hash === actor.sessionHash }
   }
 
   async revokeOthers(actor: Actor) {
     await this.identity.authenticateHash(actor.sessionHash)
-    await this.identity.source.query(
-      'DELETE FROM user_sessions WHERE user_id=? AND token_hash<>?',
-      [actor.user.id, actor.sessionHash],
-    )
+    await this.identity.source
+      .getRepository(UserSessionEntity)
+      .delete({ userId: actor.user.id, tokenHash: Not(actor.sessionHash) })
   }
 
   async recoveryStatus(actor: Actor): Promise<RecoveryCodeStatus> {
-    const [row] = await this.identity.source.query(
-      'SELECT SUM(used_at IS NULL) AS remaining,MAX(created_at) AS generated_at FROM user_recovery_codes WHERE user_id=?',
-      [actor.user.id],
-    )
+    const [row] = await this.identity.source
+      .createQueryBuilder()
+      .select(
+        'SUM(used_at IS NULL) AS remaining,MAX(created_at) AS generated_at',
+      )
+      .from('user_recovery_codes', 'user_recovery_codes')
+      .where('user_id=:p0')
+      .setParameters({ p0: actor.user.id })
+      .getRawMany()
     return {
       remaining: Number(row.remaining || 0),
       generatedAt: row.generated_at ? isoTime(row.generated_at) : null,
@@ -102,21 +140,24 @@ export class AccountSecurityService {
       randomBytes(16).toString('hex').toUpperCase())
     await this.identity.source.transaction(async (db) => {
       await this.identity.authenticateHash(actor.sessionHash, db)
-      const [user] = await db.query(
-        'SELECT password_hash FROM app_users WHERE id=? FOR UPDATE',
-        [actor.user.id],
-      )
-      if (!(await verifyPassword(current, user.password_hash))) {
-        throw new ApiError(400, 'CURRENT_PASSWORD_INVALID', '当前密码不正确')
+      const user = await db
+        .getRepository(AppUserEntity)
+        .findOne({
+          select: { passwordHash: true },
+          where: { id: actor.user.id },
+          lock: { mode: 'pessimistic_write' },
+        })
+        .then((row) => (row ? { password_hash: row.passwordHash } : null))
+      if (!user || !(await verifyPassword(current, user.password_hash))) {
+        throw ErrorCode.CURRENT_PASSWORD_INVALID()
       }
-      await db.query('DELETE FROM user_recovery_codes WHERE user_id=?', [
-        actor.user.id,
-      ])
+      await db
+        .getRepository(UserRecoveryCodeEntity)
+        .delete({ user_id: actor.user.id })
       for (const code of codes) {
-        await db.query(
-          'INSERT INTO user_recovery_codes(user_id,code_hash) VALUES(?,?)',
-          [actor.user.id, digest(code)],
-        )
+        await db
+          .getRepository(UserRecoveryCodeEntity)
+          .insert({ user_id: actor.user.id, code_hash: digest(code) })
       }
     })
     return { codes: codes.map((code) => code.match(/.{8}/g)!.join('-')) }
@@ -135,45 +176,59 @@ export class AccountSecurityService {
             .replaceAll(' ', '')
             .toUpperCase()
         : ''
-    const invalid = () =>
-      new ApiError(
-        400,
-        'RECOVERY_INVALID',
-        '账号或恢复码无效，恢复码可能已使用或已被更新',
-      )
+    const invalid = () => ErrorCode.RECOVERY_INVALID()
     if (!/^[a-f0-9]{32}$/i.test(code)) {
       throw invalid()
     }
     const codeHash = digest(code)
-    const [candidate] = await this.identity.source.query(
-      'SELECT u.id FROM app_users u JOIN user_recovery_codes c ON c.user_id=u.id WHERE u.username=? AND u.enabled=TRUE AND c.code_hash=? AND c.used_at IS NULL',
-      [username, codeHash],
-    )
+    const [candidate] = await this.identity.source
+      .createQueryBuilder()
+      .select('u.id', 'id')
+      .from('app_users', 'u')
+      .innerJoin('user_recovery_codes', 'c', 'c.user_id=u.id')
+      .where(
+        'u.username=:p0 AND u.enabled=TRUE AND c.code_hash=:p1 AND c.used_at IS NULL',
+      )
+      .setParameters({ p0: username, p1: codeHash })
+      .getRawMany()
     if (!candidate) {
       throw invalid()
     }
     const hash = await hashPassword(nextPassword)
     await this.identity.source.transaction(async (db) => {
-      const [user] = await db.query(
-        'SELECT id,enabled FROM app_users WHERE id=? FOR UPDATE',
-        [candidate.id],
-      )
-      const [match] = await db.query(
-        'SELECT code_hash FROM user_recovery_codes WHERE user_id=? AND code_hash=? AND used_at IS NULL FOR UPDATE',
-        [candidate.id, codeHash],
-      )
+      const user = await db
+        .getRepository(AppUserEntity)
+        .findOne({
+          select: { id: true, enabled: true },
+          where: { id: candidate.id },
+          lock: { mode: 'pessimistic_write' },
+        })
+        .then((row) => (row ? { id: row.id, enabled: row.enabled } : null))
+      const match = await db.getRepository(UserRecoveryCodeEntity).findOne({
+        select: { code_hash: true },
+        where: {
+          user_id: candidate.id,
+          code_hash: codeHash,
+          used_at: IsNull(),
+        },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (!user?.enabled || !match) {
         throw invalid()
       }
-      await db.query(
-        'UPDATE user_recovery_codes SET used_at=UTC_TIMESTAMP(3) WHERE user_id=? AND code_hash=?',
-        [user.id, codeHash],
-      )
-      await db.query(
-        'UPDATE app_users SET password_hash=?,failed_attempts=0,locked_until=NULL WHERE id=?',
-        [hash, user.id],
-      )
-      await db.query('DELETE FROM user_sessions WHERE user_id=?', [user.id])
+      await db
+        .getRepository(UserRecoveryCodeEntity)
+        .update(
+          { user_id: user.id, code_hash: codeHash },
+          { used_at: () => 'UTC_TIMESTAMP(3)' },
+        )
+      await db
+        .getRepository(AppUserEntity)
+        .update(
+          { id: user.id },
+          { passwordHash: hash, failedAttempts: 0, lockedUntil: null },
+        )
+      await db.getRepository(UserSessionEntity).delete({ userId: user.id })
     })
   }
 }

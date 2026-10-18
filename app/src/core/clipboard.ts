@@ -1,3 +1,4 @@
+import { ErrorCode } from '../error-codes.js'
 /** Clipboard API for HTTPS/WebViews, with a user-gesture fallback for local HTTP H5 development. */
 export async function copyText(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
@@ -29,7 +30,7 @@ export async function copyText(text: string): Promise<void> {
     field.select()
     field.setSelectionRange(0, text.length)
     if (!document.execCommand('copy')) {
-      throw new Error('Clipboard unavailable')
+      throw ErrorCode.INTERNAL_CLIPBOARD_UNAVAILABLE()
     }
   } finally {
     field.remove()

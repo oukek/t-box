@@ -1,7 +1,8 @@
 import type { DataSource, EntityManager } from 'typeorm'
 import { createHash } from 'node:crypto'
-import { ApiError } from '../errors.js'
+import { ErrorCode } from '../error-codes.js'
 import { ApplicationOperationEntity } from './entities.js'
+import { AppUserEntity } from './identity-entities.js'
 
 export function stableJson(value: unknown): string {
   if (Array.isArray(value)) {
@@ -30,31 +31,27 @@ export async function mutateApplication<T>(
   run: (db: EntityManager) => Promise<T>,
 ): Promise<T> {
   if (typeof key !== 'string' || key.length < 8 || key.length > 200) {
-    throw new ApiError(
-      400,
-      'IDEMPOTENCY_REQUIRED',
-      '请提供 8 至 200 字符的操作标识',
-    )
+    throw ErrorCode.IDEMPOTENCY_REQUIRED('请提供 8 至 200 字符的操作标识')
   }
   const operationKey = fingerprint([action, key])
   const payloadHash = fingerprint(payload)
   return source.transaction(async (db) => {
-    const users = await db.query(
-      'SELECT id FROM app_users WHERE id=? AND enabled=1 FOR UPDATE',
-      [userId],
-    )
+    const users = await db
+      .getRepository(AppUserEntity)
+      .find({
+        select: { id: true },
+        where: { id: userId, enabled: true },
+        lock: { mode: 'pessimistic_write' },
+      })
+      .then((rows) => rows.map((row) => ({ id: row.id })))
     if (!users.length) {
-      throw new ApiError(401, 'UNAUTHORIZED', '账号不可用')
+      throw ErrorCode.UNAUTHORIZED()
     }
     const repo = db.getRepository(ApplicationOperationEntity)
     const old = await repo.findOneBy({ userId, appId, operationKey })
     if (old) {
       if (old.payloadHash !== payloadHash) {
-        throw new ApiError(
-          409,
-          'IDEMPOTENCY_CONFLICT',
-          '同一操作标识不能用于不同内容',
-        )
+        throw ErrorCode.IDEMPOTENCY_CONFLICT('同一操作标识不能用于不同内容')
       }
       return old.response as T
     }

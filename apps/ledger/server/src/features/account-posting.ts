@@ -2,6 +2,10 @@ import type { EntityManager } from 'typeorm'
 import { randomUUID } from 'node:crypto'
 import { invalid } from '@t-box/server-foundation/errors'
 import { money } from '../finance/money.js'
+import {
+  LedgerAccountEntity,
+  LedgerAccountEntryEntity,
+} from '../persistence/accounts-entities.js'
 /** Same book lock and transaction as the originating financial event. */
 export async function postAccount(
   db: EntityManager,
@@ -16,18 +20,24 @@ export async function postAccount(
   if (!account || value === 0n) {
     return
   }
-  const [row] = await db.query(
-    'SELECT id,archived FROM ledger_accounts WHERE ledger_id=? AND id=?',
-    [book, account],
-  )
+  const row = await db.getRepository(LedgerAccountEntity).findOne({
+    select: { id: true, archived: true },
+    where: { ledger_id: book, id: account },
+  })
   if (!row) {
     invalid('accountId', '资金账户不存在或不属于此账本')
   }
   // Reversals can post to archived accounts; callers validate active accounts for new operations.
-  await db.query(
-    'INSERT INTO ledger_account_entries(id,ledger_id,account_id,subject_id,entry_date,amount,note,created_by) VALUES(?,?,?,?,?,?,?,?)',
-    [randomUUID(), book, account, subject, date, money(value), note, actor],
-  )
+  await db.getRepository(LedgerAccountEntryEntity).insert({
+    id: randomUUID(),
+    ledger_id: book,
+    account_id: account,
+    subject_id: subject,
+    entry_date: date,
+    amount: money(value),
+    note,
+    created_by: actor,
+  })
 }
 export async function activeAccount(
   db: EntityManager,
@@ -37,10 +47,10 @@ export async function activeAccount(
   if (!id) {
     return
   }
-  const [row] = await db.query(
-    'SELECT id FROM ledger_accounts WHERE ledger_id=? AND id=? AND archived=FALSE',
-    [book, id],
-  )
+  const row = await db.getRepository(LedgerAccountEntity).findOne({
+    select: { id: true },
+    where: { ledger_id: book, id, archived: false },
+  })
   if (!row) {
     invalid('accountId', '请选择此账本可用的资金账户')
   }

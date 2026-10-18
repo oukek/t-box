@@ -1,6 +1,9 @@
-import type { ApplicationClientInteraction, ApplicationManifest } from '@t-box/app-contracts'
+import type {
+  ApplicationClientInteraction,
+  ApplicationManifest,
+} from '@t-box/app-contracts'
 import {
-  DateTimeError,
+  DateTimeErrorCode,
   dayjs,
   localInstant,
   validDate,
@@ -61,7 +64,7 @@ export type TimeCalculationKind =
   'convert' | 'timestamp' | 'difference' | 'shift'
 export function calculateTime(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new DateTimeError('时间计算参数无效')
+    throw DateTimeErrorCode.INVALID_DATETIME('时间计算参数无效')
   }
   const args = value as Record<string, unknown>
   if (
@@ -78,20 +81,20 @@ export function calculateTime(value: unknown) {
         ].includes(k),
     )
   ) {
-    throw new DateTimeError('时间计算包含未知字段')
+    throw DateTimeErrorCode.INVALID_DATETIME('时间计算包含未知字段')
   }
   const source = validTimezone(args.source)
   const target = validTimezone(args.target ?? source)
   if (args.kind === 'timestamp') {
     if (typeof args.value !== 'string' || !/^[-+]?\d{1,16}$/.test(args.value)) {
-      throw new DateTimeError('时间戳应为整数')
+      throw DateTimeErrorCode.INVALID_DATETIME('时间戳应为整数')
     }
     if (!['seconds', 'milliseconds'].includes(String(args.unit))) {
-      throw new DateTimeError('请选择秒或毫秒')
+      throw DateTimeErrorCode.INVALID_DATETIME('请选择秒或毫秒')
     }
     const ms = Number(args.value) * (args.unit === 'seconds' ? 1000 : 1)
     if (!Number.isSafeInteger(ms) || !Number.isFinite(new Date(ms).getTime())) {
-      throw new DateTimeError('时间戳超出范围')
+      throw DateTimeErrorCode.INVALID_DATETIME('时间戳超出范围')
     }
     const result = timeSnapshot(target, new Date(ms))
     validDate(result.date)
@@ -120,7 +123,9 @@ export function calculateTime(value: unknown) {
       !Number.isSafeInteger(Number(args.amount)) ||
       Math.abs(Number(args.amount)) > 1000000
     ) {
-      throw new DateTimeError('偏移量必须为 −1000000 至 1000000 的整数')
+      throw DateTimeErrorCode.INVALID_DATETIME(
+        '偏移量必须为 −1000000 至 1000000 的整数',
+      )
     }
     const amount = Number(args.amount)
     const units = [
@@ -133,7 +138,7 @@ export function calculateTime(value: unknown) {
       'years',
     ]
     if (!units.includes(String(args.unit))) {
-      throw new DateTimeError('时间单位无效')
+      throw DateTimeErrorCode.INVALID_DATETIME('时间单位无效')
     }
     try {
       const unit = String(args.unit) as import('@t-box/dayjs').ManipulateType
@@ -151,10 +156,10 @@ export function calculateTime(value: unknown) {
       validDate(result.date)
       return result
     } catch {
-      throw new DateTimeError('偏移后的时间超出范围')
+      throw DateTimeErrorCode.INVALID_DATETIME('偏移后的时间超出范围')
     }
   }
-  throw new DateTimeError('时间计算类型无效')
+  throw DateTimeErrorCode.INVALID_DATETIME('时间计算类型无效')
 }
 export interface TimerInput {
   label: string
@@ -212,20 +217,22 @@ export function transitionTimer(
       deadline: new Date(now + current.remainingMs).toISOString(),
     }
   }
-  throw new DateTimeError('当前倒计时状态不支持此操作')
+  throw DateTimeErrorCode.INVALID_DATETIME('当前倒计时状态不支持此操作')
 }
 export function parseTimeParams(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new DateTimeError('页面参数无效')
+    throw DateTimeErrorCode.INVALID_DATETIME('页面参数无效')
   }
   const args = value as Record<string, unknown>
   if (Object.keys(args).some((k) => !['tab', 'timezone'].includes(k))) {
-    throw new DateTimeError('未知页面参数')
+    throw DateTimeErrorCode.INVALID_DATETIME('未知页面参数')
   }
   const result: Record<string, string> = {}
   if (args.tab != null) {
-    if (!['clock', 'timers', 'stopwatch', 'convert'].includes(String(args.tab))) {
-      throw new DateTimeError('时间页面不存在')
+    if (
+      !['clock', 'timers', 'stopwatch', 'convert'].includes(String(args.tab))
+    ) {
+      throw DateTimeErrorCode.INVALID_DATETIME('时间页面不存在')
     }
     result.tab = String(args.tab)
   }

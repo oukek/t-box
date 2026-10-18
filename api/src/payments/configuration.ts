@@ -13,8 +13,12 @@ import {
   verify,
 } from 'node:crypto'
 import { isIP } from 'node:net'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { object } from '@t-box/server-foundation/input'
+import {
+  PaymentConfigurationEntity,
+  PaymentSettingEntity,
+} from '../db/records/payments-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 export type WechatRuntime = WechatPaymentConfiguration &
   Required<WechatPaymentSecrets> & { id: string }
@@ -46,13 +50,11 @@ function https(value: unknown, name: string) {
       isIP(u.hostname) ||
       u.hostname === 'localhost'
     ) {
-      throw new Error('Invalid public HTTPS URL')
+      throw ErrorCode.INTERNAL_INVALID_PUBLIC_HTTPS_URL()
     }
     return u.href.replace(/\/$/, '')
   } catch {
-    throw new ApiError(
-      400,
-      'INVALID_PAYMENT_CONFIG',
+    throw ErrorCode.INVALID_PAYMENT_CONFIG(
       `${name}须为不带查询参数的公网 HTTPS 地址`,
     )
   }
@@ -67,19 +69,28 @@ export class PaymentConfiguration {
   async runtime(id?: string): Promise<WechatRuntime | null> {
     if (this.cache) {
       if (!id) {
-        const [settings] = await this.source.query(
-          'SELECT configuration_id FROM payment_settings WHERE id=1',
-        )
+        const settings = await this.source
+          .getRepository(PaymentSettingEntity)
+          .findOne({
+            select: { id: true, configuration_id: true },
+            where: { id: 1 },
+          })
         if (!settings?.configuration_id) {
           return null
         }
         id = settings.configuration_id
       }
       const row = await this.cache.read('wechat', id!, async () => {
-        const [row] = await this.source.query(
-          'SELECT * FROM payment_configurations WHERE id=?',
-          [id],
-        )
+        const row = await this.source
+          .getRepository(PaymentConfigurationEntity)
+          .findOne({
+            select: {
+              id: true,
+              public_json: true,
+              secret_cipher: true,
+            },
+            where: { id },
+          })
         return row ?? null
       })
       return row
@@ -93,12 +104,18 @@ export class PaymentConfiguration {
           }
         : null
     }
-    const [row] = await this.source.query(
-      id
-        ? 'SELECT * FROM payment_configurations WHERE id=?'
-        : 'SELECT c.* FROM payment_settings s JOIN payment_configurations c ON c.id=s.configuration_id WHERE s.id=1',
-      id ? [id] : [],
-    )
+    const query = this.source
+      .createQueryBuilder()
+      .select('c.id,c.public_json,c.secret_cipher')
+      .from('payment_configurations', 'c')
+    if (id) {
+      query.where('c.id=:id', { id })
+    } else {
+      query
+        .innerJoin('payment_settings', 's', 'c.id=s.configuration_id')
+        .where('s.id=1')
+    }
+    const row = await query.getRawOne()
     if (!row) {
       return null
     }
@@ -114,14 +131,24 @@ export class PaymentConfiguration {
 
   async credentials(bound: WechatRuntime): Promise<WechatRuntime> {
     // Credentials rotate at merchant/account level, while the order keeps its identity.
-    const [merchant] = await this.source.query(
-      'SELECT id FROM payment_configurations WHERE JSON_UNQUOTE(JSON_EXTRACT(public_json,\'$.merchantId\'))=? ORDER BY version DESC LIMIT 1',
-      [bound.merchantId],
-    )
-    const [account] = await this.source.query(
-      'SELECT id FROM payment_configurations WHERE JSON_UNQUOTE(JSON_EXTRACT(public_json,\'$.appId\'))=? ORDER BY version DESC LIMIT 1',
-      [bound.appId],
-    )
+    const [merchant] = await this.source
+      .createQueryBuilder()
+      .select('id')
+      .from('payment_configurations', 'payment_configurations')
+      .where('JSON_UNQUOTE(JSON_EXTRACT(public_json,\'$.merchantId\'))=:p0')
+      .orderBy('version', 'DESC')
+      .limit(1)
+      .setParameters({ p0: bound.merchantId })
+      .getRawMany()
+    const [account] = await this.source
+      .createQueryBuilder()
+      .select('id')
+      .from('payment_configurations', 'payment_configurations')
+      .where('JSON_UNQUOTE(JSON_EXTRACT(public_json,\'$.appId\'))=:p0')
+      .orderBy('version', 'DESC')
+      .limit(1)
+      .setParameters({ p0: bound.appId })
+      .getRawMany()
     const signing = merchant ? await this.runtime(merchant.id) : null
     const oauth = account ? await this.runtime(account.id) : null
     return {
@@ -164,19 +191,19 @@ export class PaymentConfiguration {
       'appSecret',
     ])
     return this.source.transaction(async (db) => {
-      await db.query('SELECT id FROM payment_settings WHERE id=1 FOR UPDATE')
+      await db.getRepository(PaymentSettingEntity).find({
+        select: { id: true },
+        where: { id: 1 },
+        lock: { mode: 'pessimistic_write' },
+      })
       const old = await this.runtime()
       if (old && b.id !== old.id) {
-        throw new ApiError(
-          409,
-          'PAYMENT_CONFIG_STALE',
-          '支付配置已修改，请刷新后重试',
-        )
+        throw ErrorCode.PAYMENT_CONFIG_STALE()
       }
       const c = { ...emptyWechat, ...b } as WechatRuntime
       for (const key of ['enabled', 'native', 'h5', 'jsapi', 'app'] as const) {
         if (typeof c[key] !== 'boolean') {
-          throw new ApiError(400, 'INVALID_PAYMENT_CONFIG', '支付开关无效')
+          throw ErrorCode.INVALID_PAYMENT_CONFIG()
         }
       }
       for (const key of [
@@ -189,7 +216,7 @@ export class PaymentConfiguration {
         'description',
       ] as const) {
         if (typeof c[key] !== 'string' || c[key].length > 10000) {
-          throw new ApiError(400, 'INVALID_PAYMENT_CONFIG', '支付配置字段无效')
+          throw ErrorCode.INVALID_PAYMENT_CONFIG('支付配置字段无效')
         }
       }
       const secrets = Object.fromEntries(
@@ -198,7 +225,7 @@ export class PaymentConfiguration {
             b[k] !== undefined &&
             (typeof b[k] !== 'string' || b[k].length > 10000)
           ) {
-            throw new ApiError(400, 'INVALID_PAYMENT_CONFIG', '密钥格式无效')
+            throw ErrorCode.INVALID_PAYMENT_CONFIG('密钥格式无效')
           }
           return [k, (b[k] as string | undefined)?.trim() || old?.[k] || '']
         }),
@@ -212,13 +239,9 @@ export class PaymentConfiguration {
               !/^wx[a-zA-Z0-9]{8,30}$/.test(c.mobileAppId)) ||
               !/^\d{6,32}$/.test(c.merchantId) ||
               !/^[A-F0-9]{16,64}$/i.test(c.merchantSerial) ||
-              !/^(?:PUB_KEY_ID_\w+|[A-Fa-f0-9]{16,64})$/.test(
-                c.platformSerial,
-              )
+              !/^(?:PUB_KEY_ID_\w+|[A-Fa-f0-9]{16,64})$/.test(c.platformSerial)
         ) {
-          throw new ApiError(
-            400,
-            'INVALID_PAYMENT_CONFIG',
+          throw ErrorCode.INVALID_PAYMENT_CONFIG(
             'AppID、商户号或证书 / 公钥 ID 格式无效',
           )
         }
@@ -227,18 +250,10 @@ export class PaymentConfiguration {
           c.frontendUrl = https(c.frontendUrl, '支付网页地址')
         }
         if (Buffer.byteLength(secrets.apiV3Key) !== 32) {
-          throw new ApiError(
-            400,
-            'INVALID_PAYMENT_CONFIG',
-            'API v3 密钥须为 32 字节',
-          )
+          throw ErrorCode.INVALID_PAYMENT_CONFIG('API v3 密钥须为 32 字节')
         }
         if (!c.description.trim() || c.description.length > 127) {
-          throw new ApiError(
-            400,
-            'INVALID_PAYMENT_CONFIG',
-            '商品描述须为 1–127 字符',
-          )
+          throw ErrorCode.INVALID_PAYMENT_CONFIG('商品描述须为 1–127 字符')
         }
         try {
           const privateKey = createPrivateKey(secrets.privateKey)
@@ -249,7 +264,7 @@ export class PaymentConfiguration {
             (privateKey.asymmetricKeyDetails?.modulusLength ?? 0) < 2048 ||
             (platformKey.asymmetricKeyDetails?.modulusLength ?? 0) < 2048
           ) {
-            throw new Error('Payment keys must use RSA with at least 2048 bits')
+            throw ErrorCode.INTERNAL_PAYMENT_KEYS_MUST_USE_RSA_WITH_AT_LEAST_2048_BITS()
           }
           if (
             !verify(
@@ -259,19 +274,15 @@ export class PaymentConfiguration {
               sign('RSA-SHA256', Buffer.from('config-check'), privateKey),
             )
           ) {
-            throw new Error('Payment private key failed signature verification')
+            throw ErrorCode.INTERNAL_PAYMENT_PRIVATE_KEY_FAILED_SIGNATURE_VERIFICATION()
           }
         } catch {
-          throw new ApiError(
-            400,
-            'INVALID_PAYMENT_CONFIG',
+          throw ErrorCode.INVALID_PAYMENT_CONFIG(
             '商户私钥或微信支付公钥 / 平台证书 PEM 无效',
           )
         }
         if (c.jsapi && !/^[A-Z0-9]{16,128}$/i.test(secrets.appSecret)) {
-          throw new ApiError(
-            400,
-            'INVALID_PAYMENT_CONFIG',
+          throw ErrorCode.INVALID_PAYMENT_CONFIG(
             'JSAPI 支付需要公众号 AppSecret',
           )
         }
@@ -280,39 +291,29 @@ export class PaymentConfiguration {
           (old.appId !== c.appId || old.merchantId !== c.merchantId) &&
           (!b.privateKey || !b.apiV3Key || (c.jsapi && !b.appSecret))
         ) {
-          throw new ApiError(
-            400,
-            'INVALID_PAYMENT_CONFIG',
+          throw ErrorCode.INVALID_PAYMENT_CONFIG(
             '更换商户或公众号时须重新填写全部对应密钥',
           )
         }
       } else if (c.enabled) {
-        throw new ApiError(400, 'INVALID_PAYMENT_CONFIG', '请先完成支付配置')
+        throw ErrorCode.INVALID_PAYMENT_CONFIG('请先完成支付配置')
       }
       if (c.enabled && !c.native && !c.h5 && !c.jsapi && !c.app) {
-        throw new ApiError(
-          400,
-          'INVALID_PAYMENT_CONFIG',
-          '至少启用一种支付方式',
-        )
+        throw ErrorCode.INVALID_PAYMENT_CONFIG('至少启用一种支付方式')
       }
       const id = randomUUID()
       const pub = Object.fromEntries(
         Object.keys(emptyWechat).map((k) => [k, c[k as keyof WechatRuntime]]),
       )
-      await db.query(
-        'INSERT INTO payment_configurations(id,public_json,secret_cipher,administrator_id) VALUES(?,?,?,?)',
-        [
-          id,
-          JSON.stringify(pub),
-          this.vault.encrypt(JSON.stringify(secrets)),
-          administrator,
-        ],
-      )
-      await db.query(
-        'UPDATE payment_settings SET configuration_id=? WHERE id=1',
-        [id],
-      )
+      await db.getRepository(PaymentConfigurationEntity).insert({
+        id,
+        public_json: pub,
+        secret_cipher: this.vault.encrypt(JSON.stringify(secrets)),
+        administrator_id: administrator,
+      })
+      await db
+        .getRepository(PaymentSettingEntity)
+        .update({ id: 1 }, { configuration_id: id })
       return { ...pub, id }
     })
   }

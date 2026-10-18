@@ -1,27 +1,27 @@
 import type { CalculationResult } from './types.js'
 import { numberList } from './algebra.js'
-import {
-  CalculationError,
-  formatNumber as f,
-} from './types.js'
+import { CalculationErrorCode } from './error-codes.js'
+import { formatNumber as f } from './types.js'
 
 type Matrix = number[][]
 function parse(value: string | null | undefined): Matrix {
   if (typeof value !== 'string') {
-    throw new CalculationError('请输入矩阵')
+    throw CalculationErrorCode.INVALID_CALCULATION('请输入矩阵')
   }
   const rows = value
     .trim()
     .split(/[\n;；]+/)
     .map((row) => numberList(row, 6))
   if (rows.length > 6 || rows.some((row) => row.length !== rows[0]!.length)) {
-    throw new CalculationError('矩阵最多 6 × 6，各行元素数量需一致')
+    throw CalculationErrorCode.INVALID_CALCULATION(
+      '矩阵最多 6 × 6，各行元素数量需一致',
+    )
   }
   return rows
 }
 function square(a: Matrix) {
   if (a.length !== a[0]!.length) {
-    throw new CalculationError('此运算需要方阵')
+    throw CalculationErrorCode.INVALID_CALCULATION('此运算需要方阵')
   }
 }
 const text = (a: Matrix) => a.map((row) => row.map(f).join('  ')).join('\n')
@@ -54,13 +54,15 @@ export function calculateMatrix(
         if (v.operation === 'determinant') {
           return [{ label: '行列式', value: '0' }]
         }
-        throw new CalculationError('矩阵奇异，不存在逆矩阵')
+        throw CalculationErrorCode.INVALID_CALCULATION('矩阵奇异，不存在逆矩阵')
       }
       if (Math.abs(p) < norm * 1e-12) {
-        throw new CalculationError('矩阵接近奇异，无法可靠计算')
+        throw CalculationErrorCode.INVALID_CALCULATION(
+          '矩阵接近奇异，无法可靠计算',
+        )
       }
       if (pivot !== col) {
-        [m[pivot], m[col]] = [m[col]!, m[pivot]!]
+        ;[m[pivot], m[col]] = [m[col]!, m[pivot]!]
         det = -det
       }
       det *= p
@@ -84,7 +86,9 @@ export function calculateMatrix(
     const b = parse(v.b)
     if (v.operation === 'multiply') {
       if (cols !== b.length) {
-        throw new CalculationError('A 的列数必须等于 B 的行数')
+        throw CalculationErrorCode.INVALID_CALCULATION(
+          'A 的列数必须等于 B 的行数',
+        )
       }
       result = a.map((row) =>
         Array.from({ length: b[0]!.length }, (_, j) =>
@@ -92,13 +96,15 @@ export function calculateMatrix(
       )
     } else if (v.operation === 'add' || v.operation === 'subtract') {
       if (rows !== b.length || cols !== b[0]!.length) {
-        throw new CalculationError('加减运算的矩阵尺寸需一致')
+        throw CalculationErrorCode.INVALID_CALCULATION(
+          '加减运算的矩阵尺寸需一致',
+        )
       }
       result = a.map((row, i) =>
         row.map((x, j) => x + (v.operation === 'add' ? 1 : -1) * b[i]![j]!),
       )
     } else {
-      throw new CalculationError('矩阵运算方式无效')
+      throw CalculationErrorCode.INVALID_CALCULATION('矩阵运算方式无效')
     }
   }
   return [

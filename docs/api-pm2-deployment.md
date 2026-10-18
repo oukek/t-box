@@ -4,9 +4,9 @@
 
 所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。新增 后端部署（PM2），现有 代码检查与测试 和 后端镜像发布（Docker / OSS） 保留为独立的手动工作流。
 
-本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 停止旧 API 与 worker → 数据库初始化 → 确保管理员存在 → 自动同步应用提交凭证 → 启动 API 和 worker → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。初始化会保留已有管理员，无需在工作流中另选初始化开关。
+本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 只读数据库兼容性预检 → 停止旧 API 与 worker → 数据库初始化 → 确保管理员存在 → 自动同步应用提交凭证 → 启动 API 和 worker → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。初始化会保留已有管理员，无需在工作流中另选初始化开关。
 
-生产配置和已有数据必须事先准备好。首次初始化直接创建完整结构，同一基线重复部署不改动配置或数据；旧开发库不能自动接管，详见 [数据库初始化](database-initialization.md)。发布前按 [运行与恢复](operations-and-recovery.md) 做好备份。启动失败会停止受管理的进程并使 Actions 失败，不自动回滚数据库或用旧代码继续连接已迁移的库。
+生产配置和已有数据必须事先准备好。首次初始化直接创建完整结构，同一基线重复部署不改动配置或数据；旧开发库不能自动接管，详见 [数据库初始化](database-initialization.md)。发布前按 [运行与恢复](operations-and-recovery.md) 做好备份。预检失败保留正在运行的旧服务；停服后的初始化或启动失败会停止受管理的进程并使 Actions 失败，不自动回滚数据库。
 
 ## GitHub 设置
 
@@ -115,15 +115,15 @@ pm2 status
 pm2 logs t-box-api --lines 100
 ```
 
-`--init-admin` 只在首次安装时使用。脚本先检查运行配置、OSS 和初始应用摘要，建立 api/.env、api/.secrets 链接及必要日志目录，不创建本地业务文件或静态产物目录。之后停止旧 worker 和 API，运行 `api/dist/init-db.js`，按选项运行管理员初始化，再用新版本的绝对路径启动 API / worker，并移除旧本地产物服务。
+`--init-admin` 只在首次安装时使用。脚本先检查运行配置、OSS 和初始应用摘要，建立 api/.env、api/.secrets 链接及必要日志目录，不创建本地业务文件或静态产物目录。之后停止旧 worker 和 API，运行 `api/dist/init-db.js`（停服前已先运行 `--check` 只读预检），按选项运行管理员初始化，再用新版本的绝对路径启动 API / worker，并移除旧本地产物服务。
 
 初始管理员凭据保存在 shared/secrets/bootstrap-admin.txt；已有管理员不会重置。首次登录修改密码后删除该文件。
 
-启动成功要求 API 健康端点的 MySQL 正常、已配置 Redis 时 Redis 也正常，并且 API / worker 两个进程连续三次检查均 online、PID 稳定、运行路径属于新版本。仅 HTTP 200 或 PM2 显示短暂 online 不算成功。默认最多检查 60 次，每次 HTTP 请求最多 3 秒、检查间隔 1 秒。通过后更新 `current`，保留原链接为 `previous`，并运行 `pm2 save`。使用 root `.pm2-deploy.lock` 防止并发迁移；异常中断留下锁时，先核对其中 owner.json 的进程与部署状态，再清理确认失效的锁。
+启动成功要求 API 健康端点的 MySQL 正常、已配置 Redis 时 Redis 也正常，并且 API / worker 两个进程连续三次检查均 online、PID 稳定、运行路径属于新版本。仅 HTTP 200 或 PM2 显示短暂 online 不算成功。默认最多检查 60 次，每次 HTTP 请求最多 3 秒、检查间隔 1 秒。通过后更新 `current`，保留原链接为 `previous`，并运行 `pm2 save`。使用 root `.pm2-deploy.lock` 防止并发发布；异常中断留下锁时，先核对其中 owner.json 的进程与部署状态，再清理确认失效的锁。
 
 ecosystem 使用绝对版本路径、fork 模式、单实例、关闭 watch，退出等待为 90 秒。不要直接开启 cluster 多实例：当前会话订阅、账本通知和部分限流仍需处理跨实例状态。
 
-不再启动本地应用产物服务，也不需要 ARTIFACT_PORT。API 的 HOST/PORT 可在 shared/api.env 覆盖。`prepare-release.mjs` 仍可单独执行，它只准备运行配置与必要目录，不启动服务或迁移。
+不再启动本地应用产物服务，也不需要 ARTIFACT_PORT。API 的 HOST/PORT 可在 shared/api.env 覆盖。`prepare-release.mjs` 仍可单独执行，它只准备运行配置与必要目录，不启动服务或初始化数据库。
 
 配置开机恢复时，以实际运行账户执行 pm2 startup，再按照其提示执行 systemd 安装命令，之后 pm2 save。升级 Node 后需重新检查 startup 的 Node 路径。
 
@@ -138,7 +138,7 @@ release="/www/wwwroot/tbox/releases/NEW_RELEASE_ID"
 node "$release/control/start-release.mjs"
 ```
 
-迁移失败就停止后续步骤，检查实际进程和数据库状态；不能随意回退数据库。升级会有短暂停服，健康检查应同时确认 Redis 状态。代码回滚仅在数据库结构兼容旧代码时执行：选择旧 release，手动准备路径，再删除/启动对应 PM2 进程；不要自动执行 down 迁移。
+初始化失败就停止后续步骤，检查实际进程和数据库状态；不能随意回退数据库。升级会有短暂停服，健康检查应同时确认 Redis 状态。代码回滚仅在数据库结构兼容旧代码时执行：选择旧 release，手动准备路径，再删除/启动对应 PM2 进程；不要自动反向修改数据库结构。
 
 API 日志自身对敏感字段脱敏，PM2 日志保存在 shared/logs。运行账户需要自行配置日志轮转和发布目录保留策略；保留当前版本、可回滚版本和必要备份，不删除共享数据。前端、后台静态产物及微信支付域名/回调仍需分别配置。
 

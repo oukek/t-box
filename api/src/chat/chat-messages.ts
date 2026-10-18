@@ -3,14 +3,10 @@ import type {
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions'
 import type { ProviderItem } from './provider.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 function invalid(): never {
-  throw new ApiError(
-    409,
-    'CHAT_HISTORY_INVALID',
-    '会话上下文包含不兼容或不完整的工具记录，请新建对话',
-  )
+  throw ErrorCode.CHAT_HISTORY_INVALID()
 }
 
 /** Keep persisted history transport-neutral: only the adapter translates wire format. */
@@ -92,11 +88,7 @@ export function chatMessages(
           part.image_url
         ) {
           if (supportsVision === false) {
-            throw new ApiError(
-              409,
-              'VISION_MODEL_REQUIRED',
-              '当前普通会话模型未启用看图能力，请在后台启用看图或切换模型',
-            )
+            throw ErrorCode.VISION_MODEL_REQUIRED()
           }
           parts.push({
             type: 'image_url',

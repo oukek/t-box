@@ -1,17 +1,20 @@
 import type { CalculationResult } from './types.js'
-import { CalculationError, numeric } from './types.js'
+import { CalculationErrorCode } from './error-codes.js'
+import { numeric } from './types.js'
 
 const gcd = (a: bigint, b: bigint): bigint => {
   a = a < 0n ? -a : a
   b = b < 0n ? -b : b
   while (b) {
-    [a, b] = [b, a % b]
+    ;[a, b] = [b, a % b]
   }
   return a
 }
 function integer(value: string | null | undefined, label: string): bigint {
   if (typeof value !== 'string' || !/^[-+]?\d{1,256}$/.test(value.trim())) {
-    throw new CalculationError(`${label}需为最多 256 位的整数`)
+    throw CalculationErrorCode.INVALID_CALCULATION(
+      `${label}需为最多 256 位的整数`,
+    )
   }
   return BigInt(value.trim())
 }
@@ -41,7 +44,7 @@ export function calculateDiscrete(
     const c = integer(v.c, '分子 C')
     const d = integer(v.d, '分母 D')
     if (b === 0n || d === 0n) {
-      throw new CalculationError('分母不能为 0')
+      throw CalculationErrorCode.INVALID_CALCULATION('分母不能为 0')
     }
     let num: bigint
     let den: bigint
@@ -56,12 +59,12 @@ export function calculateDiscrete(
       den = b * d
     } else if (v.operation === 'divide') {
       if (c === 0n) {
-        throw new CalculationError('不能除以零分数')
+        throw CalculationErrorCode.INVALID_CALCULATION('不能除以零分数')
       }
       num = a * d
       den = b * c
     } else {
-      throw new CalculationError('分数运算无效')
+      throw CalculationErrorCode.INVALID_CALCULATION('分数运算无效')
     }
     if (den < 0n) {
       num = -num
@@ -92,7 +95,9 @@ export function calculateDiscrete(
     const to = numeric(v.to, '目标进制', 2, 36, true)
     const source = v.value?.trim().toLowerCase()
     if (!source || !/^[-+]?[0-9a-z]{1,256}$/.test(source)) {
-      throw new CalculationError('请输入最多 256 位的有效整数，不带进制前缀')
+      throw CalculationErrorCode.INVALID_CALCULATION(
+        '请输入最多 256 位的有效整数，不带进制前缀',
+      )
     }
     let result = 0n
     const negative = source.startsWith('-')
@@ -100,7 +105,7 @@ export function calculateDiscrete(
     for (const char of digits) {
       const digit = Number.parseInt(char, 36)
       if (digit >= from) {
-        throw new CalculationError(
+        throw CalculationErrorCode.INVALID_CALCULATION(
           `数字 ${char.toUpperCase()} 不属于 ${from} 进制`,
         )
       }

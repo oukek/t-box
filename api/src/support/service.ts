@@ -4,6 +4,7 @@ import type {
 } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { ConfigurationCache } from '../configuration/cache.js'
+import { PlatformConfigurationStateEntity } from '../db/records/configuration-entities.js'
 import { SupportSettingsEntity } from './entity.js'
 import { parseSupportConfiguration } from './validation.js'
 
@@ -51,9 +52,9 @@ export class CustomerSupportService {
     if (this.cache) {
       await this.source.transaction(async (db) => {
         await update(db)
-        await db.query(
-          'UPDATE platform_configuration_state SET revision=revision+1 WHERE id=1',
-        )
+        await db
+          .getRepository(PlatformConfigurationStateEntity)
+          .update({ id: 1 }, { revision: () => 'revision+1' })
       })
     } else {
       await update(this.source)

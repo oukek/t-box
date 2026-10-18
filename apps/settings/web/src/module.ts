@@ -2,6 +2,7 @@ import type { ClientApplicationModule } from '@t-box/app-shell-sdk'
 import { APPLICATION_CONTRACT_VERSION } from '@t-box/app-contracts'
 import { profileManifest } from '@t-box/settings-contracts'
 import { defineAsyncComponent } from 'vue'
+import { ErrorCode } from './error-codes.js'
 import './pages/profile.css'
 
 const ready = () => import('./pages/SettingsPage.vue')
@@ -29,7 +30,7 @@ export const profileModule: ClientApplicationModule = {
       Array.isArray(value) ||
       Object.keys(value).length
     ) {
-      throw new Error('设置应用不接受导航参数')
+      throw ErrorCode.INTERNAL_INVALID_SETTINGS_NAVIGATION()
     }
     return {}
   },

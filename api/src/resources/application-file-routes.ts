@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type { PlatformService } from '../platform/service.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { bearer } from '../identity/service.js'
 import { ApplicationFiles } from './application-files.js'
 import { MAX_RESOURCE_SIZE } from './service.js'
@@ -31,7 +31,7 @@ export function registerApplicationFiles(
           bearer(request.headers.authorization),
         )
         if (!Buffer.isBuffer(request.body)) {
-          throw new ApiError(415, 'INVALID_UPLOAD', '请使用二进制文件上传')
+          throw ErrorCode.INVALID_UPLOAD()
         }
         let name = '未命名文件'
         try {

@@ -3,6 +3,7 @@ import { parseCalculatorParams } from '@t-box/calculator-contracts'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { createApp, h } from 'vue'
 import CalculatorPage from './CalculatorPage.vue'
+import { ErrorCode } from './error-codes.js'
 import { bindHistory, runtime } from './runtime'
 import './base.css'
 
@@ -12,7 +13,7 @@ connectAppClient({
   calculator_fill_expression(value) {
     const params = parseCalculatorParams(value)
     if (!params.expression) {
-      throw new Error('请输入表达式')
+      throw ErrorCode.INTERNAL_EXPRESSION_REQUIRED()
     }
     runtime.kind = params.kind || 'scientific'
     runtime.expression = params.expression
@@ -40,7 +41,15 @@ connectAppClient({
     createApp({
       render: () =>
         h('main', { class: 'application-frame' }, [
-          ...(ownsNavigation ? [h(ApplicationHeader, { title: '计算器', backLabel: 'OS', onBack: () => connection.client.navigation.back() })] : []),
+          ...(ownsNavigation
+            ? [
+                h(ApplicationHeader, {
+                  title: '计算器',
+                  backLabel: 'OS',
+                  onBack: () => connection.client.navigation.back(),
+                }),
+              ]
+            : []),
           h(CalculatorPage, {
             kind: runtime.kind,
             expression: runtime.expression || undefined,

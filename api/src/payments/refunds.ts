@@ -1,14 +1,34 @@
 import type { PaymentRefund, RefundStatus } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { BillingService } from '../billing/service.js'
+import type { StoredPaymentRefund } from '../db/records/payments-entities.js'
 import type { PaymentGateway, VerifiedRefund } from './gateway.js'
 import { randomUUID } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
+import { In, Not, Raw } from 'typeorm'
 import { decimal } from '../billing/money.js'
+import { BillingWalletEntity } from '../db/records/billing-entities.js'
+import {
+  PaymentOrderEntity,
+  PaymentRefundEntity,
+} from '../db/records/payments-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { requestKey } from './service.js'
 
-const view = (row: any): PaymentRefund => ({
+const view = (
+  row: Pick<
+    StoredPaymentRefund,
+    | 'id' |
+    'order_id' |
+    'amount_cents' |
+    'credit_micro' |
+    'status' |
+    'reason' |
+    'error' |
+    'created_at' |
+    'updated_at'
+  >,
+): PaymentRefund => ({
   id: row.id,
   orderId: row.order_id,
   amount: decimal(BigInt(row.amount_cents) * 10000n),
@@ -19,7 +39,12 @@ const view = (row: any): PaymentRefund => ({
   createdAt: isoTime(row.created_at),
   updatedAt: isoTime(row.updated_at),
 })
-const pending = ['prepared', 'processing', 'uncertain', 'abnormal']
+const pending: RefundStatus[] = [
+  'prepared',
+  'processing',
+  'uncertain',
+  'abnormal',
+]
 /** Full original-route refunds. Bonus credit is reclaimed together; no negative wallet or fabricated success. */
 export class PaymentRefundService {
   private recovering?: Promise<void>
@@ -31,9 +56,21 @@ export class PaymentRefundService {
 
   async list(): Promise<PaymentRefund[]> {
     return (
-      await this.source.query(
-        'SELECT * FROM payment_refunds ORDER BY created_at DESC,id DESC LIMIT 100',
-      )
+      await this.source.getRepository(PaymentRefundEntity).find({
+        select: {
+          id: true,
+          order_id: true,
+          amount_cents: true,
+          credit_micro: true,
+          status: true,
+          reason: true,
+          error: true,
+          created_at: true,
+          updated_at: true,
+        },
+        order: { created_at: 'DESC', id: 'DESC' },
+        take: 100,
+      })
     ).map(view)
   }
 
@@ -44,7 +81,7 @@ export class PaymentRefundService {
     key: string,
   ) {
     if (!this.gateway?.refund || !this.gateway.queryRefund) {
-      throw new ApiError(503, 'REFUNDS_UNAVAILABLE', '渠道尚未配置退款能力')
+      throw ErrorCode.REFUNDS_UNAVAILABLE()
     }
     requestKey(key)
     if (
@@ -52,47 +89,71 @@ export class PaymentRefundService {
       !reason.trim() ||
       Buffer.byteLength(reason) > 80
     ) {
-      throw new ApiError(400, 'REFUND_REASON', '请填写退款原因，最多 80 个字节')
+      throw ErrorCode.REFUND_REASON()
     }
     const refund = await this.source.transaction(async (db) => {
-      const [order] = await db.query(
-        'SELECT * FROM payment_orders WHERE id=? FOR UPDATE',
-        [orderId],
-      )
+      const order = await db.getRepository(PaymentOrderEntity).findOne({
+        select: {
+          id: true,
+          user_id: true,
+          request_key: true,
+          channel: true,
+          amount_cents: true,
+          currency: true,
+          status: true,
+          transaction_id: true,
+          created_at: true,
+          expires_at: true,
+          paid_at: true,
+          configuration_id: true,
+          payment_mode: true,
+          next_query_at: true,
+          bonus_cents: true,
+        },
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (!order || order.status !== 'paid' || !order.transaction_id) {
-        throw new ApiError(
-          409,
-          'REFUND_ORDER_INVALID',
-          '仅已支付订单可申请退款',
-        )
+        throw ErrorCode.REFUND_ORDER_INVALID()
       }
-      const [old] = await db.query(
-        'SELECT * FROM payment_refunds WHERE order_id=? AND request_key=?',
-        [orderId, key],
-      )
+      const old = await db.getRepository(PaymentRefundEntity).findOne({
+        select: {
+          id: true,
+          order_id: true,
+          request_key: true,
+          administrator_id: true,
+          reason: true,
+          amount_cents: true,
+          credit_micro: true,
+          status: true,
+          refund_id: true,
+          submitted: true,
+          error: true,
+          lease_owner: true,
+          lease_until: true,
+          next_query_at: true,
+          created_at: true,
+          updated_at: true,
+          succeeded_at: true,
+        },
+        where: { order_id: orderId, request_key: key },
+      })
       if (old) {
         if (old.reason !== reason.trim()) {
-          throw new ApiError(
-            409,
-            'IDEMPOTENCY_CONFLICT',
-            '重复退款请求的原因不一致',
-          )
+          throw ErrorCode.IDEMPOTENCY_CONFLICT('重复退款请求的原因不一致')
         }
         return view(old)
       }
       if (
         (
-          await db.query(
-            'SELECT id FROM payment_refunds WHERE order_id=? AND status<>\'closed\' LIMIT 1',
-            [orderId],
-          )
+          await db.getRepository(PaymentRefundEntity).find({
+            select: { id: true },
+            where: { order_id: orderId, status: Not('closed') },
+            take: 1,
+          })
         ).length
       ) {
-        throw new ApiError(
-          409,
-          'REFUND_EXISTS',
-          '此订单已有退款，请核对原退款单',
-        )
+        throw ErrorCode.REFUND_EXISTS()
       }
       const wallet = await this.billing.lock(db, order.user_id)
       const credit = BigInt(order.amount_cents + order.bonus_cents) * 10000n
@@ -100,32 +161,51 @@ export class PaymentRefundService {
         BigInt(wallet.balance_micro) - BigInt(wallet.reserved_micro) <
           credit
       ) {
-        throw new ApiError(
-          409,
-          'REFUND_BALANCE_USED',
-          '可用余额不足以收回本次充值及赠送额度，请先核对已消费与预留费用',
-        )
+        throw ErrorCode.REFUND_BALANCE_USED()
       }
       const id = randomUUID()
-      await db.query(
-        'UPDATE billing_wallets SET reserved_micro=reserved_micro+? WHERE user_id=?',
-        [credit.toString(), order.user_id],
-      )
-      await db.query(
-        'INSERT INTO payment_refunds(id,order_id,request_key,administrator_id,reason,amount_cents,credit_micro) VALUES(?,?,?,?,?,?,?)',
-        [
-          id,
-          orderId,
-          key,
-          administratorId,
-          reason.trim(),
-          order.amount_cents,
-          credit.toString(),
-        ],
-      )
-      const [row] = await db.query('SELECT * FROM payment_refunds WHERE id=?', [
+      await db
+        .createQueryBuilder()
+        .update('billing_wallets')
+        .set({ reserved_micro: () => 'reserved_micro+:p0' })
+        .updateEntity(false)
+        .where('user_id=:p1')
+        .setParameters({ p0: credit.toString(), p1: order.user_id })
+        .execute()
+      await db.getRepository(PaymentRefundEntity).insert({
         id,
-      ])
+        order_id: orderId,
+        request_key: key,
+        administrator_id: administratorId,
+        reason: reason.trim(),
+        amount_cents: order.amount_cents,
+        credit_micro: credit.toString(),
+      })
+      const row = await db.getRepository(PaymentRefundEntity).findOne({
+        select: {
+          id: true,
+          order_id: true,
+          request_key: true,
+          administrator_id: true,
+          reason: true,
+          amount_cents: true,
+          credit_micro: true,
+          status: true,
+          refund_id: true,
+          submitted: true,
+          error: true,
+          lease_owner: true,
+          lease_until: true,
+          next_query_at: true,
+          created_at: true,
+          updated_at: true,
+          succeeded_at: true,
+        },
+        where: { id },
+      })
+      if (!row) {
+        throw ErrorCode.REFUND_NOT_FOUND()
+      }
       return view(row)
     })
     // Receipt was committed before the network call; crash/retry retains the same merchant refund number.
@@ -134,12 +214,30 @@ export class PaymentRefundService {
   }
 
   async get(id: string) {
-    const [row] = await this.source.query(
-      'SELECT * FROM payment_refunds WHERE id=?',
-      [id],
-    )
+    const row = await this.source.getRepository(PaymentRefundEntity).findOne({
+      select: {
+        id: true,
+        order_id: true,
+        request_key: true,
+        administrator_id: true,
+        reason: true,
+        amount_cents: true,
+        credit_micro: true,
+        status: true,
+        refund_id: true,
+        submitted: true,
+        error: true,
+        lease_owner: true,
+        lease_until: true,
+        next_query_at: true,
+        created_at: true,
+        updated_at: true,
+        succeeded_at: true,
+      },
+      where: { id },
+    })
     if (!row) {
-      throw new ApiError(404, 'REFUND_NOT_FOUND', '退款单不存在')
+      throw ErrorCode.REFUND_NOT_FOUND()
     }
     return view(row)
   }
@@ -149,20 +247,33 @@ export class PaymentRefundService {
       return
     }
     const owner = randomUUID()
-    const claimed = await this.source.query(
-      `UPDATE payment_refunds SET lease_owner=?,lease_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND)
-      WHERE id=? AND status IN ('prepared','processing','uncertain','abnormal') AND next_query_at<=UTC_TIMESTAMP(3)
-      AND (lease_until IS NULL OR lease_until<UTC_TIMESTAMP(3))`,
-      [owner, id],
-    )
-    if (!claimed.affectedRows) {
+    const claimed = await this.source
+      .createQueryBuilder()
+      .update('payment_refunds')
+      .set({
+        lease_owner: owner,
+        lease_until: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND)',
+      })
+      .updateEntity(false)
+      .where(
+        'id=:p1 AND status IN (\'prepared\',\'processing\',\'uncertain\',\'abnormal\') AND next_query_at<=UTC_TIMESTAMP(3)\n      AND (lease_until IS NULL OR lease_until<UTC_TIMESTAMP(3))',
+      )
+      .setParameters({ p1: id })
+      .execute()
+    if (!claimed.affected) {
       return
     }
     try {
-      const [row] = await this.source.query(
-        `SELECT r.*,o.configuration_id,o.transaction_id FROM payment_refunds r JOIN payment_orders o ON o.id=r.order_id WHERE r.id=?`,
-        [id],
-      )
+      const [row] = await this.source
+        .createQueryBuilder()
+        .select(
+          'r.id,r.order_id,r.reason,r.amount_cents,r.submitted,o.configuration_id,o.transaction_id',
+        )
+        .from('payment_refunds', 'r')
+        .innerJoin('payment_orders', 'o', 'o.id=r.order_id')
+        .where('r.id=:p0')
+        .setParameters({ p0: id })
+        .getRawMany()
       const context = { configurationId: row.configuration_id || undefined }
       let result: VerifiedRefund | null
       const submit = () =>
@@ -177,10 +288,12 @@ export class PaymentRefundService {
           context,
         )
       if (!row.submitted) {
-        await this.source.query(
-          'UPDATE payment_refunds SET submitted=TRUE,status=\'processing\' WHERE id=? AND lease_owner=?',
-          [id, owner],
-        )
+        await this.source
+          .getRepository(PaymentRefundEntity)
+          .update(
+            { id, lease_owner: owner },
+            { submitted: true, status: 'processing' },
+          )
         result = await submit()
       } else {
         result = await this.gateway.queryRefund(id, context)
@@ -194,20 +307,34 @@ export class PaymentRefundService {
         await this.accept(result)
       } else {
         // A custom adapter may return no confirmed state; keep its credit reserved.
-        await this.source.query(
-          'UPDATE payment_refunds SET status=\'uncertain\',error=\'渠道尚未查到退款，请核对原退款单\' WHERE id=? AND lease_owner=?',
-          [id, owner],
-        )
+        await this.source
+          .getRepository(PaymentRefundEntity)
+          .update(
+            { id, lease_owner: owner },
+            { status: 'uncertain', error: '渠道尚未查到退款，请核对原退款单' },
+          )
       }
     } catch {
-      await this.source.query(
-        'UPDATE payment_refunds SET status=\'uncertain\',error=\'渠道结果尚未确认，余额仍预留；正在核对原退款单\' WHERE id=? AND lease_owner=? AND status NOT IN (\'succeeded\',\'closed\')',
-        [id, owner],
+      await this.source.getRepository(PaymentRefundEntity).update(
+        {
+          id,
+          lease_owner: owner,
+          status: Not(In(['succeeded', 'closed'])),
+        },
+        {
+          status: 'uncertain',
+          error: '渠道结果尚未确认，余额仍预留；正在核对原退款单',
+        },
       )
     } finally {
-      await this.source.query(
-        'UPDATE payment_refunds SET lease_owner=NULL,lease_until=NULL,next_query_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND),updated_at=UTC_TIMESTAMP(3) WHERE id=? AND lease_owner=?',
-        [id, owner],
+      await this.source.getRepository(PaymentRefundEntity).update(
+        { id, lease_owner: owner },
+        {
+          lease_owner: null,
+          lease_until: null,
+          next_query_at: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 60 SECOND)',
+          updated_at: () => 'UTC_TIMESTAMP(3)',
+        },
       )
     }
   }
@@ -223,17 +350,53 @@ export class PaymentRefundService {
       typeof event.refundId !== 'string' ||
       !/^[\w-]{1,64}$/.test(event.refundId)
     ) {
-      throw new ApiError(400, 'REFUND_INVALID', '渠道退款信息无效')
+      throw ErrorCode.REFUND_INVALID()
     }
     await this.source.transaction(async (db) => {
-      const [order] = await db.query(
-        'SELECT * FROM payment_orders WHERE id=? FOR UPDATE',
-        [event.orderId],
-      )
-      const [row] = await db.query(
-        'SELECT * FROM payment_refunds WHERE id=? FOR UPDATE',
-        [event.id],
-      )
+      const order = await db.getRepository(PaymentOrderEntity).findOne({
+        select: {
+          id: true,
+          user_id: true,
+          request_key: true,
+          channel: true,
+          amount_cents: true,
+          currency: true,
+          status: true,
+          transaction_id: true,
+          created_at: true,
+          expires_at: true,
+          paid_at: true,
+          configuration_id: true,
+          payment_mode: true,
+          next_query_at: true,
+          bonus_cents: true,
+        },
+        where: { id: event.orderId },
+        lock: { mode: 'pessimistic_write' },
+      })
+      const row = await db.getRepository(PaymentRefundEntity).findOne({
+        select: {
+          id: true,
+          order_id: true,
+          request_key: true,
+          administrator_id: true,
+          reason: true,
+          amount_cents: true,
+          credit_micro: true,
+          status: true,
+          refund_id: true,
+          submitted: true,
+          error: true,
+          lease_owner: true,
+          lease_until: true,
+          next_query_at: true,
+          created_at: true,
+          updated_at: true,
+          succeeded_at: true,
+        },
+        where: { id: event.id },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (
         !order ||
         !row ||
@@ -245,19 +408,11 @@ export class PaymentRefundService {
           order.amount_cents !== event.totalCents ||
           (row.refund_id && row.refund_id !== event.refundId)
       ) {
-        throw new ApiError(
-          409,
-          'REFUND_MISMATCH',
-          '渠道退款订单、金额或商户配置不一致',
-        )
+        throw ErrorCode.REFUND_MISMATCH()
       }
       if (['succeeded', 'closed'].includes(row.status)) {
         if ((row.status === 'succeeded') !== (event.status === 'SUCCESS')) {
-          throw new ApiError(
-            409,
-            'REFUND_CONFLICT',
-            '退款终态不一致，请人工核对',
-          )
+          throw ErrorCode.REFUND_CONFLICT()
         }
         return
       }
@@ -276,15 +431,14 @@ export class PaymentRefundService {
           BigInt(wallet.balance_micro) - (status === 'succeeded' ? credit : 0n)
         const reserved = BigInt(wallet.reserved_micro) - credit
         if (balance < 0n || reserved < 0n || balance < reserved) {
-          throw new ApiError(
-            409,
-            'REFUND_WALLET_MISMATCH',
-            '退款余额预留不一致，请人工核对',
-          )
+          throw ErrorCode.REFUND_WALLET_MISMATCH()
         }
-        await db.query(
-          'UPDATE billing_wallets SET balance_micro=?,reserved_micro=? WHERE user_id=?',
-          [balance.toString(), reserved.toString(), order.user_id],
+        await db.getRepository(BillingWalletEntity).update(
+          { user_id: order.user_id },
+          {
+            balance_micro: balance.toString(),
+            reserved_micro: reserved.toString(),
+          },
         )
         if (status === 'succeeded') {
           await this.billing.entry(
@@ -299,19 +453,27 @@ export class PaymentRefundService {
           )
         }
       }
-      await db.query(
-        'UPDATE payment_refunds SET status=?,refund_id=?,error=?,succeeded_at=IF(?=\'succeeded\',?,NULL),updated_at=UTC_TIMESTAMP(3) WHERE id=?',
-        [
+      await db
+        .createQueryBuilder()
+        .update('payment_refunds')
+        .set({
           status,
-          event.refundId,
-          status === 'abnormal'
-            ? '渠道退款异常，请到商户平台核对；余额仍预留'
-            : null,
-          status,
-          event.succeededAt || new Date(),
-          row.id,
-        ],
-      )
+          refund_id: event.refundId,
+          error:
+            status === 'abnormal'
+              ? '渠道退款异常，请到商户平台核对；余额仍预留'
+              : null,
+          succeeded_at: () => 'IF(:p3=\'succeeded\',:p4,NULL)',
+          updated_at: () => 'UTC_TIMESTAMP(3)',
+        })
+        .updateEntity(false)
+        .where('id=:p5')
+        .setParameters({
+          p3: status,
+          p4: event.succeededAt || new Date(),
+          p5: row.id,
+        })
+        .execute()
     })
   }
 
@@ -320,7 +482,7 @@ export class PaymentRefundService {
     headers: Record<string, string | string[] | undefined>,
   ) {
     if (!this.gateway?.verifyRefund || !Buffer.isBuffer(raw)) {
-      throw new ApiError(400, 'REFUND_NOTIFICATION_INVALID', '退款通知无效')
+      throw ErrorCode.REFUND_NOTIFICATION_INVALID()
     }
     await this.accept(await this.gateway.verifyRefund(raw, headers))
   }
@@ -336,10 +498,15 @@ export class PaymentRefundService {
     if (!this.gateway?.queryRefund) {
       return
     }
-    const rows = await this.source.query(
-      'SELECT id FROM payment_refunds WHERE status IN (?) AND next_query_at<=UTC_TIMESTAMP(3) ORDER BY next_query_at LIMIT 20',
-      [pending],
-    )
+    const rows = await this.source.getRepository(PaymentRefundEntity).find({
+      select: { id: true },
+      where: {
+        status: In(pending),
+        next_query_at: Raw((column) => `${column} <= UTC_TIMESTAMP(3)`),
+      },
+      order: { next_query_at: 'ASC' },
+      take: 20,
+    })
     for (const row of rows) {
       await this.process(row.id)
     }

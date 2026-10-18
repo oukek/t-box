@@ -1,5 +1,7 @@
 import type { EntityManager } from 'typeorm'
 import { randomUUID } from 'node:crypto'
+import { jsonDocument } from '@t-box/server-foundation/persistence/columns'
+import { LedgerAuditEntity } from '../domain-entities.js'
 
 export async function audit(
   db: EntityManager,
@@ -9,15 +11,12 @@ export async function audit(
   subjectId: string | null,
   details: unknown = {},
 ) {
-  await db.query(
-    'INSERT INTO ledger_audit(id,ledger_id,user_id,action,subject_id,details) VALUES(?,?,?,?,?,?)',
-    [
-      randomUUID(),
-      ledgerId,
-      userId,
-      action,
-      subjectId,
-      JSON.stringify(details),
-    ],
-  )
+  await db.getRepository(LedgerAuditEntity).insert({
+    id: randomUUID(),
+    ledgerId,
+    userId,
+    action,
+    subjectId,
+    details: jsonDocument(details),
+  })
 }

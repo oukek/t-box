@@ -1,9 +1,9 @@
 import type { WechatRuntime } from './configuration.js'
 import { createDecipheriv, verify } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 const fail = (message = '微信支付响应校验失败，请稍后核对订单') =>
-  new ApiError(502, 'WECHAT_UNAVAILABLE', message)
+  ErrorCode.WECHAT_UNAVAILABLE(message)
 export function merchantOrder(id: string) {
   if (
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)
@@ -76,7 +76,7 @@ export function decryptWechat(
   try {
     const bytes = Buffer.from(resource.ciphertext, 'base64')
     if (bytes.length <= 16) {
-      throw new Error('Encrypted payment resource has no payload')
+      throw ErrorCode.INTERNAL_ENCRYPTED_PAYMENT_RESOURCE_HAS_NO_PAYLOAD()
     }
     const cipher = createDecipheriv(
       'aes-256-gcm',

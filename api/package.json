@@ -55,6 +55,7 @@
     "@t-box/app-server-sdk": "workspace:*",
     "@t-box/calculator-server": "workspace:*",
     "@t-box/calendar-server": "workspace:*",
+    "@t-box/errors": "workspace:*",
     "@t-box/images-server": "workspace:*",
     "@t-box/ledger-server": "workspace:*",
     "@t-box/server-foundation": "workspace:*",

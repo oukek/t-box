@@ -1,5 +1,7 @@
+import { ErrorCode } from './error-codes.js'
+
 function csvError(message: string): never {
-  throw new Error(message)
+  throw ErrorCode.INTERNAL_REMOTE_OPERATION_FAILED(message)
 }
 export function parseCsv(content: string) {
   if (new TextEncoder().encode(content).byteLength > 1024 * 1024) {

@@ -1,11 +1,14 @@
 import type { LedgerTool } from '../ai/tools.js'
 import { definition, nullable } from '@t-box/app-server-sdk'
 import { ledgerRecordKinds } from '@t-box/ledger-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 
 const str = { type: 'string' }
 const date = { type: 'string', description: 'YYYY-MM-DD' }
-const amount = { type: 'string', description: '大于零的十进制金额，最多两位小数' }
+const amount = {
+  type: 'string',
+  description: '大于零的十进制金额，最多两位小数',
+}
 const id = { type: 'string', description: '查询返回的真实 ID，不得猜测' }
 const schema = (properties: Record<string, unknown>) => ({
   type: 'object',
@@ -100,7 +103,7 @@ export function featureTool(
       const extra = ctx.extra as
         Record<string, (args: unknown) => Promise<unknown>> | undefined
       if (!extra?.[name]) {
-        throw new ApiError(503, 'FEATURE_UNAVAILABLE', '当前账本不支持此工具')
+        throw ErrorCode.FEATURE_UNAVAILABLE()
       }
       return extra[name]!(args)
     },

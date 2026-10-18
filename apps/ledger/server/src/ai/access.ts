@@ -1,7 +1,10 @@
 import type { ResourceRef } from '@t-box/app-contracts'
-import type { ApplicationSessionState, ResourceAdapter } from '@t-box/app-server-sdk'
+import type {
+  ApplicationSessionState,
+  ResourceAdapter,
+} from '@t-box/app-server-sdk'
 import type { LedgerAccess } from '../ledgers/access.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { parseId } from '../validation.js'
 
 const reference = (id: string): ResourceRef => ({
@@ -21,7 +24,7 @@ export function ledgerAccessAdapter(access: LedgerAccess): ResourceAdapter {
         ref.resourceType !== 'book' ||
         !['read', 'write', 'manage', 'own'].includes(action)
       ) {
-        throw new ApiError(400, 'INVALID_SCOPE', '不支持的账本资源或操作范围')
+        throw ErrorCode.INVALID_SCOPE('不支持的账本资源或操作范围')
       }
       const { book, locked } = await access.check(
         actor,
@@ -52,7 +55,7 @@ export function decodeLedgerEvent(event: Record<string, unknown>) {
   const { ledgerId, ...rest } = event
   const ref = reference(parseId(ledgerId))
   if (rest.scopeBindings !== undefined && !Array.isArray(rest.scopeBindings)) {
-    throw new ApiError(400, 'INVALID_SCOPE', '资源作用域必须为数组')
+    throw ErrorCode.INVALID_SCOPE('资源作用域必须为数组')
   }
   const refs = (rest.scopeBindings || []) as ResourceRef[]
   if (
@@ -61,7 +64,7 @@ export function decodeLedgerEvent(event: Record<string, unknown>) {
         value.appId === 'ledger' && value.resourceId !== ref.resourceId,
     )
   ) {
-    throw new ApiError(400, 'INVALID_SCOPE', '旧账本字段与资源作用域冲突')
+    throw ErrorCode.INVALID_SCOPE('旧账本字段与资源作用域冲突')
   }
   return {
     ...rest,

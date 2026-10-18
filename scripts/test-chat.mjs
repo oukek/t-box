@@ -243,9 +243,18 @@ class ChatConnection {
           .slice(after)
           .map((event) => event.type)
           .join(', ')
+        const execution = this.events.slice(after).flatMap((event) => {
+          if (event.type === 'tool.update') {
+            return [{ tool: event.tool.name, status: event.tool.status, summary: event.tool.summary }]
+          }
+          if (event.type === 'run.finished') {
+            return [{ finished: event.status }]
+          }
+          return []
+        })
         waiter.reject(
           new Error(
-            `Timed out waiting for a chat event. Received event types: ${eventTypes || 'none'}.`,
+            `Timed out waiting for a chat event. Received event types: ${eventTypes || 'none'}. Execution: ${JSON.stringify(execution)}.`,
           ),
         )
       }, timeout)

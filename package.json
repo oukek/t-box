@@ -10,8 +10,8 @@
   "scripts": {
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0",
-    "check": "pnpm lint && pnpm check:apps && pnpm typecheck",
-    "test:unit": "pnpm test && pnpm test:ui-components && pnpm test:app-sdk && pnpm test:native && pnpm test:application-release",
+    "check": "pnpm lint && pnpm check:apps && pnpm check:business && pnpm typecheck",
+    "test:unit": "pnpm test && pnpm test:ui-components && pnpm test:app-sdk && pnpm test:native && pnpm test:application-release && node --test scripts/business-code.test.mjs",
     "dev": "pnpm build:contracts && concurrently --kill-others -n api,app,admin,calculator,artifacts,packages -c cyan,green,magenta,blue,white,yellow \"pnpm dev:api\" \"pnpm dev:app\" \"pnpm dev:admin\" \"pnpm dev:apps\" \"node scripts/serve-application-artifacts.mjs 6176 0.0.0.0\" \"pnpm dev:packages\"",
     "dev:app": "pnpm --filter @t-box/app dev",
     "dev:api": "pnpm --filter @t-box/api dev",
@@ -78,7 +78,8 @@
     "test:browser": "node scripts/test-browser.mjs",
     "test:operations": "node --test scripts/operations*.test.mjs scripts/application-starter.test.mjs",
     "create:application": "node scripts/create-application.mjs",
-    "test:db-init": "pnpm build:contracts && pnpm --filter @t-box/api test:db-init"
+    "test:db-init": "pnpm build:contracts && pnpm --filter @t-box/api test:db-init",
+    "check:business": "node scripts/check-business-code.mjs"
   },
   "devDependencies": {
     "@antfu/eslint-config": "9.5.1",

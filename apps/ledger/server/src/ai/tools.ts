@@ -4,7 +4,8 @@ import type { CategoryRepository } from '../categories/repository.js'
 import type { BillRepository } from '../repository.js'
 import type { chatContext } from './context.js'
 import { definition, nullable, object } from '@t-box/app-server-sdk'
-import { ApiError, invalid } from '@t-box/server-foundation/errors'
+import { invalid } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { featureTools } from '../features/tools.js'
 import { debtInput, settlementInput } from '../ledgers/validation.js'
 import {
@@ -61,7 +62,7 @@ export const ledgerTools: Record<string, LedgerTool> = {
     writeFingerprint: (value) => JSON.stringify(debtInput(value)),
     async handler(args, ctx) {
       if (!ctx.extra) {
-        throw new ApiError(503, 'UNAVAILABLE', '往来未启用')
+        throw ErrorCode.UNAVAILABLE()
       }
       return ctx.extra.debts_create!(debtInput(args))
     },
@@ -98,7 +99,7 @@ export const ledgerTools: Record<string, LedgerTool> = {
     writeFingerprint: (value) => JSON.stringify(settlementInput(value)),
     async handler(args, ctx) {
       if (!ctx.extra) {
-        throw new ApiError(503, 'UNAVAILABLE', '往来未启用')
+        throw ErrorCode.UNAVAILABLE()
       }
       return ctx.extra.settlements_create!(settlementInput(args))
     },
@@ -121,7 +122,7 @@ export const ledgerTools: Record<string, LedgerTool> = {
     successSummary: '统计完成',
     async handler(args, ctx) {
       if (!ctx.extra) {
-        throw new ApiError(503, 'UNAVAILABLE', '账本统计未启用')
+        throw ErrorCode.UNAVAILABLE('账本统计未启用')
       }
       return ctx.extra.ledger_statistics!(args)
     },
@@ -147,7 +148,7 @@ export const ledgerTools: Record<string, LedgerTool> = {
     successSummary: '往来查询完成',
     async handler(args, ctx) {
       if (!ctx.extra) {
-        throw new ApiError(503, 'UNAVAILABLE', '往来未启用')
+        throw ErrorCode.UNAVAILABLE()
       }
       const input = object(args, [
         'direction',
@@ -174,7 +175,7 @@ export const ledgerTools: Record<string, LedgerTool> = {
     async handler(value, { categories }) {
       object(value, [])
       if (!categories) {
-        throw new ApiError(503, 'CATEGORIES_UNAVAILABLE', '分类服务不可用')
+        throw ErrorCode.CATEGORIES_UNAVAILABLE()
       }
       return categories.list()
     },
@@ -207,7 +208,7 @@ export const ledgerTools: Record<string, LedgerTool> = {
     async handler(value, { bills, categories }) {
       const input = parseBillInput(value) as BillInput
       if (!categories) {
-        throw new ApiError(503, 'CATEGORIES_UNAVAILABLE', '分类服务不可用')
+        throw ErrorCode.CATEGORIES_UNAVAILABLE()
       }
       await categories.validate(input)
       return bills.create(input)

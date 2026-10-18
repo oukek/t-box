@@ -1,5 +1,5 @@
 import { ApplicationError } from '@t-box/app-server-sdk'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from './error-codes.js'
 import { runCalculation as calculate } from './service.js'
 /** Compatibility REST boundary; all calculation implementation belongs to apps/calculator. */
 export function runRestCalculation(input: unknown) {
@@ -7,7 +7,7 @@ export function runRestCalculation(input: unknown) {
     return calculate(input)
   } catch (error) {
     if (error instanceof ApplicationError) {
-      throw new ApiError(400, error.code, error.message)
+      throw ErrorCode.INVALID_CALCULATION(error.message)
     }
     throw error
   }

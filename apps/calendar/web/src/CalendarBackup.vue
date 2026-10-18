@@ -5,6 +5,7 @@ import { timeSnapshot } from '@t-box/time-contracts'
 import { Modal } from '@t-box/ui-kit'
 import { onBeforeUnmount, ref } from 'vue'
 import { calendarApi } from './api'
+import { ErrorCode } from './error-codes.js'
 import { identity } from './runtime'
 
 const emit = defineEmits<{ changed: [] }>()
@@ -59,7 +60,7 @@ async function readImport(event: Event) {
   }
   try {
     if (file.size > 5 * 1024 * 1024) {
-      throw new Error('备份文件最多 5 MB')
+      throw ErrorCode.INTERNAL_BACKUP_FILE_TOO_LARGE()
     }
     const data = calendarObject(JSON.parse(await file.text()), [
       'format',
@@ -72,7 +73,7 @@ async function readImport(event: Event) {
       !Array.isArray(data.events) ||
       data.events.length > 1000
     ) {
-      throw new Error('请选择 T Box 日历备份，每次最多 1000 条')
+      throw ErrorCode.INTERNAL_INVALID_CALENDAR_BACKUP()
     }
     importEvents.value = data.events.map(parseCalendarEvent)
     importProgress.value = 0

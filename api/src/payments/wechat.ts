@@ -14,12 +14,29 @@ import type {
 import { createHash, randomBytes, sign } from 'node:crypto'
 import { isIP } from 'node:net'
 import { ApiError } from '@t-box/server-foundation/errors'
+import {
+  PaymentConfigurationEntity,
+  PaymentOrderEntity,
+} from '../db/records/payments-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { parseStatementCSV } from './statement.js'
 import { WechatAuthorization } from './wechat-authorization.js'
-import { decryptWechat, wechatFailure as fail, localOrder, merchantOrder, readWechatBody, verifyWechat } from './wechat-message.js'
+import {
+  decryptWechat,
+  wechatFailure as fail,
+  localOrder,
+  merchantOrder,
+  readWechatBody,
+  verifyWechat,
+} from './wechat-message.js'
 import { parseWechatRefund, verifyWechatRefund } from './wechat-refund.js'
 
-export { decryptWechat, localOrder, merchantOrder, verifyWechat } from './wechat-message.js'
+export {
+  decryptWechat,
+  localOrder,
+  merchantOrder,
+  verifyWechat,
+} from './wechat-message.js'
 
 function payment(
   data: Record<string, unknown>,
@@ -86,7 +103,7 @@ export class WechatGateway implements PaymentGateway {
   async configurationId() {
     const c = await this.configuration.runtime()
     if (!c?.enabled) {
-      throw new ApiError(503, 'PAYMENT_NOT_CONFIGURED', '在线充值尚未开放')
+      throw ErrorCode.PAYMENT_NOT_CONFIGURED('在线充值尚未开放')
     }
     return c.id
   }
@@ -143,7 +160,10 @@ export class WechatGateway implements PaymentGateway {
     body?: unknown,
   ): Promise<Record<string, unknown>> {
     const response = await this.send(c, method, path, body)
-    const raw = response.status === 204 ? Buffer.alloc(0) : await readWechatBody(response, 64 * 1024)
+    const raw =
+      response.status === 204
+        ? Buffer.alloc(0)
+        : await readWechatBody(response, 64 * 1024)
     verifyWechat(raw, Object.fromEntries(response.headers), c)
     if (response.status === 204) {
       return {}
@@ -156,13 +176,17 @@ export class WechatGateway implements PaymentGateway {
     }
     if (!response.ok) {
       if (json.code === 'NO_STATEMENT_EXIST') {
-        throw new ApiError(404, 'STATEMENT_EMPTY', '渠道当日没有交易账单')
+        throw ErrorCode.STATEMENT_EMPTY()
       }
-      if (response.status === 404 && json.code === 'RESOURCE_NOT_EXISTS' && path.startsWith('/v3/refund/domestic/refunds/')) {
-        throw new ApiError(404, 'REFUND_NOT_FOUND', '渠道暂未查到此退款单')
+      if (
+        response.status === 404 &&
+        json.code === 'RESOURCE_NOT_EXISTS' &&
+        path.startsWith('/v3/refund/domestic/refunds/')
+      ) {
+        throw ErrorCode.REFUND_NOT_FOUND('渠道暂未查到此退款单')
       }
       if (json.code === 'ORDERPAID') {
-        throw new ApiError(409, 'ORDER_PAID', '订单已支付，请刷新核对到账状态')
+        throw ErrorCode.ORDER_PAID('订单已支付，请刷新核对到账状态')
       }
       throw fail(
         '微信支付下单未完成，请检查商户权限与支付域名配置；原订单仍可核对',
@@ -173,14 +197,26 @@ export class WechatGateway implements PaymentGateway {
 
   async refund(input: RefundRequest, context: PaymentContext) {
     const c = await this.config(context)
-    const result = parseWechatRefund(await this.request(c, 'POST', '/v3/refund/domestic/refunds', {
-      transaction_id: input.transactionId,
-      out_refund_no: merchantOrder(input.id),
-      reason: input.reason,
-      notify_url: `${c.apiBaseUrl}/api/v1/payments/webhooks/wechat/refunds`,
-      amount: { refund: input.amountCents, total: input.amountCents, currency: 'CNY' },
-    }), c)
-    if (result.id !== input.id || result.orderId !== input.orderId || result.transactionId !== input.transactionId || result.amountCents !== input.amountCents) {
+    const result = parseWechatRefund(
+      await this.request(c, 'POST', '/v3/refund/domestic/refunds', {
+        transaction_id: input.transactionId,
+        out_refund_no: merchantOrder(input.id),
+        reason: input.reason,
+        notify_url: `${c.apiBaseUrl}/api/v1/payments/webhooks/wechat/refunds`,
+        amount: {
+          refund: input.amountCents,
+          total: input.amountCents,
+          currency: 'CNY',
+        },
+      }),
+      c,
+    )
+    if (
+      result.id !== input.id ||
+      result.orderId !== input.orderId ||
+      result.transactionId !== input.transactionId ||
+      result.amountCents !== input.amountCents
+    ) {
       throw fail('微信退款结果与原退款单不一致')
     }
     return result
@@ -188,23 +224,38 @@ export class WechatGateway implements PaymentGateway {
 
   async statement(day: string, context: PaymentContext) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-      throw new ApiError(400, 'STATEMENT_DATE', '账单日期无效')
+      throw ErrorCode.STATEMENT_DATE('账单日期无效')
     }
     const c = await this.config(context)
     let metadata: Record<string, unknown>
     try {
-      metadata = await this.request(c, 'GET', `/v3/bill/tradebill?bill_date=${day}&bill_type=ALL`)
+      metadata = await this.request(
+        c,
+        'GET',
+        `/v3/bill/tradebill?bill_date=${day}&bill_type=ALL`,
+      )
     } catch (error) {
       if (error instanceof ApiError && error.code === 'STATEMENT_EMPTY') {
         return { day, merchantId: c.merchantId, sha1: '', rows: [] }
       }
       throw error
     }
-    if (metadata.hash_type !== 'SHA1' || typeof metadata.hash_value !== 'string' || !/^[a-f0-9]{40}$/i.test(metadata.hash_value) || typeof metadata.download_url !== 'string') {
+    if (
+      metadata.hash_type !== 'SHA1' ||
+      typeof metadata.hash_value !== 'string' ||
+      !/^[a-f0-9]{40}$/i.test(metadata.hash_value) ||
+      typeof metadata.download_url !== 'string'
+    ) {
       throw fail('微信账单摘要无效')
     }
     const url = new URL(metadata.download_url)
-    if (url.origin !== 'https://api.mch.weixin.qq.com' || url.username || url.password || url.hash || !['/v3/billdownload/file', '/v3/bill/downloadurl'].includes(url.pathname)) {
+    if (
+      url.origin !== 'https://api.mch.weixin.qq.com' ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      !['/v3/billdownload/file', '/v3/bill/downloadurl'].includes(url.pathname)
+    ) {
       throw fail('微信账单下载来源无效')
     }
     const response = await this.send(c, 'GET', url.pathname + url.search)
@@ -218,13 +269,25 @@ export class WechatGateway implements PaymentGateway {
     if (sha1 !== metadata.hash_value.toLowerCase()) {
       throw fail('微信账单文件校验失败')
     }
-    return { day, merchantId: c.merchantId, sha1, rows: parseStatementCSV(bytes.toString('utf8'), c.merchantId) }
+    return {
+      day,
+      merchantId: c.merchantId,
+      sha1,
+      rows: parseStatementCSV(bytes.toString('utf8'), c.merchantId),
+    }
   }
 
   async queryRefund(id: string, context: PaymentContext) {
     const c = await this.config(context)
     try {
-      const result = parseWechatRefund(await this.request(c, 'GET', `/v3/refund/domestic/refunds/${merchantOrder(id)}`), c)
+      const result = parseWechatRefund(
+        await this.request(
+          c,
+          'GET',
+          `/v3/refund/domestic/refunds/${merchantOrder(id)}`,
+        ),
+        c,
+      )
       if (result.id !== id) {
         throw fail()
       }
@@ -237,7 +300,10 @@ export class WechatGateway implements PaymentGateway {
     }
   }
 
-  verifyRefund(raw: Buffer, headers: Record<string, string | string[] | undefined>) {
+  verifyRefund(
+    raw: Buffer,
+    headers: Record<string, string | string[] | undefined>,
+  ) {
     return verifyWechatRefund(this.configuration, raw, headers)
   }
 
@@ -249,11 +315,7 @@ export class WechatGateway implements PaymentGateway {
     const c = await this.config(context)
     const mode = context?.mode ?? 'native'
     if (!c[mode]) {
-      throw new ApiError(
-        409,
-        'PAYMENT_MODE_DISABLED',
-        '当前客户端对应的支付方式尚未开放',
-      )
+      throw ErrorCode.PAYMENT_MODE_DISABLED()
     }
     const body: Record<string, unknown> = {
       appid: mode === 'app' ? c.mobileAppId : c.appId,
@@ -408,10 +470,14 @@ export class WechatGateway implements PaymentGateway {
     ) {
       throw fail()
     }
-    const keys = await this.configuration.source.query(
-      'SELECT id FROM payment_configurations WHERE JSON_UNQUOTE(JSON_EXTRACT(public_json,\'$.platformSerial\'))=? ORDER BY version DESC',
-      [headers['wechatpay-serial']],
-    )
+    const keys = await this.configuration.source
+      .createQueryBuilder()
+      .select('id')
+      .from('payment_configurations', 'payment_configurations')
+      .where('JSON_UNQUOTE(JSON_EXTRACT(public_json,\'$.platformSerial\'))=:p0')
+      .orderBy('version', 'DESC')
+      .setParameters({ p0: headers['wechatpay-serial'] })
+      .getRawMany()
     let authenticated = false
     for (const row of keys) {
       const c = await this.configuration.runtime(row.id)
@@ -427,7 +493,7 @@ export class WechatGateway implements PaymentGateway {
       }
     }
     if (!authenticated) {
-      throw new ApiError(400, 'PAYMENT_SIGNATURE_INVALID', '支付通知验签失败')
+      throw ErrorCode.PAYMENT_SIGNATURE_INVALID()
     }
     let envelope: {
       event_type?: string
@@ -445,9 +511,9 @@ export class WechatGateway implements PaymentGateway {
     ) {
       throw fail()
     }
-    const rows = await this.configuration.source.query(
-      'SELECT id FROM payment_configurations ORDER BY version DESC',
-    )
+    const rows = await this.configuration.source
+      .getRepository(PaymentConfigurationEntity)
+      .find({ select: { id: true }, order: { version: 'DESC' } })
     const tried = new Set<string>()
     for (const row of rows) {
       const c = await this.configuration.runtime(row.id)
@@ -462,10 +528,12 @@ export class WechatGateway implements PaymentGateway {
         continue
       }
       const orderId = localOrder(data.out_trade_no)
-      const [order] = await this.configuration.source.query(
-        'SELECT configuration_id,payment_mode FROM payment_orders WHERE id=?',
-        [orderId],
-      )
+      const order = await this.configuration.source
+        .getRepository(PaymentOrderEntity)
+        .findOne({
+          select: { id: true, configuration_id: true, payment_mode: true },
+          where: { id: orderId },
+        })
       if (!order?.configuration_id) {
         break
       }
@@ -480,10 +548,6 @@ export class WechatGateway implements PaymentGateway {
         return event
       }
     }
-    throw new ApiError(
-      400,
-      'PAYMENT_SIGNATURE_INVALID',
-      '支付通知解密或订单商户校验失败',
-    )
+    throw ErrorCode.PAYMENT_SIGNATURE_INVALID('支付通知解密或订单商户校验失败')
   }
 }

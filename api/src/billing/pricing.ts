@@ -22,6 +22,7 @@ export class BillingPricingService {
   }
 
   private async load(): Promise<AiFeeSchedule> {
+    // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
     const rows: {
       purpose: string
       inputPrice: string

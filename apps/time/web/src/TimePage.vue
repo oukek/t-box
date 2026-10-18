@@ -11,6 +11,7 @@ import {
 import { AppIcon, Modal, SheetSelect } from '@t-box/ui-kit'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { timeApi } from './api'
+import { ErrorCode } from './error-codes.js'
 import { application, identity, preferences } from './runtime'
 import { durationLabel } from './stopwatch'
 import StopwatchPanel from './StopwatchPanel.vue'
@@ -55,14 +56,20 @@ const liveTimers = computed(() =>
     ...timerState(t, now.value + offset.value),
   })),
 )
-const timezoneNow = computed(() => Math.floor((now.value + offset.value) / 60_000) * 60_000)
-const commonZoneOptions = computed(() => timezoneOptions(commonTimezones, timezoneNow.value))
-const zoneOptions = computed(() => timezoneOptions(
-  commonTimezones.some((z) => z.value === zone.value)
-    ? commonTimezones
-    : [{ value: zone.value, label: zone.value }, ...commonTimezones],
-  timezoneNow.value,
-))
+const timezoneNow = computed(
+  () => Math.floor((now.value + offset.value) / 60_000) * 60_000,
+)
+const commonZoneOptions = computed(() =>
+  timezoneOptions(commonTimezones, timezoneNow.value),
+)
+const zoneOptions = computed(() =>
+  timezoneOptions(
+    commonTimezones.some((z) => z.value === zone.value)
+      ? commonTimezones
+      : [{ value: zone.value, label: zone.value }, ...commonTimezones],
+    timezoneNow.value,
+  ),
+)
 let tick: ReturnType<typeof setInterval> | undefined
 let poll: ReturnType<typeof setInterval> | undefined
 let loadId = 0
@@ -120,7 +127,9 @@ watch(
     }
     try {
       preferences.clocks = [...clocks.value]
-      void application.client.storage.set('time.clocks.v1', clocks.value).catch(() => {})
+      void application.client.storage
+        .set('time.clocks.v1', clocks.value)
+        .catch(() => {})
     } catch {}
   },
   { deep: true },
@@ -178,10 +187,10 @@ function addZone(value: string) {
   try {
     const z = validTimezone(value.trim())
     if (clocks.value.includes(z)) {
-      throw new Error('此时区已添加')
+      throw ErrorCode.INTERNAL_TIMEZONE_EXISTS()
     }
     if (clocks.value.length >= 12) {
-      throw new Error('最多添加 12 个世界时钟')
+      throw ErrorCode.INTERNAL_WORLD_CLOCK_LIMIT()
     }
     clocks.value.push(z)
     zoneModal.value = false

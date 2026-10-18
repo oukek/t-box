@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       start_services:
-        description: 上传后执行数据库迁移并启动 PM2
+        description: 上传后执行数据库初始化并启动 PM2
         type: boolean
         default: true
 
@@ -106,7 +106,7 @@ jobs:
         run: |
           printf 'Verified release directory: %s/releases/%s\n\n' "$PM2_UPLOAD_DIR" "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
           if [ "$PM2_START_SERVICES" = true ]; then
-            printf 'Database migrations, PM2 startup and health checks passed.\n' >> "$GITHUB_STEP_SUMMARY"
+            printf 'Database initialization, PM2 startup and health checks passed.\n' >> "$GITHUB_STEP_SUMMARY"
           else
-            printf 'Upload only. Run node control/start-release.mjs in the release directory to migrate and start PM2.\n' >> "$GITHUB_STEP_SUMMARY"
+            printf 'Upload only. Run node control/start-release.mjs in the release directory to initialize the database and start PM2.\n' >> "$GITHUB_STEP_SUMMARY"
           fi

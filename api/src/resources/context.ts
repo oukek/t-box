@@ -1,5 +1,5 @@
 import type { ProviderItem } from '../chat/provider.js'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 /**
  * Restore internal resource references after the provider returns retained user items.
  * Large base64/file bytes are request projections, never durable context or credentials.
@@ -43,11 +43,7 @@ export function restoreContextReferences(
         return structuredClone(replacement)
       }
       if (part.type === 'input_image' && part.image_url?.startsWith('data:')) {
-        throw new ApiError(
-          502,
-          'COMPACTION_ATTACHMENT_INVALID',
-          '压缩结果中的附件无法关联原资源，已保留原上下文',
-        )
+        throw ErrorCode.COMPACTION_ATTACHMENT_INVALID()
       }
       return part
     })

@@ -1,3 +1,4 @@
+import type { ResponseInputMessageContentList } from 'openai/resources/responses/responses'
 import type { AttachmentPort } from '../agent/contracts.js'
 import type { ResourceService } from './service.js'
 import { restoreContextReferences } from './context.js'
@@ -11,7 +12,9 @@ export function attachmentPort(resources: ResourceService): AttachmentPort {
       if (!attachments.length) {
         return
       }
-      const parts: any[] = [{ type: 'input_text', text }]
+      const parts: ResponseInputMessageContentList = [
+        { type: 'input_text', text },
+      ]
       for (const resource of attachments) {
         parts.push({
           type: 'input_text',

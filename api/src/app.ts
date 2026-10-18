@@ -12,6 +12,7 @@ import cors from '@fastify/cors'
 import { ApplicationError } from '@t-box/app-server-sdk'
 import { registerCalculator } from '@t-box/calculator-server'
 import { registerCalendar } from '@t-box/calendar-server/routes'
+import { apiErrorResponse } from '@t-box/errors'
 import { parseCategoryInput } from '@t-box/ledger-server/categories/validation'
 import { notFound } from '@t-box/ledger-server/errors'
 import {
@@ -35,6 +36,7 @@ import { UnconfiguredProvider } from './chat/provider.js'
 import { registerChatSocket } from './chat/websocket.js'
 import { settingNumber } from './configuration/defaults.js'
 import { registerDesktop } from './desktop/routes.js'
+import { ErrorCode } from './error-codes.js'
 import { registerApplicationCatalog } from './platform/application-catalog.js'
 import { registerPlatform } from './platform/routes.js'
 import { registerLedgerSocket } from './platform/socket.js'
@@ -80,11 +82,15 @@ export function createApp(deps: AppDependencies) {
       const origin = request.headers.origin
       const origins = (admin ? deps.adminOrigins : deps.corsOrigins) ?? ['*']
       const allowed = admin
-        ? !!origin && (origins.includes('*') || origins.includes(origin) || origin === `${request.protocol}://${request.host}`)
+        ? !!origin &&
+        (origins.includes('*') ||
+          origins.includes(origin) ||
+          origin === `${request.protocol}://${request.host}`)
         : !!origin && (origins.includes('*') || origins.includes(origin))
       callback(null, {
         // Credentialed admin requests need an exact reflected origin, never a literal wildcard.
-        origin: !admin && origins.includes('*') ? '*' : allowed ? origin : false,
+        origin:
+          !admin && origins.includes('*') ? '*' : allowed ? origin : false,
         credentials: admin && allowed,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         exposedHeaders: ['X-Request-Id'],
@@ -99,11 +105,47 @@ export function createApp(deps: AppDependencies) {
       await deps.platform!.tasks.recover()
       recoveryTimer = setInterval(() => {
         void deps.platform!.tasks.recover().catch(() => {})
-        void deps.platform!.notifications.recover().catch(() => app.log.warn({ code: 'NOTIFICATION_RECOVERY_FAILED' }, 'Inbox delivery will retry'))
+        void deps
+          .platform!
+          .notifications
+          .recover()
+          .catch(() =>
+            app.log.warn(
+              { code: 'NOTIFICATION_RECOVERY_FAILED' },
+              'Inbox delivery will retry',
+            ),
+          )
         void deps.platform!.billing.recover().catch(() => {})
-        void deps.platform!.resources.purgeDeleted().catch(() => app.log.warn({ code: 'RESOURCE_PURGE_FAILED' }, 'Private resource deletion will retry'))
-        void deps.platform!.refunds.recover().catch(() => app.log.warn({ code: 'REFUND_RECOVERY_FAILED' }, 'Refund reconciliation failed'))
-        void deps.platform!.paymentReconciliation.recover().catch(() => app.log.warn({ code: 'STATEMENT_RECOVERY_FAILED' }, 'Merchant statement reconciliation failed'))
+        void deps
+          .platform!
+          .resources
+          .purgeDeleted()
+          .catch(() =>
+            app.log.warn(
+              { code: 'RESOURCE_PURGE_FAILED' },
+              'Private resource deletion will retry',
+            ),
+          )
+        void deps
+          .platform!
+          .refunds
+          .recover()
+          .catch(() =>
+            app.log.warn(
+              { code: 'REFUND_RECOVERY_FAILED' },
+              'Refund reconciliation failed',
+            ),
+          )
+        void deps
+          .platform!
+          .paymentReconciliation
+          .recover()
+          .catch(() =>
+            app.log.warn(
+              { code: 'STATEMENT_RECOVERY_FAILED' },
+              'Merchant statement reconciliation failed',
+            ),
+          )
         void deps.platform!.applications?.recover().catch(() => {})
       }, 30_000)
       recoveryTimer.unref()
@@ -121,17 +163,50 @@ export function createApp(deps: AppDependencies) {
     capabilityLoading: 'deferred',
     onRunError: (error) => {
       app.log.warn(error, 'Agent run interrupted')
-      if (!['SERVER_SHUTDOWN', 'CLIENT_REQUIRED', 'RUN_CANCELLED'].includes(error.code)) {
-        void deps.platform?.operations?.record({ kind: 'task_error', code: error.code, taskId: error.runId, requestId: error.requestId, stage: error.stage, agentId: error.agentId, httpStatus: error.diagnostics?.httpStatus, providerRequestId: error.diagnostics?.providerRequestId }).catch(() => app.log.warn({ code: 'OPERATIONS_WRITE_FAILED' }, 'Operational event not saved'))
+      if (
+        !['SERVER_SHUTDOWN', 'CLIENT_REQUIRED', 'RUN_CANCELLED'].includes(
+          error.code,
+        )
+      ) {
+        void deps.platform?.operations
+          ?.record({
+            kind: 'task_error',
+            code: error.code,
+            taskId: error.runId,
+            requestId: error.requestId,
+            stage: error.stage,
+            agentId: error.agentId,
+            httpStatus: error.diagnostics?.httpStatus,
+            providerRequestId: error.diagnostics?.providerRequestId,
+          })
+          .catch(() =>
+            app.log.warn(
+              { code: 'OPERATIONS_WRITE_FAILED' },
+              'Operational event not saved',
+            ),
+          )
       }
     },
   })
-  const worker = deps.taskWorker && deps.platform?.tasks
-    ? new TaskRecoveryWorker(deps.platform.tasks, chat, async () => settingNumber(await deps.administration?.configuration.snapshot(), 'ai.worker.concurrency', 2), (code, taskId) => {
-        app.log.warn({ code, taskId }, 'Background task recovery paused')
-        void deps.platform?.operations.record({ kind: 'recovery_error', code, taskId }).catch(() => {})
-      })
-    : undefined
+  const worker =
+    deps.taskWorker && deps.platform?.tasks
+      ? new TaskRecoveryWorker(
+          deps.platform.tasks,
+          chat,
+          async () =>
+            settingNumber(
+              await deps.administration?.configuration.snapshot(),
+              'ai.worker.concurrency',
+              2,
+            ),
+          (code, taskId) => {
+            app.log.warn({ code, taskId }, 'Background task recovery paused')
+            void deps.platform?.operations
+              .record({ kind: 'recovery_error', code, taskId })
+              .catch(() => {})
+          },
+        )
+      : undefined
   if (deps.administration) {
     app.addHook('onReady', async () => {
       const { platformDefinitions } =
@@ -145,7 +220,15 @@ export function createApp(deps: AppDependencies) {
   })
   app.addHook('onResponse', async (request, reply) => {
     if (reply.statusCode >= 500 && deps.platform?.operations) {
-      await deps.platform.operations.record({ kind: 'http_error', code: 'HTTP_SERVER_ERROR', requestId: request.id, httpStatus: reply.statusCode, durationMs: reply.elapsedTime }).catch(() => {})
+      await deps.platform.operations
+        .record({
+          kind: 'http_error',
+          code: 'HTTP_SERVER_ERROR',
+          requestId: request.id,
+          httpStatus: reply.statusCode,
+          durationMs: reply.elapsedTime,
+        })
+        .catch(() => {})
     }
   })
   registerChatSocket(app, chat, deps.corsOrigins, (scope, allowed) => {
@@ -160,23 +243,25 @@ export function createApp(deps: AppDependencies) {
   if (deps.administration) {
     registerAdmin(app, deps.administration, deps.platform, deps.adminOrigins)
     if (deps.platform?.applications) {
-      registerApplicationBuildImports(app, new ApplicationBuildImports(
-        deps.administration.store.source,
-        new ApplicationPublishing(deps.administration.store.source, deps.platform.applications),
-      ))
+      registerApplicationBuildImports(
+        app,
+        new ApplicationBuildImports(
+          deps.administration.store.source,
+          new ApplicationPublishing(
+            deps.administration.store.source,
+            deps.platform.applications,
+          ),
+        ),
+      )
     }
   }
 
   app.setErrorHandler((error, request, reply) => {
     if ((error as { code?: string }).code === 'ER_DUP_ENTRY') {
-      return reply.code(409).send({
-        error: {
-          code: 'ALREADY_EXISTS',
-          message: /\/categories(?:[/?]|$)/.test(request.url)
-            ? '此收支类型下已存在同名分类'
-            : '账号或该服务商下的模型已存在',
-        },
-      })
+      const failure = ErrorCode.ALREADY_EXISTS(/\/categories(?:[/?]|$)/.test(request.url)
+        ? '此收支类型下已存在同名分类'
+        : '账号或该服务商下的模型已存在')
+      return reply.code(failure.statusCode).send(apiErrorResponse(failure))
     }
     if (error instanceof ApplicationError) {
       return reply
@@ -184,13 +269,7 @@ export function createApp(deps: AppDependencies) {
         .send({ error: { code: error.code, message: error.message } })
     }
     if (error instanceof ApiError) {
-      return reply.code(error.statusCode).send({
-        error: {
-          code: error.code,
-          message: error.message,
-          ...(error.details ? { details: error.details } : {}),
-        },
-      })
+      return reply.code(error.statusCode).send(apiErrorResponse(error))
     }
     const errorInfo = error as {
       statusCode?: number
@@ -199,32 +278,21 @@ export function createApp(deps: AppDependencies) {
     }
     if (errorInfo.statusCode && errorInfo.statusCode < 500) {
       const tooLarge = errorInfo.statusCode === 413
-      return reply.code(errorInfo.statusCode).send({
-        error: {
-          code: tooLarge ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST',
-          message: tooLarge
-            ? '请求内容过大'
-            : '请求格式不正确，请使用 application/json',
-        },
-      })
+      // The framework owns transport statuses such as 415; retain its exact status.
+      return reply.code(errorInfo.statusCode).send(apiErrorResponse(tooLarge ? ErrorCode.PAYLOAD_TOO_LARGE() : ErrorCode.BAD_REQUEST()))
     }
     // Avoid SQL text, connection configuration, and user content in server logs.
     request.log.error(
       { code: errorInfo.code ?? 'UNKNOWN', name: errorInfo.name },
       'Request failed',
     )
-    return reply.code(500).send({
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: '服务暂时不可用，请稍后重试',
-      },
-    })
+    const failure = ErrorCode.INTERNAL_ERROR()
+    return reply.code(failure.statusCode).send(apiErrorResponse(failure))
   })
 
   app.setNotFoundHandler((_request, reply) => {
-    return reply
-      .code(404)
-      .send({ error: { code: 'NOT_FOUND', message: '接口不存在' } })
+    const failure = ErrorCode.NOT_FOUND()
+    return reply.code(failure.statusCode).send(apiErrorResponse(failure))
   })
 
   app.get('/api/v1/health', async (_request, reply) => {
@@ -284,7 +352,7 @@ export function createApp(deps: AppDependencies) {
   } else {
     const categories = () => {
       if (!deps.categories) {
-        throw new ApiError(503, 'CATEGORIES_UNAVAILABLE', '分类服务不可用')
+        throw ErrorCode.CATEGORIES_UNAVAILABLE()
       }
       return deps.categories
     }

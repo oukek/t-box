@@ -1,11 +1,12 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-} from 'node:crypto'
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { ErrorCode } from '../error-codes.js'
 
-export { digest, hashPassword, verifyPassword } from '@t-box/server-foundation/crypto'
+export {
+  digest,
+  hashPassword,
+  verifyPassword,
+} from '@t-box/server-foundation/crypto'
 export function loadEncryptionKey() {
   const directory = new URL('../../.secrets/', import.meta.url)
   // src/admin and dist/admin both resolve to api/.secrets.
@@ -20,13 +21,13 @@ export function loadEncryptionKey() {
   }
   const key = readFileSync(file)
   if (key.length !== 32) {
-    throw new Error('Provider encryption key must contain 32 bytes')
+    throw ErrorCode.INTERNAL_PROVIDER_ENCRYPTION_KEY_MUST_CONTAIN_32_BYTES()
   }
   return key
 }
 export function createVault(key: Buffer) {
   if (key.length !== 32) {
-    throw new Error('Invalid vault key')
+    throw ErrorCode.INTERNAL_INVALID_VAULT_KEY()
   }
   return {
     encrypt(value: string) {
@@ -45,7 +46,7 @@ export function createVault(key: Buffer) {
         .split('.')
         .map((v) => Buffer.from(v, 'base64'))
       if (!iv || !tag || !bytes) {
-        throw new Error('Invalid encrypted credential')
+        throw ErrorCode.INTERNAL_INVALID_ENCRYPTED_CREDENTIAL()
       }
       const cipher = createDecipheriv('aes-256-gcm', key, iv)
       cipher.setAuthTag(tag)

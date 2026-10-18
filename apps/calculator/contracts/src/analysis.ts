@@ -1,10 +1,7 @@
 import type { CalculationResult } from './types.js'
 import { numberList } from './algebra.js'
-import {
-  CalculationError,
-  formatNumber as f,
-  numeric,
-} from './types.js'
+import { CalculationErrorCode } from './error-codes.js'
+import { formatNumber as f, numeric } from './types.js'
 
 export function calculateAnalysis(
   kind: string,
@@ -32,9 +29,7 @@ export function calculateAnalysis(
     })
     const middle = Math.floor(count / 2)
     const median =
-      count % 2
-        ? sorted[middle]!
-        : (sorted[middle - 1]! + sorted[middle]!) / 2
+      count % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2
     const max = Math.max(...frequency.values())
     const modes = [...frequency]
       .filter(([, n]) => n === max)
@@ -143,7 +138,7 @@ export function calculateAnalysis(
         positive('height'),
       ].sort((x, y) => y - x) as [number, number, number]
       if (c <= a - b) {
-        throw new CalculationError('三边不满足三角形不等式')
+        throw CalculationErrorCode.INVALID_CALCULATION('三边不满足三角形不等式')
       }
       const area =
         Math.sqrt(
@@ -177,6 +172,6 @@ export function calculateAnalysis(
         item('空间对角线', Math.hypot(a, b, c)),
       ]
     }
-    throw new CalculationError('几何形状无效')
+    throw CalculationErrorCode.INVALID_CALCULATION('几何形状无效')
   }
 }

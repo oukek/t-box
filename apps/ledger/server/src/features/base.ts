@@ -1,6 +1,7 @@
 import type { FinanceService } from '../finance/service.js'
 import type { Access, Principal } from '../ledgers/types.js'
-import { ApiError, invalid } from '@t-box/server-foundation/errors'
+import { invalid } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { parseId } from '../validation.js'
 
 export class FeatureService {
@@ -19,12 +20,12 @@ export class FeatureService {
 
   manage(access: Access) {
     if (!['owner', 'admin'].includes(access.role)) {
-      throw new ApiError(403, 'FORBIDDEN', '仅账本所有者或管理员可管理此设置')
+      throw ErrorCode.FORBIDDEN()
     }
   }
 }
-export const json = <T>(value: T | string): T =>
-  typeof value === 'string' ? JSON.parse(value) : value
+export const json = <T>(value: unknown): T =>
+  typeof value === 'string' ? JSON.parse(value) : (value as T)
 export function integer(v: unknown, name: string, min: number, max: number) {
   if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
     invalid(name, `请输入 ${min}–${max} 的整数`)
@@ -36,5 +37,5 @@ export function optionalId(v: unknown): string | null {
 }
 
 export function notFound(): never {
-  throw new ApiError(404, 'RECORD_NOT_FOUND', '记录不存在或不可访问')
+  throw ErrorCode.RECORD_NOT_FOUND()
 }

@@ -6,9 +6,17 @@ import type {
   WalletEntry,
 } from '@t-box/shared'
 import type { DataSource, EntityManager } from 'typeorm'
+import type { StoredBillingUsage } from '../db/records/billing-entities.js'
 import { randomUUID } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { isoTime } from '@t-box/server-foundation/time'
+import { Raw } from 'typeorm'
+import {
+  BillingAuditEntity,
+  BillingEntryEntity,
+  BillingUsageEntity,
+  BillingWalletEntity,
+} from '../db/records/billing-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { admitCost } from './budget.js'
 import { count, decimal, money, tokenFee } from './money.js'
 
@@ -17,31 +25,8 @@ interface WalletRow {
   reserved_micro: string
   mode: Wallet['mode']
 }
-interface UsageRow {
-  id: string
-  user_id: string
-  task_id: string | null
-  model_config_id: string
-  prices_json: ModelPrices | string
-  kind: UsageRecord['kind']
-  mode: Wallet['mode']
-  status: UsageRecord['status']
-  reserved_micro: string
-  fee_micro: string
-  charged_micro: string
-  message_id: string | null
-  agent_id: string | null
-  purpose: import('@t-box/shared').ModelCallPurpose
-  cached_tokens: string | null
-  cache_write_tokens: string | null
-  reasoning_tokens: string | null
-  duration_ms: number | null
-  input_tokens: string | null
-  output_tokens: string | null
-  images: number | null
-  response_id: string | null
-  created_at: Date
-}
+type UsageRow = StoredBillingUsage
+
 const viewWallet = (w: WalletRow): Wallet => ({
   currency: 'CNY',
   mode: w.mode,
@@ -52,18 +37,29 @@ const viewWallet = (w: WalletRow): Wallet => ({
 export class BillingService {
   constructor(
     readonly source: DataSource,
-    private readonly configuration?: { snapshot(): Promise<import('@t-box/shared').ConfigurationSnapshot> },
+    private readonly configuration?: {
+      snapshot(): Promise<import('@t-box/shared').ConfigurationSnapshot>
+    },
   ) {}
 
   async lock(db: EntityManager, userId: string): Promise<WalletRow> {
-    await db.query(
-      'INSERT INTO billing_wallets(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)',
-      [userId],
-    )
-    const [row] = await db.query(
-      'SELECT balance_micro,reserved_micro,mode FROM billing_wallets WHERE user_id=? FOR UPDATE',
-      [userId],
-    )
+    await db
+      .createQueryBuilder()
+      .insert()
+      .into('billing_wallets')
+      .values({ user_id: () => ':p0' })
+      .updateEntity(false)
+      .setParameters({ p0: userId })
+      .orUpdate(['user_id'])
+      .execute()
+    const row = await db.getRepository(BillingWalletEntity).findOne({
+      select: { balance_micro: true, reserved_micro: true, mode: true },
+      where: { user_id: userId },
+      lock: { mode: 'pessimistic_write' },
+    })
+    if (!row) {
+      throw ErrorCode.SCHEMA_REQUIRED('余额账户初始化失败')
+    }
     return row
   }
 
@@ -91,15 +87,11 @@ export class BillingService {
     return this.source.transaction(async (db) => {
       await admitCost(db, input, configuration)
       const wallet = await this.lock(db, input.userId)
-      const [old] = await db.query('SELECT id FROM billing_usage WHERE id=?', [
-        input.id,
-      ])
+      const old = await db
+        .getRepository(BillingUsageEntity)
+        .findOne({ select: { id: true }, where: { id: input.id } })
       if (old) {
-        throw new ApiError(
-          409,
-          'USAGE_REPLAY',
-          '本次调用已记录，请先核对执行结果',
-        )
+        throw ErrorCode.USAGE_REPLAY()
       }
       const mode = input.free ? 'record_only' : wallet.mode
       const reserve = mode === 'record_only' ? 0n : input.reserve
@@ -107,33 +99,30 @@ export class BillingService {
         reserve < 0n ||
         BigInt(wallet.balance_micro) - BigInt(wallet.reserved_micro) < reserve
       ) {
-        throw new ApiError(
-          402,
-          'BALANCE_INSUFFICIENT',
-          '可用余额不足，请充值后继续；已完成的操作仍保留',
-        )
+        throw ErrorCode.BALANCE_INSUFFICIENT()
       }
-      await db.query(
-        'UPDATE billing_wallets SET reserved_micro=reserved_micro+? WHERE user_id=?',
-        [reserve.toString(), input.userId],
-      )
-      await db.query(
-        'INSERT INTO billing_usage(id,user_id,task_id,model_config_id,prices_json,kind,mode,reserved_micro,message_id,agent_id,purpose,cost_reserved_micro) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-        [
-          input.id,
-          input.userId,
-          input.taskId ?? null,
-          input.modelId,
-          JSON.stringify(input.prices),
-          input.kind,
-          mode,
-          reserve.toString(),
-          input.messageId ?? null,
-          input.agentId ?? null,
-          input.purpose ?? 'response',
-          input.reserve.toString(),
-        ],
-      )
+      await db
+        .createQueryBuilder()
+        .update('billing_wallets')
+        .set({ reserved_micro: () => 'reserved_micro+:p0' })
+        .updateEntity(false)
+        .where('user_id=:p1')
+        .setParameters({ p0: reserve.toString(), p1: input.userId })
+        .execute()
+      await db.getRepository(BillingUsageEntity).insert({
+        id: input.id,
+        user_id: input.userId,
+        task_id: input.taskId ?? null,
+        model_config_id: input.modelId,
+        prices_json: input.prices,
+        kind: input.kind,
+        mode,
+        reserved_micro: reserve.toString(),
+        message_id: input.messageId ?? null,
+        agent_id: input.agentId ?? null,
+        purpose: input.purpose ?? 'response',
+        cost_reserved_micro: input.reserve.toString(),
+      })
       return mode
     })
   }
@@ -155,12 +144,39 @@ export class BillingService {
   ) {
     const result = await this.source.transaction(async (db) => {
       const wallet = await this.lock(db, userId)
-      const [row]: UsageRow[] = await db.query(
-        'SELECT * FROM billing_usage WHERE id=? AND user_id=? FOR UPDATE',
-        [id, userId],
-      )
+      const row = await db.getRepository(BillingUsageEntity).findOne({
+        select: {
+          id: true,
+          user_id: true,
+          task_id: true,
+          model_config_id: true,
+          prices_json: true,
+          kind: true,
+          mode: true,
+          status: true,
+          reserved_micro: true,
+          fee_micro: true,
+          charged_micro: true,
+          input_tokens: true,
+          output_tokens: true,
+          images: true,
+          response_id: true,
+          created_at: true,
+          updated_at: true,
+          message_id: true,
+          agent_id: true,
+          purpose: true,
+          cached_tokens: true,
+          reasoning_tokens: true,
+          duration_ms: true,
+          cache_write_tokens: true,
+          cost_reserved_micro: true,
+        },
+        where: { id, user_id: userId },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (!row) {
-        throw new ApiError(404, 'USAGE_NOT_FOUND', '费用记录不存在')
+        throw ErrorCode.USAGE_NOT_FOUND()
       }
       if (row.status === 'settled') {
         if (
@@ -181,20 +197,12 @@ export class BillingService {
               (usage.images ?? null) !== row.images ||
               (usage.responseId?.slice(0, 200) ?? null) !== row.response_id
         ) {
-          throw new ApiError(
-            409,
-            'USAGE_CONFLICT',
-            '重复用量与已结算记录不一致',
-          )
+          throw ErrorCode.USAGE_CONFLICT()
         }
         return true
       }
       if (row.status === 'released') {
-        throw new ApiError(
-          409,
-          'USAGE_RELEASED',
-          '该记录已人工解除，需人工核对费用',
-        )
+        throw ErrorCode.USAGE_RELEASED()
       }
       const price =
         typeof row.prices_json === 'string'
@@ -204,63 +212,62 @@ export class BillingService {
         usage.cachedInputTokens != null &&
         count(usage.cachedInputTokens) > count(usage.inputTokens)
       ) {
-        throw new ApiError(502, 'USAGE_INVALID', '缓存用量超过输入用量')
+        throw ErrorCode.USAGE_INVALID('缓存用量超过输入用量')
       }
       if (
         usage.reasoningTokens != null &&
         count(usage.reasoningTokens) > count(usage.outputTokens)
       ) {
-        throw new ApiError(502, 'USAGE_INVALID', '推理用量超过输出用量')
+        throw ErrorCode.USAGE_INVALID('推理用量超过输出用量')
       }
       if (
         usage.cacheWriteTokens != null &&
         count(usage.cacheWriteTokens) + (usage.cachedInputTokens ?? 0) >
         count(usage.inputTokens)
       ) {
-        throw new ApiError(502, 'USAGE_INVALID', '缓存读写用量超过输入用量')
+        throw ErrorCode.USAGE_INVALID('缓存读写用量超过输入用量')
       }
       const fee =
         row.kind === 'image'
           ? money(price.imagePrice) * BigInt(count(usage.images))
-          : tokenFee(
-              price,
-              count(usage.inputTokens),
-              count(usage.outputTokens),
-            )
+          : tokenFee(price, count(usage.inputTokens), count(usage.outputTokens))
       const debit = row.mode === 'record_only' ? 0n : fee
       const otherReserved =
         BigInt(wallet.reserved_micro) - BigInt(row.reserved_micro)
       // A compatible provider may exceed the provisional budget. Preserve the actual
       // usage for review; never create negative balances or partially debit silently.
       const canPay = BigInt(wallet.balance_micro) - otherReserved >= debit
-      await db.query(
-        'UPDATE billing_usage SET fee_micro=?,input_tokens=?,output_tokens=?,images=?,response_id=?,cached_tokens=?,cache_write_tokens=?,reasoning_tokens=?,duration_ms=?,status=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?',
-        [
-          fee.toString(),
-          usage.inputTokens ?? null,
-          usage.outputTokens ?? null,
-          usage.images ?? null,
-          usage.responseId?.slice(0, 200) ?? null,
-          usage.cachedInputTokens ?? null,
-          usage.cacheWriteTokens ?? null,
-          usage.reasoningTokens ?? null,
-          usage.durationMs == null ? null : count(usage.durationMs),
-          canPay ? 'settled' : 'review',
-          id,
-        ],
+      await db.getRepository(BillingUsageEntity).update(
+        { id },
+        {
+          fee_micro: fee.toString(),
+          input_tokens: usage.inputTokens ?? null,
+          output_tokens: usage.outputTokens ?? null,
+          images: usage.images ?? null,
+          response_id: usage.responseId?.slice(0, 200) ?? null,
+          cached_tokens: usage.cachedInputTokens ?? null,
+          cache_write_tokens: usage.cacheWriteTokens ?? null,
+          reasoning_tokens: usage.reasoningTokens ?? null,
+          duration_ms:
+            usage.durationMs == null ? null : count(usage.durationMs),
+          status: canPay ? 'settled' : 'review',
+          updated_at: () => 'UTC_TIMESTAMP(3)',
+        },
       )
       if (!canPay) {
         return false
       }
       const balance = BigInt(wallet.balance_micro) - debit
-      await db.query(
-        'UPDATE billing_wallets SET balance_micro=?,reserved_micro=? WHERE user_id=?',
-        [balance.toString(), otherReserved.toString(), userId],
+      await db.getRepository(BillingWalletEntity).update(
+        { user_id: userId },
+        {
+          balance_micro: balance.toString(),
+          reserved_micro: otherReserved.toString(),
+        },
       )
-      await db.query('UPDATE billing_usage SET charged_micro=? WHERE id=?', [
-        debit.toString(),
-        id,
-      ])
+      await db
+        .getRepository(BillingUsageEntity)
+        .update({ id }, { charged_micro: debit.toString() })
       if (debit) {
         await this.entry(db, userId, 'usage', `usage:${id}`, -debit, balance)
       }
@@ -276,11 +283,7 @@ export class BillingService {
       return true
     })
     if (!result) {
-      throw new ApiError(
-        402,
-        'USAGE_REVIEW',
-        '本次用量超出可用余额，费用已保留待核对；不会重复调用',
-      )
+      throw ErrorCode.USAGE_REVIEW()
     }
   }
 
@@ -290,10 +293,36 @@ export class BillingService {
     administrator: string,
     reason: string,
   ) {
-    const [row]: UsageRow[] = await this.source.query(
-      'SELECT * FROM billing_usage WHERE id=? AND user_id=?',
-      [id, userId],
-    )
+    const row = await this.source.getRepository(BillingUsageEntity).findOne({
+      select: {
+        id: true,
+        user_id: true,
+        task_id: true,
+        model_config_id: true,
+        prices_json: true,
+        kind: true,
+        mode: true,
+        status: true,
+        reserved_micro: true,
+        fee_micro: true,
+        charged_micro: true,
+        input_tokens: true,
+        output_tokens: true,
+        images: true,
+        response_id: true,
+        created_at: true,
+        updated_at: true,
+        message_id: true,
+        agent_id: true,
+        purpose: true,
+        cached_tokens: true,
+        reasoning_tokens: true,
+        duration_ms: true,
+        cache_write_tokens: true,
+        cost_reserved_micro: true,
+      },
+      where: { id, user_id: userId },
+    })
     if (
       !row ||
       !['review', 'settled'].includes(row.status) ||
@@ -301,11 +330,7 @@ export class BillingService {
         (row.input_tokens === null || row.output_tokens === null)) ||
         (row.kind === 'image' && row.images === null)
     ) {
-      throw new ApiError(
-        409,
-        'USAGE_UNKNOWN',
-        '尚未取得实际用量，请先核对服务商记录，或解除预留并放弃本次扣费',
-      )
+      throw ErrorCode.USAGE_UNKNOWN()
     }
     await this.settle(
       userId,
@@ -332,15 +357,24 @@ export class BillingService {
   }
 
   async uncertain(userId: string, id: string) {
-    await this.source.query(
-      'UPDATE billing_usage SET status=\'review\',updated_at=UTC_TIMESTAMP(3) WHERE id=? AND user_id=? AND status=\'reserved\'',
-      [id, userId],
-    )
+    await this.source
+      .getRepository(BillingUsageEntity)
+      .update(
+        { id, user_id: userId, status: 'reserved' },
+        { status: 'review', updated_at: () => 'UTC_TIMESTAMP(3)' },
+      )
   }
 
   async recover() {
-    await this.source.query(
-      'UPDATE billing_usage SET status=\'review\',updated_at=UTC_TIMESTAMP(3) WHERE status=\'reserved\' AND updated_at<DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 10 MINUTE)',
+    await this.source.getRepository(BillingUsageEntity).update(
+      {
+        status: 'reserved',
+        updated_at: Raw(
+          (column) =>
+            `${column} < DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 10 MINUTE)`,
+        ),
+      },
+      { status: () => '\'review\'', updated_at: () => 'UTC_TIMESTAMP(3)' },
     )
   }
 
@@ -352,33 +386,55 @@ export class BillingService {
   ) {
     await this.source.transaction(async (db) => {
       const wallet = await this.lock(db, userId)
-      const [row]: UsageRow[] = await db.query(
-        'SELECT * FROM billing_usage WHERE id=? AND user_id=? FOR UPDATE',
-        [id, userId],
-      )
+      const row = await db.getRepository(BillingUsageEntity).findOne({
+        select: {
+          id: true,
+          user_id: true,
+          task_id: true,
+          model_config_id: true,
+          prices_json: true,
+          kind: true,
+          mode: true,
+          status: true,
+          reserved_micro: true,
+          fee_micro: true,
+          charged_micro: true,
+          input_tokens: true,
+          output_tokens: true,
+          images: true,
+          response_id: true,
+          created_at: true,
+          updated_at: true,
+          message_id: true,
+          agent_id: true,
+          purpose: true,
+          cached_tokens: true,
+          reasoning_tokens: true,
+          duration_ms: true,
+          cache_write_tokens: true,
+          cost_reserved_micro: true,
+        },
+        where: { id, user_id: userId },
+        lock: { mode: 'pessimistic_write' },
+      })
       if (!row || row.status !== 'review') {
-        throw new ApiError(409, 'REVIEW_REQUIRED', '仅可解除待核对记录的预留')
+        throw ErrorCode.REVIEW_REQUIRED()
       }
-      await db.query(
-        'UPDATE billing_wallets SET reserved_micro=? WHERE user_id=?',
-        [
-          (
+      await db.getRepository(BillingWalletEntity).update(
+        { user_id: userId },
+        {
+          reserved_micro: (
             BigInt(wallet.reserved_micro) - BigInt(row.reserved_micro)
           ).toString(),
-          userId,
-        ],
+        },
       )
-      await db.query(
-        'UPDATE billing_usage SET status=\'released\',updated_at=UTC_TIMESTAMP(3) WHERE id=?',
-        [id],
-      )
-      await this.audit(
-        db,
-        userId,
-        administrator,
-        'release',
-        `${id}: ${reason}`,
-      )
+      await db
+        .getRepository(BillingUsageEntity)
+        .update(
+          { id },
+          { status: 'released', updated_at: () => 'UTC_TIMESTAMP(3)' },
+        )
+      await this.audit(db, userId, administrator, 'release', `${id}: ${reason}`)
     })
   }
 
@@ -390,10 +446,9 @@ export class BillingService {
   ) {
     await this.source.transaction(async (db) => {
       const previous = await this.lock(db, userId)
-      await db.query('UPDATE billing_wallets SET mode=? WHERE user_id=?', [
-        mode,
-        userId,
-      ])
+      await db
+        .getRepository(BillingWalletEntity)
+        .update({ user_id: userId }, { mode })
       await this.audit(
         db,
         userId,
@@ -411,10 +466,13 @@ export class BillingService {
     action: string,
     detail: string,
   ) {
-    await db.query(
-      'INSERT INTO billing_audit(id,user_id,administrator_id,action,detail) VALUES(?,?,?,?,?)',
-      [randomUUID(), userId, administrator, action, detail],
-    )
+    await db.getRepository(BillingAuditEntity).insert({
+      id: randomUUID(),
+      user_id: userId,
+      administrator_id: administrator,
+      action,
+      detail,
+    })
   }
 
   async entry(
@@ -427,19 +485,16 @@ export class BillingService {
     reason = '',
     administrator?: string,
   ) {
-    await db.query(
-      'INSERT INTO billing_entries(id,user_id,kind,reference_key,amount_micro,balance_micro,reason,administrator_id) VALUES(?,?,?,?,?,?,?,?)',
-      [
-        randomUUID(),
-        userId,
-        kind,
-        reference,
-        amount.toString(),
-        balance.toString(),
-        reason,
-        administrator ?? null,
-      ],
-    )
+    await db.getRepository(BillingEntryEntity).insert({
+      id: randomUUID(),
+      user_id: userId,
+      kind,
+      reference_key: reference,
+      amount_micro: amount.toString(),
+      balance_micro: balance.toString(),
+      reason,
+      administrator_id: administrator ?? null,
+    })
   }
 
   async credit(
@@ -452,10 +507,15 @@ export class BillingService {
     administrator?: string,
   ) {
     const wallet = await this.lock(db, userId)
-    const [existing] = await db.query(
-      'SELECT user_id,amount_micro,reason,administrator_id FROM billing_entries WHERE reference_key=?',
-      [reference],
-    )
+    const existing = await db.getRepository(BillingEntryEntity).findOne({
+      select: {
+        user_id: true,
+        amount_micro: true,
+        reason: true,
+        administrator_id: true,
+      },
+      where: { reference_key: reference },
+    })
     if (existing) {
       if (
         existing.user_id !== userId ||
@@ -463,7 +523,7 @@ export class BillingService {
         existing.reason !== reason ||
         existing.administrator_id !== (administrator ?? null)
       ) {
-        throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', '重复请求参数不一致')
+        throw ErrorCode.IDEMPOTENCY_CONFLICT()
       }
       return
     }
@@ -471,17 +531,12 @@ export class BillingService {
       amount <= 0n ||
       BigInt(wallet.balance_micro) + amount > 9_223_372_036_854_775_807n
     ) {
-      throw new ApiError(
-        400,
-        'BALANCE_LIMIT',
-        '入账金额须为正数，且账户余额不能超出系统处理上限',
-      )
+      throw ErrorCode.BALANCE_LIMIT()
     }
     const balance = BigInt(wallet.balance_micro) + amount
-    await db.query(
-      'UPDATE billing_wallets SET balance_micro=? WHERE user_id=?',
-      [balance.toString(), userId],
-    )
+    await db
+      .getRepository(BillingWalletEntity)
+      .update({ user_id: userId }, { balance_micro: balance.toString() })
     await this.entry(
       db,
       userId,
@@ -516,10 +571,18 @@ export class BillingService {
 
   async users(search = ''): Promise<BillingUser[]> {
     const pattern = `%${search.replace(/[=%_]/g, '=$&')}%`
-    const rows = await this.source.query(
-      'SELECT u.id,u.username,u.nickname,COALESCE(w.balance_micro,0) balance_micro,COALESCE(w.reserved_micro,0) reserved_micro,COALESCE(w.mode,\'charge\') mode FROM app_users u LEFT JOIN billing_wallets w ON w.user_id=u.id WHERE u.username LIKE ? ESCAPE \'=\' OR u.nickname LIKE ? ESCAPE \'=\' ORDER BY u.created_at DESC LIMIT 200',
-      [pattern, pattern],
-    )
+    const rows = await this.source
+      .createQueryBuilder()
+      .select(
+        'u.id,u.username,u.nickname,COALESCE(w.balance_micro,0) balance_micro,COALESCE(w.reserved_micro,0) reserved_micro,COALESCE(w.mode,\'charge\') mode',
+      )
+      .from('app_users', 'u')
+      .leftJoin('billing_wallets', 'w', 'w.user_id=u.id')
+      .where('u.username LIKE :p0 ESCAPE \'=\' OR u.nickname LIKE :p1 ESCAPE \'=\'')
+      .orderBy('u.created_at', 'DESC')
+      .limit(200)
+      .setParameters({ p0: pattern, p1: pattern })
+      .getRawMany()
     return rows.map(
       (r: WalletRow & { id: string, username: string, nickname: string }) => ({
         id: r.id,
@@ -531,10 +594,40 @@ export class BillingService {
   }
 
   async records(userId: string): Promise<UsageRecord[]> {
-    const rows: UsageRow[] = await this.source.query(
-      'SELECT * FROM billing_usage WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 100',
-      [userId],
-    )
+    const rows: UsageRow[] = await this.source
+      .getRepository(BillingUsageEntity)
+      .find({
+        select: {
+          id: true,
+          user_id: true,
+          task_id: true,
+          model_config_id: true,
+          prices_json: true,
+          kind: true,
+          mode: true,
+          status: true,
+          reserved_micro: true,
+          fee_micro: true,
+          charged_micro: true,
+          input_tokens: true,
+          output_tokens: true,
+          images: true,
+          response_id: true,
+          created_at: true,
+          updated_at: true,
+          message_id: true,
+          agent_id: true,
+          purpose: true,
+          cached_tokens: true,
+          reasoning_tokens: true,
+          duration_ms: true,
+          cache_write_tokens: true,
+          cost_reserved_micro: true,
+        },
+        where: { user_id: userId },
+        order: { created_at: 'DESC', id: 'DESC' },
+        take: 100,
+      })
     // An explicit allowlist keeps server model IDs, prices and upstream response IDs private.
     return rows.map((r) => ({
       id: r.id,
@@ -561,17 +654,25 @@ export class BillingService {
   }
 
   async entries(userId: string): Promise<WalletEntry[]> {
-    const rows = await this.source.query(
-      'SELECT id,kind,amount_micro,balance_micro,created_at FROM billing_entries WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 100',
-      [userId],
-    )
+    const rows = await this.source.getRepository(BillingEntryEntity).find({
+      select: {
+        id: true,
+        kind: true,
+        amount_micro: true,
+        balance_micro: true,
+        created_at: true,
+      },
+      where: { user_id: userId },
+      order: { created_at: 'DESC', id: 'DESC' },
+      take: 100,
+    })
     return rows.map(
       (r: {
         id: string
         kind: WalletEntry['kind']
         amount_micro: string
         balance_micro: string
-        created_at: Date
+        created_at: Date | string
       }) => ({
         id: r.id,
         kind: r.kind,

@@ -1,14 +1,15 @@
 <script setup lang="ts">
+import type { LedgerNotice } from '@t-box/ledger-contracts'
 import { onMounted, ref } from 'vue'
 import { featureApi } from './api'
 
 const props = defineProps<{ ledgerId: string }>()
 const api = featureApi(props.ledgerId)
-const rows = ref<any[]>([])
+const rows = ref<LedgerNotice[]>([])
 const error = ref('')
 async function load() {
   try {
-    rows.value = await api.get('/notices')
+    rows.value = await api.get<LedgerNotice[]>('/notices')
   } catch (e) {
     error.value = (e as Error).message
   }

@@ -1,8 +1,8 @@
 import type { ToolResult } from '@t-box/shared'
 import type { ChatSession, SessionRun } from '../chat/session.js'
 import type { ClientInteraction } from './contracts.js'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { CHAT_LIMITS } from '@t-box/shared'
+import { ErrorCode } from '../error-codes.js'
 
 /** Pause at a resumable boundary; never feed an absent client's decision to the model. */
 export function requireClient(session: ChatSession, run: SessionRun) {
@@ -30,11 +30,7 @@ export function requestClient(
   onWait?: () => void,
 ): Promise<ToolResult> {
   if (run.pending) {
-    throw new ApiError(
-      409,
-      'INTERACTION_IN_PROGRESS',
-      '已有一项客户端操作正在等待处理',
-    )
+    throw ErrorCode.INTERACTION_IN_PROGRESS()
   }
   run.abort.signal.throwIfAborted()
   if (request.optional && (!session.owner || !session.send)) {
@@ -48,11 +44,7 @@ export function requestClient(
     if (request.optional) {
       return Promise.resolve(deferred)
     }
-    throw new ApiError(
-      409,
-      'CLIENT_CAPABILITY_UNAVAILABLE',
-      '当前客户端不支持此操作，请更新应用',
-    )
+    throw ErrorCode.CLIENT_CAPABILITY_UNAVAILABLE()
   }
   run.view.status = 'waiting_client'
   onWait?.()

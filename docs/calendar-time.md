@@ -33,7 +33,7 @@ Android 13 通知权限、Android 12+ 精确闹钟授权及省电策略会影响
 - `app/src/features/reminders/`：公共设备提醒协调器、稳定 ID 差量计划、权限设置和全局提醒宿主。原生同步异步串行，账号版本保护过期响应。
 - `app/src/core/applicationMutation.ts`：未知网络结果保留操作标识，完全相同请求重试不会重复新增；确定的失败清理标识。结果不明时应先重试原请求或刷新查看，改变输入代表一次新操作。
 
-迁移 `CalendarTime1791244816000` 新增 calendar_events、calendar_exceptions、app_timers、application_operations。数据库外键按账号级联清理。事件／倒计时删除为软删除；尚未实现历史操作记录的自动归档，长期大规模运行前应增加保留策略。
+日历与时间应用各自的 `server/src/schema.ts` 提供 calendar_events、calendar_exceptions、app_timers、application_operations 的首次建表定义，由平台初始化入口统一执行。数据库外键按账号级联清理。事件／倒计时删除为软删除；尚未实现历史操作记录的自动归档，长期大规模运行前应增加保留策略。
 
 AI 运行层无日历或时间业务分支；只在前后端 application registry 注册模块。能力入口自动显示工具／交互／技能／Agent。time_now 为基础只读工具，未激活 skill 也可查询；其余能力由对应 skill 激活。专业 Agent 不绕过权限。calendar_event_delete 通过 calendar_confirm 返回严格 approved=true 才执行；同步提醒通过独立的可选 ui 交互，不接收凭据或生成代码。前端关闭时服务端仍可创建日程和倒计时，设备提醒同步延后到下次打开；删除确认必须等待前端，不能跳过。
 
@@ -73,6 +73,6 @@ AI 创建／更新事件的工具包含可空 `lunar` 配置，提供后端工�
 
 `apps/calendar/contracts/src/almanac.ts` 使用 lunar-typescript 提供前后端共用的纯日期查询：农历年月日、闰月、干支年（以农历年为界）、生肖、24 节气、下个节气日期、公历及传统节日。当前农历展示范围 1900–2100 年；其他年份继续支持普通日历和事件，不伪造农历信息。日期按公历年月日计算，与设备时区无关。节气按中国历法的日期展示，不是设备所在地的天文时刻。月格优先显示节日、节气，再显示农历日（月初显示月名）；完整信息在选中日期下展示。
 
-年度放假调休由日历应用后端同步并保存到数据库，前端通过 API 和 SDK 缓存读取，AI 工具读取同一份已发布安排。节日名称与休／班安排分开，未知年度不会据节日名称推断放假。迁移保留之前核实的 2026 年数据；其他年度自动同步或后台审核发布。详见 [节假日数据与后台管理](calendar-holidays.md)。
+年度放假调休由日历应用后端同步并保存到数据库，前端通过 API 和 SDK 缓存读取，AI 工具读取同一份已发布安排。节日名称与休／班安排分开，未知年度不会据节日名称推断放假。首次初始化仅内置之前核实的 2026 年数据；其他年度自动同步或后台审核发布。详见 [节假日数据与后台管理](calendar-holidays.md)。
 
 `GET /api/v1/calendar/date-info?date=YYYY-MM-DD` 需登录，返回 `CalendarDayInfo`。后端工具 `calendar_date_info` 查询指定日期，`calendar_today` 增加 `almanac` 字段，均在后端执行，无需前端在线。日历技能明确要求区分节日与官方放假，未向 AI 核心添加应用业务逻辑。

@@ -17,7 +17,8 @@
   },
   "dependencies": {
     "@t-box/app-contracts": "workspace:*",
-    "@t-box/app-sdk": "workspace:*"
+    "@t-box/app-sdk": "workspace:*",
+    "@t-box/errors": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~5.9.3"

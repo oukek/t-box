@@ -16,6 +16,7 @@
 
 ## 公共包
 
+- `errors`：前后端通用的类型化错误工厂及跨领域协议错误；应用各自维护错误目录，不依赖平台私有目录。
 - `app-contracts`：应用清单、资源引用、工具/交互声明、发布、安装及消息协议。没有应用业务实现。
 - `app-server-sdk`：受限工具上下文、技能/Agent 契约、工具 schema 与独立 HTTP 后端协议。
 - `app-web-sdk`：独立来源 Web 应用的 MessageChannel 桥。
@@ -36,7 +37,7 @@
 
 服务端注册入口 `api/src/applications/registry.ts` 组合 apps 的公开模块；PlatformService 注入数据源与服务端口。记账不接收 IdentityService 的具体类，只接收身份校验/限流接口。图片工具只接收 ImageToolPort，模型密钥、资源存储和计费仍属于平台服务。设置和市场通过平台的账号/应用安装 API 工作，不重复建立另一套后台或数据库。
 
-数据库实体由所属应用导出、主 API 数据源统一注册。已有迁移保留在 API 的有序迁移链：部分历史迁移同时创建账号和业务结构，不能为了目录形式拆开或重排已执行的迁移。应用 ID、版本号、工具名称、URL、表名及历史不可变发布定义均保持兼容。
+数据库实体由所属应用导出、主 API 数据源统一注册。应用首次建表与默认数据位于自己的 `server/src/schema.ts`，平台 `api/src/db/schema/index.ts` 组合注册；历史 migrations 已合并，不再保留旧有序迁移链。正式部署后保留发布基线，以增量升级脚本处理后续结构变化，详见 [数据库初始化](database-initialization.md)。应用 ID、版本号、工具名称、URL、表名及历史不可变发布定义均保持兼容。
 
 ## 开发和验证
 

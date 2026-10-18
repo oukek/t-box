@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { LedgerAccount } from '@t-box/ledger-contracts'
+import type {
+  LedgerAccount,
+  LedgerReimbursement,
+  LedgerReimbursementReceipt,
+} from '@t-box/ledger-contracts'
 import type { FormValues, LedgerFormField } from './form'
 import { BottomSheet } from '@t-box/ui-kit'
 import { computed, onMounted, ref } from 'vue'
@@ -11,11 +15,11 @@ import LedgerFormSheet from './LedgerFormSheet.vue'
 const props = defineProps<{ ledgerId: string, canWrite: boolean }>()
 const api = featureApi(props.ledgerId)
 const action = useFeatureAction()
-const rows = ref<any[]>([])
+const rows = ref<LedgerReimbursement[]>([])
 const accounts = ref<LedgerAccount[]>([])
-const target = ref<any>()
-const historyTarget = ref<any>()
-const receipts = ref<any[]>([])
+const target = ref<LedgerReimbursement>()
+const historyTarget = ref<LedgerReimbursement>()
+const receipts = ref<LedgerReimbursementReceipt[]>([])
 const operation = ref<{ path: string, title: string } | null>(null)
 const attachmentResourceIds = ref<string[]>([])
 const form = ref<FormValues>({})
@@ -36,12 +40,12 @@ const fields = computed<LedgerFormField[]>(() => [
   { key: 'note', label: '备注' },
 ])
 async function load() {
-  [rows.value, accounts.value] = await Promise.all([
-    api.get('/reimbursements'),
-    api.get('/accounts'),
+  ;[rows.value, accounts.value] = await Promise.all([
+    api.get<LedgerReimbursement[]>('/reimbursements'),
+    api.get<LedgerAccount[]>('/accounts'),
   ])
 }
-function open(row: any) {
+function open(row: LedgerReimbursement) {
   attachmentResourceIds.value = []
   target.value = row
   form.value = {
@@ -53,6 +57,9 @@ function open(row: any) {
   action.error.value = ''
 }
 async function save() {
+  if (!target.value) {
+    return
+  }
   const body = {
     ...form.value,
     attachmentResourceIds: attachmentResourceIds.value,
@@ -66,10 +73,12 @@ async function save() {
     await load()
   }
 }
-async function history(row: any) {
+async function history(row: LedgerReimbursement) {
   historyTarget.value = row
   try {
-    receipts.value = await api.get(`/reimbursements/${row.id}/receipts`)
+    receipts.value = await api.get<LedgerReimbursementReceipt[]>(
+      `/reimbursements/${row.id}/receipts`,
+    )
   } catch (e) {
     action.error.value = (e as Error).message
   }
@@ -85,7 +94,8 @@ async function confirmOperation() {
     operation.value = null
     await load()
     if (historyTarget.value) {
-      const row = rows.value.find((r) => r.id === historyTarget.value.id)
+      const historyId = historyTarget.value.id
+      const row = rows.value.find((r) => r.id === historyId)
       if (row) {
         await history(row)
       }

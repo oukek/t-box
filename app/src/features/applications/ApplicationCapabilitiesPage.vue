@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { ApplicationCapabilities, ApplicationToolEffect } from '@t-box/shared'
-import {
-  APPLICATION_CONTRACT_VERSION,
+import type {
+  ApplicationCapabilities,
+  ApplicationToolEffect,
 } from '@t-box/shared'
+import { APPLICATION_CONTRACT_VERSION } from '@t-box/shared'
 import { AppIcon } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -11,6 +12,7 @@ import { appCatalog } from '../../core/app-runtime/catalog'
 import { getApplication } from '../../core/applications'
 import { navigateTab } from '../../core/navigation'
 import { request } from '../../core/network'
+import { ErrorCode } from '../../error-codes.js'
 
 const props = defineProps<{ appId: string }>()
 const data = ref<ApplicationCapabilities | null>(null)
@@ -39,10 +41,15 @@ const tabs = computed(
     ] as const,
 )
 const supported = (name: string) =>
-  appCatalog.entries.find((e) => e.release.appId === props.appId)?.release.clientTools.includes(name) || Object.hasOwn(
-    applicationModules.find((module) => module.manifest.id === props.appId)?.ai?.clientTools || {},
-    name,
-  )
+  appCatalog.entries
+    .find((e) => e.release.appId === props.appId)
+    ?.release
+    .clientTools
+    .includes(name) ||
+    Object.hasOwn(
+      applicationModules.find((module) => module.manifest.id === props.appId)?.ai?.clientTools || {},
+      name,
+    )
 const toolTitle = (name: string) =>
   data.value?.tools.find((tool) => tool.name === name)?.title || name
 const skillTitle = (id: string) =>
@@ -66,7 +73,7 @@ async function load() {
       result.data.contractVersion !== APPLICATION_CONTRACT_VERSION ||
       result.data.manifest.id !== props.appId
     ) {
-      throw new Error('应用能力协议与当前版本不兼容，请更新应用后重试。')
+      throw ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED()
     }
     data.value = result.data
   } catch (cause) {

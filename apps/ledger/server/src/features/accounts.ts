@@ -1,10 +1,20 @@
-import type { LedgerAccount } from '@t-box/ledger-contracts'
+import type {
+  LedgerAccount,
+  LedgerAccountEntry,
+  LedgerTransfer,
+} from '@t-box/ledger-contracts'
 import type { Principal } from '../ledgers/types.js'
 import { randomUUID } from 'node:crypto'
 import { invalid } from '@t-box/server-foundation/errors'
+import { choice } from '@t-box/server-foundation/input'
 import { amount, cents, money } from '../finance/money.js'
 import { isoTime } from '../ledgers/time.js'
 import { date, note, object, text, today } from '../ledgers/validation.js'
+import {
+  LedgerAccountEntity,
+  LedgerAccountEntryEntity,
+  LedgerTransferEntity,
+} from '../persistence/accounts-entities.js'
 import { project } from '../statistics/projection.js'
 import { parseId } from '../validation.js'
 import { activeAccount, postAccount } from './account-posting.js'
@@ -13,11 +23,14 @@ import { FeatureService, notFound } from './base.js'
 export class AccountService extends FeatureService {
   async list(actor: Principal, book: string): Promise<LedgerAccount[]> {
     await this.read(actor, book)
-    const rows = await this.db.query(
+    // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
+    const rows = await this.db.query<
+      (Omit<LedgerAccount, 'archived'> & { archived: number | boolean })[]
+    >(
       'SELECT a.id,a.name,a.kind,a.archived,COALESCE(SUM(IF(e.entry_date<=?,e.amount,0)),0) AS balance FROM ledger_accounts a LEFT JOIN ledger_account_entries e ON e.ledger_id=a.ledger_id AND e.account_id=a.id WHERE a.ledger_id=? GROUP BY a.id,a.name,a.kind,a.archived ORDER BY a.archived,a.created_at',
       [today(), book],
     )
-    return rows.map((r: any) => ({ ...r, archived: !!Number(r.archived) }))
+    return rows.map((r) => ({ ...r, archived: !!Number(r.archived) }))
   }
 
   async create(
@@ -45,10 +58,13 @@ export class AccountService extends FeatureService {
       async (db, a) => {
         this.manage(a)
         const id = randomUUID()
-        await db.query(
-          'INSERT INTO ledger_accounts(id,ledger_id,name,kind,created_by) VALUES(?,?,?,?,?)',
-          [id, book, name, v.kind, actor.user.id],
-        )
+        await db.getRepository(LedgerAccountEntity).insert({
+          id,
+          ledger_id: book,
+          name,
+          kind: choice(v.kind, 'kind', ['cash', 'bank', 'wallet', 'other']),
+          created_by: actor.user.id,
+        })
         await postAccount(
           db,
           book,
@@ -62,7 +78,7 @@ export class AccountService extends FeatureService {
         return {
           id,
           name,
-          kind: v.kind,
+          kind: choice(v.kind, 'kind', ['cash', 'bank', 'wallet', 'other']),
           balance: money(cents(signed)),
           archived: false,
         }
@@ -86,44 +102,75 @@ export class AccountService extends FeatureService {
       { id, ...v },
       async (db, a) => {
         this.manage(a)
-        const [r] = await db.query(
-          'SELECT * FROM ledger_accounts WHERE ledger_id=? AND id=?',
-          [book, id],
-        )
+        const r = await db.getRepository(LedgerAccountEntity).findOne({
+          select: {
+            id: true,
+            ledger_id: true,
+            name: true,
+            kind: true,
+            archived: true,
+            created_by: true,
+            created_at: true,
+          },
+          where: { ledger_id: book, id },
+        })
         if (!r) {
           notFound()
         }
         if (v.archived !== undefined && typeof v.archived !== 'boolean') {
           invalid('archived', '状态无效')
         }
-        await db.query(
-          'UPDATE ledger_accounts SET name=?,archived=? WHERE id=?',
-          [
-            v.name === undefined ? r.name : text(v.name, '名称', 60),
-            v.archived ?? r.archived,
-            id,
-          ],
+        await db.getRepository(LedgerAccountEntity).update(
+          { id },
+          {
+            name: v.name === undefined ? r.name : text(v.name, '名称', 60),
+            archived: v.archived ?? r.archived,
+          },
         )
         return { id }
       },
     )
   }
 
-  async entries(actor: Principal, book: string, id: string) {
+  async entries(
+    actor: Principal,
+    book: string,
+    id: string,
+  ): Promise<LedgerAccountEntry[]> {
     await this.read(actor, book)
-    const [r] = await this.db.query(
-      'SELECT id FROM ledger_accounts WHERE ledger_id=? AND id=?',
-      [book, id],
-    )
+    const r = await this.db
+      .getRepository(LedgerAccountEntity)
+      .findOne({ select: { id: true }, where: { ledger_id: book, id } })
     if (!r) {
       notFound()
     }
     return (
-      await this.db.query(
-        'SELECT id,subject_id AS subjectId,entry_date AS date,amount,note,created_at AS createdAt FROM ledger_account_entries WHERE ledger_id=? AND account_id=? ORDER BY entry_date DESC,created_at DESC LIMIT 1000',
-        [book, id],
-      )
-    ).map((r: any) => ({ ...r, createdAt: isoTime(r.createdAt) }))
+      await this.db
+        .getRepository(LedgerAccountEntryEntity)
+        .find({
+          select: {
+            id: true,
+            subject_id: true,
+            entry_date: true,
+            amount: true,
+            note: true,
+            created_at: true,
+          },
+          where: { ledger_id: book, account_id: id },
+          order: { entry_date: 'DESC', created_at: 'DESC' },
+          take: 1000,
+        })
+        .then((rows) =>
+          rows.map((row) => ({
+            id: row.id,
+            subjectId: row.subject_id,
+            date: row.entry_date,
+            amount: row.amount,
+            note: row.note,
+            createdAt: row.created_at,
+          })),
+        )
+    ).map((r) => ({ ...r, createdAt: isoTime(r.createdAt) }))
   }
 
   async reconcile(
@@ -149,10 +196,13 @@ export class AccountService extends FeatureService {
       async (db, a) => {
         this.manage(a)
         await activeAccount(db, book, id)
-        const [r] = await db.query(
-          'SELECT COALESCE(SUM(amount),0) balance FROM ledger_account_entries WHERE ledger_id=? AND account_id=? AND entry_date<=?',
-          [book, id, d],
-        )
+        const [r] = await db
+          .createQueryBuilder()
+          .select('COALESCE(SUM(amount),0) balance')
+          .from('ledger_account_entries', 'ledger_account_entries')
+          .where('ledger_id=:p0 AND account_id=:p1 AND entry_date<=:p2')
+          .setParameters({ p0: book, p1: id, p2: d })
+          .getRawMany()
         const delta = cents(target) - cents(r.balance)
         const subject = randomUUID()
         await postAccount(
@@ -202,10 +252,16 @@ export class AccountService extends FeatureService {
         await activeAccount(db, book, from)
         await activeAccount(db, book, to)
         const id = randomUUID()
-        await db.query(
-          'INSERT INTO ledger_transfers(id,ledger_id,from_account_id,to_account_id,amount,transfer_date,note,created_by) VALUES(?,?,?,?,?,?,?,?)',
-          [id, book, from, to, sum, d, n, actor.user.id],
-        )
+        await db.getRepository(LedgerTransferEntity).insert({
+          id,
+          ledger_id: book,
+          from_account_id: from,
+          to_account_id: to,
+          amount: sum,
+          transfer_date: d,
+          note: n,
+          created_by: actor.user.id,
+        })
         await postAccount(db, book, from, id, d, -cents(sum), n, actor.user.id)
         await postAccount(db, book, to, id, d, cents(sum), n, actor.user.id)
         await project(db, book, {
@@ -227,12 +283,35 @@ export class AccountService extends FeatureService {
     )
   }
 
-  async transfers(actor: Principal, book: string) {
+  async transfers(actor: Principal, book: string): Promise<LedgerTransfer[]> {
     await this.read(actor, book)
-    return this.db.query(
-      'SELECT id,from_account_id AS fromAccountId,to_account_id AS toAccountId,amount,transfer_date AS date,note,reversed FROM ledger_transfers WHERE ledger_id=? ORDER BY transfer_date DESC,created_at DESC LIMIT 500',
-      [book],
-    )
+    return this.db
+      .getRepository(LedgerTransferEntity)
+      .find({
+        select: {
+          id: true,
+          from_account_id: true,
+          to_account_id: true,
+          amount: true,
+          transfer_date: true,
+          note: true,
+          reversed: true,
+        },
+        where: { ledger_id: book },
+        order: { transfer_date: 'DESC', created_at: 'DESC' },
+        take: 500,
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          fromAccountId: row.from_account_id,
+          toAccountId: row.to_account_id,
+          amount: row.amount,
+          date: row.transfer_date,
+          note: row.note,
+          reversed: Boolean(Number(row.reversed)),
+        })),
+      )
   }
 
   async reverse(
@@ -248,10 +327,21 @@ export class AccountService extends FeatureService {
       'transfer.reversed',
       { id },
       async (db, a) => {
-        const [r] = await db.query(
-          'SELECT * FROM ledger_transfers WHERE ledger_id=? AND id=?',
-          [book, id],
-        )
+        const r = await db.getRepository(LedgerTransferEntity).findOne({
+          select: {
+            id: true,
+            ledger_id: true,
+            from_account_id: true,
+            to_account_id: true,
+            amount: true,
+            transfer_date: true,
+            note: true,
+            reversed: true,
+            created_by: true,
+            created_at: true,
+          },
+          where: { ledger_id: book, id },
+        })
         if (!r) {
           notFound()
         }
@@ -259,9 +349,9 @@ export class AccountService extends FeatureService {
         if (Number(r.reversed)) {
           return { id }
         }
-        await db.query('UPDATE ledger_transfers SET reversed=TRUE WHERE id=?', [
-          id,
-        ])
+        await db
+          .getRepository(LedgerTransferEntity)
+          .update({ id }, { reversed: true })
         await postAccount(
           db,
           book,

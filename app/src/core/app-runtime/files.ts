@@ -7,7 +7,7 @@ import {
   APPLICATION_FILE_MAX_BYTES,
   APPLICATION_FILE_MAX_COUNT,
 } from '@t-box/app-contracts'
-import { AppSdkError } from '@t-box/app-sdk'
+import { SdkErrorCode } from '@t-box/app-sdk'
 import { request } from '../network'
 
 let choosing = false
@@ -17,7 +17,7 @@ export function chooseApplicationFiles(
   signal?: AbortSignal,
 ): Promise<File[]> {
   if (choosing) {
-    throw new AppSdkError('FILE_PICKER_BUSY', '已有文件选择窗口打开')
+    throw SdkErrorCode.FILE_PICKER_BUSY()
   }
   if (
     Object.keys(options).some((key) => !['accept', 'multiple'].includes(key)) ||
@@ -25,7 +25,7 @@ export function chooseApplicationFiles(
       (typeof options.accept !== 'string' || options.accept.length > 500)) ||
       (options.multiple !== undefined && typeof options.multiple !== 'boolean')
   ) {
-    throw new AppSdkError('INVALID_ARGUMENTS', '文件选择参数无效')
+    throw SdkErrorCode.INVALID_ARGUMENTS('文件选择参数无效')
   }
   signal?.throwIfAborted()
   choosing = true
@@ -43,7 +43,7 @@ export function chooseApplicationFiles(
     }
     const abort = () => {
       cleanup()
-      reject(new AppSdkError('REQUEST_CANCELLED', '已取消文件选择'))
+      reject(SdkErrorCode.REQUEST_CANCELLED('已取消文件选择'))
     }
     input.addEventListener(
       'change',
@@ -57,8 +57,7 @@ export function chooseApplicationFiles(
           )
         ) {
           reject(
-            new AppSdkError(
-              'FILE_SIZE',
+            SdkErrorCode.FILE_SIZE(
               '每次最多 10 个文件，每个文件需为 1 字节至 10 MB',
             ),
           )
@@ -87,7 +86,7 @@ export async function uploadApplicationFile(
   signal?: AbortSignal,
 ) {
   if (!file.size || file.size > APPLICATION_FILE_MAX_BYTES) {
-    throw new AppSdkError('FILE_SIZE', '每个文件需为 1 字节至 10 MB')
+    throw SdkErrorCode.FILE_SIZE()
   }
   return (
     await request<{ data: ApplicationFile }>(
@@ -111,7 +110,7 @@ export async function readApplicationFile(
   signal?: AbortSignal,
 ) {
   if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/i.test(id)) {
-    throw new AppSdkError('INVALID_ARGUMENTS', '文件标识无效')
+    throw SdkErrorCode.INVALID_ARGUMENTS('文件标识无效')
   }
   return (
     await request<{ data: ApplicationFileContent }>(
@@ -132,7 +131,7 @@ export function decodeApplicationFile(args: Record<string, unknown>) {
       args.base64,
     )
   ) {
-    throw new AppSdkError('INVALID_ARGUMENTS', '文件参数无效')
+    throw SdkErrorCode.INVALID_ARGUMENTS('文件参数无效')
   }
   const binary = atob(args.base64)
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))

@@ -17,7 +17,8 @@ if (args[0]==='info') console.log('linux/'+(process.env.FAKE_SERVER_ARCH || 'amd
 else if (args[0]==='image' && args[1]==='save') process.stdout.write('fake-docker-image-archive');
 else if (args[0]==='image' && args[1]==='inspect') console.log(JSON.stringify([{Id:process.env.FAKE_IMAGE_ID,Os:'linux',Architecture:'amd64'}]));
 else if (args[0]==='compose') {
-  if (args.includes('dist/init-db.js') && process.env.FAKE_FAIL==='migration') process.exit(9);
+  if (args.includes('dist/init-db.js') && !args.includes('--check') && process.env.FAKE_FAIL==='initialization') process.exit(9);
+  if (args.includes('--check') && process.env.FAKE_FAIL==='preflight') process.exit(8);
   if (args.includes('up') && process.env.FAKE_FAIL==='health') process.exit(10);
 }
 `
@@ -108,7 +109,7 @@ test('download verifies and imports before stopping the old API; initialization 
   const load = log.findIndex((row) => row.args.includes('load'))
   const stop = log.findIndex((row) => row.args.includes('stop'))
   assert.ok(load >= 0 && stop > load)
-  assert.equal(log.filter((row) => row.args.includes('dist/init-db.js')).length, 1)
+  assert.equal(log.filter((row) => row.args.includes('dist/init-db.js')).length, 2)
   assert.equal(log.filter((row) => row.args.includes('dist/admin/bootstrap.js')).length, 1)
   assert.ok(log.some((row) => row.args.includes('--wait') && row.args.includes('up')))
   assert.ok(readFileSync(join(f.dir, '.env'), 'utf8').includes('MYSQL_PASSWORD=\'fixture$#\''))
@@ -175,20 +176,29 @@ test('downloaded image archives are removed after import and every import is ver
   assert.equal(f.logs().some((row) => row.args.includes('load')), false)
 })
 
-for (const failure of ['migration', 'health']) {
+for (const failure of ['initialization', 'health']) {
   test(failure + ' failure does not advance configured version or deployment state', (t) => {
     const f = fixture(t)
     f.publish()
     assert.notEqual(f.run('deploy-release.sh', [release], { FAKE_FAIL: failure }).status, 0)
     assert.equal(readFileSync(join(f.dir, '.env'), 'utf8'), f.originalEnv)
     assert.equal(existsSync(join(f.dir, 'current-release')), false)
-    if (failure === 'migration') {
+    if (failure === 'initialization') {
       assert.equal(f.logs().some((row) => row.args.includes('up')), false)
     }
   })
 }
 
-test('explicit rollback switches code without rerunning migrations or bootstrap', (t) => {
+test('database preflight failure keeps the running container and deployment records untouched', (t) => {
+  const f = fixture(t)
+  f.publish()
+  assert.notEqual(f.run('deploy-release.sh', [release], { FAKE_FAIL: 'preflight' }).status, 0)
+  assert.equal(f.logs().some((row) => row.args.includes('stop') || row.args.includes('up')), false)
+  assert.equal(readFileSync(join(f.dir, '.env'), 'utf8'), f.originalEnv)
+  assert.equal(existsSync(join(f.dir, 'current-release')), false)
+})
+
+test('explicit rollback switches code without rerunning initializations or bootstrap', (t) => {
   const f = fixture(t)
   f.publish()
   writeFileSync(join(f.dir, 'current-release'), 'prior-release\n')

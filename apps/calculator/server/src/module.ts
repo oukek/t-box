@@ -2,7 +2,7 @@ import type {
   ApplicationModule,
   ApplicationToolRegistration,
 } from '@t-box/app-server-sdk'
-import { ApplicationError, definition } from '@t-box/app-server-sdk'
+import { ApplicationErrorCode, definition } from '@t-box/app-server-sdk'
 import {
   CalculationError,
   calculatorCatalog,
@@ -98,7 +98,7 @@ export function createCalculatorModule(): ApplicationModule {
           return parseCalculatorParams(value)
         } catch (error) {
           if (error instanceof CalculationError) {
-            throw new ApplicationError('INVALID_CALCULATION', error.message)
+            throw ApplicationErrorCode.INVALID_CALCULATION(error.message)
           }
           throw error
         }

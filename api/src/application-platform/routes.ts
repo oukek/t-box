@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { Actor } from '../application-sdk/contracts.js'
 import type { ApplicationPlatform } from './service.js'
 import { validId } from '@t-box/app-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { ErrorCode } from '../error-codes.js'
 import { bearer } from '../identity/service.js'
 
 export function registerApplicationPlatform(
@@ -17,13 +17,16 @@ export function registerApplicationPlatform(
     reply.header('Cache-Control', 'no-store')
     return { data: await service.catalog(a.user.id) }
   })
-  app.post<{ Params: { id: string } }>('/api/v1/app-market/:id/repair', async (req) => {
-    const a = await actor(req.headers.authorization)
-    if (!validId(req.params.id)) {
-      throw new ApiError(400, 'INVALID_APP_ID', '应用标识无效')
-    }
-    return { data: await service.repair(a.user.id, req.params.id) }
-  })
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/app-market/:id/repair',
+    async (req) => {
+      const a = await actor(req.headers.authorization)
+      if (!validId(req.params.id)) {
+        throw ErrorCode.INVALID_APP_ID()
+      }
+      return { data: await service.repair(a.user.id, req.params.id) }
+    },
+  )
   app.post<{
     Params: { id: string }
     Body: {
@@ -46,11 +49,11 @@ export function registerApplicationPlatform(
       !Array.isArray(b.grants) ||
       b.grants.some((g) => typeof g !== 'string')
     ) {
-      throw new ApiError(400, 'INVALID_APP_OPERATION', '应用操作参数无效')
+      throw ErrorCode.INVALID_APP_OPERATION()
     }
     const key = req.headers['idempotency-key']
     if (typeof key !== 'string') {
-      throw new ApiError(400, 'REQUEST_KEY_REQUIRED', '请提供操作标识')
+      throw ErrorCode.REQUEST_KEY_REQUIRED()
     }
     if (b.action !== 'uninstall') {
       const release = await service.release(b.releaseId)
@@ -58,11 +61,7 @@ export function registerApplicationPlatform(
         release.runtime.type === 'shell' &&
         b.hostVersion !== release.manifest.version
       ) {
-        throw new ApiError(
-          409,
-          'HOST_UPDATE_REQUIRED',
-          '此版本需要先更新宿主应用或刷新网页，再更新应用',
-        )
+        throw ErrorCode.HOST_UPDATE_REQUIRED()
       }
     }
     reply.header('Cache-Control', 'no-store')
@@ -93,7 +92,7 @@ export function registerApplicationPlatform(
         !validId(req.params.id) ||
         !['web', 'android', 'ios'].includes(req.query.platform)
       ) {
-        throw new ApiError(400, 'INVALID_PLATFORM', '应用或运行平台无效')
+        throw ErrorCode.INVALID_PLATFORM()
       }
       reply.header('Cache-Control', 'no-store')
       return {
@@ -110,7 +109,7 @@ export function registerApplicationPlatform(
     async (req, reply) => {
       const a = await actor(req.headers.authorization)
       if (!['web', 'android', 'ios'].includes(req.query.platform)) {
-        throw new ApiError(400, 'INVALID_PLATFORM', '运行平台无效')
+        throw ErrorCode.INVALID_PLATFORM('运行平台无效')
       }
       reply.header('Cache-Control', 'no-store')
       return {
@@ -142,11 +141,11 @@ export function registerApplicationPlatform(
       !Number.isSafeInteger(b.generation) ||
       !validId(b.method)
     ) {
-      throw new ApiError(400, 'INVALID_APP_INVOCATION', '应用调用参数无效')
+      throw ErrorCode.INVALID_APP_INVOCATION()
     }
     const key = req.headers['idempotency-key']
     if (typeof key !== 'string' || !/^[\w-]{1,80}$/.test(key)) {
-      throw new ApiError(400, 'REQUEST_KEY_REQUIRED', '调用标识无效')
+      throw ErrorCode.REQUEST_KEY_REQUIRED('调用标识无效')
     }
     reply.header('Cache-Control', 'no-store')
     return {
@@ -161,13 +160,41 @@ export function registerApplicationPlatform(
       ),
     }
   })
-  app.post<{ Params: { id: string } }>('/api/v1/applications/:id/events', async (req, reply) => {
-    const a = await actor(req.headers.authorization)
-    const input = req.body as { releaseId: string, generation: number, channel: string, cursor?: string, arguments?: unknown }
-    if (!validId(req.params.id) || !input || Object.keys(input).some((key) => !['releaseId', 'generation', 'channel', 'cursor', 'arguments'].includes(key)) || typeof input.releaseId !== 'string' || !Number.isSafeInteger(input.generation) || typeof input.channel !== 'string' || !/^[a-z][a-z0-9_.-]{0,63}$/.test(input.channel) || (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))) {
-      throw new ApiError(400, 'INVALID_APP_EVENT', '应用事件参数无效')
-    }
-    reply.header('Cache-Control', 'no-store')
-    return { data: await service.events(a.user.id, req.params.id, input) }
-  })
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/applications/:id/events',
+    async (req, reply) => {
+      const a = await actor(req.headers.authorization)
+      const input = req.body as {
+        releaseId: string
+        generation: number
+        channel: string
+        cursor?: string
+        arguments?: unknown
+      }
+      if (
+        !validId(req.params.id) ||
+        !input ||
+        Object.keys(input).some(
+          (key) =>
+            ![
+              'releaseId',
+              'generation',
+              'channel',
+              'cursor',
+              'arguments',
+            ].includes(key),
+        ) ||
+        typeof input.releaseId !== 'string' ||
+        !Number.isSafeInteger(input.generation) ||
+        typeof input.channel !== 'string' ||
+        !/^[a-z][a-z0-9_.-]{0,63}$/.test(input.channel) ||
+        (input.cursor !== undefined &&
+          (typeof input.cursor !== 'string' || input.cursor.length > 4096))
+      ) {
+        throw ErrorCode.INVALID_APP_EVENT()
+      }
+      reply.header('Cache-Control', 'no-store')
+      return { data: await service.events(a.user.id, req.params.id, input) }
+    },
+  )
 }

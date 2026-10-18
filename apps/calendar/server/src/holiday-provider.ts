@@ -1,8 +1,6 @@
 import type { HolidayDataset } from '@t-box/calendar-contracts'
-import {
-  parseHolidayDataset,
-} from '@t-box/calendar-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { parseHolidayDataset } from '@t-box/calendar-contracts'
+import { ErrorCode } from './error-codes.js'
 
 export const holidayProvider = 'https://github.com/NateScarlet/holiday-cn'
 export type HolidayFetcher = (
@@ -22,11 +20,7 @@ const download = async (
     return null
   }
   if (!response.ok) {
-    throw new ApiError(
-      502,
-      'HOLIDAY_SOURCE_FAILED',
-      `节假日数据源返回 ${response.status}`,
-    )
+    throw ErrorCode.HOLIDAY_SOURCE_FAILED(`节假日数据源返回 ${response.status}`)
   }
   const reader = response.body!.getReader()
   let size = 0
@@ -39,7 +33,7 @@ const download = async (
       }
       size += next.value.byteLength
       if (size > 65536) {
-        throw new Error('节假日数据超过大小限制')
+        throw ErrorCode.INTERNAL_HOLIDAY_DATA_TOO_LARGE()
       }
       chunks.push(next.value)
     }
@@ -52,7 +46,7 @@ const download = async (
     !Array.isArray(value.papers) ||
     !Array.isArray(value.days)
   ) {
-    throw new Error('节假日数据源格式无效')
+    throw ErrorCode.INTERNAL_INVALID_HOLIDAY_SOURCE()
   }
   if (!value.papers.length && !value.days.length) {
     return null
@@ -63,8 +57,7 @@ const download = async (
       papers: value.papers,
       days: value.days.map((day: Record<string, unknown>) => {
         if (typeof day.isOffDay !== 'boolean') {
-          // eslint-disable-next-line unicorn/prefer-type-error -- Preserve the provider's existing Error contract during this style migration.
-          throw new Error('节假日休班标记无效')
+          throw ErrorCode.INTERNAL_INVALID_HOLIDAY_DAY()
         }
         return {
           name: day.name,

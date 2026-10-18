@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { ErrorCode } from './error-codes.js'
 
 export const calendarConfirmation = ref<{
   title: string
@@ -7,7 +8,7 @@ export const calendarConfirmation = ref<{
 let resolve: ((value: { approved: boolean }) => void) | undefined
 export function requestCalendarConfirmation(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('确认参数无效')
+    throw ErrorCode.INTERNAL_INVALID_CONFIRMATION_ARGUMENTS()
   }
   const args = value as Record<string, unknown>
   if (
@@ -17,10 +18,10 @@ export function requestCalendarConfirmation(value: unknown) {
     typeof args.message !== 'string' ||
     args.message.length > 1000
   ) {
-    throw new Error('确认内容无效')
+    throw ErrorCode.INTERNAL_INVALID_CONFIRMATION_CONTENT()
   }
   if (resolve) {
-    throw new Error('已有确认待处理')
+    throw ErrorCode.INTERNAL_CONFIRMATION_PENDING()
   }
   calendarConfirmation.value = { title: args.title, message: args.message }
   return new Promise<{ approved: boolean }>((done) => {

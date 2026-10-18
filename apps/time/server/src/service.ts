@@ -3,18 +3,15 @@ import type { DataSource, EntityManager } from 'typeorm'
 import type { StoredTimer } from './entity.js'
 import { randomUUID } from 'node:crypto'
 import { calendarObject } from '@t-box/calendar-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
 import {
   revision,
   temporalDomain,
 } from '@t-box/server-foundation/persistence/errors'
 import { mutateApplication } from '@t-box/server-foundation/persistence/operations'
 import { parseId } from '@t-box/server-foundation/validation'
-import {
-  timerState,
-  transitionTimer,
-} from '@t-box/time-contracts'
+import { timerState, transitionTimer } from '@t-box/time-contracts'
 import { TimerEntity } from './entity.js'
+import { ErrorCode } from './error-codes.js'
 
 const view = (row: StoredTimer, now = Date.now()): AppTimer => ({
   ...timerState(row.data, now),
@@ -33,7 +30,7 @@ export class TimeService {
       .getRepository(TimerEntity)
       .findOneBy({ id: parseId(id), userId, deleted: false })
     if (!row) {
-      throw new ApiError(404, 'TIMER_NOT_FOUND', '倒计时不存在或无权访问')
+      throw ErrorCode.TIMER_NOT_FOUND()
     }
     return row
   }
@@ -63,11 +60,7 @@ export class TimeService {
       Number(a.durationSeconds) < 1 ||
       Number(a.durationSeconds) > 604800
     ) {
-      throw new ApiError(
-        400,
-        'INVALID_TIMER',
-        '名称最多 100 字，时长为 1 秒至 7 天的整数秒',
-      )
+      throw ErrorCode.INVALID_TIMER()
     }
     const input: TimerInput = {
       label: a.label.trim(),
@@ -83,11 +76,7 @@ export class TimeService {
       async (db) => {
         const repo = db.getRepository(TimerEntity)
         if ((await repo.countBy({ userId, deleted: false })) >= 50) {
-          throw new ApiError(
-            409,
-            'TIMER_LIMIT',
-            '最多保留 50 个倒计时，请整理已结束的记录',
-          )
+          throw ErrorCode.TIMER_LIMIT()
         }
         const now = Date.now()
         const row: StoredTimer = {
@@ -117,7 +106,7 @@ export class TimeService {
     )
     const version = revision(a.revision)
     if (!['pause', 'resume', 'restart', 'cancel'].includes(String(a.action))) {
-      throw new ApiError(400, 'INVALID_TIMER_ACTION', '倒计时操作无效')
+      throw ErrorCode.INVALID_TIMER_ACTION()
     }
     parseId(id)
     return mutateApplication(
@@ -130,11 +119,7 @@ export class TimeService {
       async (db) => {
         const row = await this.get(userId, id, db)
         if (row.revision !== version) {
-          throw new ApiError(
-            409,
-            'STALE_REVISION',
-            '倒计时已更新，请刷新后重试',
-          )
+          throw ErrorCode.STALE_REVISION('倒计时已更新，请刷新后重试')
         }
         const data = temporalDomain(() =>
           transitionTimer(row.data, a.action as TimerAction, Date.now()),
@@ -146,11 +131,7 @@ export class TimeService {
             { data, revision: version + 1 },
           )
         if (!result.affected) {
-          throw new ApiError(
-            409,
-            'STALE_REVISION',
-            '倒计时已更新，请刷新后重试',
-          )
+          throw ErrorCode.STALE_REVISION('倒计时已更新，请刷新后重试')
         }
         return view({ ...row, data, revision: version + 1 })
       },
@@ -177,11 +158,7 @@ export class TimeService {
             { deleted: true, revision: version + 1 },
           )
         if (!result.affected) {
-          throw new ApiError(
-            409,
-            'STALE_REVISION',
-            '倒计时已更新，请刷新后重试',
-          )
+          throw ErrorCode.STALE_REVISION('倒计时已更新，请刷新后重试')
         }
         return { deleted: true, id }
       },

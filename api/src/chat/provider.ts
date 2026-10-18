@@ -8,12 +8,12 @@ import type {
   ResponseOutputItem,
 } from 'openai/resources/responses/responses'
 import { createHash } from 'node:crypto'
-import { ApiError } from '@t-box/server-foundation/errors'
 import { contextOutputBudget, resolveContextPolicy } from '@t-box/shared'
 import OpenAI from 'openai'
 import { settingNumber } from '../configuration/defaults.js'
 import { modelParameters } from '../configuration/model-parameters.js'
 import { titleInstructions } from '../configuration/prompts.js'
+import { ErrorCode } from '../error-codes.js'
 import { providerStream } from './provider-stream.js'
 
 export type ProviderItem = ResponseInputItem
@@ -70,7 +70,12 @@ export interface ChatProvider {
   summarize?(input: ProviderInput): Promise<string>
   compact?(input: ProviderInput): Promise<ProviderItem[]>
   configurationKey?: string
-  forRun?: (options?: { configurationKey?: string, preferredConfigurationKey?: string, supportsVision?: boolean, peek?: boolean }) => Promise<ChatProvider>
+  forRun?: (options?: {
+    configurationKey?: string
+    preferredConfigurationKey?: string
+    supportsVision?: boolean
+    peek?: boolean
+  }) => Promise<ChatProvider>
   next(input: ProviderInput): Promise<ProviderTurn>
   title?(input: {
     execution?: ProviderInput['execution']
@@ -87,11 +92,7 @@ export interface ChatProvider {
 export class UnconfiguredProvider implements ChatProvider {
   readonly mode = 'unconfigured'
   async next(_input: ProviderInput): Promise<never> {
-    throw new ApiError(
-      503,
-      'AI_NOT_CONFIGURED',
-      '尚未接入 AI，请先在后台配置并启用普通会话模型。',
-    )
+    throw ErrorCode.AI_NOT_CONFIGURED()
   }
 }
 
@@ -143,9 +144,7 @@ export class OpenAIResponsesProvider implements ChatProvider {
           item.content.some((part) => part.type === 'input_image'),
       )
     ) {
-      throw new ApiError(
-        409,
-        'VISION_MODEL_REQUIRED',
+      throw ErrorCode.VISION_MODEL_REQUIRED(
         '当前普通会话模型未启用看图能力，请在后台选择支持图片输入的会话模型并启用看图',
       )
     }
@@ -260,9 +259,7 @@ export class OpenAIResponsesProvider implements ChatProvider {
       ) {
         if (event.type === 'response.incomplete') {
           const reason = event.response.incomplete_details?.reason
-          throw new ApiError(
-            502,
-            'PROVIDER_INCOMPLETE',
+          throw ErrorCode.PROVIDER_INCOMPLETE(
             reason === 'max_output_tokens'
               ? '模型输出额度不足，响应未完成'
               : reason === 'content_filter'
@@ -285,11 +282,7 @@ export class OpenAIResponsesProvider implements ChatProvider {
       }
     }
     if (!output) {
-      throw new ApiError(
-        502,
-        'PROVIDER_STREAM_CLOSED',
-        '模型连接提前结束，未获得完整响应',
-      )
+      throw ErrorCode.PROVIDER_STREAM_CLOSED()
     }
     return {
       // Preserve reasoning (including encrypted_content), messages and every call.
@@ -326,11 +319,7 @@ export class OpenAIResponsesProvider implements ChatProvider {
       },
     )
     if (!Number.isSafeInteger(result.input_tokens) || result.input_tokens < 0) {
-      throw new ApiError(
-        502,
-        'TOKEN_COUNT_INVALID',
-        '服务商返回了无效的上下文 token 计数',
-      )
+      throw ErrorCode.TOKEN_COUNT_INVALID()
     }
     return result.input_tokens
   }
@@ -371,18 +360,14 @@ export class OpenAIResponsesProvider implements ChatProvider {
       })
       .join('\n')
     if (turn.calls.length || !(completed || text).trim()) {
-      throw new ApiError(502, 'SUMMARY_INVALID', '模型未返回有效的上下文摘要')
+      throw ErrorCode.SUMMARY_INVALID()
     }
     return (completed || text).trim()
   }
 
   async compact(input: ProviderInput): Promise<ProviderItem[]> {
     if (!this.contextPolicy?.compaction) {
-      throw new ApiError(
-        409,
-        'COMPACTION_DISABLED',
-        '当前模型未启用上下文压缩',
-      )
+      throw ErrorCode.COMPACTION_DISABLED('当前模型未启用上下文压缩')
     }
     const started = Date.now()
     const response = await this.client.responses.compact(
@@ -418,11 +403,7 @@ export class OpenAIResponsesProvider implements ChatProvider {
       !response.output.length ||
       !response.output.some((x) => x.type === 'compaction')
     ) {
-      throw new ApiError(
-        502,
-        'COMPACTION_INVALID',
-        '服务商未返回有效的上下文压缩结果',
-      )
+      throw ErrorCode.COMPACTION_INVALID()
     }
     return response.output as ProviderItem[]
   }
@@ -463,10 +444,18 @@ export class OpenAIResponsesProvider implements ChatProvider {
       },
     )
     if (response.usage) {
-      await input.onUsage?.({ inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens, cachedInputTokens: response.usage.input_tokens_details?.cached_tokens ?? null, reasoningTokens: response.usage.output_tokens_details?.reasoning_tokens ?? null, responseId: response.id })
+      await input.onUsage?.({
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cachedInputTokens:
+          response.usage.input_tokens_details?.cached_tokens ?? null,
+        reasoningTokens:
+          response.usage.output_tokens_details?.reasoning_tokens ?? null,
+        responseId: response.id,
+      })
     }
     if (response.status !== 'completed') {
-      throw new Error('Title response incomplete')
+      throw ErrorCode.INTERNAL_TITLE_RESPONSE_INCOMPLETE()
     }
     return response.output_text
   }

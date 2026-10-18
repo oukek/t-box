@@ -3,8 +3,10 @@ import type { Actor } from '@t-box/app-server-sdk'
 import type { ApplicationPlatform } from '../application-platform/service.js'
 import type { ResourceService } from './service.js'
 import { validId } from '@t-box/app-contracts'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
 import { parseId } from '@t-box/server-foundation/validation'
+import { ApplicationFileGrantEntity, ApplicationInstallationEntity } from '../db/records/applications-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 /** Installation-scoped grants, independent of an application's business resources. */
 export class ApplicationFiles {
@@ -15,18 +17,14 @@ export class ApplicationFiles {
 
   private async context(actor: Actor, appId: string) {
     if (!validId(appId)) {
-      throw new ApiError(400, 'INVALID_APP_ID', '应用标识无效')
+      throw ErrorCode.INVALID_APP_ID()
     }
     const { installation } = await this.applications.assertActive(
       actor.user.id,
       appId,
     )
     if (!installation.grants.includes('files')) {
-      throw new ApiError(
-        403,
-        'APP_PERMISSION_REQUIRED',
-        '此应用没有文件访问权限',
-      )
+      throw ErrorCode.APP_PERMISSION_REQUIRED.forbidden()
     }
     return installation.generation
   }
@@ -40,17 +38,48 @@ export class ApplicationFiles {
       'uploaded',
       true,
     )
-    if ((await this.context(actor, appId)) !== generation) {
-      throw new ApiError(
-        409,
-        'APP_RUNTIME_EXPIRED',
-        '应用安装状态已改变，请重新打开',
-      )
-    }
-    await this.resources.source.query(
-      'INSERT INTO application_file_grants(user_id,app_id,generation,resource_id) VALUES(?,?,?,?)',
-      [actor.user.id, appId, generation, file.id],
-    )
+    await this.resources.source.transaction(async (db) => {
+      // Match application lifecycle lock order: user, then installation. Network
+      // upload is already complete, so neither lock spans object storage I/O.
+      await db
+        .getRepository(AppUserEntity)
+        .findOne({
+          select: { id: true },
+          where: { id: actor.user.id },
+          lock: { mode: 'pessimistic_write' },
+        })
+      const installation = await db
+        .getRepository(ApplicationInstallationEntity)
+        .findOne({
+          select: {
+            user_id: true,
+            generation: true,
+            status: true,
+            grants: true,
+          },
+          where: { user_id: actor.user.id, app_id: appId },
+          lock: { mode: 'pessimistic_write' },
+        })
+      if (
+        !installation ||
+        installation.status !== 'active' ||
+        installation.generation !== generation
+      ) {
+        throw ErrorCode.APP_RUNTIME_EXPIRED()
+      }
+      if (
+        !Array.isArray(installation.grants) ||
+        !installation.grants.includes('files')
+      ) {
+        throw ErrorCode.APP_PERMISSION_REQUIRED.forbidden()
+      }
+      await db.getRepository(ApplicationFileGrantEntity).insert({
+        user_id: actor.user.id,
+        app_id: appId,
+        generation,
+        resource_id: file.id,
+      })
+    })
     return file
   }
 
@@ -60,20 +89,23 @@ export class ApplicationFiles {
     resourceId: string,
   ): Promise<ApplicationFileContent> {
     const generation = await this.context(actor, appId)
-    const [grant] = await this.resources.source.query(
-      'SELECT resource_id FROM application_file_grants WHERE user_id=? AND app_id=? AND generation=? AND resource_id=?',
-      [actor.user.id, appId, generation, parseId(resourceId)],
-    )
+    const grant = await this.resources.source
+      .getRepository(ApplicationFileGrantEntity)
+      .findOne({
+        select: { resource_id: true },
+        where: {
+          user_id: actor.user.id,
+          app_id: appId,
+          generation,
+          resource_id: parseId(resourceId),
+        },
+      })
     if (!grant) {
-      throw new ApiError(404, 'FILE_NOT_FOUND', '文件不存在或未授权此应用访问')
+      throw ErrorCode.FILE_NOT_FOUND()
     }
     const { resource, bytes } = await this.resources.bytes(actor, resourceId)
     if ((await this.context(actor, appId)) !== generation) {
-      throw new ApiError(
-        409,
-        'APP_RUNTIME_EXPIRED',
-        '应用安装状态已改变，请重新打开',
-      )
+      throw ErrorCode.APP_RUNTIME_EXPIRED()
     }
     return { file: resource, base64: bytes.toString('base64') }
   }

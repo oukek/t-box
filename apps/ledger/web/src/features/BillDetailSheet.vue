@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { Bill, LedgerAccount } from '@t-box/ledger-contracts'
+import type {
+  Bill,
+  LedgerAccount,
+  LedgerBillDetail,
+  LedgerRefund,
+} from '@t-box/ledger-contracts'
 import type { FormValues, LedgerFormField } from './form'
 import { BottomSheet } from '@t-box/ui-kit'
 import { computed, ref, watch } from 'vue'
@@ -18,10 +23,10 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [], copy: [bill: Bill], changed: [] }>()
 const api = featureApi(props.ledgerId)
 const action = useFeatureAction()
-const detail = ref<any>()
+const detail = ref<LedgerBillDetail>()
 const accounts = ref<LedgerAccount[]>([])
 const editor = ref<'refund' | 'reimburse' | 'template' | 'reverse' | null>(null)
-const target = ref<any>()
+const target = ref<LedgerRefund>()
 const attachmentResourceIds = ref<string[]>([])
 const form = ref<FormValues>({})
 const fields = computed<LedgerFormField[]>(() =>
@@ -56,9 +61,9 @@ async function load() {
     return
   }
   try {
-    [detail.value, accounts.value] = await Promise.all([
-      api.get(`/bills/${props.billId}/detail`),
-      api.get('/accounts'),
+    ;[detail.value, accounts.value] = await Promise.all([
+      api.get<LedgerBillDetail>(`/bills/${props.billId}/detail`),
+      api.get<LedgerAccount[]>('/accounts'),
     ])
   } catch (e) {
     action.error.value = (e as Error).message
@@ -73,25 +78,33 @@ watch(
   },
   { immediate: true },
 )
-function open(mode: typeof editor.value, row?: any) {
+function open(mode: typeof editor.value, row?: LedgerRefund) {
+  const bill = detail.value?.bill
+  if (!bill) {
+    return
+  }
   target.value = row
   attachmentResourceIds.value = []
   editor.value = mode
   action.error.value = ''
   form.value =
     mode === 'template'
-      ? { name: props.categoryLabel(detail.value.bill.category) }
+      ? { name: props.categoryLabel(bill.category) }
       : mode === 'reimburse'
-        ? { counterparty: '', amount: detail.value.bill.amount }
+        ? { counterparty: '', amount: bill.amount }
         : {
             amount: '',
             date: localDate(),
-            accountId: detail.value.bill.accountId ?? '',
+            accountId: bill.accountId ?? '',
             note: '',
           }
 }
 async function save() {
-  const bill = detail.value.bill as Bill
+  const bill = detail.value?.bill
+  if (!bill || !editor.value || (editor.value === 'reverse' && !target.value)) {
+    return
+  }
+  const targetId = target.value?.id
   const mode = editor.value
   const path =
     mode === 'refund'
@@ -100,7 +113,7 @@ async function save() {
         ? '/reimbursements'
         : mode === 'template'
           ? '/templates'
-          : `/refunds/${target.value.id}/reversal`
+          : `/refunds/${targetId}/reversal`
   const body =
     mode === 'refund'
       ? {
@@ -180,7 +193,7 @@ const auditLabel = (action: string) =>
           <dt>资金账户</dt>
           <dd>
             {{
-              accounts.find((a) => a.id === detail.bill.accountId)?.name
+              accounts.find((a) => a.id === detail?.bill.accountId)?.name
                 ?? "未指定"
             }}
           </dd>

@@ -7,7 +7,14 @@ import type {
 } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import { isDeepStrictEqual } from 'node:util'
-import { ApiError } from '@t-box/server-foundation/errors'
+import { jsonDocument } from '@t-box/server-foundation/persistence/columns'
+import { isoTime } from '@t-box/server-foundation/time'
+import {
+  PlatformConfigurationEntity,
+  PlatformConfigurationHistoryEntity,
+  PlatformConfigurationStateEntity,
+} from '../db/records/configuration-entities.js'
+import { ErrorCode } from '../error-codes.js'
 import { ConfigurationCache } from './cache.js'
 
 const decode = (value: unknown) =>
@@ -29,14 +36,10 @@ export function validateConfiguration(
           value.length <= (def.maxLength ?? 12000) &&
           (def.type !== 'select' || def.options?.includes(value))
   if (!valid) {
-    throw new ApiError(
-      400,
-      'INVALID_CONFIGURATION',
-      `${def.title}的值或范围不正确`,
-    )
+    throw ErrorCode.INVALID_CONFIGURATION(`${def.title}的值或范围不正确`)
   }
   if (def.type === 'text' && typeof value === 'string' && !value.trim()) {
-    throw new ApiError(400, 'INVALID_CONFIGURATION', `${def.title}不能为空`)
+    throw ErrorCode.INVALID_CONFIGURATION(`${def.title}不能为空`)
   }
   return value as ConfigurationValue
 }
@@ -50,25 +53,26 @@ export class ConfigurationStore {
   /** Platform AI configuration only; applications own their contracts and settings. */
   async register(definitions: ConfigurationDefinition[]) {
     for (const def of definitions) {
-      if (
-        !/^[\w.-]{1,190}$/.test(def.key) ||
-        def.key.startsWith('apps.')
-      ) {
-        throw new Error('Invalid configuration key')
+      if (!/^[\w.-]{1,190}$/.test(def.key) || def.key.startsWith('apps.')) {
+        throw ErrorCode.INTERNAL_INVALID_CONFIGURATION_KEY()
       }
       validateConfiguration(def, def.defaultValue)
       this.definitions.set(def.key, structuredClone(def))
     }
     await this.source.transaction(async (db) => {
-      await db.query(
-        'SELECT revision FROM platform_configuration_state WHERE id=1 FOR UPDATE',
-      )
+      await db.getRepository(PlatformConfigurationStateEntity).find({
+        select: { revision: true },
+        where: { id: 1 },
+        lock: { mode: 'pessimistic_write' },
+      })
       let changed = false
       for (const def of definitions) {
-        const [existing] = await db.query(
-          'SELECT definition_json FROM platform_configurations WHERE config_key=?',
-          [def.key],
-        )
+        const existing = await db
+          .getRepository(PlatformConfigurationEntity)
+          .findOne({
+            select: { definition_json: true },
+            where: { config_key: def.key },
+          })
         if (
           existing &&
           isDeepStrictEqual(decode(existing.definition_json), def)
@@ -76,43 +80,74 @@ export class ConfigurationStore {
           continue
         }
         changed = true
-        await db.query(
-          'INSERT IGNORE INTO platform_configurations(config_key,definition_json,value_json) VALUES(?,?,?)',
-          [def.key, JSON.stringify(def), JSON.stringify(def.defaultValue)],
-        )
-        await db.query(
-          'UPDATE platform_configurations SET definition_json=? WHERE config_key=?',
-          [JSON.stringify(def), def.key],
-        )
-        await db.query(
-          'INSERT IGNORE INTO platform_configuration_history(config_key,revision,value_json,note) VALUES(?,0,?,\'平台默认配置\')',
-          [def.key, JSON.stringify(def.defaultValue)],
-        )
+        await db
+          .createQueryBuilder()
+          .insert()
+          .into('platform_configurations')
+          .values({
+            config_key: def.key,
+            definition_json: () => ':p1',
+            value_json: () => ':p2',
+          })
+          .updateEntity(false)
+          .orIgnore()
+          .setParameters({
+            p1: JSON.stringify(def),
+            p2: JSON.stringify(def.defaultValue),
+          })
+          .execute()
+        await db
+          .getRepository(PlatformConfigurationEntity)
+          .update({ config_key: def.key }, { definition_json: def })
+        await db
+          .createQueryBuilder()
+          .insert()
+          .into('platform_configuration_history')
+          .values({
+            config_key: def.key,
+            revision: 0,
+            value_json: () => ':p1',
+            note: '平台默认配置',
+          })
+          .updateEntity(false)
+          .orIgnore()
+          .setParameters({ p1: JSON.stringify(def.defaultValue) })
+          .execute()
       }
       // Metadata/default registration changes the catalog across processes as well.
       if (changed) {
-        await db.query(
-          'UPDATE platform_configuration_state SET revision=revision+1 WHERE id=1',
-        )
+        await db
+          .getRepository(PlatformConfigurationStateEntity)
+          .update({ id: 1 }, { revision: () => 'revision+1' })
       }
     })
   }
 
   async snapshot(): Promise<ConfigurationSnapshot> {
-    const [state] = await this.source.query(
-      'SELECT revision FROM platform_configuration_state WHERE id=1',
-    )
+    const state = await this.source
+      .getRepository(PlatformConfigurationStateEntity)
+      .findOne({ select: { revision: true }, where: { id: 1 } })
     if (!state) {
-      throw new ApiError(503, 'SCHEMA_REQUIRED', '请先初始化配置数据库')
+      throw ErrorCode.SCHEMA_REQUIRED('请先初始化配置数据库')
     }
     const revision = Number(state.revision)
     const raw = await this.cache.read<ConfigurationSnapshot>(
       'platform',
       revision,
       async () => {
-        const rows = await this.source.query(
-          'SELECT s.revision,c.config_key,CAST(c.value_json AS CHAR) AS value_json FROM platform_configuration_state s LEFT JOIN platform_configurations c ON c.config_key NOT LIKE \'apps.%\' WHERE s.id=1',
-        )
+        const rows = await this.source
+          .createQueryBuilder()
+          .select(
+            's.revision,c.config_key,CAST(c.value_json AS CHAR) AS value_json',
+          )
+          .from('platform_configuration_state', 's')
+          .leftJoin(
+            'platform_configurations',
+            'c',
+            'c.config_key NOT LIKE \'apps.%\'',
+          )
+          .where('s.id=1')
+          .getRawMany()
         return {
           revision: Number(rows[0].revision),
           values: Object.fromEntries(
@@ -163,10 +198,17 @@ export class ConfigurationStore {
 
   async history(key: string): Promise<ConfigurationHistory[]> {
     this.definition(key)
-    const rows = await this.source.query(
-      'SELECT revision,CAST(value_json AS CHAR) AS value_json,administrator_id,note,created_at FROM platform_configuration_history WHERE config_key=? ORDER BY revision DESC LIMIT 50',
-      [key],
-    )
+    const rows = await this.source
+      .createQueryBuilder()
+      .select(
+        'revision,CAST(value_json AS CHAR) AS value_json,administrator_id,note,created_at',
+      )
+      .from('platform_configuration_history', 'platform_configuration_history')
+      .where('config_key=:p0')
+      .orderBy('revision', 'DESC')
+      .limit(50)
+      .setParameters({ p0: key })
+      .getRawMany()
     return rows.map(
       (r: {
         revision: number
@@ -179,7 +221,7 @@ export class ConfigurationStore {
         value: decode(r.value_json),
         administratorId: r.administrator_id,
         note: r.note,
-        createdAt: new Date(r.created_at).toISOString(),
+        createdAt: isoTime(r.created_at),
       }),
     )
   }
@@ -187,11 +229,7 @@ export class ConfigurationStore {
   private definition(key: string) {
     const def = this.definitions.get(key)
     if (!def) {
-      throw new ApiError(
-        404,
-        'CONFIGURATION_NOT_FOUND',
-        '配置项未注册或已移除',
-      )
+      throw ErrorCode.CONFIGURATION_NOT_FOUND()
     }
     return def
   }
@@ -215,7 +253,7 @@ export class ConfigurationStore {
       (body.note !== undefined &&
         (typeof body.note !== 'string' || body.note.length > 500))
     ) {
-      throw new ApiError(400, 'INVALID_CONFIGURATION', '配置格式不正确')
+      throw ErrorCode.INVALID_CONFIGURATION()
     }
     let value = body.value
     if (body.restoreRevision !== undefined) {
@@ -224,55 +262,58 @@ export class ConfigurationStore {
         Number(body.restoreRevision) < 0 ||
         body.value !== undefined
       ) {
-        throw new ApiError(400, 'INVALID_CONFIGURATION', '恢复版本无效')
+        throw ErrorCode.INVALID_CONFIGURATION('恢复版本无效')
       }
-      const [old] = await this.source.query(
-        'SELECT CAST(value_json AS CHAR) AS value_json FROM platform_configuration_history WHERE config_key=? AND revision=?',
-        [key, body.restoreRevision],
-      )
-      if (!old) {
-        throw new ApiError(
-          404,
-          'CONFIGURATION_VERSION_NOT_FOUND',
-          '配置版本不存在',
+      const [old] = await this.source
+        .createQueryBuilder()
+        .select('CAST(value_json AS CHAR) AS value_json')
+        .from(
+          'platform_configuration_history',
+          'platform_configuration_history',
         )
+        .where('config_key=:p0 AND revision=:p1')
+        .setParameters({ p0: key, p1: body.restoreRevision })
+        .getRawMany()
+      if (!old) {
+        throw ErrorCode.CONFIGURATION_VERSION_NOT_FOUND()
       }
       value = decode(old.value_json)
     }
     value = validateConfiguration(def, value)
     await this.source.transaction(async (db) => {
-      const [state] = await db.query(
-        'SELECT revision FROM platform_configuration_state WHERE id=1 FOR UPDATE',
-      )
-      if (Number(state?.revision) !== body.revision) {
-        throw new ApiError(
-          409,
-          'CONFIGURATION_CHANGED',
-          '配置已更新，请刷新后再保存',
-        )
+      const state = await db
+        .getRepository(PlatformConfigurationStateEntity)
+        .findOne({
+          select: { revision: true },
+          where: { id: 1 },
+          lock: { mode: 'pessimistic_write' },
+        })
+      if (!state || Number(state.revision) !== body.revision) {
+        throw ErrorCode.CONFIGURATION_CHANGED()
       }
-      await db.query(
-        'UPDATE platform_configurations SET value_json=?,updated_at=UTC_TIMESTAMP(3) WHERE config_key=?',
-        [JSON.stringify(value), key],
+      await db.getRepository(PlatformConfigurationEntity).update(
+        { config_key: key },
+        {
+          value_json: jsonDocument(value),
+          updated_at: () => 'UTC_TIMESTAMP(3)',
+        },
       )
-      await db.query(
-        'INSERT INTO platform_configuration_history(config_key,revision,value_json,administrator_id,note) VALUES(?,?,?,?,?)',
-        [
-          key,
-          Number(state.revision) + 1,
-          JSON.stringify(value),
-          administratorId,
+      await db.getRepository(PlatformConfigurationHistoryEntity).insert({
+        config_key: key,
+        revision: Number(state.revision) + 1,
+        value_json: jsonDocument(value),
+        administrator_id: administratorId,
+        note:
           body.restoreRevision !== undefined
             ? `恢复版本 ${body.restoreRevision}：${body.note ?? ''}`.slice(
                 0,
                 500,
               )
-            : (body.note ?? ''),
-        ],
-      )
-      await db.query(
-        'UPDATE platform_configuration_state SET revision=revision+1 WHERE id=1',
-      )
+            : String(body.note ?? ''),
+      })
+      await db
+        .getRepository(PlatformConfigurationStateEntity)
+        .update({ id: 1 }, { revision: () => 'revision+1' })
     })
     return this.view()
   }

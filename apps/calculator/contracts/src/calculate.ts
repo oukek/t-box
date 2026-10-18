@@ -3,51 +3,49 @@ import { calculateAlgebra } from './algebra.js'
 import { calculateAnalysis } from './analysis.js'
 import { calculatorCatalog, getCalculatorDefinition } from './catalog.js'
 import { calculateDiscrete } from './discrete.js'
+import { CalculationErrorCode } from './error-codes.js'
 import { evaluateExpression } from './expression.js'
 import { calculateMatrix } from './matrix.js'
-import {
-  CalculationError,
-  fieldVisible,
-  formatNumber,
-  numeric,
-} from './types.js'
+import { fieldVisible, formatNumber, numeric } from './types.js'
 /** One pure domain entry point shared by the UI, REST and application tools. */
 export function calculate(input: unknown): CalculationResult {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new CalculationError('计算参数必须为对象')
+    throw CalculationErrorCode.INVALID_CALCULATION('计算参数必须为对象')
   }
   const request = input as CalculationInput
   if (
     Object.keys(request).some((k) => !['kind', 'values'].includes(k)) ||
     typeof request.kind !== 'string'
   ) {
-    throw new CalculationError('计算类型或参数无效')
+    throw CalculationErrorCode.INVALID_CALCULATION('计算类型或参数无效')
   }
   const definition = getCalculatorDefinition(request.kind)
   const values = request.values
   if (!values || typeof values !== 'object' || Array.isArray(values)) {
-    throw new CalculationError('values 必须为参数对象')
+    throw CalculationErrorCode.INVALID_CALCULATION('values 必须为参数对象')
   }
   if (
     Object.keys(values).some(
       (k) => !definition.fields.some((field) => field.key === k),
     )
   ) {
-    throw new CalculationError('包含未支持的计算参数')
+    throw CalculationErrorCode.INVALID_CALCULATION('包含未支持的计算参数')
   }
   for (const field of definition.fields) {
     const value = values[field.key]
     if (value != null && (typeof value !== 'string' || value.length > 16000)) {
-      throw new CalculationError(`${field.label}内容无效或过长`)
+      throw CalculationErrorCode.INVALID_CALCULATION(
+        `${field.label}内容无效或过长`,
+      )
     }
     if (!fieldVisible(field, values)) {
       continue
     }
     if (typeof value !== 'string' || !value.trim()) {
-      throw new CalculationError(`请填写${field.label}`)
+      throw CalculationErrorCode.INVALID_CALCULATION(`请填写${field.label}`)
     }
     if (field.options && !field.options.some((o) => o.value === value)) {
-      throw new CalculationError(`${field.label}选项无效`)
+      throw CalculationErrorCode.INVALID_CALCULATION(`${field.label}选项无效`)
     }
   }
   let items: CalculationResult['items'] | undefined
@@ -79,7 +77,7 @@ export function calculate(input: unknown): CalculationResult {
       calculateDiscrete(request.kind, values)
   }
   if (!items) {
-    throw new CalculationError('此计算类型尚未实现')
+    throw CalculationErrorCode.INVALID_CALCULATION('此计算类型尚未实现')
   }
   return {
     kind: definition.id,

@@ -1,4 +1,7 @@
+import type { DataSource } from 'typeorm'
 import { createHash } from 'node:crypto'
+import { PlatformConfigurationStateEntity } from '../db/records/configuration-entities.js'
+import { ErrorCode } from '../error-codes.js'
 
 export interface ConfigurationRedis {
   readonly isReady: boolean
@@ -17,17 +20,24 @@ export class ConfigurationCache {
   ) {}
 
   async current<T>(
-    source: {
-      query(sql: string): Promise<Array<{ revision: string | number }>>
-    },
+    source: Pick<DataSource, 'getRepository'>,
     scope: string,
     load: () => Promise<T>,
     ai = false,
   ): Promise<T> {
-    const [row] = await source.query(
-      `SELECT ${ai ? 'ai_revision' : 'revision'} AS revision FROM platform_configuration_state WHERE id=1`,
+    const row = await source
+      .getRepository(PlatformConfigurationStateEntity)
+      .findOne({
+        select: ai
+          ? { id: true, ai_revision: true }
+          : { id: true, revision: true },
+        where: { id: 1 },
+      })
+    return this.read(
+      scope,
+      Number((ai ? row?.ai_revision : row?.revision) ?? 0),
+      load,
     )
-    return this.read(scope, Number(row?.revision ?? 0), load)
   }
 
   async read<T>(
@@ -41,7 +51,10 @@ export class ConfigurationCache {
       return Promise.race([
         work,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('CACHE_TIMEOUT')), 150)
+          timer = setTimeout(
+            () => reject(ErrorCode.INTERNAL_CACHE_TIMEOUT()),
+            150,
+          )
         }),
       ]).finally(() => clearTimeout(timer))
     }

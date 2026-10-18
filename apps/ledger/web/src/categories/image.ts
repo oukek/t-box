@@ -1,3 +1,4 @@
+import { ErrorCode } from '../error-codes.js'
 /** Normalize uploads to a small PNG; storage never needs the original image or its metadata. */
 export async function categoryThumbnail(file: File): Promise<string> {
   if (
@@ -5,7 +6,7 @@ export async function categoryThumbnail(file: File): Promise<string> {
     !file.size ||
     file.size > 10 * 1024 * 1024
   ) {
-    throw new Error('请选择 10 MB 以内的 PNG、JPEG 或 WebP 图片')
+    throw ErrorCode.INTERNAL_INVALID_ICON_IMAGE()
   }
   const url = URL.createObjectURL(file)
   try {
@@ -16,18 +17,12 @@ export async function categoryThumbnail(file: File): Promise<string> {
     canvas.width = canvas.height = 96
     const context = canvas.getContext('2d')
     if (!context || !image.naturalWidth || !image.naturalHeight) {
-      throw new Error('图片无法读取，请选择其他图片')
+      throw ErrorCode.INTERNAL_IMAGE_READ_FAILED()
     }
     const scale = Math.min(96 / image.naturalWidth, 96 / image.naturalHeight)
     const width = image.naturalWidth * scale
     const height = image.naturalHeight * scale
-    context.drawImage(
-      image,
-      (96 - width) / 2,
-      (96 - height) / 2,
-      width,
-      height,
-    )
+    context.drawImage(image, (96 - width) / 2, (96 - height) / 2, width, height)
     return canvas.toDataURL('image/png')
   } finally {
     URL.revokeObjectURL(url)
