@@ -5,6 +5,9 @@ project(':capacitor-android').projectDir = new File('../../node_modules/.pnpm/@c
 include ':capacitor-local-notifications'
 project(':capacitor-local-notifications').projectDir = new File('../../node_modules/.pnpm/@capacitor+local-notifications@8.3.1_@capacitor+core@8.5.2/node_modules/@capacitor/local-notifications/android')
 
+include ':t-box-capacitor-app-resources'
+project(':t-box-capacitor-app-resources').projectDir = new File('../node_modules/@t-box/capacitor-app-resources/android')
+
 include ':t-box-capacitor-native-scanner'
 project(':t-box-capacitor-native-scanner').projectDir = new File('../node_modules/@t-box/capacitor-native-scanner/android')
 

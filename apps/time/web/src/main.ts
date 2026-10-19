@@ -25,8 +25,7 @@ connectAppClient({
   },
 })
   .then(async (connection) => {
-    configureRuntime(connection.client, connection.context)
-    await loadPreferences()
+    configureRuntime(connection.client, connection.context, (await connection.client.auth.getSession()).status === 'signed_in')
     configureReminderClient(connection.client)
     void refreshReminderStatus()
 
@@ -44,6 +43,7 @@ connectAppClient({
         ]),
     }).mount(root)
     connection.ready()
+    void loadPreferences()
     window.addEventListener('pagehide', () => connection.client.dispose(), {
       once: true,
     })

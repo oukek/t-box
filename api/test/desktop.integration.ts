@@ -58,7 +58,7 @@ try {
     a.token,
   )
   assert.equal(initial.revision, 0)
-  assert.equal(initial.applications.length, 6)
+  assert.equal(initial.applications.length, 7)
   assert.ok(
     initial.applications.every((app) =>
       app.manifest.id === 'ledger'

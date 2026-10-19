@@ -10,6 +10,7 @@ import {
   calendarAccessAdapter,
   createCalendarModule,
 } from '@t-box/calendar-server/module'
+import { createConverterModule } from '@t-box/converter-server'
 import { createImagesModule } from '@t-box/images-server/module'
 import { ledgerAccessAdapter } from '@t-box/ledger-server/ai/access'
 import { createLedgerModule } from '@t-box/ledger-server/ai/module'
@@ -35,6 +36,7 @@ export function createApplicationModules(options: {
     createLedgerModule(options),
     createImagesModule(options.platform?.images),
     createCalculatorModule(),
+    createConverterModule(),
     createCalendarModule(options.platform?.calendar),
     createTimeModule(options.platform?.time),
   ]

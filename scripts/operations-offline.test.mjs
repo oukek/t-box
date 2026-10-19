@@ -39,6 +39,9 @@ test('offline installation verifies every static byte, retains the prior version
     Uint8Array,
     crypto: webcrypto,
     Response,
+    AbortController,
+    setTimeout,
+    clearTimeout,
     fetch: async (input, options) => {
       fetched++
       if (offline) {
@@ -61,7 +64,7 @@ test('offline installation verifies every static byte, retains the prior version
     install = value
   } })
   await install
-  assert.equal(stores.get('tbox-static-v1:/:fixture').size, 2)
+  assert.equal(stores.get('tbox-static-v1:/:fixture').size, 3)
   const dispatch = (url, method = 'GET', mode = 'cors') => {
     let handled
     events.get('fetch')({ request: { url, method, mode }, respondWith: (value) => {
@@ -78,4 +81,9 @@ test('offline installation verifies every static byte, retains the prior version
   assert.equal(await (await dispatch('https://host.test/assets/app.js')).text(), bytes['assets/app.js'])
   assert.equal(fetched, before)
   assert.equal(await (await dispatch('https://host.test/', 'GET', 'navigate')).text(), bytes['index.html'])
+  const waiting = await caches.open('tbox-static-v1:/:waiting')
+  await waiting.put('https://host.test/assets/next-hashed.js', new Response('next verified shell'))
+  await assert.rejects(dispatch('https://host.test/assets/next-hashed.js'), /offline/, 'an incomplete waiting cache must never supply code')
+  await waiting.put('https://host.test/__tbox_shell_complete__', new Response('waiting'))
+  assert.equal(await (await dispatch('https://host.test/assets/next-hashed.js')).text(), 'next verified shell', 'the active worker can serve a completed newer bundle during offline refresh')
 })

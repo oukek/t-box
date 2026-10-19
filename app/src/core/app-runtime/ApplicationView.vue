@@ -54,7 +54,11 @@ function retry() {
     >
       <component :is="module.component" v-bind="module.props(params, { openRevision })" />
     </Suspense>
-    <ApplicationLaunch :application="application" :stage="launch.stage.value" />
+    <ApplicationLaunch
+      :application="application"
+      :stage="launch.stage.value"
+      :resource-progress="launch.resourceProgress.value"
+    />
     <ApplicationUpdatePrompt :app-id="application.id" :ready="launch.stage.value === 'ready'" />
   </section>
 </template>

@@ -71,6 +71,7 @@ export interface ShellState {
     loading: boolean
     error: string
     revision: number
+    resources?: Record<string, import('@t-box/app-contracts').DeviceResourceState>
   }
 }
 const state = reactive<ShellState>({

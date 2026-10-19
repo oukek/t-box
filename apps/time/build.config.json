@@ -3,5 +3,6 @@
   "package": "@t-box/time-web",
   "releasePackage": "@t-box/time-server",
   "releaseModule": "server/dist/release.js",
-  "releaseExport": "timeRelease"
+  "releaseExport": "timeRelease",
+  "native": { "bundled": true, "guest": true }
 }

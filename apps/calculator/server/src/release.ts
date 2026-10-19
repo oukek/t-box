@@ -17,4 +17,5 @@ export const calculatorRelease: AppRelease = {
   permissions: ['calculator.calculate', 'storage'],
   clientTools: ['calculator_fill_expression'],
   defaultInstalled: true,
+  guestAccess: 'local',
 }

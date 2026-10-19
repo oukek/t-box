@@ -7,6 +7,7 @@ packages:
   - shared
   - deploy/oss
   - packages/*
+  - apps/*/core
   - apps/*/contracts
   - apps/*/server
   - apps/*/web

@@ -1,0 +1,27 @@
+{
+  "name": "@t-box/converter-core",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "@t-box/converter-contracts": "workspace:*",
+    "decimal.js": "10.6.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

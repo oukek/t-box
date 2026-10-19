@@ -51,9 +51,11 @@ OSS 文件均公开读，前端拼接 OSS 域名和相对路径直接访问，�
 
 ## 首页、应用与记账
 
-底部两个入口：**AI** 保留会话窗口，顶部「AI 中心」侧栏提供余额、AI 费用说明、我的资源和任务记录；**OS** 是手机桌面式的应用入口。打开应用及详情页面后隐藏底部导航。「设置」（保留原 profile 应用 ID）提供个人账号、安全、当前设备的使用偏好和关于/版本信息。修改密码与退出登录放在账号信息内，退出前需要确认。长按图标或点击「整理」可拖动排序，后端按账号分别保存移动端和 PC 桌面；也支持方向键及按钮移动。记账为可卸载用户应用，其他现有应用为可升级、不可卸载的系统应用；应用不必提供 AI 工具。版本号从 `app/package.json` 读取。详细接口与扩展说明见 [OS 桌面](docs/desktop.md)。
+底部两个入口：**AI** 保留会话窗口，顶部「AI 中心」侧栏提供余额、AI 费用说明、我的资源和任务记录；**OS** 是手机桌面式的应用入口。打开应用及详情页面后隐藏底部导航。「设置」（保留原 profile 应用 ID）提供个人账号、安全、当前设备的使用偏好和关于/版本信息。修改密码与退出登录放在账号信息内，退出前需要确认。长按图标或点击「整理」可拖动排序，后端按账号分别保存移动端和 PC 桌面；也支持方向键及按钮移动。记账为可卸载用户应用，其他现有应用为可升级、不可卸载的系统应用；应用不必提供 AI 工具。版本号从 `app/package.json` 读取。详细接口与扩展说明见 [OS 桌面](docs/desktop.md)。应用安装后的网页/原生本地资源、后台预取、校验与失败回退见 [应用资源架构](docs/application-local-resources.md)。
 
 未配置并启用普通会话模型时，首页提示尚未接入 AI，不识别文本、不调用工具、不自动记账。后端已经拆分模型适配、技能注册、工具注册与多轮调度；前端工具通过 WebSocket 执行并回传结果。任务状态、执行检查点和工具结果已入 MySQL；主助手可委派具有独立上下文与工具范围的专业 Agent，断线后可从任务记录继续。实现与恢复边界见 [持久任务与专业 Agent](docs/tasks-and-agents.md)。首次会话支持自动标题及手动改名，公开思考摘要、分析与工具按时间线显示，完成后自动折叠过程，见 [会话展示与通讯协议](docs/conversation-presentation.md)。详细边界、调用时序、扩展方法和当前持久化范围见 [架构说明](docs/architecture.md)。
+
+单位换算也是默认安装、不可卸载的系统应用，支持 35 类、314 个单位、常用换算和历史记录；页面在本地即时换算，前后端共用同一纯计算引擎；查询目录、单项及批量换算均提供后端 AI 工具。使用与扩展见 [单位换算应用](apps/converter/README.md)。
 
 ## 账本与统计
 
@@ -92,6 +94,8 @@ OSS 文件均公开读，前端拼接 OSS 域名和相对路径直接访问，�
 
 对话历史、工具回执与请求去重记录保存于 MySQL；连接和运行任务保存在 API 进程内存。API 重启或连接过期后，已登录用户按历史会话 ID 自动恢复；尚未发送消息的空对话自动建立新连接。开发热更新会重新初始化连接。前端断线后后端继续执行；需要前端操作时暂停，重新打开所属对话后自动恢复交互。服务重启或模型错误暂停的任务需主动继续，断线前的消息不会自动重发；已经写入的账单仍然保留。受保护历史恢复时仍需有效的账本权限与密码授权。
 
+计算器、日历和时间的本地计算范围，以及 workspace 包导入错误的处理方式，见 [本地计算与开发启动](docs/local-execution-and-development.md)。根目录 `pnpm dev` 会先校验安装并补齐工作区链接；前端开发和构建统一直接解析工作区源码。
+
 ## H5 / PC 构建
 
 所有 workspace 共用根目录 `eslint.config.mjs`：TypeScript / JavaScript 使用单引号、无行尾分号、两空格缩进，每条声明只定义一个变量，分支使用展开的大括号。Vue 模板、CSS / HTML 和配置文件也通过同一入口检查；Swift / Java 等原生源码由对应原生工具链处理。无分号风格仍保留避免自动分号插入歧义所需的行首分号。
@@ -118,7 +122,7 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；跨域默认开放，后台通过回显来源、跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包的四个子应用静态种子上传 OSS，再上传、初始化数据库并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
+生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；跨域默认开放，后台通过回显来源、跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包的五个子应用静态种子上传 OSS，再上传、初始化数据库并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
 
 ## iOS / Android 开发热更新
 
@@ -216,6 +220,8 @@ API 默认监听 `127.0.0.1`，HTTP 和 WebSocket 来源默认开放，后台回
 计算器、记账、日历、时间（各自的 `apps/*` 目录）支持独立 Web 容器、安装与 Actions 发布。记账是可卸载的用户应用，其余现有应用为可升级、不可卸载的系统应用。后台“应用发布”支持构建目录上传、版本草稿、提交、发布与历史版本切换。`pnpm dev` 同时启动计算器（5176）、记账（5177）、日历（5178）、时间（5179）和静态产物服务（6176）；单独启动宿主时也要运行 `pnpm dev:apps`。首次拉取结构变更执行 `pnpm install && pnpm db:init`。详见 [独立应用平台](docs/application-platform.md)及[安装与故障隔离](docs/application-installation-health.md)。
 
 图标源文件、版本图片与后台上传：[应用图标与独立日历、时间](docs/application-icons.md)。
+
+网页与原生均支持游客使用计算器、单位换算、月历/农历、世界时钟等本地功能，云端数据、AI 和记账再要求登录。正式网页首次在线保存完整资源后支持断网刷新；Vite 开发模式仍依赖开发服务。游客版本声明、发布前置条件及缓存/权限边界见 [应用本地资源](docs/application-local-resources.md)。
 
 节假日同步、年度管理与缓存：[日历节假日数据](docs/calendar-holidays.md)。
 

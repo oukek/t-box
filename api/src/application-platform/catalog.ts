@@ -1,6 +1,7 @@
 import type { AppRelease } from '@t-box/app-contracts'
 import { calculatorRelease } from '@t-box/calculator-server'
 import { calendarRelease } from '@t-box/calendar-server'
+import { converterRelease } from '@t-box/converter-server'
 import { ledgerRelease } from '@t-box/ledger-server'
 import { systemApplicationManifests } from '@t-box/shared'
 import { timeRelease } from '@t-box/time-server'
@@ -19,12 +20,13 @@ const webRelease = (release: AppRelease) => {
 export const builtinKinds: Readonly<Record<string, AppRelease['kind']>> = {
   ledger: 'user',
   calculator: 'system',
+  converter: 'system',
   calendar: 'system',
   time: 'system',
   profile: 'system',
   market: 'system',
 }
-const webReleases: Record<string, AppRelease> = { calculator: calculatorRelease, ledger: ledgerRelease, calendar: calendarRelease, time: timeRelease }
+const webReleases: Record<string, AppRelease> = { converter: converterRelease, calculator: calculatorRelease, ledger: ledgerRelease, calendar: calendarRelease, time: timeRelease }
 /** Build-time composition of trusted deployments. Legacy apps remain shell modules until migrated. */
 export const deployedApplications: readonly AppRelease[] =
   systemApplicationManifests.map((manifest) =>

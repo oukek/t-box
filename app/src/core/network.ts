@@ -1,3 +1,4 @@
+import { SdkErrorCode } from '@t-box/app-sdk'
 import { RequestError } from '@t-box/app-shell-sdk'
 import { ErrorCode } from '../error-codes.js'
 import { createRequestId } from './identifiers'
@@ -18,10 +19,14 @@ export async function request<T>(
   path: string,
   options: RequestInit & { timeoutMs?: number } = {},
 ): Promise<T> {
+  if (!navigator.onLine) {
+    throw SdkErrorCode.NETWORK_REQUIRED()
+  }
   if (configurationError) {
     throw ErrorCode.INTERNAL_CLIENT_CONFIGURATION_REQUIRED(configurationError)
   }
   const { timeoutMs = 15000, ...fetchOptions } = options
+  const token = identity.token
   const controller = new AbortController()
   const abort = () => controller.abort()
   const externalSignal = options.signal
@@ -40,8 +45,8 @@ export async function request<T>(
       ...fetchOptions,
       signal: controller.signal,
       headers: {
-        ...(identity.token
-          ? { Authorization: `Bearer ${identity.token}` }
+        ...(token
+          ? { Authorization: `Bearer ${token}` }
           : {}),
         ...(['POST', 'PATCH', 'DELETE'].includes(options.method ?? '')
           ? { 'Idempotency-Key': createRequestId() }
@@ -72,7 +77,7 @@ export async function request<T>(
           details?: Record<string, string>
         }
       }
-      if (response.status === 401 && path !== '/auth/login') {
+      if (response.status === 401 && path !== '/auth/login' && identity.token === token) {
         setSession(null)
       }
       throw RequestError.fromResponse(response.status, errorBody.error)

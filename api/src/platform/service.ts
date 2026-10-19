@@ -5,6 +5,7 @@ import type { PaymentGateway } from '../payments/gateway.js'
 import type { WechatAuthorization } from '../payments/wechat-authorization.js'
 import { calculatorBackend } from '@t-box/calculator-server'
 import { CalendarService } from '@t-box/calendar-server/service'
+import { converterBackend } from '@t-box/converter-server'
 import { FinanceService } from '@t-box/ledger-server/finance/service'
 import { LedgerAccess } from '@t-box/ledger-server/ledgers/access'
 import { createLedgerRows } from '@t-box/ledger-server/ledgers/create'
@@ -80,6 +81,7 @@ export class PlatformService {
       { shellMigrations: ['ledger', 'calendar', 'time'], deploymentIssues },
     )
     this.applications.bind('calculator', calculatorBackend)
+    this.applications.bind('converter', converterBackend)
     this.desktop = new DesktopService(source, this.applications)
     this.calendar = new CalendarService(source, configuration?.cache)
     this.time = new TimeService(source)

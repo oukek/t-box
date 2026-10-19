@@ -6,13 +6,16 @@
 | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------- | ----------------- |
 | `apps/ledger`     | 用户应用，可卸载             | contracts、web、server；账本、分类、账单、往来、统计、授权、REST、实时订阅、AI 工具与 Agent | 独立来源 Web 容器 |
 | `apps/calculator` | 系统应用                     | contracts、独立 web、server、shell；数学计算、REST、AI 工具、发布定义与历史迁移             | 独立来源 Web 容器 |
+| `apps/converter` | 系统应用 | contracts、core、web、server、shell；35 类 314 个单位、高精度换算、AI 工具 | 独立来源 Web 容器 |
 | `apps/calendar`   | 系统应用                     | contracts、web、server；日程/纪念日、重复规则、备份、提醒、权限与 AI 工具                   | 独立来源 Web 容器 |
 | `apps/time`       | 系统应用                     | contracts、web、server；世界时钟、倒计时、秒表、时间计算与 AI 工具                          | 独立来源 Web 容器 |
 | `apps/settings`   | 系统应用，历史 ID 为 profile | contracts、web；账号页面、密码弹窗、关于和图标大小                                          | 宿主内置模块      |
 | `apps/market`     | 系统应用                     | contracts、web；目录、版本、安装/更新/卸载页面                                              | 宿主内置模块      |
 | `apps/images`     | AI 能力模块，无 OS 图标      | server；图片技能、工具和 Agent，接收图片处理服务端口                                        | 无独立页面        |
 
-每个包有自己的 package.json、tsconfig 和类型检查。contracts 与 server 编译到各自 dist；四个独立 Web 应用使用 app-web-sdk 消息桥，经主机转发受控业务与设备能力。设置、市场和宿主 shell 以源码包由宿主 Vite 编译，保留跨 workspace HMR。生产由 OSS 提供独立静态版本，后端能力仍随 API 部署；不能把特权 shell SDK 放进第三方 iframe。操作顺序见 [首次部署](first-deployment.md)。
+每个包有自己的 package.json、tsconfig 和类型检查。contracts 与 server 编译到各自 dist；五个独立 Web 应用使用 app-web-sdk 消息桥，经主机转发受控业务与设备能力。设置、市场和宿主 shell 以源码包由宿主 Vite 编译，保留跨 workspace HMR。生产由 OSS 提供独立静态版本，后端能力仍随 API 部署；不能把特权 shell SDK 放进第三方 iframe。操作顺序见 [首次部署](first-deployment.md)。
+
+纯计算能力可以放在应用自己的 `core` 包中，由 Web 与 server 共用；`core` 不依赖 Node.js、浏览器宿主或运行层 SDK。单位换算的目录、系数、校验及计算即采用此结构：页面本地即时计算，AI 工具在后端执行相同引擎。权限、业务写入、实时数据和账号存储仍由服务端负责。
 
 ## 公共包
 
@@ -44,7 +47,7 @@
 ```bash
 pnpm install
 pnpm build:contracts        # 按 workspace 依赖顺序编译 contracts、SDK、server
-pnpm dev                   # 宿主、API、后台、独立计算器、产物服务和包 watch
+pnpm dev                   # 宿主、API、后台、五个独立应用、产物服务和包 watch
 pnpm dev:packages          # 单独运行公共包和应用后端/契约 watch
 pnpm check:apps            # 导入边界、源文件存在性、显式依赖及层级检查
 pnpm typecheck

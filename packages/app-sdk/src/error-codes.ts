@@ -21,6 +21,8 @@ const definitions = {
   INVALID_SUBSCRIPTION: '事件订阅无效或过多',
   INVALID_TIMEOUT: '请求超时时间无效',
   NAVIGATION_DENIED: '只有当前应用可以打开更新页面',
+  NETWORK_REQUIRED: '此操作需要联网，请连接网络后重试',
+  APP_UPDATE_REQUIRED: '此功能需要登录并在应用市场完成更新后使用',
   PERMISSION_DENIED: '应用未授权此事件通道',
   PROTOCOL_MISMATCH: '应用 SDK 协议不兼容',
   REQUEST_CANCELLED: '请求已取消',

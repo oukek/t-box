@@ -15,6 +15,7 @@ test('new independent app scaffold compiles contracts, server and Vue web app an
   const root = await mkdtemp(join(tmpdir(), 'tbox-template-'))
   try {
     await mkdir(join(root, 'apps'))
+    await symlink(join(workspace, 'scripts'), join(root, 'scripts'))
     const app = await createApplication(root, 'fixture-app', 5188)
     assert.equal((await discoverApplications(root))[0].appId, 'fixture-app')
     await assert.rejects(createApplication(root, '../escape'), /Usage/)

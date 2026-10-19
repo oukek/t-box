@@ -24,6 +24,11 @@ watch(
   },
   { immediate: true, flush: 'sync' },
 )
+watch(() => preferences.loaded, (loaded) => {
+  if (loaded && preferenceOwner && preferenceOwner === identity.user?.id) {
+    stopwatch.value = parseStopwatch(preferences.stopwatch)
+  }
+})
 const elapsed = computed(() => stopwatchElapsed(stopwatch.value, now.value))
 let ticker: ReturnType<typeof setInterval> | undefined
 function persistStopwatch() {

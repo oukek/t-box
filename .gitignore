@@ -42,10 +42,15 @@ capacitor/android/app/src/main/assets/capacitor.plugins.json
 
 # Copied Capacitor web assets
 capacitor/www/
+capacitor/bundled-applications/
+capacitor/bundled-applications.tmp/
+capacitor/android/app/src/main/assets/tbox-packages/
+capacitor/ios/App/App/tbox-packages/
 
 # Generated public Universal Link association file
 capacitor/generated/
 
 # Immutable application web artifacts and private deployment bindings
 output/app-artifacts/
+output/application-releases/
 apps/*/deployment.local.json

@@ -1,0 +1,12 @@
+{
+  "name": "@t-box/capacitor-app-resources",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "exports": { ".": { "types": "./index.d.ts", "import": "./index.js", "default": "./index.js" } },
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "capacitor": { "ios": { "src": "ios" }, "android": { "src": "android" } },
+  "peerDependencies": { "@capacitor/core": "^8.5.2" },
+  "devDependencies": { "@capacitor/core": "8.5.2" }
+}

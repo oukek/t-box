@@ -31,7 +31,7 @@ connectAppClient({
   },
 })
   .then(async (connection) => {
-    configureRuntime(connection.client, connection.context)
+    configureRuntime(connection.client, connection.context, (await connection.client.auth.getSession()).status === 'signed_in')
     configureReminderClient(connection.client)
     void refreshReminderStatus()
     connection.client.runtime.onInteractionCancel(() =>

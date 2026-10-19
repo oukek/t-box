@@ -474,6 +474,7 @@ export class ApplicationPublishing {
         updatePrompt: (b.updatePrompt ??
           base?.updatePrompt) as AppRelease['updatePrompt'],
         defaultInstalled: base?.defaultInstalled ?? false,
+        guestAccess: base?.guestAccess ?? this.platform.deployedRelease(appId)?.guestAccess,
       }
       validateRelease(release)
       if (build) {

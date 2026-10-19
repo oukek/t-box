@@ -3,5 +3,6 @@
   "package": "@t-box/calculator-web",
   "releasePackage": "@t-box/calculator-server",
   "releaseModule": "server/dist/release.js",
-  "releaseExport": "calculatorRelease"
+  "releaseExport": "calculatorRelease",
+  "native": { "bundled": true, "guest": true }
 }

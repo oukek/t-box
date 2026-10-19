@@ -19,7 +19,7 @@ export const timeManifest = {
   iconAsset: applicationIcon,
   iconVariant: 'clock',
   color: 'blue',
-  version: '1.1.1',
+  version: '1.1.3',
   skillIds: ['timekeeping'],
 } as const satisfies ApplicationManifest
 export const commonTimezones = [
@@ -165,6 +165,19 @@ export interface TimerInput {
   label: string
   durationSeconds: number
 }
+/** Shared input checks; storage, ownership and idempotency stay on the server. */
+export function parseTimerInput(value: unknown): TimerInput {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw DateTimeErrorCode.INVALID_DATETIME('倒计时参数无效')
+  }
+  const input = value as Record<string, unknown>
+  if (Object.keys(input).some((key) => !['label', 'durationSeconds'].includes(key)) ||
+    typeof input.label !== 'string' || !input.label.trim() || input.label.length > 100 ||
+    !Number.isSafeInteger(input.durationSeconds) || Number(input.durationSeconds) < 1 || Number(input.durationSeconds) > 604800) {
+    throw DateTimeErrorCode.INVALID_DATETIME('倒计时名称需为 1—100 个字符，时长需为 1 秒至 7 天')
+  }
+  return { label: input.label.trim(), durationSeconds: Number(input.durationSeconds) }
+}
 export interface AppTimer extends TimerInput {
   id: string
   status: 'running' | 'paused' | 'completed' | 'cancelled'
@@ -241,13 +254,7 @@ export function parseTimeParams(value: unknown): Record<string, string> {
   }
   return result
 }
-export {
-  DateTimeError,
-  dayjs,
-  localInstant,
-  validDate,
-  validTimezone,
-} from '@t-box/dayjs'
+export * from './stopwatch.js'
 
 export const timeClientInteractions = [
   {
@@ -263,3 +270,11 @@ export const timeClientInteractions = [
     },
   },
 ] as const satisfies readonly ApplicationClientInteraction[]
+
+export {
+  DateTimeError,
+  dayjs,
+  localInstant,
+  validDate,
+  validTimezone,
+} from '@t-box/dayjs'

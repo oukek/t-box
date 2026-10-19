@@ -12,17 +12,18 @@ import {
   occurrenceReminders,
   occursOn,
   parseCalendarEvent,
+  parseTimerInput,
   timerState,
   timeSnapshot,
   transitionTimer,
   validDate,
 } from '@t-box/shared'
-import { createTimeModule } from '@t-box/time-server/module'
 import {
   durationLabel,
   parseStopwatch,
   stopwatchElapsed,
-} from '@t-box/time-web/stopwatch'
+} from '@t-box/time-contracts'
+import { createTimeModule } from '@t-box/time-server/module'
 import { CapabilityRegistry } from '../src/agent/registry.js'
 import { adaptApplication } from '../src/bootstrap/application-adapter.js'
 
@@ -514,4 +515,11 @@ test('Chinese almanac includes lunar dates, leap months, solar terms and festiva
   // Callers cannot corrupt cached almanac data.
   spring.festivals.length = 0
   assert.ok(calendarDayInfo('2026-02-17').festivals.includes('春节'))
+})
+
+test('timer input is validated identically before UI submission and server persistence', () => {
+  assert.deepEqual(parseTimerInput({ label: '  专注  ', durationSeconds: 60 }), { label: '专注', durationSeconds: 60 })
+  for (const value of [null, [], { label: 'test', durationSeconds: 0 }, { label: '', durationSeconds: 1 }, { label: 'x'.repeat(101), durationSeconds: 1 }, { label: 'test', durationSeconds: '60' }, { label: 'test', durationSeconds: 604801 }, { label: 'test', durationSeconds: 1, userId: 'other' }]) {
+    assert.throws(() => parseTimerInput(value))
+  }
 })

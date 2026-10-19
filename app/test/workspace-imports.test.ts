@@ -29,11 +29,7 @@ test('Vite transforms workspace consumers of the shared errors package', async (
           '@t-box/errors',
           file,
         )
-      assert.equal(
-        resolved?.id,
-        join(workspace, 'packages/errors/dist/index.js'),
-        consumer,
-      )
+      assert.equal(resolved?.id, join(workspace, 'packages/errors/src/index.ts'), consumer)
       const result = await server.transformRequest('/@fs' + file)
       assert.ok(result, consumer)
       assert.doesNotMatch(
@@ -42,6 +38,12 @@ test('Vite transforms workspace consumers of the shared errors package', async (
         'the browser must receive a resolved workspace module URL',
       )
     }
+    const desktop = join(workspace, 'shared/dist/desktop.js')
+    const converter = await server.environments.client.pluginContainer.resolveId('@t-box/converter-contracts', desktop)
+    assert.equal(converter?.id, join(workspace, 'apps/converter/contracts/src/index.ts'))
+    const desktopResult = await server.transformRequest('/@fs' + desktop)
+    assert.ok(desktopResult)
+    assert.doesNotMatch(desktopResult.code, /from\s+['"]@t-box\/converter-contracts['"]/)
   } finally {
     await server.close()
     await rm(cache, { recursive: true, force: true })

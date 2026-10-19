@@ -47,13 +47,13 @@ const server = createServer(async (req, res) => {
       createHash('sha256')
         .update(JSON.stringify(manifest.files))
         .digest('hex') !== digest ||
-        !Object.hasOwn(manifest.files, file)
+        (file !== 'artifact.json' && !Object.hasOwn(manifest.files, file))
     ) {
       throw new Error('Invalid artifact')
     }
     const bytes = await readFile(join(artifactRoot, file))
     if (
-      createHash('sha256').update(bytes).digest('hex') !== manifest.files[file]
+      file !== 'artifact.json' && createHash('sha256').update(bytes).digest('hex') !== manifest.files[file]
     ) {
       throw new Error('Artifact changed')
     }

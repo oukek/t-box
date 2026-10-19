@@ -40,6 +40,9 @@ export async function discoverApplications(root) {
       config.releaseModule.split('/').includes('..') || !/^[a-z]\w*$/i.test(config.releaseExport)) {
       throw new Error(`Invalid independent build declaration: ${entry.name}`)
     }
+    if (config.native !== undefined && (!config.native || config.native.bundled !== true || config.native.guest !== true || Object.keys(config.native).some((key) => !['bundled', 'guest'].includes(key)))) {
+      throw new Error(`Invalid native bundle declaration: ${entry.name}`)
+    }
     const web = join(root, 'apps', entry.name, 'web')
     const pkg = JSON.parse(await readFile(join(web, 'package.json'), 'utf8'))
     const releaseDirectory = config.releaseModule.split('/')[0]

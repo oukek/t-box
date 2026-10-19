@@ -19,6 +19,7 @@ import {
   currentScopeBindings,
 } from '../../applications/registry'
 import { clientCapabilities, executeClientTool } from '../../core/clientTools'
+import { online } from '../../core/connectivity'
 import { createRequestId } from '../../core/identifiers'
 import { apiBase, chatWebSocketUrl } from '../../core/network'
 import { identity } from '../../core/session'
@@ -102,6 +103,7 @@ export const chatBusy = computed(() =>
 )
 export const canSendMessage = computed(
   () =>
+    online.value &&
     state.connection === 'connected' &&
     state.mode === 'openai' &&
     !chatBusy.value &&
@@ -160,7 +162,7 @@ function applySnapshot(snapshot: ChatSnapshot) {
 }
 
 function transmit(event: ChatClientEvent): boolean {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
+  if (!online.value || !socket || socket.readyState !== WebSocket.OPEN) {
     return false
   }
   try {
@@ -450,6 +452,10 @@ async function connect() {
   if (!started) {
     return
   }
+  if (!online.value) {
+    state.connection = 'offline'
+    return
+  }
   clearTimers()
   const currentGeneration = ++generation
   const previous = socket
@@ -574,11 +580,17 @@ async function connect() {
   }
 }
 
+function reconnectWhenOnline() {
+  if (started && (!socket || socket.readyState !== WebSocket.OPEN)) {
+    void connect()
+  }
+}
 export function startChat() {
   if (started) {
     return
   }
   started = true
+  window.addEventListener('online', reconnectWhenOnline)
   pendingAuthorization = []
   state.messages = []
   state.activeRun = null
@@ -601,6 +613,7 @@ export function startChat() {
 }
 
 export function stopChat() {
+  window.removeEventListener('online', reconnectWhenOnline)
   state.retryRequestId = ''
   rejectMutations('会话已关闭，请检查操作结果')
   pendingDraft = null

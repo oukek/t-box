@@ -1,6 +1,6 @@
 # 应用图标与独立日历、时间
 
-内置图标沿用原先的图形与配色，不重新设计。六个桌面应用的静态图标源文件分别位于 `apps/{ledger,calculator,calendar,time,settings,market}/icon.svg`。运行 `pnpm apps:icons` 将文件转换为各应用 contracts 内的 `icon.ts`，由 manifest 的 `iconAsset` 字段提供。修改源文件后应重新生成并发布新版本。可运行 `pnpm apps:icons --check` 检查生成文件是否同步。
+内置图标沿用原先的图形与配色，不重新设计。七个桌面应用的静态图标源文件分别位于 `apps/{ledger,calculator,calendar,time,converter,settings,market}/icon.svg`。运行 `pnpm apps:icons` 将文件转换为各应用 contracts 内的 `icon.ts`，由 manifest 的 `iconAsset` 字段提供。修改源文件后应重新生成并发布新版本。可运行 `pnpm apps:icons --check` 检查生成文件是否同步。
 
 `iconAsset` 是有大小限制的图片 data URL。支持 PNG、JPEG、WebP、GIF、静态 SVG，最大 128 KiB；建议正方形、不依赖字体、保留小尺寸辨识度。SVG 不接受脚本、外部引用、内嵌页面或动画。前台和后台都通过 `img` 显示，不将 SVG 作为 HTML 注入。图标包含在发布元信息中，随版本、导入包摘要与数据库记录保存，不依赖宿主的 public 目录或外部图床。后台创建/编辑草稿可上传替换图标；已提交/已发布版本保持不可变，需要另建版本修改。
 
@@ -10,7 +10,7 @@
 
 日历/时间均为系统应用，自动安装，不可卸载。首次升级会将旧 shell 版本及现有安装迁移到 Web 版本，保留数据库日程、倒计时与用户数据；后续 Web 版本需在后台发布、由用户在市场更新。单个应用准备失败不会阻塞 AI 或其他应用。生产部署缺少应用产物时，应用显示暂不可用，管理员补全部署后可重试安装。
 
-本地分别在 5178 / 5179 开发，`pnpm dev:apps` 同时启动四个独立应用并支持热更新。Actions 下拉列表已经包含日历、时间，全部工作流仍为手动触发；构建上传 OSS 并登记为待发布，不自动上架。Docker / PM2 首次部署也携带这两个应用的初始静态产物。
+本地分别在 5178 / 5179 开发，`pnpm dev:apps` 同时启动五个独立应用并支持热更新。Actions 下拉列表已经包含日历、时间，全部工作流仍为手动触发；构建上传 OSS 并登记为待发布，不自动上架。Docker / PM2 首次部署也携带这两个应用的初始静态产物。
 
 世界时钟和秒表状态改用按账号、应用隔离的 SDK 存储；宿主仅迁移时间应用声明的两个历史本地键，不向独立页面暴露宿主用户 ID 或整个 localStorage。后台更换产物路径或应用来源后，这些偏好仍可使用。
 

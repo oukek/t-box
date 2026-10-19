@@ -25,7 +25,7 @@ if (ApiError !== foundationApiError || !(ErrorCode.NOT_FOUND() instanceof ApiErr
 const { applicationBootstrapArtifacts, applicationSettings } = await import('./dist/config.js')
 if (process.env.NODE_ENV === 'production' && applicationSettings().delivery === 'oss') {
   const bootstrap = applicationBootstrapArtifacts()
-  if (['calculator', 'ledger', 'calendar', 'time'].some((appId) => !bootstrap[appId])) {
+  if (['calculator', 'ledger', 'calendar', 'time', 'converter'].some((appId) => !bootstrap[appId])) {
     throw new Error('Production OSS bootstrap configuration is incomplete')
   }
   for (const path of [join(api, '.storage'), join(api, '../bootstrap/app-artifacts'), join(api, '../output/app-artifacts')]) {

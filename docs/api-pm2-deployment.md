@@ -169,7 +169,7 @@ node deploy/pm2/deploy-source.mjs
 # 首次需要创建管理员时追加 --init-admin
 ```
 
-该入口自动执行锁定依赖安装（包括构建工具）、构建 API/workspace/四个应用种子、校验独立生产包、解压新版本，最后调用同一个 `start-release.mjs`。即使服务器 NODE_ENV=production，也显式保留编译器；安装步骤使用非交互模式。首次推荐直接运行 Node 入口，避免 pnpm 在进入脚本前按旧的生产依赖状态自动安装。依赖已准备好的源码目录也提供 `pnpm deploy:pm2` 别名。
+该入口自动执行锁定依赖安装（包括构建工具）、构建 API/workspace/五个应用种子、校验独立生产包、解压新版本，最后调用同一个 `start-release.mjs`。即使服务器 NODE_ENV=production，也显式保留编译器；安装步骤使用非交互模式。首次推荐直接运行 Node 入口，避免 pnpm 在进入脚本前按旧的生产依赖状态自动安装。依赖已准备好的源码目录也提供 `pnpm deploy:pm2` 别名。
 
 不会直接在源码目录运行 PM2，也不会 reset/clean Git 文件。tracked 文件有未提交修改时会拒绝部署；拉取与合并由操作员明确执行，脚本不隐式切换分支。发布根目录可通过 `PM2_DEPLOY_ROOT` 调整，默认 `/www/wwwroot/tbox`。源码构建使用 `.pm2-build.lock`，启动阶段与 Actions 共用 `.pm2-deploy.lock`。
 

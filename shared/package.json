@@ -21,6 +21,7 @@
     "@t-box/app-contracts": "workspace:*",
     "@t-box/calculator-contracts": "workspace:*",
     "@t-box/calendar-contracts": "workspace:*",
+    "@t-box/converter-contracts": "workspace:*",
     "@t-box/ledger-contracts": "workspace:*",
     "@t-box/market-contracts": "workspace:*",
     "@t-box/settings-contracts": "workspace:*",

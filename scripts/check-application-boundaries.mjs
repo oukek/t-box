@@ -21,7 +21,7 @@ async function files(directory) {
 }
 const packages = []
 for (const app of await readdir(resolve(root, 'apps'))) {
-  for (const layer of ['contracts', 'web', 'server', 'shell']) {
+  for (const layer of ['contracts', 'core', 'web', 'server', 'shell']) {
     const path = resolve(root, 'apps', app, layer)
     try {
       await access(resolve(path, 'package.json'))
@@ -86,15 +86,22 @@ for (const { path, layer } of packages) {
         ) {
           errors.push(`Missing source import: ${label}`)
         }
-      } else if (!ref.startsWith('node:')) {
+      } else if (ref.startsWith('node:')) {
+        if (layer === 'core') {
+          errors.push(`Pure application core depends on Node.js: ${label}`)
+        }
+      } else {
         const name = ref.startsWith('@')
           ? ref.split('/').slice(0, 2).join('/')
           : ref.split('/')[0]
         if (!dependencies.has(name)) {
           errors.push(`Undeclared dependency: ${label}`)
         }
-        if (layer === 'contracts' && /-(?:web|server)(?:\/|$)/.test(name)) {
+        if (layer === 'contracts' && /-(?:core|web|server|shell)(?:\/|$)/.test(name)) {
           errors.push(`Contracts depend on runtime: ${label}`)
+        }
+        if (layer === 'core' && /-(?:web|server|shell|sdk)(?:\/|$)/.test(name)) {
+          errors.push(`Pure application core depends on a runtime adapter: ${label}`)
         }
         if (layer === 'server' && /-web(?:\/|$)/.test(name)) {
           errors.push(`Server depends on browser code: ${label}`)
@@ -106,7 +113,7 @@ for (const { path, layer } of packages) {
           ['ui-kit', 'server-foundation', 'dayjs', 'errors', 'app-contracts'].some(
             (n) => manifest.name === `@t-box/${n}`,
           ) &&
-          /^@t-box\/.+-(?:contracts|web|server)$/.test(name) &&
+          /^@t-box\/.+-(?:contracts|core|web|server)$/.test(name) &&
           name !== '@t-box/app-contracts'
         ) {
           errors.push(`Common package depends on an application: ${label}`)

@@ -3,6 +3,7 @@ import { parseHolidayDataset } from '@t-box/calendar-contracts'
 import { shallowRef } from 'vue'
 import { calendarApi } from './api'
 import { ErrorCode } from './error-codes.js'
+import { identity } from './runtime'
 import { application } from './sdk'
 
 interface CachedYear {
@@ -65,6 +66,9 @@ export async function loadHolidayYears(
         ) {
           return true
         }
+        if (!identity.signedIn) {
+          return true
+        }
         try {
           const { data } = await calendarApi.holidayYear(year, signal)
           if (signal.aborted) {
@@ -82,7 +86,7 @@ export async function loadHolidayYears(
           }
           return true
         } catch {
-          return signal.aborted
+          return signal.aborted || cache.has(year)
         }
       }),
   )

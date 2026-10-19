@@ -53,7 +53,7 @@ watch(
   { immediate: true },
 )
 watch(
-  () => runtime.subject,
+  () => [runtime.subject, runtime.initialHistory],
   () => {
     records.value = loadHistory(userId())
   },

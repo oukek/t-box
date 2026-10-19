@@ -9,7 +9,7 @@ import {
 } from '@t-box/server-foundation/persistence/errors'
 import { mutateApplication } from '@t-box/server-foundation/persistence/operations'
 import { parseId } from '@t-box/server-foundation/validation'
-import { timerState, transitionTimer } from '@t-box/time-contracts'
+import { DateTimeError, parseTimerInput, timerState, transitionTimer } from '@t-box/time-contracts'
 import { TimerEntity } from './entity.js'
 import { ErrorCode } from './error-codes.js'
 
@@ -49,22 +49,14 @@ export class TimeService {
   }
 
   create(userId: string, key: unknown, value: unknown) {
-    const a = temporalDomain(() =>
-      calendarObject(value, ['label', 'durationSeconds']),
-    )
-    if (
-      typeof a.label !== 'string' ||
-      !a.label.trim() ||
-      a.label.length > 100 ||
-      !Number.isSafeInteger(a.durationSeconds) ||
-      Number(a.durationSeconds) < 1 ||
-      Number(a.durationSeconds) > 604800
-    ) {
-      throw ErrorCode.INVALID_TIMER()
-    }
-    const input: TimerInput = {
-      label: a.label.trim(),
-      durationSeconds: Number(a.durationSeconds),
+    let input: TimerInput
+    try {
+      input = parseTimerInput(value)
+    } catch (error) {
+      if (error instanceof DateTimeError) {
+        throw ErrorCode.INVALID_TIMER(error.message)
+      }
+      throw error
     }
     return mutateApplication(
       this.source,

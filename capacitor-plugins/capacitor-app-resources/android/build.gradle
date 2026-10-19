@@ -1,0 +1,14 @@
+apply plugin: 'com.android.library'
+android {
+    namespace 'com.tbox.plugins.appresources'
+    compileSdkVersion rootProject.ext.compileSdkVersion
+    defaultConfig {
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+}
+dependencies { implementation project(':capacitor-android') }

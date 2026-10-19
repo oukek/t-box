@@ -5,6 +5,7 @@ import {
   changeInstallation,
   refreshCatalog,
 } from '../core/app-runtime/catalog'
+import { deviceResources } from '../core/app-runtime/resources'
 import {
   createHostTransport,
   trustedApplicationRequest,
@@ -73,7 +74,7 @@ export function initializeApplicationShell() {
         preferences,
         desktopAppearance,
         appInfo,
-        appCatalog: { ...appCatalog },
+        appCatalog: { ...appCatalog, resources: { ...deviceResources } },
       })
     },
     { flush: 'sync' },

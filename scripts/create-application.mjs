@@ -80,7 +80,7 @@ export function createApplicationModule(): ApplicationModule {
 }
 `)
   await write('web/index.html', `<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${appId}</title></head><body><div id="app"></div><script type="module" src="/src/main.ts"></script></body></html>\n`)
-  await write('web/vite.config.ts', 'import vue from \'@vitejs/plugin-vue\'\nimport { defineConfig } from \'vite\'\nexport default defineConfig({ plugins: [vue()], base: \'./\', build: { target: \'es2022\' } })\n')
+  await write('web/vite.config.ts', 'import vue from \'@vitejs/plugin-vue\'\nimport { defineConfig } from \'vite\'\nimport { workspaceSources } from \'../../../scripts/vite-workspace.mjs\'\nexport default defineConfig({ plugins: [workspaceSources(), vue()], base: \'./\', build: { target: \'es2022\' } })\n')
   await write('web/src/main.ts', `import type { AppClient } from '@t-box/app-sdk'
 import { connectAppClient } from '@t-box/app-web-sdk'
 import { createApp } from 'vue'

@@ -15,6 +15,7 @@ import {
 } from './core/app-runtime/catalog'
 import { startCatalogSync } from './core/app-runtime/catalogSync'
 import { shellVersionCompatible } from './core/app-runtime/compatibility'
+import { localApplications } from './core/app-runtime/localApplications'
 import { clearApplicationBindings } from './core/app-runtime/resourceBindings'
 import { getApplication } from './core/applications'
 import { online } from './core/connectivity'
@@ -57,6 +58,7 @@ const currentView = computed(() =>
     : null,
 )
 const currentInstallation = computed(() => appCatalog.entries.find((e) => e.release.appId === navigation.application?.appId)?.installation)
+const loginRequired = computed(() => !identity.user && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
 const installationError = computed(() => appCatalog.error || currentInstallation.value?.error || '')
 async function retryCurrentApplication() {
   const id = navigation.application?.appId
@@ -103,6 +105,9 @@ watch(
 )
 onMounted(() => {
   startNavigation()
+  if (!identity.token && localApplications.releases.length && (!location.hash || location.hash === '#')) {
+    navigateTab('applications')
+  }
   void restoreSession()
   stopViewport = observeViewport()
 })
@@ -115,12 +120,17 @@ onBeforeUnmount(() => {
 
 <template>
   <aside
+    v-if="localApplications.error"
+    class="offline-banner"
+    role="alert"
+  >{{ localApplications.error }}</aside>
+  <aside
     v-if="!online"
     class="offline-banner"
     role="status"
-  >当前离线，联网后可继续。记账、AI 和支付操作需要网络。</aside>
+  >当前离线，本地计算可继续使用。云端数据、AI 和支付需要联网。</aside>
   <div
-    v-if="!identity.ready"
+    v-if="!identity.ready && !localApplications.releases.length"
     class="identity-page"
     role="status"
   >
@@ -133,7 +143,6 @@ onBeforeUnmount(() => {
       重新连接
     </button>
   </div>
-  <LoginPage v-else-if="!identity.user" />
   <div
     v-else
     class="super-app"
@@ -156,23 +165,38 @@ onBeforeUnmount(() => {
       tabindex="-1"
     >
       <ChatPage
+        v-if="identity.user"
         v-show="navigation.screen === 'home'"
         :active="navigation.screen === 'home'"
       />
+      <section v-if="loginRequired" class="login-required">
+        <ApplicationHeader
+          v-if="!showPrimaryNavigation"
+          :title="currentApplication?.name || '登录'"
+          back-label="OS"
+          @back="navigateTab('applications')"
+        />
+        <p class="login-required-hint">{{ online ? '此功能需要登录，本地工具仍可直接使用。' : '此功能需要联网并登录，本地工具仍可离线使用。' }}</p>
+        <LoginPage />
+      </section>
+      <div v-if="!identity.user && navigation.screen === 'applications'" class="guest-mode-notice">
+        <span>本地模式 · 系统工具无需登录</span>
+        <button class="button button-secondary" @click="navigateTab('home')">登录</button>
+      </div>
       <ApplicationsPage v-show="navigation.screen === 'applications'" />
       <ApplicationCapabilitiesPage
         v-if="
-          navigation.screen === 'capabilities' && navigation.capabilityAppId
+          identity.user && navigation.screen === 'capabilities' && navigation.capabilityAppId
         "
         :app-id="navigation.capabilityAppId"
       />
-      <WalletPage v-if="navigation.screen === 'wallet'" />
-      <RechargePage v-if="navigation.screen === 'recharge'" />
-      <PricingPage v-if="navigation.screen === 'pricing'" />
-      <ResourcesPage v-if="navigation.screen === 'resources'" />
-      <AccountSettingsPage v-if="navigation.screen === 'account'" />
+      <WalletPage v-if="identity.user && navigation.screen === 'wallet'" />
+      <RechargePage v-if="identity.user && navigation.screen === 'recharge'" />
+      <PricingPage v-if="identity.user && navigation.screen === 'pricing'" />
+      <ResourcesPage v-if="identity.user && navigation.screen === 'resources'" />
+      <AccountSettingsPage v-if="identity.user && navigation.screen === 'account'" />
       <ApplicationView
-        v-if="navigation.screen === 'application' && currentApplication && currentView && isInstalled(currentApplication.id) && currentCompatible"
+        v-if="!loginRequired && navigation.screen === 'application' && currentApplication && currentView && isInstalled(currentApplication.id) && currentCompatible"
         :key="currentApplication.id"
         :module="currentView"
         :application="currentApplication"
@@ -180,7 +204,7 @@ onBeforeUnmount(() => {
         :open-revision="navigation.revision"
       />
       <section
-        v-else-if="navigation.screen === 'application' && currentApplication"
+        v-else-if="!loginRequired && navigation.screen === 'application' && currentApplication"
         class="application-unavailable"
       >
         <ApplicationHeader
@@ -273,6 +297,45 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.guest-mode-notice {
+  position: absolute;
+  z-index: 2;
+  top: max(12px, env(safe-area-inset-top));
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #fff;
+}
+.guest-mode-notice .button {
+  padding: 5px 12px;
+  min-height: 30px;
+}
+.workspace-plane > .identity-page {
+  min-height: 0;
+  flex: 1;
+}
+.login-required {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.login-required .identity-page {
+  min-height: 0;
+}
+.login-required-hint {
+  margin: 16px 20px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+@media (max-width: 600px) {
+  .guest-mode-notice > span {
+    display: none;
+  }
+}
 .application-unavailable {
   margin: 0 auto;
   width: 100%;

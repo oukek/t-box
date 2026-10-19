@@ -4,6 +4,7 @@ import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { createApp, h } from 'vue'
 import CalculatorPage from './CalculatorPage.vue'
 import { ErrorCode } from './error-codes.js'
+import { restoreHistory } from './history'
 import { bindHistory, runtime } from './runtime'
 import './base.css'
 
@@ -26,13 +27,6 @@ connectAppClient({
     bindHistory((records) =>
       connection.client.storage.set('calculator.history.v1', records),
     )
-    try {
-      runtime.initialHistory = await connection.client.storage.get(
-        'calculator.history.v1',
-      )
-    } catch {
-      /* Local backup remains usable. */
-    }
     const params = parseCalculatorParams(connection.context.params)
     runtime.kind = params.kind || 'scientific'
     runtime.expression = params.expression || ''
@@ -58,6 +52,10 @@ connectAppClient({
         ]),
     }).mount(node)
     connection.ready({ appNavigation: ownsNavigation })
+    const historyRevision = runtime.historyRevision
+    void connection.client.storage.get('calculator.history.v1').then((saved) => {
+      restoreHistory(connection.context.subject, saved, historyRevision)
+    }).catch(() => { /* Local backup and calculation remain usable. */ })
     window.addEventListener('pagehide', () => connection.client.dispose(), {
       once: true,
     })

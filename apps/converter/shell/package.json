@@ -1,0 +1,22 @@
+{
+  "name": "@t-box/converter-shell",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-shell-sdk": "workspace:*",
+    "@t-box/converter-contracts": "workspace:*",
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vue-tsc": "^3.2.5"
+  }
+}

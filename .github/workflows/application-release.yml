@@ -12,6 +12,7 @@ on:
           # BEGIN GENERATED APPLICATIONS
           - '数学计算器 (calculator)'
           - '日历 (calendar)'
+          - '单位换算 (converter)'
           - '记账 (ledger)'
           - '时间 (time)'
         # END GENERATED APPLICATIONS

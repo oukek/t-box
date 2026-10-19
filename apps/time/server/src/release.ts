@@ -13,4 +13,5 @@ export const timeRelease: AppRelease = {
   permissions: ['api.request', 'storage', 'device.reminders'],
   clientTools: ['time_reminders_sync'],
   defaultInstalled: true,
+  guestAccess: 'local',
 }

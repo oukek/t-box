@@ -29,6 +29,9 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   admin:
     dependencies:
@@ -87,6 +90,9 @@ importers:
       '@t-box/calendar-server':
         specifier: workspace:*
         version: link:../apps/calendar/server
+      '@t-box/converter-server':
+        specifier: workspace:*
+        version: link:../apps/converter/server
       '@t-box/errors':
         specifier: workspace:*
         version: link:../packages/errors
@@ -133,15 +139,21 @@ importers:
       '@t-box/calendar-contracts':
         specifier: workspace:*
         version: link:../apps/calendar/contracts
+      '@t-box/converter-contracts':
+        specifier: workspace:*
+        version: link:../apps/converter/contracts
+      '@t-box/converter-core':
+        specifier: workspace:*
+        version: link:../apps/converter/core
       '@t-box/device-reminders':
         specifier: workspace:*
         version: link:../packages/device-reminders
       '@t-box/ledger-web':
         specifier: workspace:*
         version: link:../apps/ledger/web
-      '@t-box/time-web':
+      '@t-box/time-contracts':
         specifier: workspace:*
-        version: link:../apps/time/web
+        version: link:../apps/time/contracts
       '@types/ali-oss':
         specifier: ^6.23.3
         version: 6.23.3
@@ -181,12 +193,18 @@ importers:
       '@t-box/calendar-shell':
         specifier: workspace:*
         version: link:../apps/calendar/shell
+      '@t-box/capacitor-app-resources':
+        specifier: workspace:*
+        version: link:../capacitor-plugins/capacitor-app-resources
       '@t-box/capacitor-native-scanner':
         specifier: workspace:*
         version: link:../capacitor-plugins/capacitor-native-scanner
       '@t-box/capacitor-wechat-pay':
         specifier: workspace:*
         version: link:../capacitor-plugins/capacitor-wechat-pay
+      '@t-box/converter-shell':
+        specifier: workspace:*
+        version: link:../apps/converter/shell
       '@t-box/device-reminders':
         specifier: workspace:*
         version: link:../packages/device-reminders
@@ -478,6 +496,113 @@ importers:
       vite:
         specifier: 8.3.2
         version: 8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vue-tsc:
+        specifier: ^3.2.5
+        version: 3.3.12(typescript@5.9.3)
+
+  apps/converter/contracts:
+    dependencies:
+      '@t-box/app-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/app-contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  apps/converter/core:
+    dependencies:
+      '@t-box/converter-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      decimal.js:
+        specifier: 10.6.0
+        version: 10.6.0
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  apps/converter/server:
+    dependencies:
+      '@t-box/app-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/app-contracts
+      '@t-box/app-server-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-server-sdk
+      '@t-box/converter-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@t-box/converter-core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  apps/converter/shell:
+    dependencies:
+      '@t-box/app-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/app-contracts
+      '@t-box/app-shell-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-shell-sdk
+      '@t-box/converter-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      vue:
+        specifier: 3.5.43
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vue-tsc:
+        specifier: ^3.2.5
+        version: 3.3.12(typescript@5.9.3)
+
+  apps/converter/web:
+    dependencies:
+      '@t-box/app-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-sdk
+      '@t-box/app-web-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-web-sdk
+      '@t-box/converter-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@t-box/converter-core':
+        specifier: workspace:*
+        version: link:../core
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
+      '@t-box/ui-kit':
+        specifier: workspace:*
+        version: link:../../../packages/ui-kit
+      vue:
+        specifier: ^3.5.29
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.0
+        version: 24.19.1
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.4
+        version: 6.0.9(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.43(typescript@5.9.3))
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vite:
+        specifier: 8.3.2
+        version: 8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vue-tsc:
         specifier: ^3.2.5
         version: 3.3.12(typescript@5.9.3)
@@ -860,6 +985,9 @@ importers:
       '@capacitor/local-notifications':
         specifier: ^8.3.1
         version: 8.3.1(@capacitor/core@8.5.2)
+      '@t-box/capacitor-app-resources':
+        specifier: workspace:*
+        version: link:../capacitor-plugins/capacitor-app-resources
       '@t-box/capacitor-native-scanner':
         specifier: workspace:*
         version: link:../capacitor-plugins/capacitor-native-scanner
@@ -879,6 +1007,12 @@ importers:
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
+
+  capacitor-plugins/capacitor-app-resources:
+    devDependencies:
+      '@capacitor/core':
+        specifier: 8.5.2
+        version: 8.5.2
 
   capacitor-plugins/capacitor-native-scanner:
     devDependencies:
@@ -1070,6 +1204,9 @@ importers:
       '@t-box/calendar-contracts':
         specifier: workspace:*
         version: link:../apps/calendar/contracts
+      '@t-box/converter-contracts':
+        specifier: workspace:*
+        version: link:../apps/converter/contracts
       '@t-box/ledger-contracts':
         specifier: workspace:*
         version: link:../apps/ledger/contracts

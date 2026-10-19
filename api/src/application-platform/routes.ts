@@ -4,6 +4,7 @@ import type { ApplicationPlatform } from './service.js'
 import { validId } from '@t-box/app-contracts'
 import { ErrorCode } from '../error-codes.js'
 import { bearer } from '../identity/service.js'
+import { parseLaunchReport } from './launch-report.js'
 
 export function registerApplicationPlatform(
   app: FastifyInstance,
@@ -12,6 +13,31 @@ export function registerApplicationPlatform(
 ) {
   const actor = async (authorization: string | undefined) =>
     authenticate(bearer(authorization))
+  app.get('/api/v1/app-market/local', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (_req, reply) => {
+    // No user lookup, install, grant, or backend lifecycle is performed here.
+    reply.header('Cache-Control', 'no-store')
+    return { protocol: 1, applications: await service.publicLocalCatalog() }
+  })
+  app.post<{ Params: { id: string } }>('/api/v1/applications/:id/launches', { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const a = await actor(req.headers.authorization)
+    const report = parseLaunchReport(req.body, req.params.id)
+    app.log.info({ applicationLaunch: { ...report, userId: a.user.id } }, 'Application launch')
+    return reply.code(204).send()
+  })
+  app.post<{ Params: { id: string }, Body: { failedReleaseId: string, releaseId: string } }>('/api/v1/applications/:id/rollback', async (req, reply) => {
+    const a = await actor(req.headers.authorization)
+    const value = req.body
+    const key = req.headers['idempotency-key']
+    if (!validId(req.params.id) || !value || Object.keys(value).some((field) => !['failedReleaseId', 'releaseId'].includes(field)) || typeof value.failedReleaseId !== 'string' || typeof value.releaseId !== 'string' || typeof key !== 'string') {
+      throw ErrorCode.APP_ROLLBACK_REJECTED()
+    }
+    const release = await service.release(value.releaseId)
+    if (release.appId !== req.params.id || release.runtime.type !== 'web') {
+      throw ErrorCode.APP_ROLLBACK_REJECTED()
+    }
+    reply.header('Cache-Control', 'no-store')
+    return { data: await service.change(a.user.id, req.params.id, 'update', value.releaseId, key, release.permissions, { rollbackFrom: value.failedReleaseId }) }
+  })
   app.get('/api/v1/app-market', async (req, reply) => {
     const a = await actor(req.headers.authorization)
     reply.header('Cache-Control', 'no-store')

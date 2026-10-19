@@ -85,11 +85,11 @@ AI 模型列表按安装授权过滤；执行前、缓存回执重放前和确�
 
 首次运行：`pnpm install && pnpm db:init`。随后 `pnpm dev` 同时运行 API 3000、宿主 5173、后台 5175、计算器 5176、产物服务 6176 和公共包 watch。分别运行时先 `pnpm build:contracts`，再 `pnpm dev:api`、`pnpm dev:app`、`pnpm dev:apps`。移动端 live reload 把本机应用开发地址换成宿主 LAN 地址，设备需要同时能访问 3000/5173/5176 对应服务。
 
-`pnpm build` 或 `pnpm pack` 构建宿主与独立计算器。数学代码不再打进宿主；计算器产物生成到 `output/app-artifacts/calculator/<sha256>/`，附带逐文件摘要。`pnpm serve:apps` 在 loopback 6176 提供按摘要分版本的产物，检查路径与文件摘要，设置 CSP，并保留旧版本。正式环境用独立 HTTPS 来源反向代理这个服务，例如 `apps.example.com`；不能与主站同源。
+`pnpm build` 或 `pnpm run pack` 构建宿主与独立计算器。数学代码不再打进宿主；计算器产物生成到 `output/app-artifacts/calculator/<sha256>/`，附带逐文件摘要。`pnpm serve:apps` 在 loopback 6176 提供按摘要分版本的产物，检查路径与文件摘要，设置 CSP，并保留旧版本。正式环境用独立 HTTPS 来源反向代理这个服务，例如 `apps.example.com`；不能与主站同源。
 
 正式环境设置 `APP_ARTIFACT_ORIGIN=https://apps.example.com`，与产物反向代理来源保持一致。API 与产物服务需要共享持久化的 `output/app-artifacts` 目录。复制 `apps/calculator/deployment.example.json` 为 `deployment.local.json`，填写相同的独立 HTTPS origin 和构建输出的 artifact 摘要，再启动 API。API 验证产物清单摘要，并登记新的不可变 release。第一次初始化预装版本自动上线；同应用后续部署版本只登记为待发布，需管理员发布。已有用户在市场确认更新；不要原地替换已发布文件。默认 localhost 发布定义仅用于开发，`NODE_ENV=production` 必须提供正式部署配置。
 
-Capacitor 仍把宿主 dist 复制到 www。独立应用通过受约束容器运行；生产不使用 `server.url` 接管壳，也不自动暴露 Capacitor 插件。计算器本地历史通过有权限校验的宿主存储桥保留，旧宿主记录会按当前用户迁移，原记录不删除。安装状态不是离线缓存，当前独立应用需要网络加载。正式 Android/iOS 打包需要可访问的 HTTPS API 与应用产物地址；本阶段未作真机发行验证，也未接入外部第三方应用商店发行。
+Capacitor 仍把宿主 dist 复制到 www。独立应用通过受约束容器运行；生产不使用 `server.url` 接管壳，也不自动暴露 Capacitor 插件。计算器本地历史通过有权限校验的宿主存储桥保留，旧宿主记录会按当前用户迁移，原记录不删除。安装状态与本机资源状态分开管理，安装后优先加载经过校验的本地静态包，更新在后台准备。业务权限和 API 请求仍需要网络。详见 [本地资源、回退与启动诊断](application-local-resources.md)。正式 Android/iOS 打包需要可访问的 HTTPS API 与应用产物地址；本阶段未作真机发行验证，也未接入外部第三方应用商店发行。
 
 ## 验证
 

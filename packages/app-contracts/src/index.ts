@@ -80,6 +80,8 @@ export interface AppRelease {
   clientTools: string[]
   updatePrompt?: ApplicationUpdatePrompt
   defaultInstalled: boolean
+  /** App-owned opt-in: guests may run local features, never backend methods or grants. */
+  guestAccess?: 'local'
 }
 export interface AppInstallation {
   appId: string
@@ -93,12 +95,23 @@ export interface AppInstallation {
   error?: string | null
 }
 export interface MarketEntry {
+  /** Trusted local baseline, available without an account. Never a server installation/grant. */
+  localOnly?: boolean
   release: AppRelease
+  /** Installed metadata may differ from the currently published update. */
+  installedRelease?: AppRelease
+  /** Device-local bootstrap only. This never authorizes backend requests or grants. */
+  localBinding?: { subject: string, storage: boolean }
   installation: AppInstallation | null
   issue?: string | null
   releaseNotes?: string
   /** The running version owns presentation, not the newly published version. */
   installedUpdatePrompt?: ApplicationUpdatePrompt
+}
+export interface DeviceResourceState {
+  status: 'preparing' | 'ready' | 'failed' | 'unsupported'
+  completed?: number
+  total?: number
 }
 export interface LifecycleRequest {
   operationId: string
@@ -124,6 +137,8 @@ export interface BackendInvocation {
   preparationTicket?: string
 }
 export interface RuntimeDescriptor {
+  /** Local baseline can use local SDK capabilities only. */
+  localOnly?: boolean
   protocol: typeof APP_PROTOCOL
   appId: string
   releaseId: string
@@ -133,6 +148,8 @@ export interface RuntimeDescriptor {
   permissions: string[]
   subject: string
   clientTools: string[]
+  /** Content addressed public package; never contains credentials or business data. */
+  integrity?: string
 }
 export interface BridgeRequest {
   type: 'request'
@@ -153,6 +170,9 @@ export function validId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(value)
 }
 export function validateRelease(release: AppRelease): void {
+  if (release.guestAccess !== undefined && (release.guestAccess !== 'local' || release.kind !== 'system' || !release.defaultInstalled || release.runtime.type !== 'web')) {
+    throw ErrorCode.INTERNAL_INVALID_APPLICATION_RELEASE()
+  }
   if (release.updatePrompt !== undefined) {
     validateUpdatePrompt(release.updatePrompt)
   }

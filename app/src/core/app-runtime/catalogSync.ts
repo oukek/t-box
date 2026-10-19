@@ -2,6 +2,7 @@ import { watch } from 'vue'
 import { chatWebSocketUrl } from '../network'
 import { identity } from '../session'
 import { appCatalog, refreshCatalog } from './catalog'
+import { localApplications } from './localApplications'
 
 /** One platform connection for OS, market and every open application. */
 export function startCatalogSync() {
@@ -18,7 +19,7 @@ export function startCatalogSync() {
   let dirty = false
   let disposed = false
   const reload = () => {
-    if (disposed || !identity.user) {
+    if (disposed) {
       return
     }
     if (pending) {
@@ -116,7 +117,7 @@ export function startCatalogSync() {
     connect()
   }, { immediate: true })
   const foreground = () => {
-    if (document.visibilityState !== 'visible' || !identity.user) {
+    if (document.visibilityState !== 'visible') {
       return
     }
     reload()
@@ -125,6 +126,7 @@ export function startCatalogSync() {
       connect()
     }
   }
+  const stopLocalWatch = watch(() => localApplications.releases, scheduleReload)
   const offline = () => {
     epoch++
     disconnect()
@@ -149,6 +151,7 @@ export function startCatalogSync() {
     disposed = true
     epoch++
     stopWatch()
+    stopLocalWatch()
     disconnect()
     clearInterval(fallback)
     window.removeEventListener('online', foreground)

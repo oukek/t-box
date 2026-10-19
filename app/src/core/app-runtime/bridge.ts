@@ -10,10 +10,13 @@ import {
   applicationPayloadLimit,
   createApplicationRequestId,
 } from '@t-box/app-contracts'
-import { AppSdkError } from '@t-box/app-sdk'
+import { AppSdkError, SdkErrorCode } from '@t-box/app-sdk'
 import { ErrorCode } from '../../error-codes.js'
 import { request } from '../network'
 import { identity } from '../session'
+import { appCatalog } from './catalog'
+import { localBaselineLaunch } from './localApplications'
+import { resolveLocalLaunch } from './localLaunch'
 import { createHostTransport } from './sdkHost'
 
 export interface AppConnection {
@@ -32,13 +35,27 @@ const connections: Map<
 if (import.meta.hot) {
   import.meta.hot.data.connections = connections
 }
-export async function descriptor(appId: string) {
+export async function descriptor(appId: string, options: { online?: boolean } = {}) {
   const platform = window.Capacitor?.isNativePlatform?.()
     ? window.Capacitor.getPlatform?.()
     : 'web'
-  const result = await request<{ data: RuntimeDescriptor }>(
-    `/applications/${encodeURIComponent(appId)}/runtime?platform=${platform || 'web'}`,
-  )
+  const targetPlatform = platform === 'android' || platform === 'ios' ? platform : 'web'
+  const baseline = !options.online ? localBaselineLaunch(appId, targetPlatform, identity.user?.id, appCatalog.entries)?.descriptor : undefined
+  let local = !options.online ? resolveLocalLaunch(appCatalog.entries, appId, targetPlatform)?.descriptor : undefined
+  if (baseline && targetPlatform !== 'web') {
+    // Shipped tools open immediately. A different account-installed version is used only after its local files exist.
+    const { AppResources } = await import('@t-box/capacitor-app-resources')
+    const digest = local?.integrity?.slice(7)
+    if (!local || !digest || /^0{64}$/.test(digest) || !(await AppResources.has({ appId, digest })).ready) {
+      local = baseline
+    }
+  }
+  local ||= baseline
+  const result = local
+    ? { data: local }
+    : await request<{ data: RuntimeDescriptor }>(
+        `/applications/${encodeURIComponent(appId)}/runtime?platform=${platform || 'web'}`,
+      )
   const entry = new URL(result.data.entryUrl)
   if (
     result.data.protocol !== APP_PROTOCOL ||
@@ -105,7 +122,7 @@ export function connectFrame(
       close('应用会话已结束')
     }
   })
-  const timer = setTimeout(close, 15000, '应用连接超时，请重试')
+  const timer = setTimeout(close, 15000, '应用连接超时：页面未完成 SDK 初始化，请检查应用控制台和资源是否正常加载')
   function close(reason = '应用已关闭') {
     if (closed) {
       return
@@ -135,7 +152,10 @@ export function connectFrame(
     if (closed || identity.user?.id !== userId) {
       throw ErrorCode.INTERNAL_APPLICATION_SESSION_ENDED()
     }
-    const latest = await descriptor(runtime.appId)
+    if (!navigator.onLine) {
+      throw SdkErrorCode.NETWORK_REQUIRED()
+    }
+    const latest = await descriptor(runtime.appId, { online: true })
     if (closed || identity.user?.id !== userId) {
       throw ErrorCode.INTERNAL_APPLICATION_SESSION_ENDED()
     }
@@ -325,7 +345,7 @@ export async function invokeApplicationTool(
   ) {
     throw ErrorCode.INTERNAL_INVALID_APPLICATION_TOOL_ARGUMENTS()
   }
-  const runtime = await descriptor(a.appId)
+  const runtime = await descriptor(a.appId, { online: true })
   if (
     runtime.releaseId !== a.releaseId ||
     runtime.generation !== a.generation ||
@@ -358,7 +378,7 @@ export async function invokeDeclaredApplicationTool(
   args: unknown,
   open: (value: unknown) => Promise<unknown>,
 ) {
-  const runtime = await descriptor(appId)
+  const runtime = await descriptor(appId, { online: true })
   return invokeApplicationTool(
     {
       appId,

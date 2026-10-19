@@ -71,6 +71,20 @@ test('copy validates source before replacing existing assets and removes stale c
   assert.equal(f.read('capacitor/www/assets/new.js'), 'new')
   assert.equal(existsSync(join(f.root, 'capacitor/www/assets/stale.js')), false)
 })
+test('native application code is shipped outside the privileged web root, with only the public index exposed', (t) => {
+  const f = fixture(t)
+  f.put('app/dist/index.html', 'host')
+  f.put('capacitor/bundled-applications/index.json', '{"protocol":1,"applications":[]}')
+  f.put('capacitor/bundled-applications/math/digest/index.html', 'isolated application')
+  f.put('capacitor/bundled-applications/math/digest/tbox-package-files.json', '{}')
+  assert.equal(f.run('copy-web-assets.mjs').status, 0)
+  assert.ok(existsSync(join(f.root, 'capacitor/www/tbox-bundled-applications.json')))
+  assert.equal(existsSync(join(f.root, 'capacitor/www/math')), false)
+  for (const directory of ['capacitor/android/app/src/main/assets/tbox-packages', 'capacitor/ios/App/App/tbox-packages']) {
+    assert.equal(f.read(`${directory}/math/digest/index.html`), 'isolated application')
+    assert.ok(existsSync(join(f.root, directory, 'math/digest/tbox-package-files.json')))
+  }
+})
 
 test('bundled sync clears both live reload variables; dev keeps an explicit URL', {
   skip: process.platform === 'win32',
@@ -107,4 +121,9 @@ appendFileSync(process.env.TBOX_TEST_COMMAND_LOG, JSON.stringify({ args: process
   assert.deepEqual(dev[2].args.slice(-3), ['cap', 'sync', 'ios'])
   assert.equal(dev[2].live, 'http://192.168.1.10:5173/')
   assert.equal(dev[2].server, undefined)
+})
+test('native web build invokes the project pack script, never pnpm publishing pack', () => {
+  const config = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.match(config.scripts['build:web'], /pnpm --dir \.\. run pack/)
+  assert.match(config.scripts['build:web'], /bundle-native-applications\.mjs/)
 })

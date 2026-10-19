@@ -5,6 +5,7 @@ export const runtime = reactive({
   kind: 'scientific',
   expression: '',
   initialHistory: null as unknown,
+  historyRevision: 0,
   revision: 0,
 })
 

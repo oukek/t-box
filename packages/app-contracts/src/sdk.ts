@@ -17,6 +17,8 @@ export interface ApplicationContext {
   updatePrompt?: ApplicationUpdatePrompt
   permissions: readonly string[]
   capabilities: readonly HostMethod[]
+  /** A local context identifies a cached installation, not a verified account or backend grant. */
+  access?: 'local' | 'online'
 }
 export interface ApplicationSession {
   status: 'restoring' | 'signed_in' | 'signed_out'

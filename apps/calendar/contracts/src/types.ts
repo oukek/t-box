@@ -69,7 +69,7 @@ export const calendarManifest = {
   iconAsset: applicationIcon,
   iconVariant: 'calendar',
   color: 'orange',
-  version: '1.1.1',
+  version: '1.1.3',
   skillIds: ['calendar_planning'],
 } as const satisfies ApplicationManifest
 export const calendarClientInteractions = [

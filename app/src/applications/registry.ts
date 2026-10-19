@@ -3,6 +3,7 @@ import type { ClientApplicationModule } from '@t-box/app-shell-sdk'
 import type { ResourceRef } from '@t-box/shared'
 import { createCalculatorShellModule } from '@t-box/calculator-shell'
 import { createCalendarShellModule } from '@t-box/calendar-shell'
+import { createConverterShellModule } from '@t-box/converter-shell'
 import { createLedgerShellModule } from '@t-box/ledger-shell'
 import { marketModule } from '@t-box/market-web'
 import { profileModule } from '@t-box/settings-web'
@@ -21,6 +22,9 @@ import { openApplication } from '../core/navigation'
 import { ErrorCode } from '../error-codes.js'
 
 const calculatorModule = createCalculatorShellModule(
+  () => import('../core/app-runtime/WebApplication.vue'),
+)
+const converterModule = createConverterShellModule(
   () => import('../core/app-runtime/WebApplication.vue'),
 )
 const ledgerModule = createLedgerShellModule(
@@ -50,9 +54,10 @@ const timeModule = createTimeShellModule(
   },
 )
 /** Static first-party composition. Neither model output nor database config can import code. */
-export const applicationModules = shallowReactive<ClientApplicationModule[]>([
+export const applicationModules: ClientApplicationModule[] = shallowReactive<ClientApplicationModule[]>([
   ledgerModule,
   calculatorModule,
+  converterModule,
   calendarModule,
   timeModule,
   profileModule,

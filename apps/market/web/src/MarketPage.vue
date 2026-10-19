@@ -19,6 +19,9 @@ const busy = ref(false)
 const error = ref('')
 const notice = ref('')
 const operationKey = ref(crypto.randomUUID())
+const resourceStatus = computed(() => selected.value ? appCatalog.resources?.[selected.value.installation?.releaseId || selected.value.release.releaseId] : undefined)
+const targetResources = computed(() => selected.value ? appCatalog.resources?.[selected.value.release.releaseId] : undefined)
+const resourceLabel = computed(() => resourceStatus.value?.status === 'ready' ? '本地资源已就绪' : resourceStatus.value?.status === 'preparing' ? `正在准备${resourceStatus.value.total ? ` ${resourceStatus.value.completed || 0}/${resourceStatus.value.total}` : ''}` : resourceStatus.value?.status === 'failed' ? '资源准备失败，打开时可重试修复' : resourceStatus.value?.status === 'unsupported' ? '当前环境使用在线加载' : selected.value?.release.runtime.type === 'shell' ? '随宿主提供' : '首次打开时准备资源')
 const filters = computed(() => [
   { id: 'all' as const, label: '全部', count: appCatalog.entries.length },
   { id: 'installed' as const, label: '已安装', count: appCatalog.entries.filter(isInstalled).length },
@@ -224,7 +227,7 @@ watch(() => [props.focusAppId, props.openRevision, appCatalog.revision] as const
           :icon-variant="displayApp(selected).iconVariant"
         /><div><h3>{{ displayApp(selected).name }}</h3><p>{{ selected.release.kind === 'system' ? '系统应用' : '独立应用' }}<span v-if="selected.release.manifest.skillIds.length"> · 支持 AI 工具</span></p></div></div>
         <p class="market-detail-description">{{ displayApp(selected).description }}</p>
-        <dl class="market-detail-facts"><div><dt>最新版本</dt><dd>v{{ selected.release.manifest.version }}</dd></div><div><dt>安装状态</dt><dd>{{ stateLabel(selected) }}</dd></div></dl>
+        <dl class="market-detail-facts"><div><dt>最新版本</dt><dd>v{{ selected.release.manifest.version }}</dd></div><div><dt>安装状态</dt><dd>{{ stateLabel(selected) }}</dd></div><div><dt>本机资源</dt><dd>{{ resourceLabel }}</dd></div><div v-if="hasUpdate(selected) && targetResources?.status === 'ready'"><dt>更新包</dt><dd>已在后台准备好</dd></div></dl>
         <div v-if="selected.releaseNotes" class="market-release-notes"><h4>更新说明</h4><p>{{ selected.releaseNotes }}</p></div>
         <p v-if="selected.issue || selected.installation?.error" class="market-detail-warning">{{ selected.issue || selected.installation?.error }}</p>
         <div v-if="!isInstalled(selected) || hasUpdate(selected)" class="market-permissions"><h4>{{ hasUpdate(selected) ? '更新后的应用权限' : '安装后允许此应用' }}</h4><ul v-if="selected.release.permissions.length"><li v-for="permission in selected.release.permissions" :key="permission"><AppIcon name="check" :size="14" /><span>{{ permissionLabel(permission) }}</span></li></ul><p v-else>无需额外权限。</p></div>
@@ -244,7 +247,7 @@ watch(() => [props.focusAppId, props.openRevision, appCatalog.revision] as const
         class="market-detail-primary"
         :disabled="busy || isProcessing(selected)"
         @click="confirm()"
-      >{{ busy ? '正在提交…' : isProcessing(selected) ? '正在处理…' : hasUpdate(selected) ? '同意权限并更新' : isInstalled(selected) ? '打开应用' : '同意权限并安装' }}</button></div></template>
+      >{{ busy ? targetResources?.status === 'preparing' ? `准备资源${targetResources.total ? ` ${targetResources.completed || 0}/${targetResources.total}` : '…'}` : '正在提交…' : isProcessing(selected) ? '正在处理…' : hasUpdate(selected) ? '同意权限并更新' : isInstalled(selected) ? '打开应用' : '同意权限并安装' }}</button></div></template>
     </Modal>
     <Modal
       :open="uninstallOpen && Boolean(selected)"

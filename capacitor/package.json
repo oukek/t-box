@@ -8,7 +8,7 @@
     "open:ios": "node ../scripts/native.mjs open ios",
     "open:android": "node ../scripts/native.mjs open android",
     "sync:version": "node scripts/sync-native-version.mjs",
-    "build:web": "pnpm --dir .. pack",
+    "build:web": "pnpm --dir .. run pack && node ../scripts/bundle-native-applications.mjs",
     "copy:web": "node scripts/copy-web-assets.mjs",
     "dev:ios": "node ../scripts/native.mjs dev ios",
     "dev:android": "node ../scripts/native.mjs dev android",
@@ -21,6 +21,7 @@
     "@capacitor/core": "8.5.2",
     "@capacitor/ios": "8.5.2",
     "@capacitor/local-notifications": "^8.3.1",
+    "@t-box/capacitor-app-resources": "workspace:*",
     "@t-box/capacitor-native-scanner": "workspace:*",
     "@t-box/capacitor-wechat-pay": "workspace:*"
   },

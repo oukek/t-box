@@ -1,0 +1,8 @@
+{
+  "appId": "converter",
+  "package": "@t-box/converter-web",
+  "releasePackage": "@t-box/converter-server",
+  "releaseModule": "server/dist/release.js",
+  "releaseExport": "converterRelease",
+  "native": { "bundled": true, "guest": true }
+}

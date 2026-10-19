@@ -2,6 +2,7 @@ import type { ApplicationManifest } from '@t-box/app-contracts'
 import { legacyApplicationIcon as calculatorLegacyIcon } from '@t-box/calculator-contracts'
 import { calendarManifest } from '@t-box/calendar-contracts/index'
 import { legacyApplicationIcon as calendarLegacyIcon } from '@t-box/calendar-contracts/legacy-icon'
+import { converterManifest } from '@t-box/converter-contracts'
 import { legacyApplicationIcon as ledgerLegacyIcon } from '@t-box/ledger-contracts/legacy-icon'
 import { ledgerManifest } from '@t-box/ledger-contracts/manifest'
 import { marketManifest } from '@t-box/market-contracts'
@@ -42,6 +43,7 @@ export { profileManifest } from '@t-box/settings-contracts'
 export const systemApplicationManifests: readonly ApplicationManifest[] = [
   ledgerManifest,
   calculatorManifest,
+  converterManifest,
   calendarManifest,
   timeManifest,
   profileManifest,

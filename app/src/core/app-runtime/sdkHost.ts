@@ -15,12 +15,15 @@ import { backFromApplication, navigation, openApplication } from '../navigation'
 import { chatWebSocketUrl, request } from '../network'
 import { identity } from '../session'
 import { appCatalog } from './catalog'
+import { deviceApplicationScope } from './deviceStorage'
 import {
   chooseApplicationFiles,
   decodeApplicationFile,
   readApplicationFile,
   uploadApplicationFile,
 } from './files'
+import { localBaselineContext } from './localApplications'
+import { isLocalMethod, resolveLocalLaunch } from './localLaunch'
 import { setApplicationBindings } from './resourceBindings'
 import {
   parseApplicationHttpRequest,
@@ -31,7 +34,8 @@ import { availableUpdate, updatePrompts } from './updatePrompts'
 interface HostOptions {
   appId: string
   trusted?: boolean
-  expected?: Pick<ApplicationContext, 'releaseId' | 'generation' | 'subject'>
+  expected?: Pick<ApplicationContext, 'releaseId' | 'generation' | 'subject'> &
+    { localOnly?: boolean }
   params?: Record<string, string>
 }
 const platform = () =>
@@ -141,6 +145,9 @@ export function createHostTransport(options: HostOptions): AppTransport {
       if (!bound || closed) {
         return
       }
+      if (options.expected?.localOnly) {
+        return
+      }
       const installation = appCatalog.entries.find(
         (e) => e.release.appId === options.appId,
       )?.installation
@@ -163,13 +170,23 @@ export function createHostTransport(options: HostOptions): AppTransport {
       throw SdkErrorCode.SESSION_CHANGED()
     }
   }
-  async function binding(signal?: AbortSignal): Promise<ApplicationContext> {
+  async function binding(signal?: AbortSignal, local = false): Promise<ApplicationContext> {
     const started = epoch
     assertEpoch(started)
-    if (!identity.user) {
-      throw SdkErrorCode.AUTH_REQUIRED('请先登录', 401)
+    const currentPlatform = platform()
+    const targetPlatform = currentPlatform === 'ios' || currentPlatform === 'android' ? currentPlatform : 'web'
+    const cached = local
+      ? options.expected?.localOnly
+        ? localBaselineContext(options.appId, options.expected, targetPlatform)
+        : resolveLocalLaunch(appCatalog.entries, options.appId, targetPlatform)?.context
+      : undefined
+    if (!identity.user && !(cached && options.expected?.localOnly)) {
+      throw SdkErrorCode.AUTH_REQUIRED('此功能需要登录并联网后使用', 401)
     }
-    const context = (
+    if (!local && options.expected?.localOnly) {
+      throw SdkErrorCode.APP_UPDATE_REQUIRED(undefined, 409)
+    }
+    const context = cached ?? (
       await request<{ data: ApplicationContext }>(
         `/applications/${encodeURIComponent(options.appId)}/context?platform=${platform()}`,
         { signal },
@@ -197,13 +214,14 @@ export function createHostTransport(options: HostOptions): AppTransport {
     ) {
       throw SdkErrorCode.PROTOCOL_MISMATCH()
     }
-    const storage = options.trusted && module?.sdk?.storage
-    const events = Object.keys(module?.sdk?.events ?? {}).filter(
+    const storage = options.trusted && module?.sdk?.storage && context.access !== 'local'
+    const events = Object.keys(context.access === 'local' ? {} : module?.sdk?.events ?? {}).filter(
       (channel) =>
         options.trusted || context.permissions.includes(`events.${channel}`),
     )
     bound = {
       ...context,
+      access: context.access ?? 'online',
       hostUrl: location.origin + location.pathname,
       supportsAppNavigation: true,
       params: { ...(options.params ?? {}) },
@@ -455,7 +473,14 @@ export function createHostTransport(options: HostOptions): AppTransport {
       if (method === 'auth.session' && !identity.user) {
         return session() as T
       }
-      const context = await binding(callOptions.signal)
+      if (!isLocalMethod(method) && !identity.user) {
+        throw SdkErrorCode.AUTH_REQUIRED('此功能需要登录并联网后使用', 401)
+      }
+      if (!isLocalMethod(method) && !navigator.onLine) {
+        throw SdkErrorCode.NETWORK_REQUIRED()
+      }
+      const context = await binding(callOptions.signal, isLocalMethod(method))
+      assertEpoch(started)
       if (!context.capabilities.includes(method)) {
         throw SdkErrorCode.CAPABILITY_UNAVAILABLE(undefined, 403)
       }
@@ -609,13 +634,14 @@ export function createHostTransport(options: HostOptions): AppTransport {
         if (typeof a.key !== 'string' || !/^[\w.-]{1,80}$/.test(a.key)) {
           throw SdkErrorCode.INVALID_STORAGE_KEY()
         }
-        const key = `tbox.app.${options.appId}.${context.subject}.${a.key}`
+        const scope = deviceApplicationScope(options.appId, identity.user?.id, context.subject)
+        const key = `tbox.app.${options.appId}.${scope}.${a.key}`
         if (method === 'storage.get') {
           const saved = localStorage.getItem(key)
           const migrations = module?.sdk?.legacyStorageKeys
           const legacyKey =
-            migrations && Object.hasOwn(migrations, a.key)
-              ? migrations[a.key]?.(identity.user!.id)
+            identity.user && migrations && Object.hasOwn(migrations, a.key)
+              ? migrations[a.key]?.(identity.user.id)
               : undefined
           let serialized = saved
           if (serialized === null && legacyKey) {

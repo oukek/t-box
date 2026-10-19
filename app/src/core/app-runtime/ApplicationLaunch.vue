@@ -3,11 +3,13 @@ import type { ApplicationManifest } from '@t-box/shared'
 import type { LaunchStage } from './launchState'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { advanceLaunchProgress } from './launchState'
+import { advanceLaunchProgress, launchStageLabels } from './launchState'
 
-const props = defineProps<{ application: ApplicationManifest, stage: LaunchStage }>()
+const props = defineProps<{ application: ApplicationManifest, stage: LaunchStage, resourceProgress?: { completed: number, total: number } }>()
 const visible = ref(false)
 const progress = ref(0.08)
+const elapsed = ref(0)
+let startedAt = 0
 let timer: ReturnType<typeof setInterval> | undefined
 let reveal: ReturnType<typeof setTimeout> | undefined
 let finish: ReturnType<typeof setTimeout> | undefined
@@ -36,6 +38,8 @@ watch(() => props.stage, (stage) => {
     clearTimers()
     running = true
     progress.value = 0.08
+    startedAt = performance.now()
+    elapsed.value = 0
     // Cached applications can open without flashing a transient screen.
     reveal = setTimeout(() => {
       visible.value = true
@@ -43,9 +47,15 @@ watch(() => props.stage, (stage) => {
     }, 100)
     timer = setInterval(() => {
       progress.value = advanceLaunchProgress(progress.value, props.stage)
+      elapsed.value = Math.floor((performance.now() - startedAt) / 1000)
     }, 120)
   }
 }, { immediate: true })
+watch(() => props.resourceProgress, (value) => {
+  if (value && value.total > 0) {
+    progress.value = Math.max(progress.value, 0.25 + value.completed / value.total * 0.37)
+  }
+})
 onBeforeUnmount(clearTimers)
 </script>
 
@@ -67,6 +77,8 @@ onBeforeUnmount(clearTimers)
       </div>
       <div class="application-launch-footer">
         <span class="sr-only">正在打开{{ application.name }}…</span>
+        <span class="application-launch-caption">{{ launchStageLabels[stage] }}<template v-if="resourceProgress && stage === 'resources'"> {{ resourceProgress.completed }}/{{ resourceProgress.total }}</template></span>
+        <span v-if="elapsed >= 5 && stage !== 'ready'" class="application-launch-wait">已等待 {{ elapsed }} 秒</span>
         <div class="application-launch-track" aria-hidden="true"><i :style="{ transform: `scaleX(${progress})` }" /></div>
       </div>
     </div>
@@ -107,6 +119,20 @@ onBeforeUnmount(clearTimers)
   overflow: hidden;
   border-radius: 3px;
   background: #dfe7e8;
+}
+.application-launch-caption {
+  display: block;
+  margin-bottom: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #657780;
+}
+.application-launch-wait {
+  display: block;
+  text-align: center;
+  color: #8b989e;
+  font-size: 11px;
+  margin: -5px 0 12px;
 }
 .application-launch-track i {
   display: block;

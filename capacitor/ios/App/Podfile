@@ -12,6 +12,7 @@ def capacitor_pods
   pod 'Capacitor', :path => '../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios'
   pod 'CapacitorCordova', :path => '../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios'
   pod 'CapacitorLocalNotifications', :path => '../../../node_modules/.pnpm/@capacitor+local-notifications@8.3.1_@capacitor+core@8.5.2/node_modules/@capacitor/local-notifications'
+  pod 'TBoxCapacitorAppResources', :path => '../../../capacitor-plugins/capacitor-app-resources'
   pod 'TBoxCapacitorNativeScanner', :path => '../../../capacitor-plugins/capacitor-native-scanner'
   pod 'TBoxCapacitorWechatPay', :path => '../../../capacitor-plugins/capacitor-wechat-pay'
 end

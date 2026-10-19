@@ -4,6 +4,8 @@ import {
 } from '@t-box/shared'
 import { onScopeDispose, reactive, ref, watch } from 'vue'
 import { applicationModules } from '../../applications/registry'
+import { appCatalog } from '../../core/app-runtime/catalog'
+import { localApplications, localEntries, mergeLocalEntries } from '../../core/app-runtime/localApplications'
 import { request, RequestError } from '../../core/network'
 import { identity } from '../../core/session'
 
@@ -42,6 +44,43 @@ export function useDesktop() {
   let controller = new AbortController()
   let desired: string[] | undefined
   let pumping = false
+  const orderKey = () => `tbox.desktop.local-order.v1.${identity.user?.id}:${device.value}`
+  const withLocalTools = (applications: DesktopApplication[]) => {
+    for (const entry of localEntries(identity.user?.id, appCatalog.entries)) {
+      const index = applications.findIndex((app) => app.manifest.id === entry.release.appId)
+      if (index < 0 || applications[index]?.installation.status !== 'active') {
+        const local: DesktopApplication = { manifest: entry.release.manifest, installation: { kind: 'system', uninstallable: false, status: 'active', error: null }, aiAvailable: false }
+        if (index < 0) {
+          applications.push(local)
+        } else {
+          applications[index] = local
+        }
+      }
+    }
+    return applications
+  }
+  const restoreLocal = () => {
+    const applications: DesktopApplication[] = mergeLocalEntries(appCatalog.entries.filter((entry) => entry.installation?.status === 'active'), identity.user?.id).map((entry) => ({
+      manifest: (entry.installedRelease ?? entry.release).manifest,
+      installation: { kind: entry.release.kind, uninstallable: entry.release.kind === 'user', status: 'active', error: null },
+      aiAvailable: false,
+    }))
+    if (!applications.length) {
+      return false
+    }
+    const ids = applications.map((app) => app.manifest.id)
+    let saved: string[] = []
+    try {
+      const value: unknown = JSON.parse(localStorage.getItem(orderKey()) || '[]')
+      if (Array.isArray(value)) {
+        saved = value.filter((id): id is string => typeof id === 'string' && ids.includes(id))
+      }
+    } catch { /* Fall back to installed catalog order. */ }
+    state.applications = applications
+    state.appIds = [...new Set([...saved, ...ids])]
+    state.ready = true
+    return true
+  }
   const load = async () => {
     const generation = epoch
     state.loading = true
@@ -55,9 +94,14 @@ export function useDesktop() {
         return
       }
       Object.assign(state, result.data, { ready: true })
+      state.applications = withLocalTools(state.applications)
+      state.appIds = [...new Set([...state.appIds, ...state.applications.map((app) => app.manifest.id)])]
+      try {
+        localStorage.setItem(orderKey(), JSON.stringify(result.data.appIds))
+      } catch { /* Device-local display order is optional. */ }
     } catch (cause) {
       if (generation === epoch && !controller.signal.aborted) {
-        state.error = cause instanceof Error ? cause.message : '桌面读取失败'
+        state.error = restoreLocal() ? '' : (cause instanceof Error ? cause.message : '桌面读取失败')
       }
     } finally {
       if (generation === epoch) {
@@ -84,11 +128,20 @@ export function useDesktop() {
         appIds: systemApplicationManifests.map((m) => m.id),
       })
       if (identity.user) {
+        restoreLocal()
         void load()
+      } else if (localApplications.releases.length) {
+        restoreLocal()
       }
     },
     { immediate: true },
   )
+  watch(() => appCatalog.revision, () => {
+    if ((identity.user || localApplications.releases.length) && (!identity.user || !navigator.onLine || !state.ready)) {
+      restoreLocal()
+    }
+  })
+  window.addEventListener('online', changed)
   const save = async () => {
     if (pumping || !state.ready || !identity.user) {
       return
@@ -155,13 +208,25 @@ export function useDesktop() {
     if (!state.ready || JSON.stringify(ids) === JSON.stringify(state.appIds)) {
       return
     }
+    if (!identity.user) {
+      state.appIds = [...ids]
+      try {
+        localStorage.setItem(orderKey(), JSON.stringify(ids))
+      } catch { /* Guests retain a usable in-memory layout if storage is denied. */ }
+      return
+    }
+    if (!navigator.onLine || !state.catalogRevision) {
+      state.error = '桌面排序需要联网保存，请连接网络后重试'
+      state.appIds = [...state.appIds]
+      return
+    }
     desired = [...ids]
     state.appIds = [...ids]
     void save()
   }
   const retry = () => (desired ? void save() : void load())
   const refreshTimer = setInterval(() => {
-    if (identity.user && !state.loading && state.applications.some((app) => app.installation.status === 'installing' || (app.installation.kind === 'system' && app.installation.status === 'failed'))) {
+    if (navigator.onLine && identity.user && !state.loading && state.applications.some((app) => app.installation.status === 'installing' || (app.installation.kind === 'system' && app.installation.status === 'failed'))) {
       void load()
     }
   }, 10_000)
@@ -171,6 +236,7 @@ export function useDesktop() {
     controller.abort()
     query.removeEventListener('change', onResize)
     window.removeEventListener('tbox:applications-changed', changed)
+    window.removeEventListener('online', changed)
   })
   return { state, device, reorder, retry }
 }

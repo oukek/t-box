@@ -4,6 +4,7 @@ import { syncDeviceReminders } from '@t-box/device-reminders/client'
 import ReminderSettings from '@t-box/device-reminders/ReminderSettings.vue'
 import {
   commonTimezones,
+  parseTimerInput,
   timerState,
   timeSnapshot,
   validTimezone,
@@ -33,6 +34,7 @@ const now = ref(Date.now())
 const offset = ref(0)
 const synced = ref(false)
 const error = ref('')
+const synchronizationError = ref('')
 const busy = ref(false)
 const timers = ref<AppTimer[]>([])
 const creating = ref(false)
@@ -97,28 +99,36 @@ watch(
       ]),
     ]
     if (id) {
-      try {
-        const saved = preferences.clocks
-        if (
-          Array.isArray(saved) &&
-          saved.length <= 12 &&
-          saved.every((z) => {
-            try {
-              validTimezone(z)
-              return true
-            } catch {
-              return false
-            }
-          })
-        ) {
-          clocks.value = [...new Set(saved)]
-        }
-      } catch {}
+      restoreClocks()
       void refresh()
     }
   },
   { immediate: true, flush: 'sync' },
 )
+function restoreClocks() {
+  try {
+    const saved = preferences.clocks
+    if (
+      Array.isArray(saved) &&
+      saved.length <= 12 &&
+      saved.every((z) => {
+        try {
+          validTimezone(z)
+          return true
+        } catch {
+          return false
+        }
+      })
+    ) {
+      clocks.value = [...new Set(saved)]
+    }
+  } catch {}
+}
+watch(() => preferences.loaded, (loaded) => {
+  if (loaded && preferenceOwner && preferenceOwner === identity.user?.id) {
+    restoreClocks()
+  }
+})
 watch(
   clocks,
   () => {
@@ -135,6 +145,10 @@ watch(
   { deep: true },
 )
 async function refresh() {
+  if (!identity.signedIn) {
+    timers.value = []
+    return
+  }
   const ticket = ++loadId
   try {
     const start = Date.now()
@@ -145,10 +159,10 @@ async function refresh() {
     offset.value = Date.parse(result.data.serverNow) - (start + Date.now()) / 2
     synced.value = true
     timers.value = result.data.timers
-    error.value = ''
+    synchronizationError.value = ''
   } catch (cause) {
     if (ticket === loadId) {
-      error.value = cause instanceof Error ? cause.message : '时间服务读取失败'
+      synchronizationError.value = cause instanceof Error ? cause.message : '倒计时读取失败'
     }
   }
 }
@@ -220,16 +234,13 @@ async function create() {
     Number(hours.value) * 3600 +
     Number(minutes.value) * 60 +
     Number(seconds.value)
-  if (durationSeconds < 1 || durationSeconds > 604800) {
-    error.value = '倒计时时长需为 1 秒至 7 天'
-    return
-  }
-  busy.value = true
   try {
-    await timeApi.create({
+    const input = parseTimerInput({
       label: label.value.trim() || '倒计时',
       durationSeconds,
     })
+    busy.value = true
+    await timeApi.create(input)
     creating.value = false
     label.value = ''
     await refresh()
@@ -294,6 +305,11 @@ async function remove() {
     >
       {{ error }}
     </p>
+    <p
+      v-if="tab === 'timers' && synchronizationError"
+      class="temporal-error"
+      role="alert"
+    >{{ synchronizationError }}</p>
     <template v-if="tab === 'clock'">
       <div class="time-now">
         <div class="time-clock-heading">
@@ -349,6 +365,10 @@ async function remove() {
         时区自动遵循夏令时。世界时钟保存在此设备，每个账号独立。
       </p>
     </template><template v-else-if="tab === 'timers'">
+      <p v-if="!identity.signedIn" class="temporal-note">
+        云端倒计时需要联网并登录；世界时钟、秒表和时间换算可直接使用。
+        <button class="button button-secondary" @click="application.client.navigation.open({ appId: 'profile' })">登录</button>
+      </p>
       <div class="time-section-heading">
         <div>
           <h2>把时间留给重要的事</h2>

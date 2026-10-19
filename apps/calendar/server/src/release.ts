@@ -13,4 +13,5 @@ export const calendarRelease: AppRelease = {
   permissions: ['api.request', 'storage', 'device.reminders'],
   clientTools: ['calendar_confirm', 'calendar_reminders_sync'],
   defaultInstalled: true,
+  guestAccess: 'local',
 }

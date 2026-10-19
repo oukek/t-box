@@ -5,6 +5,7 @@ import {
 } from '@t-box/errors'
 
 const apiErrors = defineApiErrors({
+  APP_ROLLBACK_REJECTED: { statusCode: 409, message: '无法安全回退此版本，请前往应用市场修复或更新' },
   ALREADY_EXISTS: { statusCode: 409, message: '此记录已存在' },
   BAD_REQUEST: { statusCode: 400, message: '请求格式不正确，请使用 application/json' },
   PAYLOAD_TOO_LARGE: { statusCode: 413, message: '请求内容过大' },

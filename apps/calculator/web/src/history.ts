@@ -42,11 +42,18 @@ export function loadHistory(id: string): CalculationHistory[] {
   }
 }
 export function saveHistory(id: string, history: CalculationHistory[]) {
+  runtime.historyRevision++
   runtime.initialHistory = history
   void persistHistory?.(history).catch(() => {})
   try {
     localStorage.setItem(key(id), JSON.stringify(history))
   } catch {
     /* Calculator remains usable without browser storage. */
+  }
+}
+/** A slow bridge reply cannot restore records that the user has just cleared or replaced. */
+export function restoreHistory(id: string, value: unknown, revision: number) {
+  if (runtime.subject === id && runtime.historyRevision === revision) {
+    runtime.initialHistory = value
   }
 }

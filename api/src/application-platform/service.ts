@@ -15,7 +15,7 @@ import { APP_SDK_VERSION, validateRelease } from '@t-box/app-contracts'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { jsonDocument } from '@t-box/server-foundation/persistence/columns'
 import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
-import { IsNull } from 'typeorm'
+import { In, IsNull } from 'typeorm'
 import {
   ApplicationInstallationEntity,
   ApplicationLifecycleOperationEntity,
@@ -24,7 +24,7 @@ import {
   ApplicationReleaseEntity,
 } from '../db/records/applications-entities.js'
 import { ErrorCode } from '../error-codes.js'
-import { ApplicationArtifacts } from './artifacts.js'
+import { publicLocalReleases } from './public-local.js'
 
 const json = <T>(value: unknown): T =>
   typeof value === 'string' ? JSON.parse(value) : (value as T)
@@ -476,6 +476,24 @@ export class ApplicationPlatform {
     }
   }
 
+  async publicLocalCatalog(): Promise<AppRelease[]> {
+    await this.initialize()
+    const allowed = new Set(this.releases.filter((release) => release.guestAccess === 'local').map((release) => release.appId))
+    if (!allowed.size) {
+      return []
+    }
+    const applications = await this.source.getRepository(ApplicationRegistryEntity).find({ where: { app_id: In([...allowed]), kind: 'system' }, select: { app_id: true } })
+    if (!applications.length) {
+      return []
+    }
+    const rows = await this.source.getRepository(ApplicationReleaseEntity).find({
+      where: { app_id: In(applications.map((entry) => entry.app_id)), published: 1, status: 'published' },
+      select: { definition: true },
+      order: { app_id: 'ASC' },
+    })
+    return publicLocalReleases(rows.map((row) => json<AppRelease>(row.definition)), allowed, process.env.NODE_ENV !== 'production')
+  }
+
   async catalog(userId: string): Promise<MarketEntry[]> {
     await this.bootstrap(userId)
     const rows = await this.source
@@ -484,6 +502,7 @@ export class ApplicationPlatform {
         'r.definition,a.kind,i.user_id,i.app_id,i.release_id,i.target_release_id,i.generation,i.status,i.grants,i.operation_id,i.error,JSON_UNQUOTE(JSON_EXTRACT(installed.definition,\'$.manifest.version\')) AS installed_version,r.release_notes AS latest_release_notes,JSON_EXTRACT(installed.definition,\'$.updatePrompt\') AS installed_update_prompt',
       )
       .from('application_releases', 'r')
+      .addSelect('installed.definition', 'installed_definition')
       .innerJoin('application_registry', 'a', 'a.app_id=r.app_id')
       .leftJoin(
         'application_installations',
@@ -517,6 +536,7 @@ export class ApplicationPlatform {
           installed_version: string | null
           latest_release_notes: string
           installed_update_prompt: string | null
+          installed_definition: AppRelease | string | null
         }
     >()
     return rows.map((r) => ({
@@ -525,6 +545,15 @@ export class ApplicationPlatform {
         kind: r.kind as AppRelease['kind'],
       },
       releaseNotes: String(r.latest_release_notes || ''),
+      ...(r.user_id && r.installed_definition ? { installedRelease: json<AppRelease>(r.installed_definition) } : {}),
+      ...(r.user_id && r.status === 'active' && r.installed_definition
+        ? {
+            localBinding: {
+              subject: this.subject(userId, String(r.app_id)),
+              storage: json<string[]>(r.grants as string).includes('storage'),
+            },
+          }
+        : {}),
       ...(r.installed_update_prompt
         ? {
             installedUpdatePrompt: json<
@@ -665,13 +694,13 @@ export class ApplicationPlatform {
     releaseId: string,
     key: string,
     grants: string[],
-    options: { background?: boolean } = {},
+    options: { background?: boolean, rollbackFrom?: string } = {},
   ) {
     await this.initialize()
     if (!/^[\w-]{1,80}$/.test(key)) {
       throw ErrorCode.INVALID_REQUEST_KEY()
     }
-    const requestHash = hash({ action, releaseId, grants: [...grants].sort() })
+    const requestHash = hash({ action, releaseId, grants: [...grants].sort(), ...(options.rollbackFrom ? { rollbackFrom: options.rollbackFrom } : {}) })
     const op = await this.source.transaction(async (db) => {
       await db
         .getRepository(AppUserEntity)
@@ -735,6 +764,20 @@ export class ApplicationPlatform {
       if (row?.operation_id) {
         throw ErrorCode.APP_OPERATION_PENDING()
       }
+      if (options.rollbackFrom) {
+        // Revalidate inside the same installation lock: stale devices cannot undo a later update.
+        if (action !== 'update' || row?.status !== 'active' || row.release_id !== options.rollbackFrom || releaseId === options.rollbackFrom) {
+          throw ErrorCode.APP_ROLLBACK_REJECTED()
+        }
+        const prior = await db.getRepository(ApplicationLifecycleOperationEntity).findOne({
+          select: { id: true },
+          where: { user_id: userId, app_id: appId, release_id: releaseId, action: In(['install', 'update']), status: 'completed' },
+        })
+        const currentGrants = json<string[]>(row.grants)
+        if (!prior || !Array.isArray(currentGrants) || grants.some((permission) => !currentGrants.includes(permission))) {
+          throw ErrorCode.APP_ROLLBACK_REJECTED()
+        }
+      }
       const target = await this.release(
         action === 'uninstall' && row ? row.release_id : releaseId,
         db,
@@ -756,10 +799,12 @@ export class ApplicationPlatform {
       }
       if (action !== 'uninstall') {
         const pub = await db.getRepository(ApplicationReleaseEntity).findOne({
-          select: { published: true },
+          select: { published: true, status: true },
           where: { release_id: target.releaseId },
         })
-        if (!pub?.published) {
+        // Normal publication retires the previous immutable version. A proven historical install
+        // can roll back to it; a draft/submission can never become executable via rollback.
+        if (!pub?.published && !(options.rollbackFrom && pub?.status === 'retired')) {
           throw ErrorCode.APP_RELEASE_UNPUBLISHED()
         }
         if (
@@ -1172,19 +1217,8 @@ export class ApplicationPlatform {
     ) {
       throw ErrorCode.APP_RUNTIME_UNSUPPORTED()
     }
-    if (
-      process.env.NODE_ENV === 'production' ||
-      !release.runtime.integrity.endsWith('0'.repeat(64))
-    ) {
-      try {
-        await new ApplicationArtifacts().verify(
-          appId,
-          release.runtime.integrity.slice(7),
-        )
-      } catch {
-        throw ErrorCode.APP_ARTIFACT_UNAVAILABLE()
-      }
-    }
+    // Publication verifies the immutable artifact. Devices verify downloaded bytes.
+    // Never download an entire package again in the authenticated launch path.
     return {
       protocol: 1,
       appId,
@@ -1194,6 +1228,7 @@ export class ApplicationPlatform {
       origin: new URL(release.runtime.entryUrl).origin,
       subject: this.subject(userId, appId),
       clientTools: release.clientTools,
+      integrity: release.runtime.integrity,
       permissions: installation.grants,
     }
   }

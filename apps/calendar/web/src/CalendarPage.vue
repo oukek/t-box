@@ -20,6 +20,8 @@ import { calendarApi } from './api'
 import CalendarBackup from './CalendarBackup.vue'
 import CalendarEventEditor from './CalendarEventEditor.vue'
 import { holidayYears, loadHolidayYears } from './holiday-cache'
+import { identity } from './runtime'
+import { application } from './sdk'
 import '@t-box/ui-kit/temporal.css'
 import './calendar.css'
 
@@ -221,6 +223,10 @@ function open(o: CalendarOccurrence) {
   error.value = ''
 }
 function newEvent() {
+  if (!identity.signedIn) {
+    error.value = '创建日历事件需要联网并登录，月历、农历和节气可直接查看'
+    return
+  }
   editing.value = undefined
   editorOpen.value = true
 }
@@ -234,6 +240,12 @@ function edit() {
   editorOpen.value = true
 }
 async function load() {
+  if (!identity.signedIn) {
+    occurrences.value = []
+    events.value = []
+    loading.value = false
+    return
+  }
   const ticket = ++loadVersion
   loading.value = true
   error.value = ''
@@ -369,6 +381,10 @@ async function remove() {
         <AppIcon name="plus" :size="16" /><span>新建</span>
       </button>
     </div>
+    <p v-if="!identity.signedIn" class="temporal-note">
+      月历、农历和节气可离线查看；日历事件和纪念日需要登录。
+      <button class="button button-secondary" @click="application.client.navigation.open({ appId: 'profile' })">登录</button>
+    </p>
     <div class="calendar-tools">
       <label class="calendar-search"><AppIcon name="search" :size="16" /><input
         v-model="search"

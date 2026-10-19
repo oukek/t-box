@@ -3,6 +3,13 @@ import {
 } from '@t-box/errors'
 
 const internalErrors = defineInternalErrors('APP', {
+  INTERNAL_INVALID_NATIVE_BUNDLES: '内置应用资源清单无效，请重新打包宿主应用',
+  INTERNAL_INVALID_LOCAL_APPLICATIONS: '本地工具目录无效，请联网刷新后重试',
+  INTERNAL_DEVELOPMENT_APP_UNAVAILABLE: '应用开发服务未启动，请运行 pnpm dev 或启动对应应用的 dev 服务',
+  INTERNAL_INVALID_APPLICATION_PACKAGE: '应用资源地址或摘要无效，请联系管理员重新发布',
+  INTERNAL_APPLICATION_VERSION_QUARANTINED: '此版本启动失败，已停止重复加载，请修复资源或更新应用',
+  INTERNAL_APPLICATION_RESOURCES_TIMEOUT: '应用资源准备超时，请检查网络后重试，原版本仍然保留',
+  INTERNAL_APPLICATION_RESOURCES_FAILED: '应用资源下载或校验失败，原版本仍然保留',
   INTERNAL_UNSUPPORTED_APPLICATION_PROTOCOL: '操作执行失败',
   INTERNAL_DUPLICATE_APPLICATION: '操作执行失败',
   INTERNAL_INVALID_FRONTEND_INTERACTION_CONTRACT: '操作执行失败',
