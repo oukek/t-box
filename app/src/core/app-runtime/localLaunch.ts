@@ -21,6 +21,7 @@ export function resolveLocalLaunch(entries: readonly MarketEntry[], appId: strin
     sdkVersion: APP_SDK_VERSION,
     appId,
     releaseId: installed.releaseId,
+    applicationVersion: release.manifest.version,
     generation: installed.generation,
     subject: binding.subject,
     platform,

@@ -181,7 +181,7 @@ test('frontend tools keep their registration protocol alongside SDK calls', asyn
   }
 })
 
-test('JSON attachment requests have a bounded larger budget without expanding ordinary tool calls', async () => {
+test('file requests and app invocations have separate bounded budgets', async () => {
   const f = host(async (data, port) => {
     port.postMessage({ type: 'response', id: data.id, ok: true, data: { accepted: true } })
   })
@@ -191,7 +191,8 @@ test('JSON attachment requests have a bounded larger budget without expanding or
       method: 'POST',
       body: { base64: 'a'.repeat(100_000) },
     }), { accepted: true })
-    await assert.rejects(connected.client.api.invoke('ordinary', { padding: 'a'.repeat(64_001) }), /过大/)
+    assert.deepEqual(await connected.client.api.invoke('project_save', { frames: Array.from({ length: 1000 }, (_, id) => ({ id, caption: 'a'.repeat(200) })) }), { accepted: true })
+    await assert.rejects(connected.client.api.invoke('project_save', { padding: 'a'.repeat(1024 * 1024) }), /过大/)
     await assert.rejects(connected.client.api.request('/ledgers/book/attachment-resources', {
       method: 'POST',
       body: { base64: 'a'.repeat(15 * 1024 * 1024) },

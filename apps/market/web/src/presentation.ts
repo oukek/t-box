@@ -18,9 +18,14 @@ const permissions: Record<string, string> = {
   'storage': '保存应用偏好与本地记录',
   'api.request': '访问本应用的数据',
   'files': '上传与读取你选择的文件',
+  'files.private': '按应用内权限访问私有照片和附件',
   'resources.bindings': '关联本应用中的资源',
   'device.reminders': '同步设备提醒',
   'events.books': '接收账本变更通知',
   'profile.read': '读取你的昵称',
 }
 export const permissionLabel = (permission: string) => permissions[permission] || permission
+/** Keep every executable grant intact; summarize app-owned methods without leaking RPC names into consent UI. */
+export function permissionItems(entry: MarketApp) {
+  return [...new Set(entry.release.permissions.map((permission) => permissions[permission] || (permission.startsWith(`${entry.release.appId}.`) ? `访问「${entry.release.manifest.name}」内的数据与功能` : permission.startsWith('events.') ? '接收本应用的数据变更通知' : permission)))]
+}

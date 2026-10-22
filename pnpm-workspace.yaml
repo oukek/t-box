@@ -15,6 +15,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+  sharp: true
 
 minimumReleaseAgeExclude:
   - '@playwright/test@1.64.1'

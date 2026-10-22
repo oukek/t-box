@@ -22,28 +22,40 @@ t-box/
 
 ## 本地启动
 
-使用 Node.js 24.15+、pnpm 11.18.0。MySQL 与 Redis 使用本机已有服务。
+使用 Node.js 24.15+、pnpm 11.18.0。先启动 MySQL；Redis 可选，本机已配置 Redis 时也应保持运行。
+
+**日常开发只需在项目根目录运行：**
+
+```bash
+pnpm dev
+```
+
+启动器检查依赖、构建 Node 依赖与应用声明，然后先启动 API，健康检查通过后再启动主站、管理后台、全部独立应用和应用资源服务。看到「API 就绪」和 Vite 地址后打开页面。终端保持运行，按 Ctrl+C 一起停止；不要另外重复启动同一套服务。
+
+**只有首次使用全新空数据库时**才执行以下初始化步骤：
 
 ```bash
 pnpm install
 # 首次拉取项目需要复制 api/.env.example 为 api/.env 并填写连接信息。
-# 当前工作目录已配置好用户提供的本地连接信息。
+# 当前工作目录已有 api/.env，不需要覆盖。
 pnpm db:init
 pnpm admin:init    # 首次创建管理员，已有账号时不重置
 pnpm user:init     # 可选：创建首个普通账号及个人账本，已有用户时不修改
 pnpm dev
 ```
 
-- 前端：<http://localhost:5173>，Vite 同时监听局域网地址。
-- 管理后台：<http://localhost:5175>，独立构建与部署。
+- 前端：<http://127.0.0.1:5173>，Vite 同时监听局域网地址。
+- 管理后台：<http://127.0.0.1:5175>，独立构建与部署。
 - API：<http://127.0.0.1:3000/api/v1>，默认仅监听本机。
 - 健康检查：<http://127.0.0.1:3000/api/v1/health>。
 
-`pnpm dev` 同时启动应用、管理后台的 Vite HMR 和 API 的 TypeScript 文件监听。前端 `/api` 请求由 Vite 转发到本机 API，因此手机调试无需直接访问 API 端口。
+`pnpm dev` 包含全部子应用的 Vite HMR；API 使用一个源码监听器直接加载 workspace 源码，避免多个编译器同时改写 dist 导致反复重启。前端 `/api` 请求由 Vite 转发到本机 API，因此手机调试无需直接访问 API 端口。子应用端口 5176–5181 是宿主内部使用的入口，请通过主站 OS 桌面打开应用。
 
-单独启动后端，在项目根目录运行 `pnpm dev:api`；前端和管理后台分别用 `pnpm dev:app`、`pnpm dev:admin`。首次安装后先运行 `pnpm build:contracts`，或直接使用会自动按依赖顺序构建应用包与 SDK 的 `pnpm dev`。不要同时运行两份 API，以免占用 3000 端口。
+单独启动后端，在项目根目录运行 `pnpm dev:api`；前端和管理后台分别用 `pnpm dev:app`、`pnpm dev:admin`。拆开启动时还需按用途运行 `pnpm dev:apps` 和 `pnpm serve:apps`；通常直接使用 `pnpm dev` 即可，不需要另开 `pnpm dev:packages`。
 
 `db:init` 创建不存在的数据库并执行当前完整初始化，重复运行不修改数据或配置，不插入演示账单。旧开发库或旧迁移失败留下的库不能直接接管，请改用新库；不会自动清空原库。详见 [数据库初始化](docs/database-initialization.md)。数据库密码只保存在 `api/.env`，该文件已经加入 `.gitignore`；前端环境变量中不要放数据库连接信息。
+
+**当前本机的已有开发库已保留并补齐宝宝日记扩展表，日常启动不需要再执行 `db:init` 或升级命令。** 从旧版本升级与初始化新库是两条不同流程，请先看 [数据库初始化与升级](docs/database-initialization.md)。启动排错、端口和本地计算边界见 [本地开发说明](docs/local-execution-and-development.md)。
 
 本地配置 MySQL 和可选 Redis，使用 [api/.env.example](api/.env.example)；生产还需在 PM2 服务器填写业务文件 OSS AccessKey，地域和 Bucket 由 Actions 自动写入发布包。用户文件、AI 图片、记账附件及分类图标统一存 `tboxos/uploads/resources/`，数据库只保存相对路径。网站发布凭据和应用导入 Token 在 GitHub 配置，微信支付与 AI 密钥在后台填写。跨域默认开放；全部配置见 [API 环境配置](docs/api-environment.md)，生产按 [首次部署步骤](docs/first-deployment.md) 操作。
 
@@ -232,3 +244,7 @@ API 默认监听 `127.0.0.1`，HTTP 和 WebSocket 来源默认开放，后台回
 [统一 SDK 与应用脚手架](docs/application-sdk.md)、[成本与并发](docs/ai-cost-controls.md)、[退款与渠道对账](docs/payment-refunds-and-reconciliation.md)、[账号、通知、离线与存储](docs/account-and-offline.md)说明各自的权限、故障与验收边界。
 
 错误工厂、TypeORM 访问边界与自动检查见 [错误与数据访问规范](docs/errors-and-data-access.md)。
+
+### 宝宝日记应用
+
+[宝宝日记](apps/baby-diary/README.md) 是可安装/卸载的独立用户应用，支持多宝宝、成长记录、私有照片、共享权限、创意动画和服务端 AI 工具。已有开发库先按 [数据库增量升级说明](docs/database-initialization.md#宝宝日记增量升级) 执行升级，生产需配置独立私有附件 Bucket。

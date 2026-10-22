@@ -19,13 +19,15 @@ export function ossResourceBackend(
   return `oss-${createHash('sha256').update(`${options.region}/${options.bucket}`).digest('hex').slice(0, 24)}`
 }
 export class OssResourceStorage implements ResourceStorage {
-  readonly origin: string
+  readonly origin: string | undefined
+  readonly prefix: string
   readonly client: Pick<OSS, 'put' | 'get' | 'delete'>
   constructor(
-    options: OssResourceOptions,
+    options: OssResourceOptions & { private?: boolean },
     client?: OssResourceStorage['client'],
   ) {
-    this.origin = `https://${options.bucket}.oss-${options.region}.aliyuncs.com`
+    this.origin = options.private ? undefined : `https://${options.bucket}.oss-${options.region}.aliyuncs.com`
+    this.prefix = options.private ? 'private/application-files' : RESOURCE_OSS_PREFIX
     const configuration = {
       ...options,
       region: `oss-${options.region}`,
@@ -38,11 +40,11 @@ export class OssResourceStorage implements ResourceStorage {
   }
 
   path(id: string) {
-    return `${RESOURCE_OSS_PREFIX}/${parseId(id)}`
+    return `${this.prefix}/${parseId(id)}`
   }
 
   private key(path: string) {
-    const id = path.slice(RESOURCE_OSS_PREFIX.length + 1)
+    const id = path.slice(this.prefix.length + 1)
     if (path !== this.path(id)) {
       throw ErrorCode.RESOURCE_STORAGE_UNAVAILABLE()
     }
@@ -65,7 +67,7 @@ export class OssResourceStorage implements ResourceStorage {
       await this.client.put(key, bytes, {
         mime: image ? file.mimeType : 'application/octet-stream',
         headers: {
-          'x-oss-object-acl': 'public-read',
+          'x-oss-object-acl': this.origin ? 'public-read' : 'private',
           'x-oss-forbid-overwrite': 'true',
           'Content-MD5': createHash('md5').update(bytes).digest('base64'),
           'Cache-Control': 'no-store',

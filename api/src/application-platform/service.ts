@@ -1247,6 +1247,7 @@ export class ApplicationPlatform {
       sdkVersion: APP_SDK_VERSION,
       appId,
       releaseId: release.releaseId,
+      applicationVersion: release.manifest.version,
       generation: installation.generation,
       subject: this.subject(userId, appId),
       platform,
@@ -1263,6 +1264,7 @@ export class ApplicationPlatform {
         'auth.session',
         'navigation.back',
         'navigation.open',
+        ...(installation.grants.includes('files.private') ? ['files.private.pick' as const, 'files.private.upload' as const, 'files.private.read' as const] : []),
         ...(installation.grants.includes('files')
           ? [
               'files.pick' as const,

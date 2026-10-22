@@ -18,7 +18,7 @@ test('real host transport boots locally without HTTP, blocks backend work offlin
   try {
     const { createHostTransport } = await server.ssrLoadModule('/src/core/app-runtime/sdkHost.ts')
     const { appCatalog } = await server.ssrLoadModule('/src/core/app-runtime/catalog.ts')
-    const { setSession, identity, restoreLocalIdentity, restoreError } = await server.ssrLoadModule('/src/core/session.ts')
+    const { setSession, identity, restoreIdentity, restoreLocalIdentity, restoreError } = await server.ssrLoadModule('/src/core/session.ts')
     const { request } = await server.ssrLoadModule('/src/core/network.ts')
     const { restoreSession } = await server.ssrLoadModule('/src/features/identity/identityApi.ts')
     const subject = 'b'.repeat(64)
@@ -51,6 +51,14 @@ test('real host transport boots locally without HTTP, blocks backend work offlin
       online = true
       assert.deepEqual(await transport.call('api.invoke', { method: 'create', arguments: {} }), { saved: true })
       assert.equal(requests, 2, 'reconnection must verify the actual installation before the backend operation')
+      const events: string[] = []
+      const stopEvents = transport.listen((event: { name: string }) => events.push(event.name))
+      restoreIdentity({ ...identity.user, nickname: 'Refreshed profile, same account' })
+      await Promise.resolve()
+      await Promise.resolve()
+      assert.deepEqual(events, [], 'revalidating the same account after reconnect must not close its applications')
+      assert.deepEqual(await transport.call('storage.get', { key: 'history' }), ['1+1=2'])
+      stopEvents()
       await restoreSession()
       assert.equal(identity.user, null, '401 revokes the locally restored shell account')
       assert.equal(restoreLocalIdentity(), false, 'revoked snapshots cannot silently restore the account')

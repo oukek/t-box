@@ -1,0 +1,58 @@
+.identity-page {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 28px 20px;
+}
+.identity-card {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: min(440px, 100%);
+  margin: auto;
+  padding: 32px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+}
+.identity-eyebrow {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 1.3px;
+}
+.identity-card h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+.identity-card > p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.identity-card > .form-error {
+  color: #a94633;
+}
+.identity-card .text-button {
+  min-height: 36px;
+  padding: 4px;
+}
+.identity-card .text-button + .text-button {
+  margin-top: -14px;
+}
+@media (max-width: 480px) {
+  .identity-page {
+    padding: 24px 0;
+  }
+  .identity-card {
+    padding: 24px;
+    gap: 20px;
+  }
+  .identity-card h1 {
+    font-size: 25px;
+  }
+  .identity-card .form-field > input {
+    font-size: 16px;
+  }
+}

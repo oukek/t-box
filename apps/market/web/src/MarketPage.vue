@@ -6,7 +6,7 @@ import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { computed, ref, watch } from 'vue'
 import MarketAppCard from './MarketAppCard.vue'
-import { displayApp, hasUpdate, installAction, isInstalled, isProcessing, matchesFilter, permissionLabel, stateLabel } from './presentation'
+import { displayApp, hasUpdate, installAction, isInstalled, isProcessing, matchesFilter, permissionItems, stateLabel } from './presentation'
 import './market.css'
 
 const props = defineProps<{ focusAppId?: string, openRevision?: number }>()
@@ -230,7 +230,7 @@ watch(() => [props.focusAppId, props.openRevision, appCatalog.revision] as const
         <dl class="market-detail-facts"><div><dt>最新版本</dt><dd>v{{ selected.release.manifest.version }}</dd></div><div><dt>安装状态</dt><dd>{{ stateLabel(selected) }}</dd></div><div><dt>本机资源</dt><dd>{{ resourceLabel }}</dd></div><div v-if="hasUpdate(selected) && targetResources?.status === 'ready'"><dt>更新包</dt><dd>已在后台准备好</dd></div></dl>
         <div v-if="selected.releaseNotes" class="market-release-notes"><h4>更新说明</h4><p>{{ selected.releaseNotes }}</p></div>
         <p v-if="selected.issue || selected.installation?.error" class="market-detail-warning">{{ selected.issue || selected.installation?.error }}</p>
-        <div v-if="!isInstalled(selected) || hasUpdate(selected)" class="market-permissions"><h4>{{ hasUpdate(selected) ? '更新后的应用权限' : '安装后允许此应用' }}</h4><ul v-if="selected.release.permissions.length"><li v-for="permission in selected.release.permissions" :key="permission"><AppIcon name="check" :size="14" /><span>{{ permissionLabel(permission) }}</span></li></ul><p v-else>无需额外权限。</p></div>
+        <div v-if="!isInstalled(selected) || hasUpdate(selected)" class="market-permissions"><h4>{{ hasUpdate(selected) ? '更新后的应用权限' : '安装后允许此应用' }}</h4><ul v-if="selected.release.permissions.length"><li v-for="permission in permissionItems(selected)" :key="permission"><AppIcon name="check" :size="14" /><span>{{ permission }}</span></li></ul><p v-else>无需额外权限。</p></div>
         <p v-if="selected.release.kind === 'system'" class="market-detail-note"><AppIcon name="lock" :size="13" />系统应用随 OS 提供，支持更新，不可卸载。</p>
         <p
           v-if="error"

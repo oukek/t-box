@@ -117,8 +117,17 @@ const filtered = computed(() =>
   ),
 )
 const online = computed(() =>
-  current.value?.releases.find((r) => r.status === 'published'),
+  current.value?.releases.find((r) => r.status === 'published' && !r.readiness.development),
 )
+const visibleReleases = computed(() => {
+  const entries = current.value?.releases || []
+  const preview = entries.find((entry) => entry.readiness.development)
+  return entries.filter((entry) => !entry.readiness.development || (
+    entry === preview && !entries.some((other) =>
+      !other.readiness.development && other.release.manifest.version === entry.release.manifest.version,
+    )
+  ))
+})
 const statusNames = {
   draft: '草稿',
   submitted: '待发布',
@@ -171,9 +180,9 @@ function nextVersion(value: string) {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value)
   return match ? `${match[1]}.${match[2]}.${Number(match[3]) + 1}` : ''
 }
-async function edit(entry?: ManagedRelease, createApplication = false) {
+async function edit(entry?: ManagedRelease, createApplication = false, fromPreview = false) {
   newApp.value = createApplication
-  editing.value = entry || null
+  editing.value = fromPreview ? null : entry || null
   dialogError.value = ''
   const base = entry || online.value || current.value?.releases[0]
   const r = createApplication ? undefined : base?.release
@@ -201,7 +210,7 @@ async function edit(entry?: ManagedRelease, createApplication = false) {
       deferText: '',
       ...r?.updatePrompt,
     },
-    artifact: r?.runtime.type === 'web' ? r.runtime.integrity.slice(7) : '',
+    artifact: r?.runtime.type === 'web' && !base?.readiness.development ? r.runtime.integrity.slice(7) : '',
     runtime: r?.runtime.type || 'web',
     revision: entry?.revision || 1,
   })
@@ -438,9 +447,14 @@ onMounted(load)
             : "保存草稿并提交后，才会出现在用户市场"
         }}</span>
       </div>
+      <p v-if="visibleReleases.some((entry) => entry.readiness.development)" class="build-help">
+        Vite 开发预览不能直接发布。在项目根目录执行
+        <code>pnpm apps:submit:local {{ current.appId }}</code>，构建并提交后刷新本页审核发布。
+        也可先构建，再选择产物创建发布草稿。
+      </p>
       <div class="release-list">
         <article
-          v-for="entry in current.releases"
+          v-for="entry in visibleReleases"
           :key="entry.release.releaseId"
           class="release-row"
         >
@@ -451,12 +465,12 @@ onMounted(load)
               :icon-asset="iconOf(entry).iconAsset"
               :icon-variant="iconOf(entry).iconVariant"
               :animate="false"
-            /><strong>v{{ entry.release.manifest.version }}</strong><span class="publication-status" :class="entry.status">{{
-              statusNames[entry.status]
+            /><strong>v{{ entry.release.manifest.version }}</strong><span class="publication-status" :class="entry.readiness.development ? 'preview' : entry.status">{{
+              entry.readiness.development ? '开发预览' : statusNames[entry.status]
             }}</span>
           </div>
           <p class="release-notes">
-            {{ entry.releaseNotes || "未填写更新说明" }}
+            {{ entry.releaseNotes || (entry.readiness.development ? "用于源码热更新，尚未提交发布构建" : "未填写更新说明") }}
           </p>
           <div class="release-meta">
             <span>{{
@@ -466,7 +480,7 @@ onMounted(load)
             }}</span><span>{{ date(entry.createdAt) }}</span>
           </div>
           <p
-            v-if="entry.status !== 'published'"
+            v-if="entry.status !== 'published' && !entry.readiness.development"
             class="readiness"
             :class="{ blocked: !entry.readiness.ready }"
           >
@@ -477,13 +491,16 @@ onMounted(load)
           </p>
           <div class="release-footer">
             <span
-              v-if="entry.release.runtime.type === 'web'"
+              v-if="entry.release.runtime.type === 'web' && !entry.readiness.development"
               class="artifact-digest"
               :title="entry.release.runtime.integrity"
             >{{ entry.release.runtime.integrity.slice(0, 23) }}…</span><span v-else class="artifact-digest">{{
-              entry.release.releaseId
+              entry.readiness.development ? 'Vite 开发预览' : entry.release.releaseId
             }}</span>
-            <div>
+            <div v-if="entry.readiness.development">
+              <button :disabled="busy" @click="edit(entry, false, true)">选择产物创建发布草稿</button>
+            </div>
+            <div v-else>
               <button
                 v-if="entry.status === 'draft'"
                 :disabled="busy"
@@ -914,6 +931,25 @@ onMounted(load)
 .publication-status.submitted {
   background: #fff4dc;
   color: #8b630b;
+}
+.publication-status.preview {
+  color: var(--text-muted, #64748b);
+  background: #f1f5f9;
+}
+.build-help {
+  margin: 12px 0;
+  padding: 12px 14px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+  background: #f8fafc;
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+.build-help code {
+  color: #334155;
+  font-size: 12px;
+  user-select: all;
 }
 .release-notes {
   white-space: pre-wrap;

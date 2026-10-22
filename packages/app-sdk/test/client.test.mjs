@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { applicationPayloadLimit } from '@t-box/app-contracts'
 import { AppSdkError, createAppClient } from '../dist/index.js'
 
 function fixture(handler = async () => null) {
@@ -33,6 +34,43 @@ function fixture(handler = async () => null) {
     },
   }
 }
+test('private files use domain-scoped ports and return Blobs without URLs or credentials', async () => {
+  const file = {
+    id: 'private-photo',
+    name: '照片.png',
+    mimeType: 'image/png',
+    size: 3,
+    source: 'uploaded',
+    createdAt: '2026-10-20T00:00:00.000Z',
+  }
+  const f = fixture(async (method) =>
+    method === 'files.private.read'
+      ? { file, base64: btoa('abc') }
+      : method === 'files.private.pick'
+        ? [file]
+        : file,
+  )
+  const scope = { type: 'creative', id: 'baby-id' }
+  assert.deepEqual(
+    await f.client.files.private.pick(scope, { multiple: true }),
+    [file],
+  )
+  assert.deepEqual(f.calls[0].args, { scope, options: { multiple: true } })
+  await f.client.files.private.upload(
+    scope,
+    Object.assign(new Blob(['abc']), { name: '照片.png' }),
+  )
+  assert.equal(f.calls[1].method, 'files.private.upload')
+  assert.deepEqual(f.calls[1].args, {
+    scope,
+    file: { name: '照片.png', base64: btoa('abc') },
+  })
+  const result = await f.client.files.private.read(file.id, { original: true })
+  assert.equal(await result.blob.text(), 'abc')
+  assert.deepEqual(f.calls[2].args, { id: file.id, original: true })
+  assert.equal('url' in result, false)
+  f.client.dispose()
+})
 test('app API passes cancellation and explicit idempotency without exposing credentials', async () => {
   const f = fixture(async () => ({ value: 42 }))
   assert.deepEqual(
@@ -232,19 +270,26 @@ test('storage CRUD and capability detection use the same public protocol', async
   )
   f.client.dispose()
 })
-
 test('scoped HTTP, stable mutations and resource bindings share the authenticated host transport', async () => {
   const f = fixture(async () => ({ data: { id: 'book' } }))
   await f.client.api.request('/ledgers', { method: 'GET' })
   await f.client.api.mutate('/ledgers/book', 'PATCH', { name: '新名称' })
-  await f.client.resources.setBindings([{ appId: 'ledger', resourceType: 'book', resourceId: 'book' }])
+  await f.client.resources.setBindings([
+    { appId: 'ledger', resourceType: 'book', resourceId: 'book' },
+  ])
   assert.equal(f.calls[0].method, 'api.request')
-  assert.deepEqual(f.calls[1].args, { path: '/ledgers/book', method: 'PATCH', body: { name: '新名称' }, stable: true })
+  assert.deepEqual(f.calls[1].args, {
+    path: '/ledgers/book',
+    method: 'PATCH',
+    body: { name: '新名称' },
+    stable: true,
+  })
   assert.equal(f.calls[2].method, 'resources.bindings')
-  assert.ok(!JSON.stringify(f.calls.map((v) => v.args)).includes('Authorization'))
+  assert.ok(
+    !JSON.stringify(f.calls.map((v) => v.args)).includes('Authorization'),
+  )
   f.client.dispose()
 })
-
 test('navigation and interaction cancellation events stop on runtime disposal', () => {
   const f = fixture()
   const received = []
@@ -256,37 +301,58 @@ test('navigation and interaction cancellation events stop on runtime disposal', 
   f.emit('runtime.navigation', { ledgerId: 'stale' })
   assert.deepEqual(received, [{ ledgerId: 'book' }, 'cancelled'])
 })
-
 test('reminder SDK delegates fixed operations to the host without receiving native handles', async () => {
   const f = fixture(async () => ({ platform: 'android', state: 'granted' }))
-  assert.deepEqual(await f.client.device.reminders('sync'), { platform: 'android', state: 'granted' })
+  assert.deepEqual(await f.client.device.reminders('sync'), {
+    platform: 'android',
+    state: 'granted',
+  })
   assert.equal(f.calls[0].method, 'device.reminders')
   assert.deepEqual(f.calls[0].args, { action: 'sync' })
   f.client.dispose()
 })
-
 test('file SDK transports bounded binary content and exposes no host file path or bearer token', async () => {
-  const file = { id: 'fixture', name: 'file.bin', mimeType: 'application/octet-stream', size: 3, source: 'uploaded', createdAt: '2026-10-15T00:00:00Z' }
+  const file = {
+    id: 'fixture',
+    name: 'file.bin',
+    mimeType: 'application/octet-stream',
+    size: 3,
+    source: 'uploaded',
+    createdAt: '2026-10-15T00:00:00Z',
+  }
   const f = fixture(async (method, args) => {
     if (method === 'files.upload') {
-      assert.deepEqual(Buffer.from(args.base64, 'base64'), Buffer.from([0, 128, 255]))
+      assert.deepEqual(
+        Buffer.from(args.base64, 'base64'),
+        Buffer.from([0, 128, 255]),
+      )
       return file
     }
-    return method === 'files.pick' ? [file] : { file, base64: Buffer.from([0, 128, 255]).toString('base64') }
+    return method === 'files.pick'
+      ? [file]
+      : { file, base64: Buffer.from([0, 128, 255]).toString('base64') }
   })
   const binary = new Blob([new Uint8Array([0, 128, 255])])
   assert.deepEqual(await f.client.files.upload(binary), file)
   assert.deepEqual(await f.client.files.pick({ multiple: true }), [file])
   const content = await f.client.files.read(file.id)
-  assert.deepEqual(Buffer.from(await content.blob.arrayBuffer()), Buffer.from([0, 128, 255]))
+  assert.deepEqual(
+    Buffer.from(await content.blob.arrayBuffer()),
+    Buffer.from([0, 128, 255]),
+  )
   assert.equal(f.calls.length, 3)
-  await assert.rejects(f.client.files.upload(new Blob([])), { code: 'FILE_SIZE' })
+  await assert.rejects(f.client.files.upload(new Blob([])), {
+    code: 'FILE_SIZE',
+  })
   assert.equal(f.calls.length, 3)
   f.client.dispose()
 })
-
 test('custom update SDK acknowledges visibility, exposes only current-app market navigation, and cleans up', async () => {
-  const f = fixture(async (method) => method === 'updates.getAvailable' ? { appId: 'calculator', version: '2.0.0' } : null)
+  const f = fixture(async (method) =>
+    method === 'updates.getAvailable'
+      ? { appId: 'calculator', version: '2.0.0' }
+      : null,
+  )
   let signal
   let received
   const stop = await f.client.updates.registerPrompt((update, options) => {
@@ -294,13 +360,22 @@ test('custom update SDK acknowledges visibility, exposes only current-app market
     signal = options.signal
     return true
   })
-  f.emit('runtime.update', { promptId: 'first', update: { appId: 'calculator', version: '2.0.0' } })
+  f.emit('runtime.update', {
+    promptId: 'first',
+    update: { appId: 'calculator', version: '2.0.0' },
+  })
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.equal(received.version, '2.0.0')
-  assert.deepEqual(f.calls.find((call) => call.method === 'updates.respond').args, { promptId: 'first', shown: true })
+  assert.deepEqual(
+    f.calls.find((call) => call.method === 'updates.respond').args,
+    { promptId: 'first', shown: true },
+  )
   assert.equal((await f.client.updates.getAvailable()).appId, 'calculator')
   await f.client.updates.openMarket()
-  assert.deepEqual(f.calls.find((call) => call.method === 'updates.openMarket').args, {})
+  assert.deepEqual(
+    f.calls.find((call) => call.method === 'updates.openMarket').args,
+    {},
+  )
   stop()
   assert.equal(signal.aborted, true)
   assert.equal(f.calls.at(-1).args.enabled, false)
@@ -316,19 +391,39 @@ test('rejected custom UI requests fallback and a late UI is cancelled without ac
       finish = resolve
     })
   })
-  f.emit('runtime.update', { promptId: 'slow', update: { appId: 'calculator' } })
+  f.emit('runtime.update', {
+    promptId: 'slow',
+    update: { appId: 'calculator' },
+  })
   await new Promise((resolve) => setTimeout(resolve, 0))
   f.emit('runtime.update', { promptId: 'slow', update: null })
   finish(true)
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.equal(signal.aborted, true)
-  assert.equal(f.calls.some((call) => call.method === 'updates.respond'), false)
+  assert.equal(
+    f.calls.some((call) => call.method === 'updates.respond'),
+    false,
+  )
   stop()
   await f.client.updates.registerPrompt(() => {
     throw new Error('UI failed')
   })
-  f.emit('runtime.update', { promptId: 'broken', update: { appId: 'calculator' } })
+  f.emit('runtime.update', {
+    promptId: 'broken',
+    update: { appId: 'calculator' },
+  })
   await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.deepEqual(f.calls.find((call) => call.method === 'updates.respond').args, { promptId: 'broken', shown: false })
+  assert.deepEqual(
+    f.calls.find((call) => call.method === 'updates.respond').args,
+    { promptId: 'broken', shown: false },
+  )
   f.client.dispose()
+})
+test('bounded app invocation accommodates large project frame sets without expanding control messages', () => {
+  assert.equal(applicationPayloadLimit('api.invoke'), 1024 * 1024)
+  assert.equal(applicationPayloadLimit('runtime.context'), 64000)
+  assert.equal(
+    applicationPayloadLimit('files.private.upload'),
+    15 * 1024 * 1024,
+  )
 })

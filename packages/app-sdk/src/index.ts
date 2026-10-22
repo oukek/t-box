@@ -7,6 +7,7 @@ import type {
   ApplicationUpdateInfo,
   FilePickOptions,
   HostMethod,
+  PrivateFileScope,
 } from '@t-box/app-contracts'
 import {
   APPLICATION_FILE_MAX_BYTES,
@@ -276,6 +277,27 @@ export function createAppClient(transport: AppTransport) {
       },
     },
     files: {
+      private: {
+        pick(scope: PrivateFileScope, options: FilePickOptions = {}, request: RequestOptions = {}) {
+          return call<ApplicationFile[]>('files.private.pick', { scope, options }, { timeoutMs: 120000, ...request })
+        },
+        async upload(scope: PrivateFileScope, file: Blob & { name?: string }, request: RequestOptions = {}) {
+          if (!file.size || file.size > APPLICATION_FILE_MAX_BYTES) {
+            throw SdkErrorCode.FILE_SIZE()
+          }
+          const bytes = new Uint8Array(await file.arrayBuffer())
+          let binary = ''
+          for (let offset = 0; offset < bytes.length; offset += 32768) {
+            binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768))
+          }
+          return call<ApplicationFile>('files.private.upload', { scope, file: { name: file.name || '未命名文件', base64: btoa(binary) } }, { timeoutMs: 120000, ...request })
+        },
+        async read(id: string, options: { original?: boolean } = {}, request: RequestOptions = {}) {
+          const content = await call<ApplicationFileContent>('files.private.read', { id, original: options.original === true }, { timeoutMs: 60000, ...request })
+          const bytes = Uint8Array.from(atob(content.base64), (char) => char.charCodeAt(0))
+          return { file: content.file, blob: new Blob([bytes], { type: content.file.mimeType }) }
+        },
+      },
       /** Call from a user gesture. The host picker never exposes the account's entire library. */
       pick(options: FilePickOptions = {}, request: RequestOptions = {}) {
         return call<ApplicationFile[]>('files.pick', options, {

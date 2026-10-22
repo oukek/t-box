@@ -137,3 +137,23 @@ export function decodeApplicationFile(args: Record<string, unknown>) {
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
   return new File([bytes], args.name, { type: 'application/octet-stream' })
 }
+
+export function privateFileScope(value: unknown) {
+  const scope = value as { type?: unknown, id?: unknown } | null
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope) || Object.keys(scope).some((key) => !['type', 'id'].includes(key)) || typeof scope.type !== 'string' || !/^[a-z][a-z0-9-]{0,39}$/.test(scope.type) || typeof scope.id !== 'string' || !/^[\w-]{1,80}$/.test(scope.id)) {
+    throw SdkErrorCode.INVALID_ARGUMENTS('私有文件范围无效')
+  }
+  return { type: scope.type, id: scope.id }
+}
+export async function uploadPrivateApplicationFile(appId: string, scope: { type: string, id: string }, file: File, signal?: AbortSignal) {
+  if (!file.size || file.size > APPLICATION_FILE_MAX_BYTES) {
+    throw SdkErrorCode.FILE_SIZE()
+  }
+  return (await request<{ data: ApplicationFile }>(`/applications/${encodeURIComponent(appId)}/private-files`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name), 'X-File-Scope': encodeURIComponent(JSON.stringify(scope)) }, signal, timeoutMs: 60000 })).data
+}
+export async function readPrivateApplicationFile(appId: string, id: unknown, original: unknown, signal?: AbortSignal) {
+  if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/i.test(id) || typeof original !== 'boolean') {
+    throw SdkErrorCode.INVALID_ARGUMENTS('私有文件参数无效')
+  }
+  return (await request<{ data: ApplicationFileContent }>(`/applications/${encodeURIComponent(appId)}/private-files/${encodeURIComponent(id)}?original=${original ? '1' : '0'}`, { signal, timeoutMs: 60000 })).data
+}

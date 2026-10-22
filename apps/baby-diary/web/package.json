@@ -1,0 +1,28 @@
+{
+  "name": "@t-box/baby-diary-web",
+  "type": "module",
+  "version": "1.2.2",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5181 --strictPort",
+    "build": "vue-tsc --noEmit && vite build && node ../../../scripts/build-application-artifact.mjs baby-diary",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-sdk": "workspace:*",
+    "@t-box/app-web-sdk": "workspace:*",
+    "@t-box/baby-diary-contracts": "workspace:*",
+    "@t-box/baby-diary-core": "workspace:*",
+    "@t-box/dayjs": "workspace:*",
+    "@t-box/ui-kit": "workspace:*",
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@vitejs/plugin-vue": "6.0.9",
+    "typescript": "~5.9.3",
+    "vite": "8.3.2",
+    "vue-tsc": "^3.2.5"
+  }
+}

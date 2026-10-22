@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@t-box/app-contracts": "workspace:*",
+    "@t-box/baby-diary-contracts": "workspace:*",
     "@t-box/calculator-contracts": "workspace:*",
     "@t-box/calendar-contracts": "workspace:*",
     "@t-box/converter-contracts": "workspace:*",

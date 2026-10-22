@@ -17,3 +17,6 @@ export interface FilePickOptions {
 }
 export const APPLICATION_FILE_MAX_BYTES = 10 * 1024 * 1024
 export const APPLICATION_FILE_MAX_COUNT = 10
+
+/** Domain-scoped private files; scope IDs never grant access by themselves. */
+export interface PrivateFileScope { type: string, id: string }

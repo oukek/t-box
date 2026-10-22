@@ -24,6 +24,10 @@ if(args[0]===process.env.FIXTURE_FAIL)process.exit(9);
       assert.equal(calls.length, fail === 'install' ? 1 : fail ? 2 : 3)
       if (!fail) {
         assert.deepEqual(calls[2].slice(0, 3), ['exec', 'concurrently', '--kill-others'])
+        assert.ok(calls[2].includes('node scripts/dev-web.mjs'))
+        assert.ok(calls[2].includes('pnpm dev:api'))
+        assert.ok(!calls[2].includes('pnpm dev:packages'))
+        assert.ok(!calls[2].includes('pnpm dev:app'))
       }
     } finally {
       rmSync(folder, { recursive: true, force: true })

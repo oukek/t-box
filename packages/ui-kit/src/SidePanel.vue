@@ -1,45 +1,11 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { handleDialogCancel } from './dialogCancel'
+import { useDialog } from './useDialog'
 
 const props = defineProps<{ open: boolean, title: string, busy?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
-const panel = ref<HTMLDialogElement>()
-let previous: HTMLElement | null = null
-let previousOverflow: string | undefined
-function restore() {
-  if (previousOverflow !== undefined) {
-    document.body.style.overflow = previousOverflow
-    previousOverflow = undefined
-  }
-  if (previous?.isConnected) {
-    previous.focus()
-  }
-  previous = null
-}
-watch(
-  () => props.open,
-  async (open) => {
-    await nextTick()
-    if (open) {
-      previous =
-        document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null
-      previousOverflow = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      panel.value?.showModal()
-    } else {
-      panel.value?.close()
-    }
-  },
-  { immediate: true },
-)
-onBeforeUnmount(() => {
-  panel.value?.close()
-  restore()
-})
+const { dialog: panel, closed } = useDialog(() => props.open)
 </script>
 
 <template>
@@ -50,7 +16,7 @@ onBeforeUnmount(() => {
     @cancel="
       (event) => handleDialogCancel(event, panel, busy, () => emit('close'))
     "
-    @close="restore"
+    @close="closed"
     @click="(event) => event.target === panel && !busy && emit('close')"
   >
     <header class="side-panel-heading">

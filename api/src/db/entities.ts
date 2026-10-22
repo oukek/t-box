@@ -1,3 +1,4 @@
+import { babyDiaryEntities } from '@t-box/baby-diary-server'
 import {
   CalendarEventEntity,
   CalendarExceptionEntity,
@@ -11,6 +12,7 @@ import { ledgerDomainEntities } from '@t-box/ledger-server'
 import { BillEntity, CategoryEntity } from '@t-box/ledger-server/entities'
 import { ledgerRecordEntities } from '@t-box/ledger-server/persistence/index'
 import { ApplicationOperationEntity } from '@t-box/server-foundation/persistence/entities'
+import { PrivateFileEntity, PrivateFileQuotaEntity } from '@t-box/server-foundation/persistence/private-media'
 import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
 import { TimerEntity } from '@t-box/time-server/entity'
 import { EntitySchema } from 'typeorm'
@@ -230,6 +232,9 @@ export const SettingsEntity = new EntitySchema<{
   ],
 })
 export const entities = [
+  ...babyDiaryEntities,
+  PrivateFileEntity,
+  PrivateFileQuotaEntity,
   ...platformRecordEntities,
   ...ledgerRecordEntities,
   ResourceEntity,

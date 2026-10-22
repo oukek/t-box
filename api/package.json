@@ -7,12 +7,12 @@
     "dist"
   ],
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "node ../scripts/dev-api.mjs",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "start:worker": "node dist/worker.js",
     "resources:migrate": "tsx src/resources/migrate-local.ts",
-    "dev:worker": "tsx watch src/worker.ts",
+    "dev:worker": "node ../scripts/dev-api.mjs --worker",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "test:model-smoke": "tsx test/model-smoke.manual.ts",
@@ -46,13 +46,16 @@
     "test:answer-retry": "tsx test/answer-retry.integration.ts",
     "test:configuration": "tsx test/configuration.integration.ts",
     "test:ledger-features": "tsx test/ledger-features.integration.ts",
-    "test:db-init": "tsx test/database-initialization.integration.ts"
+    "test:db-init": "tsx test/database-initialization.integration.ts",
+    "db:upgrade:baby": "tsx src/db/upgrades/baby-diary-cli.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
     "@fastify/websocket": "11.3.3",
     "@t-box/app-contracts": "workspace:*",
     "@t-box/app-server-sdk": "workspace:*",
+    "@t-box/baby-diary-contracts": "workspace:*",
+    "@t-box/baby-diary-server": "workspace:*",
     "@t-box/calculator-server": "workspace:*",
     "@t-box/calendar-server": "workspace:*",
     "@t-box/converter-server": "workspace:*",
@@ -69,6 +72,7 @@
     "openai": "7.27.0",
     "redis": "^5.8.3",
     "reflect-metadata": "^0.2.2",
+    "sharp": "^0.34.5",
     "typeorm": "1.1.1"
   },
   "devDependencies": {

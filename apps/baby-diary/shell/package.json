@@ -1,0 +1,22 @@
+{
+  "name": "@t-box/baby-diary-shell",
+  "type": "module",
+  "version": "1.2.2",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-shell-sdk": "workspace:*",
+    "@t-box/baby-diary-contracts": "workspace:*",
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vue-tsc": "^3.2.5"
+  }
+}

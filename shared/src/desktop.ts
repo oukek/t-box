@@ -1,4 +1,5 @@
 import type { ApplicationManifest } from '@t-box/app-contracts'
+import { babyDiaryManifest } from '@t-box/baby-diary-contracts'
 import { legacyApplicationIcon as calculatorLegacyIcon } from '@t-box/calculator-contracts'
 import { calendarManifest } from '@t-box/calendar-contracts/index'
 import { legacyApplicationIcon as calendarLegacyIcon } from '@t-box/calendar-contracts/legacy-icon'
@@ -42,6 +43,7 @@ export { profileManifest } from '@t-box/settings-contracts'
 /** Trusted first-party desktop catalog; registering an AI module is optional. */
 export const systemApplicationManifests: readonly ApplicationManifest[] = [
   ledgerManifest,
+  babyDiaryManifest,
   calculatorManifest,
   converterManifest,
   calendarManifest,

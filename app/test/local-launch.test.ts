@@ -17,6 +17,7 @@ test('local launch restores the exact installed version across platforms, and ca
     assert.equal(local.descriptor?.releaseId, 'notes-1')
     assert.equal(local.context.access, 'local')
     assert.deepEqual(local.context.permissions, [])
+    assert.equal(local.context.applicationVersion, entry.installedRelease!.manifest.version)
     assert.deepEqual(local.descriptor?.permissions, [])
     assert.ok(local.context.capabilities.includes('storage.set'))
     for (const method of local.context.capabilities) {

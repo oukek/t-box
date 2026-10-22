@@ -5,6 +5,12 @@ import {
 } from '@t-box/errors'
 
 const apiErrors = defineApiErrors({
+  PRIVATE_MEDIA_CONFIG_REQUIRED: { statusCode: 503, message: '私有文件存储尚未配置，请管理员配置独立的私有 OSS Bucket' },
+  PRIVATE_MEDIA_SCOPE_INVALID: { statusCode: 400, message: '文件所属资源无效' },
+  PRIVATE_MEDIA_FORBIDDEN: { statusCode: 403, message: '无法访问此私有文件' },
+  PRIVATE_MEDIA_QUOTA: { statusCode: 409, message: '此档案的文件容量已达上限（2 GB 或 5000 个文件）' },
+  PRIVATE_MEDIA_INVALID_IMAGE: { statusCode: 400, message: '图片无法处理，请使用有效的 JPEG、PNG、WebP 或受支持的 HEIC 图片' },
+  PRIVATE_MEDIA_MISSING: { statusCode: 404, message: '私有文件不存在或已删除' },
   APP_ROLLBACK_REJECTED: { statusCode: 409, message: '无法安全回退此版本，请前往应用市场修复或更新' },
   ALREADY_EXISTS: { statusCode: 409, message: '此记录已存在' },
   BAD_REQUEST: { statusCode: 400, message: '请求格式不正确，请使用 application/json' },

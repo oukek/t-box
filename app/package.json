@@ -17,6 +17,7 @@
     "@t-box/app-contracts": "workspace:*",
     "@t-box/app-sdk": "workspace:*",
     "@t-box/app-shell-sdk": "workspace:*",
+    "@t-box/baby-diary-shell": "workspace:*",
     "@t-box/calculator-shell": "workspace:*",
     "@t-box/calendar-shell": "workspace:*",
     "@t-box/capacitor-app-resources": "workspace:*",

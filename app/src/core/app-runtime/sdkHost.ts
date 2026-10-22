@@ -11,7 +11,11 @@ import { watch } from 'vue'
 import { applicationModules } from '../../applications/registry'
 import { applicationMutation } from '../applicationMutation'
 import { createRequestId } from '../identifiers'
-import { backFromApplication, navigation, openApplication } from '../navigation'
+import {
+  backFromApplication,
+  navigation,
+  openApplication,
+} from '../navigation'
 import { chatWebSocketUrl, request } from '../network'
 import { identity } from '../session'
 import { appCatalog } from './catalog'
@@ -19,8 +23,11 @@ import { deviceApplicationScope } from './deviceStorage'
 import {
   chooseApplicationFiles,
   decodeApplicationFile,
+  privateFileScope,
   readApplicationFile,
+  readPrivateApplicationFile,
   uploadApplicationFile,
+  uploadPrivateApplicationFile,
 } from './files'
 import { localBaselineContext } from './localApplications'
 import { isLocalMethod, resolveLocalLaunch } from './localLaunch'
@@ -34,8 +41,10 @@ import { availableUpdate, updatePrompts } from './updatePrompts'
 interface HostOptions {
   appId: string
   trusted?: boolean
-  expected?: Pick<ApplicationContext, 'releaseId' | 'generation' | 'subject'> &
-    { localOnly?: boolean }
+  expected?: Pick<
+    ApplicationContext,
+    'releaseId' | 'generation' | 'subject'
+  > & { localOnly?: boolean }
   params?: Record<string, string>
 }
 const platform = () =>
@@ -50,7 +59,9 @@ const object = (value: unknown): Record<string, unknown> => {
 }
 /** One app-bound host service shared by shell and MessageChannel adapters. */
 export function createHostTransport(options: HostOptions): AppTransport {
-  const module = applicationModules.find((m) => m.manifest.id === options.appId)
+  const module = applicationModules.find(
+    (m) => m.manifest.id === options.appId,
+  )
   if (options.trusted && !module) {
     throw SdkErrorCode.APP_NOT_REGISTERED()
   }
@@ -112,7 +123,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
     listeners.clear()
   }
   const stopIdentity = watch(
-    () => [identity.token, identity.ready, identity.user?.id],
+    [() => identity.token, () => identity.ready, () => identity.user?.id],
     () => {
       const started = ++epoch
       bound = undefined
@@ -170,15 +181,22 @@ export function createHostTransport(options: HostOptions): AppTransport {
       throw SdkErrorCode.SESSION_CHANGED()
     }
   }
-  async function binding(signal?: AbortSignal, local = false): Promise<ApplicationContext> {
+  async function binding(
+    signal?: AbortSignal,
+    local = false,
+  ): Promise<ApplicationContext> {
     const started = epoch
     assertEpoch(started)
     const currentPlatform = platform()
-    const targetPlatform = currentPlatform === 'ios' || currentPlatform === 'android' ? currentPlatform : 'web'
+    const targetPlatform =
+      currentPlatform === 'ios' || currentPlatform === 'android'
+        ? currentPlatform
+        : 'web'
     const cached = local
       ? options.expected?.localOnly
         ? localBaselineContext(options.appId, options.expected, targetPlatform)
-        : resolveLocalLaunch(appCatalog.entries, options.appId, targetPlatform)?.context
+        : resolveLocalLaunch(appCatalog.entries, options.appId, targetPlatform)
+          ?.context
       : undefined
     if (!identity.user && !(cached && options.expected?.localOnly)) {
       throw SdkErrorCode.AUTH_REQUIRED('此功能需要登录并联网后使用', 401)
@@ -186,12 +204,14 @@ export function createHostTransport(options: HostOptions): AppTransport {
     if (!local && options.expected?.localOnly) {
       throw SdkErrorCode.APP_UPDATE_REQUIRED(undefined, 409)
     }
-    const context = cached ?? (
-      await request<{ data: ApplicationContext }>(
-        `/applications/${encodeURIComponent(options.appId)}/context?platform=${platform()}`,
-        { signal },
-      )
-    ).data
+    const context =
+      cached ??
+      (
+        await request<{ data: ApplicationContext }>(
+          `/applications/${encodeURIComponent(options.appId)}/context?platform=${platform()}`,
+          { signal },
+        )
+      ).data
     assertEpoch(started)
     const expected = options.expected ?? bound
     if (
@@ -214,8 +234,11 @@ export function createHostTransport(options: HostOptions): AppTransport {
     ) {
       throw SdkErrorCode.PROTOCOL_MISMATCH()
     }
-    const storage = options.trusted && module?.sdk?.storage && context.access !== 'local'
-    const events = Object.keys(context.access === 'local' ? {} : module?.sdk?.events ?? {}).filter(
+    const storage =
+      options.trusted && module?.sdk?.storage && context.access !== 'local'
+    const events = Object.keys(
+      context.access === 'local' ? {} : (module?.sdk?.events ?? {}),
+    ).filter(
       (channel) =>
         options.trusted || context.permissions.includes(`events.${channel}`),
     )
@@ -529,7 +552,11 @@ export function createHostTransport(options: HostOptions): AppTransport {
             (data) => emit({ type: 'event', name: 'runtime.update', data }),
           )
         } else {
-          updatePrompts.unregister(options.appId, updateOwner, a.registrationId)
+          updatePrompts.unregister(
+            options.appId,
+            updateOwner,
+            a.registrationId,
+          )
         }
       } else if (method === 'updates.respond') {
         if (typeof a.promptId !== 'string' || typeof a.shown !== 'boolean') {
@@ -545,6 +572,63 @@ export function createHostTransport(options: HostOptions): AppTransport {
         value = session()
       } else if (method === 'resources.bindings') {
         setApplicationBindings(options.appId, a.bindings)
+      } else if (
+        method === 'files.private.pick' ||
+        method === 'files.private.upload'
+      ) {
+        if (
+          Object.keys(a).some(
+            (key) =>
+              ![
+                'scope',
+                method === 'files.private.pick' ? 'options' : 'file',
+              ].includes(key),
+          )
+        ) {
+          throw SdkErrorCode.INVALID_ARGUMENTS()
+        }
+        if (
+          method === 'files.private.upload' &&
+          (!a.file || typeof a.file !== 'object' || Array.isArray(a.file))
+        ) {
+          throw SdkErrorCode.INVALID_ARGUMENTS()
+        }
+        const scope = privateFileScope(a.scope)
+        const signal = callOptions.signal
+          ? AbortSignal.any([lifetime.signal, callOptions.signal])
+          : lifetime.signal
+        const files =
+          method === 'files.private.pick'
+            ? await chooseApplicationFiles(
+                (a.options || {}) as { accept?: string, multiple?: boolean },
+                signal,
+              )
+            : [decodeApplicationFile(a.file as Record<string, unknown>)]
+        assertEpoch(started)
+        const uploaded = []
+        for (const file of files) {
+          assertEpoch(started)
+          signal.throwIfAborted()
+          uploaded.push(
+            await uploadPrivateApplicationFile(
+              options.appId,
+              scope,
+              file,
+              signal,
+            ),
+          )
+        }
+        value = method === 'files.private.pick' ? uploaded : uploaded[0]
+      } else if (method === 'files.private.read') {
+        if (Object.keys(a).some((key) => !['id', 'original'].includes(key))) {
+          throw SdkErrorCode.INVALID_ARGUMENTS()
+        }
+        value = await readPrivateApplicationFile(
+          options.appId,
+          a.id,
+          a.original,
+          callOptions.signal,
+        )
       } else if (method === 'files.pick' || method === 'files.upload') {
         const signal = callOptions.signal
           ? AbortSignal.any([lifetime.signal, callOptions.signal])
@@ -634,7 +718,11 @@ export function createHostTransport(options: HostOptions): AppTransport {
         if (typeof a.key !== 'string' || !/^[\w.-]{1,80}$/.test(a.key)) {
           throw SdkErrorCode.INVALID_STORAGE_KEY()
         }
-        const scope = deviceApplicationScope(options.appId, identity.user?.id, context.subject)
+        const scope = deviceApplicationScope(
+          options.appId,
+          identity.user?.id,
+          context.subject,
+        )
         const key = `tbox.app.${options.appId}.${scope}.${a.key}`
         if (method === 'storage.get') {
           const saved = localStorage.getItem(key)

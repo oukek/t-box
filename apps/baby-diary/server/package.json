@@ -1,0 +1,37 @@
+{
+  "name": "@t-box/baby-diary-server",
+  "type": "module",
+  "version": "1.2.2",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-server-sdk": "workspace:*",
+    "@t-box/baby-diary-contracts": "workspace:*",
+    "@t-box/baby-diary-core": "workspace:*",
+    "@t-box/errors": "workspace:*",
+    "@t-box/server-foundation": "workspace:*",
+    "typeorm": "1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "typescript": "~5.9.3"
+  }
+}

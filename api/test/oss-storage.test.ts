@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { test } from 'node:test'
-import { ossResourceBackend } from '../src/resources/oss.js'
+import { ossResourceBackend, OssResourceStorage } from '../src/resources/oss.js'
 import { fixtureOss } from './oss-fixture.js'
 
 test('public OSS objects preserve bytes, image preview headers and safe file downloads without signatures', async () => {
@@ -44,4 +44,18 @@ test('physical bucket identity survives credential rotation and differs across b
   assert.equal(first, ossResourceBackend({ region: 'cn-hangzhou', bucket: 'tboxos' }))
   assert.notEqual(first, ossResourceBackend({ region: 'cn-hangzhou', bucket: 'other-bucket' }))
   assert.notEqual(first, ossResourceBackend({ region: 'cn-shanghai', bucket: 'tboxos' }))
+})
+
+test('private app files never inherit a public URL, prefix or public-read object ACL', async () => {
+  const writes: { path: string, acl: string }[] = []
+  const client = { async put(path: string, _bytes: Buffer, options: { headers: Record<string, string> }) {
+    writes.push({ path, acl: options.headers['x-oss-object-acl']! })
+  } }
+  const storage = new OssResourceStorage({ region: 'cn-hangzhou', bucket: 'private-fixture', accessKeyId: 'fixture', accessKeySecret: 'fixture', private: true }, client as unknown as OssResourceStorage['client'])
+  const path = storage.path(randomUUID())
+  await storage.write(path, Buffer.from('private photo'), { name: '宝宝.png', mimeType: 'image/png' })
+  assert.equal(storage.origin, undefined)
+  assert.equal(writes[0]?.acl, 'private')
+  assert.match(writes[0]!.path, /^private\/application-files\//)
+  await assert.rejects(storage.write(`uploads/resources/${randomUUID()}`, Buffer.from('no public path')))
 })

@@ -15,7 +15,7 @@ export function verifiedOffline({ application = false } = {}) {
     },
     transformIndexHtml() {
       return [
-        ...(application ? [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', 'content': 'default-src \'none\'; script-src \'self\'; worker-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; connect-src \'self\'; font-src \'self\'; base-uri \'none\'; form-action \'none\'; frame-src \'none\'; object-src \'none\'' }, injectTo: 'head-prepend' }] : []),
+        ...(application ? [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', 'content': 'default-src \'none\'; script-src \'self\'; worker-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data: blob:; media-src \'self\' blob:; connect-src \'self\'; font-src \'self\'; base-uri \'none\'; form-action \'none\'; frame-src \'none\'; object-src \'none\'' }, injectTo: 'head-prepend' }] : []),
         { tag: 'script', attrs: { type: 'module', src: './tbox-offline.js' }, injectTo: 'body' },
       ]
     },

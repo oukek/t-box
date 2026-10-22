@@ -107,7 +107,7 @@ export function startCatalogSync() {
     }
     active.onerror = () => active.close()
   }
-  const stopWatch = watch(() => [identity.user?.id, identity.token] as const, () => {
+  const stopWatch = watch([() => identity.user?.id, () => identity.token], () => {
     epoch++
     dirty = false
     lastRevision = ''

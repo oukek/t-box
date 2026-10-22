@@ -225,7 +225,7 @@ export interface ManagedRelease {
   createdAt: string
   submittedAt: string | null
   publishedAt: string | null
-  readiness: { ready: boolean, reason: string }
+  readiness: { ready: boolean, reason: string, development?: boolean }
 }
 export interface ManagedApplication {
   appId: string

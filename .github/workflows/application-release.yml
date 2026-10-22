@@ -10,6 +10,7 @@ on:
         options:
           # eslint-disable yaml/plain-scalar
           # BEGIN GENERATED APPLICATIONS
+          - '宝宝日记 (baby-diary)'
           - '数学计算器 (calculator)'
           - '日历 (calendar)'
           - '单位换算 (converter)'

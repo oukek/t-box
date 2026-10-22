@@ -3,6 +3,7 @@ import type { ConfigurationService } from '../admin/service.js'
 import type { PaymentConfiguration } from '../payments/configuration.js'
 import type { PaymentGateway } from '../payments/gateway.js'
 import type { WechatAuthorization } from '../payments/wechat-authorization.js'
+import { BabyDiaryService } from '@t-box/baby-diary-server'
 import { calculatorBackend } from '@t-box/calculator-server'
 import { CalendarService } from '@t-box/calendar-server/service'
 import { converterBackend } from '@t-box/converter-server'
@@ -35,6 +36,7 @@ import { PaymentReconciliationService } from '../payments/reconciliation.js'
 import { PaymentRefundService } from '../payments/refunds.js'
 import { PaymentService } from '../payments/service.js'
 import { ImageTools } from '../resources/images.js'
+import { PrivateApplicationFiles } from '../resources/private-files.js'
 import { ResourceService } from '../resources/service.js'
 import { CustomerSupportService } from '../support/service.js'
 import { TaskStore } from '../tasks/store.js'
@@ -43,6 +45,8 @@ export class PlatformService {
   readonly applicationCatalogUpdates: ApplicationCatalogMonitor
   readonly applications: ApplicationPlatform
   readonly desktop: DesktopService
+  readonly privateFiles: PrivateApplicationFiles
+  readonly babyDiary: BabyDiaryService
   readonly calendar: CalendarService
   readonly time: TimeService
   readonly pricing: BillingPricingService
@@ -80,6 +84,10 @@ export class PlatformService {
       builtinKinds,
       { shellMigrations: ['ledger', 'calendar', 'time'], deploymentIssues },
     )
+    this.privateFiles = new PrivateApplicationFiles(source, this.applications)
+    this.babyDiary = new BabyDiaryService(source, this.privateFiles.port('baby-diary'))
+    this.privateFiles.bind('baby-diary', this.babyDiary.mediaPolicy)
+    this.applications.bind('baby-diary', this.babyDiary.backend())
     this.applications.bind('calculator', calculatorBackend)
     this.applications.bind('converter', converterBackend)
     this.desktop = new DesktopService(source, this.applications)

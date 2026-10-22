@@ -1,0 +1,127 @@
+// Frozen schema used to recognize and safely upgrade the first release.
+import type { DatabaseSchema } from '@t-box/server-foundation/persistence/schema'
+
+export const babyDiarySchemaV1: DatabaseSchema = {
+  id: 'baby-diary',
+  tables: [
+    `CREATE TABLE baby_diary_actors (
+      generation int NOT NULL,
+      release_id varchar(80) NOT NULL,
+      active boolean NOT NULL,
+      \`subject\` char(64) NOT NULL,
+      \`created_at\` datetime(3) NOT NULL,
+      PRIMARY KEY (\`subject\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    `CREATE TABLE baby_diary_babies (
+      \`id\` char(36) NOT NULL,
+      \`name\` varchar(40) NOT NULL,
+      \`birth_date\` date DEFAULT NULL,
+      \`sex\` varchar(10) NOT NULL,
+      \`timezone\` varchar(80) NOT NULL,
+      \`owner_subject\` char(64) NOT NULL,
+      \`archived\` boolean NOT NULL,
+      \`revision\` int NOT NULL,
+      \`created_at\` datetime(3) NOT NULL,
+      \`updated_at\` datetime(3) NOT NULL,
+      KEY baby_owner (\`owner_subject\`),
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    `CREATE TABLE baby_diary_members (
+      \`baby_id\` char(36) NOT NULL,
+      \`subject\` char(64) NOT NULL,
+      \`display_name\` varchar(40) NOT NULL,
+      \`role\` varchar(10) NOT NULL,
+      \`scopes\` json NOT NULL,
+      \`allow_export\` boolean NOT NULL,
+      \`joined_at\` datetime(3) NOT NULL,
+      KEY baby_member_subject (\`subject\`),
+      PRIMARY KEY (\`baby_id\`,\`subject\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    `CREATE TABLE baby_diary_invites (
+      \`id\` char(36) NOT NULL,
+      \`baby_id\` char(36) NOT NULL,
+      \`token_hash\` char(64) NOT NULL,
+      \`role\` varchar(10) NOT NULL,
+      \`scopes\` json NOT NULL,
+      \`allow_export\` boolean NOT NULL,
+      \`max_uses\` int NOT NULL,
+      \`uses\` int NOT NULL,
+      \`expires_at\` datetime(3) NOT NULL,
+      \`revoked_at\` datetime(3) DEFAULT NULL,
+      \`created_at\` datetime(3) NOT NULL,
+      UNIQUE KEY baby_invite_token (\`token_hash\`),
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    `CREATE TABLE baby_diary_records (
+      \`id\` char(36) NOT NULL,
+      \`baby_id\` char(36) NOT NULL,
+      \`kind\` varchar(20) NOT NULL,
+      \`date\` date NOT NULL,
+      \`title\` varchar(100) NOT NULL,
+      \`text\` text NOT NULL,
+      \`tags\` json NOT NULL,
+      \`asset_ids\` json NOT NULL,
+      \`visibility\` varchar(10) NOT NULL,
+      \`height_mm\` int DEFAULT NULL,
+      \`weight_grams\` int DEFAULT NULL,
+      \`head_mm\` int DEFAULT NULL,
+      \`method\` varchar(20) NOT NULL,
+      \`author\` char(64) NOT NULL,
+      \`author_name\` varchar(40) NOT NULL,
+      \`revision\` int NOT NULL,
+      \`created_at\` datetime(3) NOT NULL,
+      \`updated_at\` datetime(3) NOT NULL,
+      \`deleted_at\` datetime(3) DEFAULT NULL,
+      KEY baby_record_timeline (\`baby_id\`,\`deleted_at\`,\`date\`,\`id\`),
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    `CREATE TABLE baby_diary_projects (
+      \`id\` char(36) NOT NULL,
+      \`baby_id\` char(36) NOT NULL,
+      \`title\` varchar(60) NOT NULL,
+      \`template\` varchar(30) NOT NULL,
+      \`visibility\` varchar(10) NOT NULL,
+      \`settings\` json NOT NULL,
+      \`author\` char(64) NOT NULL,
+      \`revision\` int NOT NULL,
+      \`frame_count\` int NOT NULL,
+      \`created_at\` datetime(3) NOT NULL,
+      \`updated_at\` datetime(3) NOT NULL,
+      \`deleted_at\` datetime(3) DEFAULT NULL,
+      KEY baby_project_list (\`baby_id\`,\`deleted_at\`),
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    `CREATE TABLE baby_diary_frames (
+      \`id\` char(36) NOT NULL,
+      \`project_id\` char(36) NOT NULL,
+      \`asset_id\` char(36) NOT NULL,
+      \`date\` date NOT NULL,
+      \`caption\` varchar(200) NOT NULL,
+      \`position\` int NOT NULL,
+      \`x\` double NOT NULL,
+      \`y\` double NOT NULL,
+      \`scale\` double NOT NULL,
+      \`rotation\` double NOT NULL,
+      KEY baby_frame_order (\`project_id\`,\`position\`),
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    `CREATE TABLE baby_diary_operations (
+      \`subject\` char(64) NOT NULL,
+      \`operation_key\` char(64) NOT NULL,
+      \`payload_hash\` char(64) NOT NULL,
+      \`response\` json NOT NULL,
+      \`created_at\` datetime(3) NOT NULL,
+      PRIMARY KEY (\`subject\`,\`operation_key\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    `CREATE TABLE baby_diary_audit (
+      \`id\` char(36) NOT NULL,
+      \`baby_id\` char(36) NOT NULL,
+      \`actor\` char(64) NOT NULL,
+      \`action\` varchar(50) NOT NULL,
+      \`target_id\` varchar(80) NOT NULL,
+      \`created_at\` datetime(3) NOT NULL,
+      KEY baby_audit_time (\`baby_id\`,\`created_at\`),
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  ],
+}

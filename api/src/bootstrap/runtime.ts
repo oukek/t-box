@@ -40,6 +40,7 @@ export async function createRuntime(worker: boolean) {
   )
   const app = createApp({
     taskWorker: worker,
+    disableRequestLogging: process.env.NODE_ENV !== 'production',
     administration,
     platform,
     trustedProxies: config.trustedProxies,

@@ -44,7 +44,7 @@ async function submit() {
 <template>
   <main class="identity-page">
     <form class="identity-card" @submit.prevent="submit">
-      <span class="eyebrow">T BOX / 日常，一处安放</span>
+      <span class="identity-eyebrow">T BOX / 日常，一处安放</span>
       <h1>{{ mode === "recover" ? "找回账号。" : mode === "login" ? "欢迎回来。" : "开始记录生活。" }}</h1>
       <p>对话、创作与日常工具，都在自己的空间里。</p>
       <fieldset :disabled="busy" class="form-fields">

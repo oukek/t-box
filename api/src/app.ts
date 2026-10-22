@@ -23,7 +23,7 @@ import {
 } from '@t-box/ledger-server/validation'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { registerTime } from '@t-box/time-server/routes'
-import Fastify from 'fastify'
+import Fastify, { LogController } from 'fastify'
 import { registerAdmin } from './admin/routes.js'
 import { ApplicationBuildImports } from './application-platform/build-import.js'
 import { registerApplicationBuildImports } from './application-platform/import-routes.js'
@@ -41,6 +41,7 @@ import { registerApplicationCatalog } from './platform/application-catalog.js'
 import { registerPlatform } from './platform/routes.js'
 import { registerLedgerSocket } from './platform/socket.js'
 import { registerApplicationFiles } from './resources/application-file-routes.js'
+import { registerPrivateApplicationFiles } from './resources/private-file-routes.js'
 import { registerResources } from './resources/routes.js'
 import { registerCustomerSupport } from './support/routes.js'
 import { registerTasks } from './tasks/routes.js'
@@ -62,6 +63,7 @@ export interface AppDependencies {
   corsOrigins?: string[]
   adminOrigins?: string[]
   logger?: FastifyServerOptions['logger']
+  disableRequestLogging?: boolean
   chatProvider?: ChatProvider
   chatSessions?: SessionRepository
   applicationModules?: ApplicationModule[]
@@ -73,12 +75,15 @@ export function createApp(deps: AppDependencies) {
     genReqId: () => randomUUID(),
     trustProxy: deps.trustedProxies ?? false,
     logger: deps.logger ?? false,
+    logController: new LogController({ disableRequestLogging: deps.disableRequestLogging ?? false }),
     bodyLimit: 16 * 1024,
     requestTimeout: 15_000,
   })
   app.register(cors, {
     delegator: (request, callback) => {
-      const admin = /^\/api\/v1\/admin(?:\/|$)/.test(request.url.split('?')[0]!)
+      const admin = /^\/api\/v1\/admin(?:\/|$)/.test(
+        request.url.split('?')[0]!,
+      )
       const origin = request.headers.origin
       const origins = (admin ? deps.adminOrigins : deps.corsOrigins) ?? ['*']
       const allowed = admin
@@ -116,6 +121,16 @@ export function createApp(deps: AppDependencies) {
             ),
           )
         void deps.platform!.billing.recover().catch(() => {})
+        void deps
+          .platform!
+          .privateFiles
+          .purgeDrafts()
+          .catch(() =>
+            app.log.warn(
+              { code: 'PRIVATE_MEDIA_PURGE_FAILED' },
+              'Private draft cleanup will retry',
+            ),
+          )
         void deps
           .platform!
           .resources
@@ -258,9 +273,11 @@ export function createApp(deps: AppDependencies) {
 
   app.setErrorHandler((error, request, reply) => {
     if ((error as { code?: string }).code === 'ER_DUP_ENTRY') {
-      const failure = ErrorCode.ALREADY_EXISTS(/\/categories(?:[/?]|$)/.test(request.url)
-        ? '此收支类型下已存在同名分类'
-        : '账号或该服务商下的模型已存在')
+      const failure = ErrorCode.ALREADY_EXISTS(
+        /\/categories(?:[/?]|$)/.test(request.url)
+          ? '此收支类型下已存在同名分类'
+          : '账号或该服务商下的模型已存在',
+      )
       return reply.code(failure.statusCode).send(apiErrorResponse(failure))
     }
     if (error instanceof ApplicationError) {
@@ -279,7 +296,13 @@ export function createApp(deps: AppDependencies) {
     if (errorInfo.statusCode && errorInfo.statusCode < 500) {
       const tooLarge = errorInfo.statusCode === 413
       // The framework owns transport statuses such as 415; retain its exact status.
-      return reply.code(errorInfo.statusCode).send(apiErrorResponse(tooLarge ? ErrorCode.PAYLOAD_TOO_LARGE() : ErrorCode.BAD_REQUEST()))
+      return reply
+        .code(errorInfo.statusCode)
+        .send(
+          apiErrorResponse(
+            tooLarge ? ErrorCode.PAYLOAD_TOO_LARGE() : ErrorCode.BAD_REQUEST(),
+          ),
+        )
     }
     // Avoid SQL text, connection configuration, and user content in server logs.
     request.log.error(
@@ -289,12 +312,10 @@ export function createApp(deps: AppDependencies) {
     const failure = ErrorCode.INTERNAL_ERROR()
     return reply.code(failure.statusCode).send(apiErrorResponse(failure))
   })
-
   app.setNotFoundHandler((_request, reply) => {
     const failure = ErrorCode.NOT_FOUND()
     return reply.code(failure.statusCode).send(apiErrorResponse(failure))
   })
-
   app.get('/api/v1/health', async (_request, reply) => {
     const dependencies = await deps.health()
     const status =
@@ -307,7 +328,6 @@ export function createApp(deps: AppDependencies) {
       .code(dependencies.mysql === 'up' ? 200 : 503)
       .send({ data: { status, dependencies } })
   })
-
   if (deps.platform) {
     if (deps.platform.applications) {
       registerApplicationPlatform(app, deps.platform.applications, (token) =>
@@ -324,7 +344,10 @@ export function createApp(deps: AppDependencies) {
     registerPlatform(app, deps.platform)
     registerCalendar(app, deps.platform.calendar, async (token) => {
       const actor = await deps.platform!.identity.authenticate(token)
-      await deps.platform!.applications?.assertActive(actor.user.id, 'calendar')
+      await deps.platform!.applications?.assertActive(
+        actor.user.id,
+        'calendar',
+      )
       return actor
     })
     registerTime(app, deps.platform.time, async (token) => {
@@ -346,6 +369,7 @@ export function createApp(deps: AppDependencies) {
     registerCustomerSupport(app, deps.platform)
     registerResources(app, deps.platform)
     registerApplicationFiles(app, deps.platform)
+    registerPrivateApplicationFiles(app, deps.platform)
     if (deps.platform.tasks) {
       registerTasks(app, deps.platform, chat.registry)
     }
@@ -368,7 +392,6 @@ export function createApp(deps: AppDependencies) {
         .header('Location', `/api/v1/categories/${category.id}`)
         .send({ data: category })
     })
-
     app.get('/api/v1/bills', async (request) => {
       const filters = parseListFilters(request.query)
       const result = await deps.bills.list(filters)
@@ -381,13 +404,11 @@ export function createApp(deps: AppDependencies) {
         },
       }
     })
-
     app.get('/api/v1/bills/summary', async (request) => {
       return {
         data: await deps.bills.summary(parseSummaryQuery(request.query)),
       }
     })
-
     app.get<{ Params: { id: string } }>(
       '/api/v1/bills/:id',
       async (request) => {
@@ -408,7 +429,6 @@ export function createApp(deps: AppDependencies) {
         .header('Location', `/api/v1/bills/${bill.id}`)
         .send({ data: bill })
     })
-
     app.patch<{ Params: { id: string } }>(
       '/api/v1/bills/:id',
       async (request) => {

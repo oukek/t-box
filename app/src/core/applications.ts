@@ -3,10 +3,13 @@ import { presentApplicationIcon } from '@t-box/shared'
 import { computed } from 'vue'
 import { applicationModules } from '../applications/registry'
 import { ErrorCode } from '../error-codes.js'
-import { isInstalled } from './app-runtime/catalog'
+import { appCatalog, isInstalled } from './app-runtime/catalog'
 
 export const applications = computed(() =>
-  applicationModules.map((module) => presentApplication(module.manifest)),
+  applicationModules.map((module) => {
+    const entry = appCatalog.entries.find((row) => row.release.appId === module.manifest.id)
+    return presentApplication(entry?.installation?.status === 'active' ? (entry.installedRelease ?? entry.release).manifest : module.manifest)
+  }),
 )
 /** Only compiled system modules may customize shell presentation; release identity stays intact. */
 export function presentApplication(
@@ -23,7 +26,7 @@ export function presentApplication(
 export const aiApplications = computed(() =>
   applicationModules
     .filter((module) => module.ai && isInstalled(module.manifest.id))
-    .map((module) => module.manifest),
+    .map((module) => applications.value.find((app) => app.id === module.manifest.id)!),
 )
 export function getApplication(id: string) {
   return applications.value.find((app) => app.id === id)

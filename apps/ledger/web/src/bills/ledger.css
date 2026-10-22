@@ -653,11 +653,6 @@ h1 {
   align-self: flex-start;
   margin: -4px -6px 0 0;
 }
-.form-fields {
-  padding: 0;
-  margin: 0;
-  border: 0;
-}
 .form-type-control {
   display: flex;
   background: #f1f4f6;
@@ -738,20 +733,6 @@ h1 {
   margin: 0 0 22px;
   padding: 0;
 }
-.form-field {
-  display: block;
-  margin-top: 20px;
-}
-.form-field > input {
-  width: 100%;
-  background: #fbfcfc;
-  border: 1px solid #dfe6ea;
-  border-radius: 5px;
-  padding: 12px;
-  min-height: 44px;
-  font-size: 13px;
-  appearance: none;
-}
 .month-picker,
 .search-field,
 .amount-input-wrap {
@@ -761,24 +742,6 @@ h1 {
   color: #a8b1b8;
   margin-left: 6px;
   font-size: 10px;
-}
-.form-error {
-  color: #a94633;
-  background: #fbefeb;
-  border-radius: 5px;
-  padding: 11px 13px;
-  font-size: 12px;
-  line-height: 1.7;
-  margin: 20px 0 0;
-}
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 27px;
-}
-.dialog-footer .button {
-  min-width: 92px;
 }
 .confirm-dialog {
   width: min(400px, calc(100vw - 32px));

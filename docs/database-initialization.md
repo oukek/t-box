@@ -1,6 +1,6 @@
 # 数据库首次初始化
 
-项目尚未正式部署，已将历史 TypeORM migrations 合并为一份当前完整的初始化基线 `2026-10-18.1`。不再逐条执行旧的建表、改表和数据回填，也不再使用 `schema_migrations`。TypeORM 的 DataSource、EntitySchema、Repository、事务照常使用，`synchronize` 保持关闭。
+项目尚未正式部署，已将历史 TypeORM migrations 合并为一份当前完整的初始化基线 `2026-10-21.2`。不再逐条执行旧的建表、改表和数据回填，也不再使用 `schema_migrations`。TypeORM 的 DataSource、EntitySchema、Repository、事务照常使用，`synchronize` 保持关闭。
 
 ## 使用方法
 
@@ -47,3 +47,27 @@ MYSQL_DATABASE=t_box_test_init pnpm test:db-init
 ```
 
 测试连接账号需要创建、删除测试数据库的权限。测试使用随机命名的临时数据库并在结束后清理，覆盖异构默认排序规则、完整建表与默认数据、重复运行、用户/账本创建、中断恢复、旧库保护和并发初始化，不修改个人业务库。
+
+## 宝宝日记增量升级
+
+已完成 `2026-10-18.1` 、`2026-10-20.1` 或 `2026-10-21.1` 初始化的库无需清空。备份后，在新版本代码中执行：
+
+```bash
+pnpm --filter @t-box/api db:upgrade:baby --check
+pnpm db:upgrade:baby
+```
+
+脚本创建缺少的宝宝日记和私有文件表，新增照护事件、喂养/尿布明细和修改历史四张表，并为旧版宝宝档案追加可空的 `theme` 字段；不会覆盖已有档案、记录或配置，成功后更新为 `2026-10-21.2`。`--check` 显示待增加的表/字段而不写入。旧档案 `theme=NULL`，自动按档案性别选择三套主题之一。MySQL DDL 中断可重复执行；重复运行不会覆盖已有数据。旧版表定义由应用的 `schema-v1.ts` 保留用于指纹核验；可增加的字段由应用明确声明。无法识别的旧基线或结构仍拒绝接管。API 启动不自动升级。
+
+PM2 打包产物已包含升级 CLI。在 `prepare-release` 准备目录和环境后，可先显式运行 `node --env-file=/你的部署目录/shared/api.env /新发布目录/api/dist/db/upgrades/baby-diary-cli.js --check`，确认备份后去掉 `--check` 执行。随后运行原有部署/启动脚本；原有 `init-db.js --check` 会验证新基线。Docker 可在新镜像临时容器内运行同一 `dist/db/upgrades/baby-diary-cli.js`，挂载同一服务端环境；不会自动执行。
+
+生产照片存储还需独立的私有 OSS Bucket，配置 `OSS_PRIVATE_RESOURCE_BUCKET`，详见 [宝宝日记说明](../apps/baby-diary/README.md)。
+
+仍保留 `schema_migrations`、没有统一初始化标记的旧本地库，可以只增加这个独立应用所需的表：
+
+```bash
+pnpm --filter @t-box/api db:upgrade:baby --extensions-only --check
+pnpm --filter @t-box/api db:upgrade:baby --extensions-only
+```
+
+此模式先验证原平台表存在，再创建/校验宝宝日记和私有文件表，以及应用明确声明的新增字段；**不会修改原平台表、migration 记录或创建新的全库基线标记**。它不是旧平台的全量迁移，不能据此跳过生产部署的基线检查。已有扩展表出现未声明的缺失字段、额外字段或类型不匹配时拒绝执行，不覆盖已有内容。本机已有开发库可通过同一命令补齐主题字段及照护表，日常直接 `pnpm dev`。

@@ -39,8 +39,8 @@ try {
   const result = await initializeDatabase(fresh, databaseSchemas)
   assert.equal(result.initialized, true)
   assert.equal(result.baseline, DATABASE_BASELINE)
-  assert.equal(result.tables, 92)
   const expected = [...schemaTables(databaseSchemas).keys(), 'schema_initialization'].sort()
+  assert.equal(result.tables, expected.length - 1)
   assert.deepEqual((await fresh.query('SHOW TABLES')).map((row: Record<string, string>) => Object.values(row)[0]).sort(), expected)
   const collations = await fresh.query(`SELECT TABLE_NAME FROM information_schema.TABLES
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_COLLATION<>'utf8mb4_unicode_ci'`)

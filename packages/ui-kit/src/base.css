@@ -140,6 +140,75 @@ fieldset {
 .button-danger:hover:not(:disabled) {
   background: #9b4131;
 }
+.text-button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 10px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.danger-text {
+  color: #b35d4c;
+}
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+/* Shared controls belong to the UI kit, so hosts and isolated apps can load
+   them without importing another application's business styles. */
+.form-fields {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.form-field {
+  display: block;
+  margin-top: 20px;
+  font-size: 12px;
+}
+.form-fields > .form-field:first-of-type {
+  margin-top: 0;
+}
+.form-field > :where(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: 8px;
+  background: #fbfcfc;
+  border: 1px solid #dfe6ea;
+  border-radius: 5px;
+  padding: 12px;
+  min-height: 44px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+.form-field > .field-label + :where(input, select, textarea) {
+  margin-top: 0;
+}
+.form-error {
+  color: #a94633;
+  background: #fbefeb;
+  border-radius: 5px;
+  padding: 11px 13px;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 20px 0 0;
+  overflow-wrap: anywhere;
+}
+/* Also used by footer content supplied through a Modal slot. */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.dialog-footer .button {
+  min-width: 92px;
+}
 .icon-button {
   display: inline-flex;
   align-items: center;

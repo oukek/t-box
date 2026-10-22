@@ -6,7 +6,7 @@ import { parse } from 'yaml'
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url))
 
 /** Resolve public package exports, never private paths or arbitrary files in a workspace. */
-function exportTarget(value) {
+function exportTarget(value, conditions = ['browser', 'import', 'default']) {
   if (typeof value === 'string') {
     return value
   }
@@ -14,14 +14,14 @@ function exportTarget(value) {
     return null
   }
   if (Array.isArray(value)) {
-    return value.map(exportTarget).find((target) => target !== undefined)
+    return value.map((target) => exportTarget(target, conditions)).find((target) => target !== undefined)
   }
   if (value && typeof value === 'object') {
-    for (const condition of ['browser', 'import', 'default']) {
+    for (const condition of conditions) {
       if (!Object.hasOwn(value, condition)) {
         continue
       }
-      const target = exportTarget(value[condition])
+      const target = exportTarget(value[condition], conditions)
       if (target !== undefined) {
         return target
       }
@@ -51,6 +51,29 @@ export function workspaceCatalog(root = defaultRoot) {
     packages.set(manifest.name, { path: dirname(path), exports: manifest.exports })
   }
   return { packages, workspaces: workspaces.sort((a, b) => b.path.length - a.path.length), patterns: config.packages.filter((path) => !path.startsWith('!')) }
+}
+
+/**
+ * tsx uses the same public Node package entries as Vite. Only development
+ * redirects compiled exports; production keeps the original dist contract.
+ */
+export function workspaceSourcePaths(root = defaultRoot) {
+  const paths = {}
+  for (const [name, entry] of workspaceCatalog(root).packages) {
+    const exports = typeof entry.exports === 'string' || !Object.keys(entry.exports).some((key) => key.startsWith('.'))
+      ? { '.': entry.exports }
+      : entry.exports
+    for (const [subpath, value] of Object.entries(exports)) {
+      const target = exportTarget(value, ['node', 'import', 'default'])
+      const compiled = /^\.\/dist\/(.+)\.(?:mjs|js)$/.exec(target || '')
+      if (!compiled) {
+        continue
+      }
+      const id = subpath === '.' ? name : name + subpath.slice(1)
+      paths[id] = ['ts', 'tsx', 'js', 'mjs'].map((extension) => resolve(entry.path, `src/${compiled[1]}.${extension}`))
+    }
+  }
+  return paths
 }
 
 export function resolveWorkspaceSource(catalog, id, importer) {

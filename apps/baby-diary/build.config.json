@@ -1,0 +1,7 @@
+{
+  "appId": "baby-diary",
+  "package": "@t-box/baby-diary-web",
+  "releasePackage": "@t-box/baby-diary-server",
+  "releaseModule": "server/dist/release.js",
+  "releaseExport": "babyDiaryRelease"
+}

@@ -6,6 +6,8 @@ export interface ApplicationContext {
   sdkVersion: typeof APP_SDK_VERSION
   appId: string
   releaseId: string
+  /** Installed release metadata for UI feature compatibility; never an authorization grant. */
+  applicationVersion?: string
   generation: number
   subject: string
   platform: AppPlatform
@@ -27,8 +29,16 @@ export interface ApplicationSession {
   profile?: { nickname: string }
 }
 export type HostMethod =
-  | 'updates.getAvailable' | 'updates.openMarket' | 'updates.presentation' | 'updates.respond' |
-  'files.pick' | 'files.upload' | 'files.read' |
+  | 'updates.getAvailable' |
+  'updates.openMarket' |
+  'updates.presentation' |
+  'updates.respond' |
+  'files.pick' |
+  'files.upload' |
+  'files.read' |
+  'files.private.pick' |
+  'files.private.upload' |
+  'files.private.read' |
   'device.reminders' |
   'runtime.context' |
   'auth.session' |
@@ -49,9 +59,28 @@ export interface ApplicationBridgeError {
 }
 export interface ApplicationBridgeEvent {
   type: 'event'
-  name: 'auth.changed' | 'runtime.closed' | 'runtime.navigation' | 'runtime.interactions.cancelled' | 'app.event' | 'app.event.error' | 'runtime.update'
+  name:
+    | 'auth.changed' |
+    'runtime.closed' |
+    'runtime.navigation' |
+    'runtime.interactions.cancelled' |
+    'app.event' |
+    'app.event.error' |
+    'runtime.update'
   data: unknown
 }
 /** JSON attachments have a separate bounded transport budget; ordinary calls remain small. */
 export const APP_HTTP_MAX_BYTES = 15 * 1024 * 1024
-export const applicationPayloadLimit = (method: string) => ['api.request', 'files.upload', 'files.read'].includes(method) ? APP_HTTP_MAX_BYTES : 64000
+export const APP_INVOKE_MAX_BYTES = 1024 * 1024
+export const applicationPayloadLimit = (method: string) =>
+  method === 'api.invoke'
+    ? APP_INVOKE_MAX_BYTES
+    : [
+        'api.request',
+        'files.upload',
+        'files.read',
+        'files.private.upload',
+        'files.private.read',
+      ].includes(method)
+        ? APP_HTTP_MAX_BYTES
+        : 64000

@@ -27,6 +27,7 @@ import {
 } from '../db/records/applications-entities.js'
 import { ErrorCode } from '../error-codes.js'
 import { ApplicationArtifacts } from './artifacts.js'
+import { isDevelopmentRelease } from './release-source.js'
 
 const hash = (v: unknown) =>
   createHash('sha256').update(JSON.stringify(v)).digest('hex')
@@ -88,7 +89,7 @@ export class ApplicationPublishing {
       .find({ select: { definition: true }, where: { app_id: appId } })
     const digests = rows.flatMap((row: { definition: AppRelease | string }) => {
       const release = json<AppRelease>(row.definition)
-      return release.runtime.type === 'web'
+      return release.runtime.type === 'web' && !isDevelopmentRelease(release)
         ? [release.runtime.integrity.slice(7)]
         : []
     })
@@ -119,6 +120,13 @@ export class ApplicationPublishing {
   }
 
   async readiness(release: AppRelease) {
+    if (isDevelopmentRelease(release)) {
+      return {
+        ready: false,
+        development: true,
+        reason: '开发预览，尚未绑定正式构建产物；请先构建并提交发布版本',
+      }
+    }
     if (
       release.backend.type !== 'none' &&
       !this.platform.hasBackend(release.backend.binding)
@@ -145,7 +153,7 @@ export class ApplicationPublishing {
     ) {
       return {
         ready: false,
-        reason: '应用地址与当前产物服务不一致，请重新选择构建产物',
+        reason: '此版本使用其他产物服务地址；草稿可重新选择产物，已锁定版本需提交新版本',
       }
     }
     try {
@@ -252,6 +260,94 @@ export class ApplicationPublishing {
         })),
       )
     return rows.map((row) => ({ ...row, createdAt: isoTime(row.createdAt) }))
+  }
+
+  /** Trusted local operator command only; never exposed as an HTTP build/execute endpoint. */
+  async submitLocalBuild(appId: string, version: string, artifact: string) {
+    if (
+      process.env.NODE_ENV === 'production' ||
+      this.delivery !== 'local' ||
+      !['localhost', '127.0.0.1', '[::1]'].includes(new URL(this.origin).hostname)
+    ) {
+      fail('本地构建提交仅支持开发环境和本地产物服务；正式环境请使用应用发布工作流')
+    }
+    const deployed = this.platform.deployedRelease(appId)
+    if (!deployed || deployed.runtime.type !== 'web' || deployed.manifest.version !== version) {
+      return fail('构建版本与当前应用声明不一致，请重新构建后提交')
+    }
+    await this.platform.initialize()
+    await this.artifacts.verify(appId, artifact)
+    const existing = async () => {
+      const rows = await this.source.getRepository(ApplicationReleaseEntity).find({
+        select: { release_id: true, definition: true, revision: true, status: true },
+        where: { app_id: appId },
+      })
+      const row = rows.find((row) => {
+        const release = json<AppRelease>(row.definition)
+        return !isDevelopmentRelease(release) && release.manifest.version === version
+      })
+      if (row) {
+        const release = json<AppRelease>(row.definition)
+        if (
+          release.runtime.type !== 'web' ||
+          release.runtime.integrity !== `sha256-${artifact}` ||
+          release.runtime.entryUrl !== `${this.origin}/${appId}/${artifact}/`
+        ) {
+          throw ErrorCode.APP_VERSION_EXISTS(`v${version} 已绑定其他构建；请提高应用版本号后重新提交，不能覆盖原产物`)
+        }
+      }
+      return row
+    }
+    // The fixed system actor denotes a local repository operator, not an administrator session.
+    const actor = '00000000-0000-0000-0000-000000000000'
+    let row = await existing()
+    if (!row) {
+      try {
+        await this.save({
+          appId,
+          kind: this.platform.applicationKind(appId) || deployed.kind,
+          version,
+          name: deployed.manifest.name,
+          description: deployed.manifest.description,
+          icon: deployed.manifest.icon,
+          iconAsset: deployed.manifest.iconAsset,
+          iconVariant: deployed.manifest.iconVariant,
+          color: deployed.manifest.color,
+          runtime: 'web',
+          artifact,
+          releaseNotes: '',
+          updatePrompt: deployed.updatePrompt,
+        }, actor)
+      } catch (error) {
+        if (!(error && typeof error === 'object' && 'code' in error && error.code === 'APP_VERSION_EXISTS')) {
+          throw error
+        }
+        // A second local submission may have committed the same version meanwhile.
+      }
+      row = await existing()
+    }
+    if (!row) {
+      return fail('本地构建提交失败，请重新执行相同命令')
+    }
+    if (row.status === 'draft') {
+      try {
+        await this.transition(row.release_id, {
+          action: 'submit',
+          revision: Number(row.revision),
+          expectedCurrentReleaseId: null,
+        }, actor)
+      } catch (error) {
+        const latest = await existing()
+        if (!latest || latest.status === 'draft') {
+          throw error
+        }
+      }
+      row = await existing()
+    }
+    if (!row) {
+      return fail('本地构建记录已变化，请重新执行相同命令')
+    }
+    return { releaseId: row.release_id, revision: Number(row.revision), status: row.status }
   }
 
   /** Draft data never supplies executable server bindings. Existing capability contracts are copied from trusted deployment. */
@@ -424,12 +520,18 @@ export class ApplicationPublishing {
         all.some(
           (r) =>
             r.release_id !== editingId &&
+            !isDevelopmentRelease(json<AppRelease>(r.definition)) &&
             json<AppRelease>(r.definition).manifest.version === b.version,
         )
       ) {
         throw ErrorCode.APP_VERSION_EXISTS()
       }
-      const base = all[0] ? json<AppRelease>(all[0].definition) : undefined
+      // New capabilities come only from trusted deployed code. In particular a
+      // new build must not inherit an older published version's permission list.
+      const deployed = this.platform.deployedRelease(appId)
+      const base = deployed?.manifest.version === b.version
+        ? deployed
+        : all[0] ? json<AppRelease>(all[0].definition) : undefined
       if (
         b.runtime === 'shell' &&
         (!this.platform.deployedRelease(appId) ||

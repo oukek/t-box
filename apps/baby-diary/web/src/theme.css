@@ -1,0 +1,65 @@
+:root {
+  font-family:
+    ui-rounded,
+    'SF Pro Rounded',
+    -apple-system,
+    BlinkMacSystemFont,
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
+  --baby-sky: #4d7082;
+  --baby-sky-soft: #e9f2f5;
+  --baby-sun: #f1cf79;
+  --baby-sun-soft: #faf1d4;
+  --baby-ochre: #856629;
+  --baby-danger: #a14f37;
+  --baby-danger-soft: #fff0e7;
+  --ink: var(--baby-ink);
+  --muted: var(--baby-muted);
+  --line: var(--baby-line);
+  --accent: var(--baby-accent);
+  --focus-border: var(--baby-accent);
+  color: var(--baby-ink);
+  background: var(--baby-canvas);
+}
+
+/* Exactly three palettes. A null profile preference selects one by sex; these
+   selectors also power the color cards without affecting their surroundings. */
+:root,
+[data-baby-theme='neutral'] {
+  --baby-canvas: #f7f9f2;
+  --baby-paper: #fffef8;
+  --baby-ink: #2f4439;
+  --baby-text: #617263;
+  --baby-muted: #687362;
+  --baby-line: #dfe6d9;
+  --baby-accent: #48755a;
+  --baby-accent-hover: #385e47;
+  --baby-accent-soft: #edf3e6;
+  --baby-accent-muted: #a9bea1;
+}
+
+[data-baby-theme='pink'] {
+  --baby-canvas: #fcf5f8;
+  --baby-paper: #fffdfb;
+  --baby-ink: #513a45;
+  --baby-text: #7a596a;
+  --baby-muted: #826373;
+  --baby-line: #ebdfe5;
+  --baby-accent: #94516f;
+  --baby-accent-hover: #7d405c;
+  --baby-accent-soft: #f7e9ef;
+  --baby-accent-muted: #cba4b5;
+}
+[data-baby-theme='blue'] {
+  --baby-canvas: #f2f7fb;
+  --baby-paper: #fdfeff;
+  --baby-ink: #304550;
+  --baby-text: #5d7180;
+  --baby-muted: #617583;
+  --baby-line: #dce6ef;
+  --baby-accent: #426e8b;
+  --baby-accent-hover: #345a73;
+  --baby-accent-soft: #e7f0f7;
+  --baby-accent-muted: #a2bfd3;
+}

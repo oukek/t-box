@@ -1,6 +1,7 @@
 import type { MarketEntry } from '@t-box/app-contracts'
 import type { ClientApplicationModule } from '@t-box/app-shell-sdk'
 import type { ResourceRef } from '@t-box/shared'
+import { createBabyDiaryShellModule } from '@t-box/baby-diary-shell'
 import { createCalculatorShellModule } from '@t-box/calculator-shell'
 import { createCalendarShellModule } from '@t-box/calendar-shell'
 import { createConverterShellModule } from '@t-box/converter-shell'
@@ -56,6 +57,7 @@ const timeModule = createTimeShellModule(
 /** Static first-party composition. Neither model output nor database config can import code. */
 export const applicationModules: ClientApplicationModule[] = shallowReactive<ClientApplicationModule[]>([
   ledgerModule,
+  createBabyDiaryShellModule(() => import('../core/app-runtime/WebApplication.vue')),
   calculatorModule,
   converterModule,
   calendarModule,

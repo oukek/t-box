@@ -8,6 +8,7 @@ import { appCatalog } from '../../core/app-runtime/catalog'
 import { localApplications, localEntries, mergeLocalEntries } from '../../core/app-runtime/localApplications'
 import { request, RequestError } from '../../core/network'
 import { identity } from '../../core/session'
+import { refreshDesktopManifests } from './desktopPresentation'
 
 /** Desktop preferences are account/device data. Writes are serialized, with revision fencing. */
 export function useDesktop() {
@@ -41,6 +42,7 @@ export function useDesktop() {
     error: '',
   })
   let epoch = 0
+  let loadSequence = 0
   let controller = new AbortController()
   let desired: string[] | undefined
   let pumping = false
@@ -83,6 +85,7 @@ export function useDesktop() {
   }
   const load = async () => {
     const generation = epoch
+    const sequence = ++loadSequence
     state.loading = true
     state.error = ''
     try {
@@ -90,7 +93,7 @@ export function useDesktop() {
         `/desktop/${device.value}`,
         { signal: controller.signal },
       )
-      if (generation !== epoch) {
+      if (generation !== epoch || sequence !== loadSequence) {
         return
       }
       Object.assign(state, result.data, { ready: true })
@@ -100,11 +103,11 @@ export function useDesktop() {
         localStorage.setItem(orderKey(), JSON.stringify(result.data.appIds))
       } catch { /* Device-local display order is optional. */ }
     } catch (cause) {
-      if (generation === epoch && !controller.signal.aborted) {
+      if (generation === epoch && sequence === loadSequence && !controller.signal.aborted) {
         state.error = restoreLocal() ? '' : (cause instanceof Error ? cause.message : '桌面读取失败')
       }
     } finally {
-      if (generation === epoch) {
+      if (generation === epoch && sequence === loadSequence) {
         state.loading = false
       }
     }
@@ -139,6 +142,10 @@ export function useDesktop() {
   watch(() => appCatalog.revision, () => {
     if ((identity.user || localApplications.releases.length) && (!identity.user || !navigator.onLine || !state.ready)) {
       restoreLocal()
+    } else if (identity.user) {
+      // Socket-driven catalog refreshes also apply artwork immediately on an already mounted desktop.
+      state.applications = refreshDesktopManifests(state.applications, appCatalog.entries)
+      void load()
     }
   })
   window.addEventListener('online', changed)

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { handleDialogCancel } from './dialogCancel'
-import { lockDocumentScroll } from './sheetScroll'
+import { useDialog } from './useDialog'
 
 const props = defineProps<{
   open: boolean
@@ -12,7 +12,6 @@ const props = defineProps<{
   compact?: boolean
 }>()
 const emit = defineEmits<{ close: [], opened: [] }>()
-const dialog = ref<HTMLDialogElement>()
 const viewportHeight = ref<number>()
 const bottomInset = ref(0)
 function updateViewport() {
@@ -30,45 +29,17 @@ function stopViewport() {
   window.visualViewport?.removeEventListener('scroll', updateViewport)
   window.removeEventListener('resize', updateViewport)
 }
-let previous: HTMLElement | null = null
-let release: (() => void) | undefined
-function restore() {
-  stopViewport()
-  release?.()
-  release = undefined
-  const target = previous
-  previous = null
-  if (target?.isConnected) {
-    target.focus()
-  }
-}
-watch(
-  () => props.open,
-  async (open) => {
-    await nextTick()
-    if (open && props.open && dialog.value && !dialog.value.open) {
-      previous =
-        document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null
-      release = lockDocumentScroll()
-      if (props.fullHeight) {
-        updateViewport()
-        window.visualViewport?.addEventListener('resize', updateViewport)
-        window.visualViewport?.addEventListener('scroll', updateViewport)
-        window.addEventListener('resize', updateViewport)
-      }
-      dialog.value.showModal()
-      emit('opened')
-    } else if (!open) {
-      dialog.value?.close()
+const { dialog, closed } = useDialog(() => props.open, {
+  opened: () => {
+    if (props.fullHeight) {
+      updateViewport()
+      window.visualViewport?.addEventListener('resize', updateViewport)
+      window.visualViewport?.addEventListener('scroll', updateViewport)
+      window.addEventListener('resize', updateViewport)
     }
+    emit('opened')
   },
-  { immediate: true },
-)
-onBeforeUnmount(() => {
-  dialog.value?.close()
-  restore()
+  closed: stopViewport,
 })
 </script>
 
@@ -93,7 +64,7 @@ onBeforeUnmount(() => {
       @cancel="
         (event) => handleDialogCancel(event, dialog, busy, () => emit('close'))
       "
-      @close="restore"
+      @close="closed"
       @click.stop="(event) => event.target === dialog && !busy && emit('close')"
     >
       <div class="sheet-handle" aria-hidden="true" />
