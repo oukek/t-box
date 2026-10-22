@@ -37,6 +37,8 @@ import { registerChatSocket } from './chat/websocket.js'
 import { settingNumber } from './configuration/defaults.js'
 import { registerDesktop } from './desktop/routes.js'
 import { ErrorCode } from './error-codes.js'
+import { registerMemory } from './memory/routes.js'
+import { MemoryWorker } from './memory/worker.js'
 import { registerApplicationCatalog } from './platform/application-catalog.js'
 import { registerPlatform } from './platform/routes.js'
 import { registerLedgerSocket } from './platform/socket.js'
@@ -230,6 +232,10 @@ export function createApp(deps: AppDependencies) {
     })
   }
   app.addHook('onReady', async () => worker?.start())
+  const memoryWorker = deps.taskWorker && deps.platform?.memory && deps.chatProvider
+    ? new MemoryWorker(deps.platform.memory, deps.chatProvider, deps.administration?.configuration, (code, id) => app.log.warn({ code, jobId: id }, 'Memory extraction paused'))
+    : undefined
+  app.addHook('onReady', async () => memoryWorker?.start())
   app.addHook('onRequest', async (request, reply) => {
     reply.header('X-Request-Id', request.id)
   })
@@ -342,6 +348,7 @@ export function createApp(deps: AppDependencies) {
       )
     }
     registerPlatform(app, deps.platform)
+    registerMemory(app, deps.platform)
     registerCalendar(app, deps.platform.calendar, async (token) => {
       const actor = await deps.platform!.identity.authenticate(token)
       await deps.platform!.applications?.assertActive(
@@ -469,6 +476,7 @@ export function createApp(deps: AppDependencies) {
   app.addHook('onClose', async () => {
     clearInterval(recoveryTimer)
     await worker?.stopScheduling()
+    await memoryWorker?.stop()
     await chat.close()
     await worker?.drain()
     await deps.close?.()

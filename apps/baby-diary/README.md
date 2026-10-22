@@ -62,7 +62,7 @@ pnpm --filter @t-box/api db:upgrade:baby --check
 pnpm db:upgrade:baby
 ```
 
-只新增宝宝日记及通用私有文件表、更新初始化标记，不重建旧表、不重写默认配置、不运行旧 seed。未知基线默认拒绝升级。若本地仍保留 `schema_migrations`，可显式使用 `pnpm --filter @t-box/api db:upgrade:baby --extensions-only` 只增加应用表，不接管或改写原平台基线；先带 `--check` 检查。首次空库仍使用 `pnpm db:init`。数据库升级是操作员显式操作，API 启动不自动执行 DDL。
+当前升级入口同时补齐已声明的平台扩展（宝宝日记、私有文件及 AI 记忆表）、更新初始化标记，不重建旧表、不重写默认配置、不运行旧 seed。未知基线默认拒绝升级。若本地仍保留 `schema_migrations`，可显式使用 `pnpm --filter @t-box/api db:upgrade:baby --extensions-only` 只增加应用表，不接管或改写原平台基线；先带 `--check` 检查。首次空库仍使用 `pnpm db:init`。数据库升级是操作员显式操作，API 启动不自动执行 DDL。
 
 `pnpm dev` 启动全部服务；宝宝应用开发端口 5181。开发环境通过应用市场安装后打开；`pnpm --filter @t-box/baby-diary-web build` 生成校验过的独立产物。Actions「Independent application release」下拉列表已包含宝宝日记，上传/入库后由后台选择版本发布；运行 `pnpm apps:workflow` 可重新生成列表。
 

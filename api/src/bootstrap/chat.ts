@@ -35,7 +35,7 @@ export function createCapabilities(
   ].map((module) =>
     bindInstalledCapabilities(module, options.platform?.applications),
   )
-  return new CapabilityRegistry([...modules, createShellModule(modules)])
+  return new CapabilityRegistry([...modules, createShellModule(modules, Boolean(options.platform?.memory))])
 }
 export class ApplicationChatService extends ChatService {
   constructor(options: ChatServiceOptions) {
@@ -67,6 +67,7 @@ export class ApplicationChatService extends ChatService {
       host: platform
         ? {
             identity: platform.identity,
+            memory: platform.memory,
             tasks: platform.tasks,
             conversations: platform.conversations,
             attachments: platform.resources

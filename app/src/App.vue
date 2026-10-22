@@ -38,6 +38,8 @@ import RechargePage from './features/billing/RechargePage.vue'
 import WalletPage from './features/billing/WalletPage.vue'
 import ChatPage from './features/chat/ChatPage.vue'
 import { startChat, stopChat } from './features/chat/chatStore'
+import MemoryConfirmationDialog from './features/chat/MemoryConfirmationDialog.vue'
+import MemoryPage from './features/chat/MemoryPage.vue'
 import { restoreSession } from './features/identity/identityApi'
 import LoginPage from './features/identity/LoginPage.vue'
 import ResourcesPage from './features/resources/ResourcesPage.vue'
@@ -119,6 +121,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <MemoryConfirmationDialog v-if="identity.user" />
   <aside
     v-if="localApplications.error"
     class="offline-banner"
@@ -194,6 +197,7 @@ onBeforeUnmount(() => {
       <RechargePage v-if="identity.user && navigation.screen === 'recharge'" />
       <PricingPage v-if="identity.user && navigation.screen === 'pricing'" />
       <ResourcesPage v-if="identity.user && navigation.screen === 'resources'" />
+      <MemoryPage v-if="identity.user && navigation.screen === 'memory'" :key="identity.user.id" />
       <AccountSettingsPage v-if="identity.user && navigation.screen === 'account'" />
       <ApplicationView
         v-if="!loginRequired && navigation.screen === 'application' && currentApplication && currentView && isInstalled(currentApplication.id) && currentCompatible"

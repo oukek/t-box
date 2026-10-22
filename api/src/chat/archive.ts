@@ -2,6 +2,7 @@ import type { ConversationSummary, ResourceRef } from '@t-box/shared'
 import type { DataSource } from 'typeorm'
 import type { ResourceAccessRegistry } from '../agent/access.js'
 import type { Actor } from '../agent/contracts.js'
+import type { MemoryService } from '../memory/store.js'
 import type { ChatSession } from './session.js'
 import { randomUUID } from 'node:crypto'
 import { isoTime } from '@t-box/server-foundation/time'
@@ -35,6 +36,7 @@ export class ConversationArchive {
   constructor(
     readonly source: DataSource,
     private access: ResourceAccessRegistry,
+    private readonly memory?: Pick<MemoryService, 'saved' | 'removed'>,
   ) {}
 
   setAccess(access: ResourceAccessRegistry) {
@@ -155,6 +157,7 @@ export class ConversationArchive {
             },
           )
           session.title = row.title
+          await this.memory?.saved(db, session)
           return Number(row.revision) + 1
         }
         if (session.archived) {
@@ -169,6 +172,7 @@ export class ConversationArchive {
           resource_refs: refs,
           message_count: session.messages.length,
         })
+        await this.memory?.saved(db, session)
         if (session.pendingAnswerVersion) {
           const version = session.pendingAnswerVersion
           await db
@@ -478,6 +482,7 @@ export class ConversationArchive {
       await db
         .getRepository(ConversationEntity)
         .delete({ id, user_id: principal.user.id })
+      await this.memory?.removed(db, principal.user.id, id)
     })
   }
 }

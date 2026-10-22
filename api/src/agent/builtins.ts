@@ -2,10 +2,12 @@ import type { ApplicationModule } from './contracts.js'
 import { invalid } from '@t-box/server-foundation/errors'
 import { ErrorCode } from '../error-codes.js'
 import { createDiscoveryTools } from './capability-tools.js'
+import { createMemoryTools } from './memory-tools.js'
 import { definition, nullable, object } from './schema.js'
 /** Shell capabilities contain no application fields or handlers. */
 export function createShellModule(
   modules: readonly ApplicationModule[],
+  memory = false,
 ): ApplicationModule {
   const skillIds = modules.flatMap((module) => Object.keys(module.skills))
   const apps = modules.filter((module) => module.manifest && module.navigation)
@@ -15,6 +17,7 @@ export function createShellModule(
     skills: {},
     tools: {
       ...createDiscoveryTools(),
+      ...(memory ? createMemoryTools() : {}),
       ...(agents.length
         ? {
             agent_delegate: {

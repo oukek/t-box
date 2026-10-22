@@ -2,7 +2,7 @@
 import type { Wallet } from '@t-box/shared'
 import { AppIcon, SidePanel } from '@t-box/ui-kit'
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { openPricing, openResources, openWallet } from '../../core/navigation'
+import { openMemory, openPricing, openResources, openWallet } from '../../core/navigation'
 import { request } from '../../core/network'
 import { identity } from '../../core/session'
 import { displayMoney } from '../billing/format'
@@ -62,6 +62,7 @@ function openPage(action: () => void) {
     @close="emit('close')"
   >
     <div class="ai-center">
+      <button class="ai-center-link" @click="openPage(openMemory)"><span class="ai-center-icon"><AppIcon name="history" :size="18" /></span><span>记忆<small>管理已记住的信息与待确认建议</small></span><AppIcon name="right" :size="16" /></button>
       <button
         class="ai-center-balance"
         aria-label="查看我的余额"

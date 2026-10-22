@@ -14,6 +14,7 @@ import { defaultWorkflowPrompts } from '../src/agent-workflow/defaults.js'
 import { MeteredChatProvider } from '../src/billing/provider.js'
 import { ApplicationChatService } from '../src/bootstrap/chat.js'
 import { createDataSource } from '../src/db/data-source.js'
+import { ErrorCode } from '../src/error-codes.js'
 import { PlatformService } from '../src/platform/service.js'
 import { cleanupUsers } from './fixtures.js'
 
@@ -96,12 +97,7 @@ try {
       if (child && has('time_timer_create') && !childFailed && !forced) {
         childFailed = true
         input.onDelta('截断的执行分析')
-        throw new OpenAI.APIError(
-          undefined,
-          { type: 'upstream_error', message: 'private upstream body' },
-          undefined,
-          undefined,
-        )
+        throw ErrorCode.PROVIDER_FAILED()
       }
       if (!child && input.execution?.purpose === 'answer' && !rootFailed) {
         rootFailed = true

@@ -19,6 +19,7 @@ export interface CapabilitySelection {
 }
 
 export const discoveryTools = new Set([
+  'memory_search',
   'capability_search',
   'capability_load',
   'tool_result_read',

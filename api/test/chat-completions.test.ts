@@ -268,3 +268,24 @@ test('summary and title use Chat transport without tools; purposes cannot cross 
     { code: 'INVALID_INVOCATION_MODE' },
   )
 })
+test('terminal usage envelopes may have a gateway ID but content from different completions is rejected', async () => {
+  let usageId = ''
+  const args = input()
+  args.onUsage = async (usage) => {
+    usageId = usage.responseId
+  }
+  const result = await fixture([
+    chunk({ content: '完成' }, 'stop'),
+    { id: 'gateway-usage-id', choices: [], usage: { prompt_tokens: 100, completion_tokens: 4, total_tokens: 104 } },
+  ]).provider.next(args)
+  assert.equal(usageId, 'chat-test')
+  assert.equal(result.calls.length, 0)
+  await assert.rejects(fixture([
+    chunk({ content: '首段' }),
+    { ...chunk({ content: '混入其他响应' }, 'stop'), id: 'another-completion' },
+  ]).provider.next(input()), { code: 'PROVIDER_FAILED' })
+  await assert.rejects(fixture([
+    chunk({ content: '首段' }),
+    { id: 'premature-usage', choices: [], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } },
+  ]).provider.next(input()), { code: 'PROVIDER_FAILED' })
+})

@@ -365,6 +365,7 @@ export class ConfigurationService {
   async runtime(
     purpose: 'conversation' | 'image' = 'conversation',
     options: {
+      modelId?: string
       configurationKey?: string
       preferredConfigurationKey?: string
       supportsVision?: boolean
@@ -453,8 +454,12 @@ export class ConfigurationService {
             options.preferredConfigurationKey?.startsWith(row.modelId + ':'),
           )
         : undefined
+    const explicit = options.modelId ? eligible.find((row) => row.modelId === options.modelId) : undefined
+    if (options.modelId && !explicit) {
+      throw ErrorCode.AI_DISABLED('记忆提取模型不在可用普通会话模型池中')
+    }
     const row =
-      pinned ??
+      pinned ?? explicit ??
       (options.peek
         ? eligible[0]!
         : await new ModelRouting(this.store.source).select(

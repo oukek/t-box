@@ -3,6 +3,7 @@ import type {
   ConfigurationSnapshot,
 } from '@t-box/shared'
 import { defaultSecurityGuidance } from '../ai-security/policy.js'
+import { memoryExtractionPrompt } from '../memory/prompts.js'
 import { memoryInstructions, titleInstructions } from './prompts.js'
 
 const number = (
@@ -38,6 +39,13 @@ const prompt = (
   effect: 'new_task',
 })
 export const platformDefinitions: ConfigurationDefinition[] = [
+  { key: 'ai.memory.enabled', group: 'AI 记忆', title: '启用跨会话记忆', type: 'boolean', defaultValue: true, effect: 'next_request', description: '仅使用用户确认的记忆。用户仍可独立关闭；应用事实和授权不作为通用记忆。' },
+  { ...prompt('ai.prompt.memoryExtraction', '长期记忆候选提取', memoryExtractionPrompt), group: 'AI 记忆', effect: 'next_request' },
+  { ...number('ai.memory.recallTokens', '每次记忆参考预算 / token', 1600, 256, 8000, '本地分词控制记忆数据大小，还受整体上下文预算约束；不注入全部历史。'), group: 'AI 记忆', effect: 'next_request' },
+  { ...number('ai.memory.maxItems', '每用户记忆与候选总上限', 200, 10, 200, '超过上限暂停提取，不淘汰用户已确认的记忆。'), group: 'AI 记忆', effect: 'next_request' },
+  { ...number('ai.memory.extractionTimeoutMs', '记忆提取单次超时 / 毫秒', 60000, 5000, 180000, '后台整理，失败不影响回答；可恢复错误最多重试五次。'), group: 'AI 记忆', effect: 'next_request' },
+  { ...number('ai.memory.extractionOutputTokens', '记忆提取输出预算 / token', 4096, 1024, 32768, '包含推理与结构化候选的预算；仅提取用户原文，不执行应用工具。'), group: 'AI 记忆', effect: 'next_request' },
+  { key: 'ai.memory.modelId', group: 'AI 记忆', title: '记忆提取模型', type: 'text', defaultValue: 'pool', maxLength: 36, effect: 'next_request', description: '选择普通会话模型池自动分配，或选择池内指定模型。独立记录 memory_extraction 用量，平台承担费用，不扣用户余额。' },
   ...[
     ['ai.cost.taskYuan', '单任务 AI 成本上限 / 元', 20],
     ['ai.cost.userDailyYuan', '用户每日 AI 成本上限 / 元', 100],
@@ -224,7 +232,7 @@ export const platformDefinitions: ConfigurationDefinition[] = [
     5,
     0,
     5,
-    '仅重试可恢复的模型请求；不会重新执行业务工具。',
+    '首次请求之外最多自动重试 5 次，包括断流、响应标识不一致与服务商暂时异常；保留已完成的工具结果，不重新执行业务工具。参数、鉴权、余额和权限错误不自动重试。',
   ),
   number(
     'ai.retry.baseDelayMs',

@@ -125,7 +125,11 @@ export class OpenAIChatCompletionsProvider implements ChatProvider {
     const calls = new Map<number, ModelCall>()
     for await (const chunk of providerStream(stream)) {
       input.signal.throwIfAborted()
-      if (responseId && chunk.id && chunk.id !== responseId) {
+      // Some compatible gateways give the terminal usage-only envelope its own ID.
+      // It carries no generated content and must be billed against the completion ID.
+      // Never concatenate content/tool deltas from different completions.
+      const usageOnly = Boolean(finish && chunk.usage && !chunk.choices.length)
+      if (responseId && chunk.id && chunk.id !== responseId && !usageOnly) {
         throw ErrorCode.PROVIDER_FAILED()
       }
       responseId ||= chunk.id

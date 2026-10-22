@@ -24,6 +24,7 @@ import {
   ConversationEntity,
 } from './conversations-entities.js'
 import { UserRecoveryCodeEntity } from './identity-entities.js'
+import { memoryEntities } from './memory-entities.js'
 import {
   AiCostGuardEntity,
   AiModelCallEntity,
@@ -109,6 +110,7 @@ export {
 } from './workflow-entities.js'
 
 export const platformRecordEntities = [
+  ...memoryEntities,
   UserRecoveryCodeEntity,
   AgentTaskToolEntity,
   AgentTaskEntity,

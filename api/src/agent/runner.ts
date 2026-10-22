@@ -32,6 +32,7 @@ import { MessageTimeline } from './timeline.js'
 import { generateConversationTitle } from './title.js'
 
 export interface AgentRunInput {
+  memoryEnabled?: boolean
   session: ChatSession
   requestId: string
   text: string
@@ -93,6 +94,7 @@ export async function runConversation(
     user = {
       id: randomUUID(),
       role: 'user',
+      memoryEnabled: input.memoryEnabled !== false,
       content: text,
       localDate,
       createdAt: new Date().toISOString(),
@@ -156,6 +158,7 @@ export async function runConversation(
     capabilityLoading: options.capabilityLoading === 'deferred' ? 'deferred' : undefined,
     retry: input.retry,
     workflowEntry: 'adaptive',
+    useMemory: user.memoryEnabled !== false,
     version: 1,
     registryRevision: options.registry.revision,
     modulePins: {},

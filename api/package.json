@@ -47,7 +47,9 @@
     "test:configuration": "tsx test/configuration.integration.ts",
     "test:ledger-features": "tsx test/ledger-features.integration.ts",
     "test:db-init": "tsx test/database-initialization.integration.ts",
-    "db:upgrade:baby": "tsx src/db/upgrades/baby-diary-cli.ts"
+    "db:upgrade:baby": "tsx src/db/upgrades/baby-diary-cli.ts",
+    "db:upgrade:memory": "tsx src/db/upgrades/memory-cli.ts",
+    "test:memory": "tsx --test test/memory.test.ts test/memory-runtime.test.ts && tsx test/memory.integration.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
@@ -68,6 +70,7 @@
     "ali-oss": "6.23.0",
     "dotenv": "^17.2.3",
     "fastify": "^5.6.2",
+    "js-tiktoken": "1.0.21",
     "mysql2": "^3.15.3",
     "openai": "7.27.0",
     "redis": "^5.8.3",

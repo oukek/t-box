@@ -126,6 +126,9 @@ importers:
       fastify:
         specifier: ^5.6.2
         version: 5.12.5
+      js-tiktoken:
+        specifier: 1.0.21
+        version: 1.0.21
       mysql2:
         specifier: ^3.15.3
         version: 3.24.5(@types/node@24.19.1)
@@ -3477,6 +3480,9 @@ packages:
 
   js-base64@2.6.4:
     resolution: {integrity: sha512-pZe//GGmwJndub7ZghVHz7vjb2LgC1m8B07Au3eYqeqv9emhESByMXxaEgkUkEqJe87oBbSniGYoQNIBklc7IQ==}
+
+  js-tiktoken@1.0.21:
+    resolution: {integrity: sha512-biOj/6M5qdgx5TKjDnFT1ymSpM5tbd3ylwDtrQvFQSu0Z7bBYko2dF+W/aUkXUPuk6IVpRxk/3Q2sHOzGlS36g==}
 
   js-yaml@5.4.3:
     resolution: {integrity: sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw==}
@@ -6837,6 +6843,10 @@ snapshots:
   isstream@0.1.2: {}
 
   js-base64@2.6.4: {}
+
+  js-tiktoken@1.0.21:
+    dependencies:
+      base64-js: 1.5.1
 
   js-yaml@5.4.3:
     dependencies:

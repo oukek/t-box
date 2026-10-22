@@ -209,6 +209,7 @@ export function phaseTools(
           'capability_load',
           'tool_result_read',
           'conversation_history_read',
+          'memory_search',
         ].includes(tool.name),
       )
     : []

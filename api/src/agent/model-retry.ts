@@ -28,7 +28,7 @@ export interface RetryProgress {
 /** Automatic retry is narrower than manual task resumption. Never retry host/billing/tool errors. */
 export function retryableModelError(error: unknown): boolean {
   if (error instanceof ApiError) {
-    return error.code === 'PROVIDER_STREAM_CLOSED'
+    return ['PROVIDER_STREAM_CLOSED', 'PROVIDER_FAILED', 'MEMORY_EXTRACTION_INVALID'].includes(error.code)
   }
   if (!(error instanceof OpenAI.APIError)) {
     return false

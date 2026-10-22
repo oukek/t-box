@@ -24,8 +24,8 @@ const input = (history: ProviderItem[] = []): ProviderInput => ({
 })
 const history = (turns = 20): ProviderItem[] =>
   Array.from({ length: turns }, (_, i) => [
-    { role: 'user' as const, content: `用户请求 ${i}：${'事实'.repeat(200)}` },
-    { role: 'assistant' as const, content: `答复 ${i}：${'记录'.repeat(200)}` },
+    { role: 'user' as const, content: `用户请求 ${i}：${'事实'.repeat(500)}` },
+    { role: 'assistant' as const, content: `答复 ${i}：${'记录'.repeat(500)}` },
   ]).flat()
 const provider = (overrides: Partial<ChatProvider> = {}): ChatProvider => ({
   mode: 'openai',
@@ -116,6 +116,7 @@ test('portable summaries keep latest four turns verbatim, chunk within budgets a
     ),
   )
   assert.equal(state.compactions, 1)
+  assert.equal(state.countingVersion, 'cl100k-v1')
   assert.equal(progress[0], 'start')
   assert.equal(progress.at(-1), 'completed')
   const again = await prepareContext(provider(), input(result.history), {
@@ -150,12 +151,12 @@ test('in-flight compaction pins latest request and keeps parallel tool calls wit
       {
         type: 'function_call_output',
         call_id: `a${i}`,
-        output: `事实${'x'.repeat(2000)}`,
+        output: `事实${'数据记录'.repeat(700)}`,
       },
       {
         type: 'function_call_output',
         call_id: `b${i}`,
-        output: `resource_id=${i};${'x'.repeat(2000)}`,
+        output: `resource_id=${i};${'数据记录'.repeat(700)}`,
       },
     )
   }
@@ -244,7 +245,7 @@ test('oversized latest user input and a single atomic receipt fail explicitly in
   await assert.rejects(
     prepareContext(
       p,
-      input([...history(), { role: 'user', content: 'x'.repeat(33000) }]),
+      input([...history(), { role: 'user', content: '测'.repeat(33000) }]),
     ),
     { code: 'CONTEXT_LATEST_TOO_LARGE' },
   )
@@ -262,7 +263,7 @@ test('oversized latest user input and a single atomic receipt fail explicitly in
         {
           type: 'function_call_output',
           call_id: 'big',
-          output: 'x'.repeat(33000),
+          output: '测'.repeat(33000),
         },
         { role: 'user', content: '第二轮' },
       ]),
@@ -385,6 +386,16 @@ test('hysteresis skips small schema growth but hard input budget always wins', a
     }),
     { code: 'CONTEXT_LIMIT' },
   )
+})
+test('local compaction hysteresis never compares legacy byte counts with token counts', async () => {
+  const original = history()
+  const counted = estimateInputTokens(input(original))
+  const p = provider({ contextPolicy: { ...contextPolicy(null), maxInputTokens: Math.ceil(counted / 0.85) } })
+  const current: ContextState = { lastAfterTokens: counted, countingVersion: 'cl100k-v1' }
+  assert.equal((await prepareContext(p, input(original), { state: current })).compacted, false)
+  const legacy: ContextState = { lastAfterTokens: counted }
+  assert.equal((await prepareContext(p, input(original), { state: legacy })).compacted, true)
+  assert.equal(legacy.countingVersion, 'cl100k-v1')
 })
 test('opaque native memory is not exposed to a portable summarizer', async () => {
   await assert.rejects(

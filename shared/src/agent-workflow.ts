@@ -11,4 +11,4 @@ export interface AgentWorkflowConfiguration {
   updatedAt: string
 }
 export type ModelCallPurpose =
-  'response' | 'compaction' | 'analysis' | 'review' | 'answer' | 'title'
+  'response' | 'compaction' | 'analysis' | 'review' | 'answer' | 'title' | 'memory_extraction'

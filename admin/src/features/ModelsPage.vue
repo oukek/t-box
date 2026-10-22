@@ -6,7 +6,7 @@ import type {
   ModelInvocationMode,
   RemoteModel,
 } from '@t-box/shared'
-import { resolveContextPolicy } from '@t-box/shared'
+import { contextInputBudget, contextOutputBudget, resolveContextPolicy } from '@t-box/shared'
 import {
   computed,
   onBeforeUnmount,
@@ -60,6 +60,8 @@ const form = reactive({
   contextPolicy: resolveContextPolicy(),
   maxConcurrency: 4,
 })
+const contextBudget = computed(() => contextInputBudget(form.contextPolicy, contextOutputBudget(form.contextPolicy, form.supportsReasoning)))
+const compactionTrigger = computed(() => Math.floor(contextBudget.value * form.contextPolicy.compactionThreshold))
 const filteredModels = computed(() =>
   models.value.filter((m) =>
     `${m.name} ${m.modelId} ${m.providerName}`
@@ -640,6 +642,7 @@ onBeforeUnmount(() => controller?.abort())
               ]"
             /><small>每轮模型调用前检查，包括工具执行过程中。摘要/原生压缩按实际
               token 计费，原始会话与操作记录保留。</small></label>
+            <p class="wide muted">当前有效输入预算 {{ contextBudget.toLocaleString() }} token<span v-if="form.contextPolicy.compactionMode !== 'off'">，达到 {{ compactionTrigger.toLocaleString() }} token 触发压缩</span>。此数值来自当前配置，并非模型容量自动检测结果。</p>
             <template v-if="form.contextPolicy.compactionMode !== 'off'">
               <label>压缩触发比例<input
                 v-model.number="form.contextPolicy.compactionThreshold"
@@ -672,9 +675,9 @@ onBeforeUnmount(() => controller?.abort())
               v-model="form.contextPolicy.tokenCounting"
               :disabled="form.invocationMode !== 'responses'"
               type="checkbox"
-            >使用服务商精确输入计数<small>Chat Completions 使用保守估算。Responses 仅在支持
+            >使用服务商精确输入计数<small>Chat Completions 使用本地分词估算。Responses 仅在支持
               /responses/input_tokens
-              时开启。否则采用保守估算；估算不是实际扣费 token。</small></label>
+              时开启。否则采用本地分词估算并预留安全余量；不同模型分词可能有差异，图片单独预留。实际扣费以服务商 usage 为准。</small></label>
             <label class="check wide"><input
               v-model="form.contextPolicy.promptCacheKey"
               type="checkbox"

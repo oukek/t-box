@@ -68,6 +68,8 @@ export interface MessageUsage {
 }
 
 export interface ChatMessage {
+  /** User-selected per-turn memory isolation, inherited by retries and branches. */
+  memoryEnabled?: boolean
   execution?: MessageExecution
   answerRevision?: number
   localDate?: string
@@ -165,6 +167,7 @@ export type ChatClientEvent =
   } |
   {
     type: 'message.send'
+    memoryEnabled?: boolean
     requestId: string
     text: string
     localDate: string
@@ -174,6 +177,7 @@ export type ChatClientEvent =
   } |
   {
     type: 'message.resend'
+    memoryEnabled?: boolean
     requestId: string
     sourceMessageId: string
     expectedRevision?: number

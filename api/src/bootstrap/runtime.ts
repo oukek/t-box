@@ -8,6 +8,7 @@ import { createApp } from '../app.js'
 import { getConfig } from '../config.js'
 import { ConfigurationCache } from '../configuration/cache.js'
 import { createDatabase } from '../database.js'
+import { MemoryCache } from '../memory/cache.js'
 import { PaymentConfiguration } from '../payments/configuration.js'
 import { WechatGateway } from '../payments/wechat.js'
 import { PlatformService } from '../platform/service.js'
@@ -37,6 +38,8 @@ export async function createRuntime(worker: boolean) {
     gateway,
     paymentConfiguration,
     gateway.authorization,
+    undefined,
+    new MemoryCache(database.redis, `t-box:${config.mysql.database}`),
   )
   const app = createApp({
     taskWorker: worker,

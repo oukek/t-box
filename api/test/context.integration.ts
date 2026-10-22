@@ -71,7 +71,7 @@ try {
     maxOutputTokens: 32768,
     contextPolicy: contextPolicy({
       ...contextPolicy(null),
-      maxInputTokens: 49152,
+      maxInputTokens: 32768,
       keepRecentTurns: 4,
     }),
     async summarize(input) {
@@ -190,7 +190,7 @@ try {
               executed++
               return {
                 id: `actual-${(args as { index: number }).index}`,
-                payload: 'x'.repeat(12000),
+                payload: '测'.repeat(4000),
               }
             },
           },

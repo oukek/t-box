@@ -186,3 +186,5 @@ node deploy/pm2/deploy-source.mjs
 备份、隔离恢复与后台故障定位见 [运行与恢复](operations-and-recovery.md)。升级时必须同时停止旧 worker，避免旧代码使用新数据库继续执行。
 
 数据库历史 migrations 已合并为首次初始化基线；新库与旧开发库的处理边界见 [数据库初始化](database-initialization.md)。
+
+本次新增 AI 记忆表，已有 `2026-10-21.2` 等受支持基线应先备份并停止旧 API/worker，再用新产物的 `dist/db/upgrades/memory-cli.js --check` 检查，去掉 `--check` 执行升级，之后再走原发布流程。PM2 命令示例与兼容基线见 [数据库升级](database-initialization.md)。首次空库仍走原初始化；部署脚本保持严格预检，不自动修改已有库结构。

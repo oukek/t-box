@@ -2,7 +2,7 @@ import type { ModelPrices } from '@t-box/shared'
 import type { ChatProvider, ProviderInput } from '../chat/provider.js'
 import type { BillingService } from './service.js'
 import { ApiError } from '@t-box/server-foundation/errors'
-import { estimateInputTokens } from '../agent/context.js'
+import { estimateAdmissionTokens } from '../agent/token-estimate.js'
 import { settingNumber } from '../configuration/defaults.js'
 import { ErrorCode } from '../error-codes.js'
 import { money, tokenFee } from './money.js'
@@ -75,7 +75,7 @@ export class MeteredChatProvider implements ChatProvider {
     input.signal.throwIfAborted()
     // Conservative admission budget, not billable usage. JSON/UTF-8 includes
     // tool schemas, attachments and prior reasoning; final fee uses usage only.
-    const estimate = estimateInputTokens(input)
+    const estimate = estimateAdmissionTokens(input)
     const mode = await this.billing.begin({
       id: execution.operationId,
       userId: execution.userId,
@@ -83,6 +83,7 @@ export class MeteredChatProvider implements ChatProvider {
       messageId: execution.messageId,
       agentId: execution.agentId,
       purpose,
+      free: purpose === 'memory_extraction',
       modelId: this.modelId,
       prices: this.prices,
       kind: 'conversation',
@@ -147,7 +148,7 @@ export class MeteredChatProvider implements ChatProvider {
     const output =
       input.outputTokenBudget ??
       settingNumber(input.configuration, 'ai.title.reasoningTokens', 1024)
-    const estimate = estimateInputTokens({
+    const estimate = estimateAdmissionTokens({
       history: [{ role: 'user', content: input.text.slice(0, 2000) }],
       tools: [],
       instructions: input.instructions || '',

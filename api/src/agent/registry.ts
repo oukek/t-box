@@ -630,7 +630,7 @@ export class CapabilityRegistry {
         'app_open',
         'skill_activate',
         ...[...discoveryTools].filter(
-          (name) => name !== 'conversation_history_read',
+          (name) => name !== 'conversation_history_read' && name !== 'memory_search',
         ),
         ...agent.skillIds.flatMap((s) => this.skills[s]!.tools),
       ]),

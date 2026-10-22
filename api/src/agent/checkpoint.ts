@@ -3,6 +3,8 @@ import type { ModelCall, ProviderItem } from '../chat/provider.js'
 import type { ChatSession } from '../chat/session.js'
 
 export interface AgentFrame {
+  workingMemory?: import('@t-box/shared').TaskWorkingMemory
+  memoryIds?: string[]
   capabilities?: import('./capability-loading.js').CapabilitySelection
   discoveryRounds?: number
   modelRequests?: Record<string, import('./model-retry.js').ModelRequestRecord>
@@ -20,6 +22,7 @@ export interface AgentFrame {
   parentCallId?: string
 }
 export interface RunCheckpoint {
+  useMemory?: boolean
   /** Absent on old checkpoints: resume their existing eager tool protocol. */
   capabilityLoading?: 'deferred'
   configuration?: import('@t-box/shared').ConfigurationSnapshot

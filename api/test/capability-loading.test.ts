@@ -6,10 +6,11 @@ import { test } from 'node:test'
 import { ApiError } from '@t-box/server-foundation/errors'
 import { defaultWorkflowPrompts } from '../src/agent-workflow/defaults.js'
 import { createShellModule } from '../src/agent/builtins.js'
-import { contextMemoryPrefix, contextUnits, estimateInputTokens, prepareContext } from '../src/agent/context.js'
+import { contextMemoryPrefix, contextUnits, prepareContext } from '../src/agent/context.js'
 import { portableHistory } from '../src/agent/history.js'
 import { CapabilityRegistry } from '../src/agent/registry.js'
 import { definition } from '../src/agent/schema.js'
+import { estimateAdmissionTokens, estimateInputTokens } from '../src/agent/token-estimate.js'
 import { boundedToolHistory, modelToolResult, readToolResult } from '../src/agent/tool-results.js'
 import { ChatService } from '../src/chat/engine.js'
 import { MemorySessionRepository } from '../src/chat/session.js'
@@ -48,10 +49,11 @@ function setup(modules: ApplicationModule[], values: Record<string, number> = {}
   return { registry, ctx }
 }
 
-test('admission estimates count transmitted content without duplicating private configuration or guard data', () => {
+test('admission and context estimates count transmitted content without duplicating private configuration or guard data', () => {
   const sent = { history: [{ role: 'user' as const, content: '你好' }], tools: [], instructions: '系统指导' }
   const runtime = { ...sent, configuration: { revision: 1, values: { 'ai.prompt.discovery': 'private'.repeat(10000) } }, confidentialInstructions: ['private'.repeat(10000)], execution: { operationId: 'internal' } }
   assert.equal(estimateInputTokens(runtime), estimateInputTokens(sent))
+  assert.equal(estimateAdmissionTokens(runtime), estimateAdmissionTokens(sent))
 })
 
 test('1600 tools do not enlarge the initial model catalog/schema; exact discovery only loads matching definitions', async () => {

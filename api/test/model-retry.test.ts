@@ -10,6 +10,7 @@ import {
 } from '../src/agent/model-retry.js'
 import { publicRunError } from '../src/chat/errors.js'
 import { providerStream } from '../src/chat/provider-stream.js'
+import { ErrorCode } from '../src/error-codes.js'
 
 const input = (signal = new AbortController().signal): ProviderInput => ({
   history: [{ role: 'user', content: 'test' }],
@@ -150,6 +151,19 @@ test('automatic attempts are exactly initial + five retries, including restored 
     { code: 'MODEL_RETRIES_EXHAUSTED' },
   )
   assert.equal(recovered, 0)
+})
+test('malformed provider completions retry the current request, then stop after five retries', async () => {
+  const f = fixture()
+  let calls = 0
+  const original = input()
+  await assert.rejects(modelRequest('next', original, async (request) => {
+    calls++
+    assert.deepEqual(request.history, original.history)
+    throw ErrorCode.PROVIDER_FAILED()
+  }, f.options), { code: 'MODEL_RETRIES_EXHAUSTED', message: /已自动重试 5 次/ })
+  assert.equal(calls, 6)
+  assert.deepEqual(f.progress.map((p) => p.attempt), [1, 2, 3, 4, 5])
+  assert.ok(f.progress.every((p) => p.error.code === 'PROVIDER_FAILED'))
 })
 test('parameter/auth/quota/host/billing/unknown errors are never automatically retried', async () => {
   for (const error of [

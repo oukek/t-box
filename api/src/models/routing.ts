@@ -153,6 +153,7 @@ export class ModelRouting {
         error instanceof ApiError &&
         [
           'PROVIDER_STREAM_CLOSED',
+          'PROVIDER_FAILED',
           'PROVIDER_INVALID_JSON',
           'PROVIDER_INVALID_RESPONSE',
         ].includes(error.code)

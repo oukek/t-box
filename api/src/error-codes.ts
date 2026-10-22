@@ -5,6 +5,14 @@ import {
 } from '@t-box/errors'
 
 const apiErrors = defineApiErrors({
+  MEMORY_INVALID: { statusCode: 400, message: '记忆内容或范围无效' },
+  MEMORY_SENSITIVE: { statusCode: 400, message: '不能保存凭据、系统指令或受保护应用数据为通用记忆' },
+  MEMORY_NOT_FOUND: { statusCode: 404, message: '记忆不存在或已失效' },
+  MEMORY_CONFLICT: { statusCode: 409, message: '记忆已更新，请刷新后重试' },
+  MEMORY_DISABLED: { statusCode: 409, message: '记忆功能已关闭，可在 AI 记忆中开启' },
+  MEMORY_LIMIT: { statusCode: 409, message: '记忆数量已达上限，请整理后再保存' },
+  MEMORY_EXTRACTION_INVALID: { statusCode: 502, message: '记忆整理结果格式无效' },
+  MEMORY_LEASE_LOST: { statusCode: 409, message: '记忆整理任务已失效' },
   PRIVATE_MEDIA_CONFIG_REQUIRED: { statusCode: 503, message: '私有文件存储尚未配置，请管理员配置独立的私有 OSS Bucket' },
   PRIVATE_MEDIA_SCOPE_INVALID: { statusCode: 400, message: '文件所属资源无效' },
   PRIVATE_MEDIA_FORBIDDEN: { statusCode: 403, message: '无法访问此私有文件' },

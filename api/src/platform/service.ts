@@ -1,5 +1,6 @@
 import type { DataSource } from 'typeorm'
 import type { ConfigurationService } from '../admin/service.js'
+import type { MemoryCache } from '../memory/cache.js'
 import type { PaymentConfiguration } from '../payments/configuration.js'
 import type { PaymentGateway } from '../payments/gateway.js'
 import type { WechatAuthorization } from '../payments/wechat-authorization.js'
@@ -29,6 +30,7 @@ import { ConversationArchive } from '../chat/archive.js'
 import { DesktopService } from '../desktop/service.js'
 import { AccountSecurityService } from '../identity/security.js'
 import { IdentityService } from '../identity/service.js'
+import { MemoryService } from '../memory/store.js'
 import { NotificationService } from '../notifications/service.js'
 import { OperationsService } from '../operations/service.js'
 import { RechargeSettingsService } from '../payments/recharge.js'
@@ -42,6 +44,7 @@ import { CustomerSupportService } from '../support/service.js'
 import { TaskStore } from '../tasks/store.js'
 
 export class PlatformService {
+  readonly memory: MemoryService
   readonly applicationCatalogUpdates: ApplicationCatalogMonitor
   readonly applications: ApplicationPlatform
   readonly desktop: DesktopService
@@ -76,7 +79,9 @@ export class PlatformService {
     readonly paymentConfiguration?: PaymentConfiguration,
     readonly wechatAuthorization?: WechatAuthorization,
     resources?: ResourceService,
+    memoryCache?: MemoryCache,
   ) {
+    this.memory = new MemoryService(source, memoryCache, configuration?.configuration)
     this.applicationCatalogUpdates = new ApplicationCatalogMonitor(source)
     this.applications = new ApplicationPlatform(
       source,
@@ -114,6 +119,7 @@ export class PlatformService {
     this.conversations = new ConversationArchive(
       source,
       new ResourceAccessRegistry(createApplicationResourceAdapters(this)),
+      this.memory,
     )
     this.images = new ImageTools(this.resources, configuration, this.billing, this.providerConcurrency)
   }

@@ -83,9 +83,11 @@
     "test:db-init": "pnpm build:contracts && pnpm --filter @t-box/api test:db-init",
     "check:business": "node scripts/check-business-code.mjs",
     "db:upgrade:baby": "pnpm build:contracts && pnpm --filter @t-box/api db:upgrade:baby",
+    "db:upgrade:memory": "pnpm build:contracts && pnpm --filter @t-box/api db:upgrade:memory",
     "test:baby-care": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx --test test/baby-care.test.ts && pnpm --filter @t-box/api exec tsx test/baby-care.integration.ts",
     "test:baby-diary": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx --test test/baby-diary.test.ts",
-    "test:baby-diary:integration": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/baby-diary.integration.ts && pnpm --filter @t-box/api exec tsx test/baby-diary-upgrade.integration.ts"
+    "test:baby-diary:integration": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/baby-diary.integration.ts && pnpm --filter @t-box/api exec tsx test/baby-diary-upgrade.integration.ts",
+    "test:memory": "pnpm build:contracts && pnpm --filter @t-box/api test:memory && pnpm --filter @t-box/api exec tsx --test ../app/test/memory-confirmation.test.ts"
   },
   "devDependencies": {
     "@antfu/eslint-config": "9.5.1",

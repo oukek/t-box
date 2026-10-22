@@ -28,7 +28,7 @@ const source = await createDataSource({
 }).initialize()
 try {
   const legacy = databaseSchemas.filter(
-    (schema) => !['baby-diary', 'private-media'].includes(schema.id),
+    (schema) => !['baby-diary', 'private-media', 'ai-memory'].includes(schema.id),
   )
   await initializeDatabase(source, legacy)
   const legacyFingerprint = createHash('sha256')
@@ -68,7 +68,8 @@ try {
   )
   assert.equal((await upgradeBabyDiary(source)).changed, false)
   // Simulate the first complete baby release, including an existing profile.
-  const firstBabySchemas = databaseSchemas.map((schema) => schema.id === babyDiarySchemaV1.id ? babyDiarySchemaV1 : schema)
+  const beforeMemory = databaseSchemas.filter((schema) => schema.id !== 'ai-memory')
+  const firstBabySchemas = beforeMemory.map((schema) => schema.id === babyDiarySchemaV1.id ? babyDiarySchemaV1 : schema)
   const firstBabyFingerprint = createHash('sha256').update(JSON.stringify([
     '2026-10-20.1',
     firstBabySchemas.map((s) => s.id),
@@ -103,13 +104,25 @@ try {
     for (const table of careTables) {
       await runner.dropTable(table)
     }
-    const themed = databaseSchemas.map((schema) => schema.id === babyDiarySchemaV2.id ? babyDiarySchemaV2 : schema)
+    const themed = beforeMemory.map((schema) => schema.id === babyDiarySchemaV2.id ? babyDiarySchemaV2 : schema)
     const themeFingerprint = createHash('sha256').update(JSON.stringify(['2026-10-21.1', themed.map((schema) => schema.id), [...schemaTables(themed)]])).digest('hex')
     await source.query('UPDATE schema_initialization SET baseline=?,fingerprint=? WHERE id=1', ['2026-10-21.1', themeFingerprint])
     assert.deepEqual((await upgradeBabyDiary(source, true)).plannedChanges, careTables)
     assert.equal((await upgradeBabyDiary(source)).changed, true)
     assert.equal((await initializeDatabase(source, databaseSchemas)).initialized, false)
     assert.deepEqual(await source.query('SELECT name,sex,theme,revision FROM baby_diary_babies WHERE id=?', [existingBabyId]), [{ name: '保留的档案', sex: 'female', theme: null, revision: 7 }])
+    // The previous complete platform baseline only gains memory tables, without changing app data.
+    const memorySql = new Set(databaseSchemas.filter((schema) => schema.id === 'ai-memory').flatMap((schema) => [...schema.tables]))
+    const memoryTables = [...schemaTables(databaseSchemas)].filter(([, sql]) => memorySql.has(sql)).map(([name]) => name)
+    for (const table of [...memoryTables].reverse()) {
+      await runner.dropTable(table)
+    }
+    const previousFingerprint = createHash('sha256').update(JSON.stringify(['2026-10-21.2', beforeMemory.map((schema) => schema.id), [...schemaTables(beforeMemory)]])).digest('hex')
+    await source.query('UPDATE schema_initialization SET baseline=?,fingerprint=? WHERE id=1', ['2026-10-21.2', previousFingerprint])
+    assert.deepEqual((await upgradeBabyDiary(source, true)).plannedChanges, memoryTables)
+    assert.equal((await upgradeBabyDiary(source)).changed, true)
+    assert.equal((await upgradeBabyDiary(source)).changed, false)
+    assert.deepEqual(await source.query('SELECT id,configuration FROM recharge_settings'), before)
   } finally {
     await runner.release()
   }
@@ -127,13 +140,8 @@ try {
   )
   await assert.rejects(upgradeBabyDiary(source), /初始化版本/)
   // Legacy host databases may add this isolated extension without claiming or rewriting the host baseline.
-  for (const name of [
-    ...schemaTables(
-      databaseSchemas.filter((schema) =>
-        ['baby-diary', 'private-media'].includes(schema.id),
-      ),
-    ).keys(),
-  ].reverse()) {
+  const extensionSql = new Set(databaseSchemas.filter((schema) => ['baby-diary', 'private-media', 'ai-memory'].includes(schema.id)).flatMap((schema) => [...schema.tables]))
+  for (const name of [...schemaTables(databaseSchemas)].filter(([, sql]) => extensionSql.has(sql)).map(([name]) => name).reverse()) {
     await source.query(`DROP TABLE ${name}`)
   }
   await source.query('DROP TABLE schema_initialization')

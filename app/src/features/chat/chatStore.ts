@@ -640,6 +640,7 @@ export function sendMessage(
   attachments: readonly Resource[] = [],
   applicationIds: readonly ApplicationId[] = [],
   revision?: { sourceMessageId: string, expectedRevision?: number },
+  memoryEnabled = true,
 ): boolean {
   const value = text.trim() || (attachments.length ? '请查看附件。' : '')
   if (
@@ -657,6 +658,7 @@ export function sendMessage(
       : { type: 'message.send' as const }),
     requestId: createRequestId(),
     text: value,
+    memoryEnabled,
     localDate,
     scopeBindings: currentScopeBindings(),
     attachmentIds: attachments.map((resource) => resource.id),

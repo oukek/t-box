@@ -17,7 +17,7 @@ type Screen =
   'account' |
   'wallet' |
   'recharge' |
-  'pricing'
+  'pricing' | 'memory'
 type BackTarget = Tab | 'profile' | 'wallet'
 export const tabLabel = (id: BackTarget) =>
   id === 'profile'
@@ -70,7 +70,7 @@ function readHash() {
     return
   }
   // Legacy account URLs (including payment callbacks) remain valid after moving AI pages.
-  const detail = /^\/(?:ai|profile)\/(wallet|recharge|pricing|resources)$/.exec(
+  const detail = /^\/(?:ai|profile)\/(wallet|recharge|pricing|resources|memory)$/.exec(
     path || '',
   )
   if (detail) {
@@ -78,7 +78,7 @@ function readHash() {
     state.screen =
       detail[1] === 'wallet' && params.has('paymentOrder')
         ? 'recharge'
-        : (detail[1] as 'wallet' | 'recharge' | 'pricing' | 'resources')
+        : (detail[1] as 'wallet' | 'recharge' | 'pricing' | 'resources' | 'memory')
     state.backTo =
       state.screen === 'recharge' ||
       (state.screen === 'pricing' && params.get('from') === 'wallet')
@@ -149,7 +149,7 @@ export async function openApplication(value: unknown) {
         ? 'applications'
         : state.screen === 'account'
           ? 'profile'
-          : ['resources', 'wallet', 'recharge', 'pricing'].includes(
+          : ['resources', 'wallet', 'recharge', 'pricing', 'memory'].includes(
               state.screen,
             )
               ? 'home'
@@ -209,6 +209,13 @@ export function openResources() {
   state.screen = 'resources'
   state.backTo = 'home'
   history.pushState(null, '', '#/ai/resources')
+  window.scrollTo({ top: 0 })
+}
+
+export function openMemory() {
+  state.screen = 'memory'
+  state.backTo = 'home'
+  history.pushState(null, '', '#/ai/memory')
   window.scrollTo({ top: 0 })
 }
 

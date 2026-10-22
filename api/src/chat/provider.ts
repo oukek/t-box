@@ -71,6 +71,7 @@ export interface ChatProvider {
   compact?(input: ProviderInput): Promise<ProviderItem[]>
   configurationKey?: string
   forRun?: (options?: {
+    modelId?: string
     configurationKey?: string
     preferredConfigurationKey?: string
     supportsVision?: boolean

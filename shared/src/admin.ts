@@ -84,3 +84,10 @@ export function resolveContextPolicy(
 export function contextOutputBudget(policy?: ContextPolicy, reasoning = false) {
   return policy?.maxOutputTokens || (reasoning ? 32768 : 8192)
 }
+/** Effective input allowance, shared by execution and the administrator preview. */
+export function contextInputBudget(policy?: ContextPolicy, outputTokens = 8192) {
+  const resolved = resolveContextPolicy(policy)
+  return resolved.contextWindowTokens
+    ? Math.min(resolved.maxInputTokens, resolved.contextWindowTokens - outputTokens - 1024)
+    : resolved.maxInputTokens
+}

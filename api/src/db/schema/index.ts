@@ -9,6 +9,7 @@ import { billingSchema } from './billing.js'
 import { configurationSchema } from './configuration.js'
 import { desktopSchema } from './desktop.js'
 import { identitySchema } from './identity.js'
+import { memorySchema } from './memory.js'
 import { operationsSchema } from './operations.js'
 import { privateMediaSchema } from './private-media.js'
 import { resourcesSchema } from './resources.js'
@@ -21,6 +22,7 @@ export const databaseSchemas: readonly DatabaseSchema[] = [
   applicationsSchema,
   resourcesSchema,
   configurationSchema,
+  memorySchema,
   desktopSchema,
   operationsSchema,
   ledgerSchema,

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type {
+  AIModelConfig,
+  AISettings,
   ConfigurationHistory,
   ConfigurationItem,
   ConfigurationValue,
@@ -20,6 +22,8 @@ const value = ref<ConfigurationValue>('')
 const note = ref('')
 const history = ref<ConfigurationHistory[]>([])
 const historyOpen = ref(false)
+const memoryModels = ref<AIModelConfig[]>([])
+const memoryModelOptions = computed(() => [{ value: 'pool', label: '普通会话模型池（自动分配）' }, ...memoryModels.value.map((model) => ({ value: model.id, label: `${model.name} · ${model.providerName}` }))])
 const textValue = computed({
   get: () => String(value.value),
   set: (v: string) => {
@@ -54,6 +58,9 @@ async function load() {
   error.value = ''
   try {
     view.value = await request<ConfigurationView>('/configuration')
+    const [models, settings] = await Promise.all([request<AIModelConfig[]>('/models'), request<AISettings>('/settings')])
+    const pool = settings.modelIds ?? (settings.modelId ? [settings.modelId] : [])
+    memoryModels.value = models.filter((model) => model.enabled && model.purpose === 'conversation' && pool.includes(model.id))
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
@@ -209,7 +216,11 @@ onMounted(load)
           <p class="muted">
             {{ selected.description }}
           </p>
-          <label v-if="selected.type === 'text'">内容<textarea
+          <label v-if="selected.key === 'ai.memory.modelId'">提取模型<AdminSelect
+            v-model="textValue"
+            label="提取模型"
+            :options="memoryModelOptions"
+          /></label><label v-else-if="selected.type === 'text'">内容<textarea
             v-model="textValue"
             rows="12"
             :maxlength="selected.maxLength"

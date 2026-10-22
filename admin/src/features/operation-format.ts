@@ -21,6 +21,7 @@ export const purposeLabels: Record<string, string> = {
   planning: '分析计划',
   verification: '结果核对',
   compaction: '上下文整理',
+  memory_extraction: '记忆候选提取',
   title: '会话标题',
   image: '图片处理',
 }

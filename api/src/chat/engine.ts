@@ -571,11 +571,15 @@ export class ChatService {
             'scopeBindings',
             'attachmentIds',
             'applicationIds',
+            'memoryEnabled',
             ...(event.type === 'message.resend'
               ? ['sourceMessageId', 'expectedRevision']
               : []),
           ])
           requestId = id(event.requestId)
+          if (event.memoryEnabled !== undefined && typeof event.memoryEnabled !== 'boolean') {
+            throw ErrorCode.INVALID_EVENT()
+          }
           const sourceMessageId =
             event.type === 'message.resend'
               ? id(event.sourceMessageId)
@@ -665,6 +669,7 @@ export class ChatService {
               duplicate.retryMessageId ||
               duplicate.sourceMessageId !== sourceMessageId ||
               duplicate.text !== text ||
+              (duplicate.memoryEnabled !== false) !== (event.memoryEnabled !== false) ||
               duplicate.localDate !== localDate ||
               JSON.stringify(duplicate.scopeBindings || []) !==
               JSON.stringify(bindings) ||
@@ -710,6 +715,7 @@ export class ChatService {
                 savedRequest.retryMessageId ||
                 savedRequest.sourceMessageId !== sourceMessageId ||
                 savedRequest.text !== text ||
+                (savedRequest.memoryEnabled !== false) !== (event.memoryEnabled !== false) ||
                 savedRequest.localDate !== localDate ||
                 JSON.stringify(savedRequest.scopeBindings || []) !==
                 JSON.stringify(bindings) ||
@@ -773,6 +779,7 @@ export class ChatService {
             attachmentIds,
             applicationIds,
             sourceMessageId,
+            memoryEnabled: event.memoryEnabled !== false,
           })
           current.scopeBindings = bindings
           // runConversation() establishes the lock synchronously before its first await.
@@ -786,6 +793,7 @@ export class ChatService {
             attachments,
             provider,
             applicationIds,
+            memoryEnabled: event.memoryEnabled !== false,
           })
           return
         }

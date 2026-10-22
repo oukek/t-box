@@ -30,6 +30,8 @@ export type {
 } from '../application-sdk/contracts.js'
 
 export interface ToolContext extends ApplicationToolContext {
+  memory?: import('../memory/contracts.js').MemoryPort
+  memoryIds?: Set<string>
   capabilities?: import('./capability-loading.js').CapabilitySelection
   toolSchemaBudget?: number
   /** Fresh for one orchestration iteration, never cached across execution/grant checks. */
@@ -149,6 +151,7 @@ export interface AttachmentPort {
   append(history: ProviderItem[], text: string, attachments: Resource[]): void
 }
 export interface AgentHost {
+  memory?: import('../memory/contracts.js').MemoryPort
   identity: {
     authenticate(token: string): Promise<Actor>
     authenticateHash(hash: string): Promise<Actor>

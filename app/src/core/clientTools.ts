@@ -1,11 +1,13 @@
 import type { ToolResult } from '@t-box/shared'
 import { clientApplicationTools } from '../applications/registry'
+import { confirmMemory } from '../features/chat/memoryConfirmation'
 import { invokeApplicationTool } from './app-runtime/bridge'
 import { openApplication } from './navigation'
 
 type ClientTool = (args: unknown) => Promise<unknown>
 const registry: Readonly<Record<string, ClientTool>> = Object.freeze({
   app_open: openApplication,
+  memory_confirm: confirmMemory,
   application_invoke: (args) => invokeApplicationTool(args, openApplication),
   ...clientApplicationTools,
 })

@@ -65,6 +65,7 @@ export interface ChatSession {
     string,
     {
       text: string
+      memoryEnabled?: boolean
       localDate: string
       scopeBindings?: ResourceRef[]
       attachmentIds?: string[]

@@ -2,12 +2,12 @@
 import type { ChatMessage } from '@t-box/shared'
 import type { DeepReadonly } from 'vue'
 import { AppIcon } from '@t-box/ui-kit'
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { MarkdownPreview } from '../../components/markdown-preview'
 import GenerationStatus from './GenerationStatus.vue'
 import ImageGenerationPreview from './ImageGenerationPreview.vue'
 import StreamText from './StreamText.vue'
-import { isVisibleConversationTool } from './toolPresentation'
+import { useTimelinePresentation } from './useTimelinePresentation'
 
 const props = defineProps<{
   message: DeepReadonly<ChatMessage>
@@ -15,41 +15,7 @@ const props = defineProps<{
   waiting?: boolean
 }>()
 const emit = defineEmits<{ rendered: [] }>()
-const expanded = ref(true)
-const items = computed(() =>
-  [...(props.message.timeline || [])]
-    .filter(
-      (item) =>
-        (item.kind !== 'analysis' || item.label !== '结果核对') &&
-        (item.kind !== 'tool' || isVisibleConversationTool(item.tool)),
-    )
-    .sort((a, b) => a.sequence - b.sequence),
-)
-const answerIndex = computed(() =>
-  items.value.findIndex((x) => x.kind === 'answer'),
-)
-// Fold only the prefix before the final answer; later interruptions retain their chronological position.
-const process = computed(() =>
-  answerIndex.value < 0 ? items.value : items.value.slice(0, answerIndex.value),
-)
-const tail = computed(() =>
-  answerIndex.value < 0 ? [] : items.value.slice(answerIndex.value),
-)
-const completed = computed(
-  () =>
-    !props.active &&
-    answerIndex.value >= 0 &&
-    tail.value[0]?.kind === 'answer' &&
-    tail.value[0].status === 'completed' &&
-    !['paused', 'failed', 'cancelled'].includes(props.message.outcome || ''),
-)
-watch(
-  completed,
-  (done) => {
-    expanded.value = !done
-  },
-  { immediate: true },
-)
+const { items, process, completed, expanded, visible, toggle } = useTimelinePresentation(props)
 const labels = {
   reasoning: '思考摘要',
   analysis: '分析',
@@ -62,9 +28,6 @@ const statusLabels = {
   completed: '已完成',
   failed: '未完成',
 }
-const visible = computed(() =>
-  expanded.value ? [...process.value, ...tail.value] : tail.value,
-)
 const progressLabel = computed(() => {
   const last = items.value.at(-1)
   if (last?.kind === 'tool' && last.tool.status === 'running') {
@@ -83,12 +46,13 @@ const progressLabel = computed(() => {
 <template>
   <div class="message-timeline">
     <button
-      v-if="completed && process.length"
+      v-if="process.length"
+      type="button"
       class="process-toggle"
       :aria-expanded="expanded"
-      @click="expanded = !expanded"
+      @click="toggle"
     >
-      <AppIcon name="check" :size="14" />
+      <AppIcon :name="completed ? 'check' : 'sparkle'" :size="14" />
       <span>{{ expanded ? "收起处理过程" : "查看处理过程" }}</span>
       <small>{{ process.length }} 个步骤</small>
       <AppIcon

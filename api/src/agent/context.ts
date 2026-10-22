@@ -5,41 +5,19 @@ import type {
   ProviderUsage,
 } from '../chat/provider.js'
 import { randomUUID } from 'node:crypto'
-import { resolveContextPolicy } from '@t-box/shared'
+import { contextInputBudget, resolveContextPolicy } from '@t-box/shared'
 import { secureInstructions } from '../ai-security/policy.js'
 import { settingNumber, settingText } from '../configuration/defaults.js'
 import { memoryInstructions } from '../configuration/prompts.js'
 import { ErrorCode } from '../error-codes.js'
-/** Admission estimate only. Images are billed from provider usage, not base64 byte length. */
-export function estimateInputTokens(
-  input: Pick<ProviderInput, 'history' | 'tools' | 'instructions'>,
-) {
-  let images = 0
-  // A structural Pick type does not remove runtime properties. Snapshots,
-  // audit IDs and confidentiality matchers are server-only, not model input.
-  const json = JSON.stringify(
-    {
-      history: input.history,
-      tools: input.tools,
-      instructions: input.instructions,
-    },
-    (key, value: unknown) => {
-      if (key === 'image_url' && typeof value === 'string') {
-        images++
-        return '[image]'
-      }
-      return value
-    },
-  )
-  // Conservative bound, deliberately not presented as a tokenizer or billable usage.
-  return Math.min(
-    100_000_000,
-    Buffer.byteLength(json, 'utf8') + images * 16_384 + 4096,
-  )
-}
+import { estimateInputTokens } from './token-estimate.js'
+
+export { estimateInputTokens } from './token-estimate.js'
 export interface ContextState {
   compactions?: number
   lastAfterTokens?: number
+  /** Old byte-based estimates are not comparable with local token estimates. */
+  countingVersion?: string
   retainedTurns?: number
   summarizedItems?: number
 }
@@ -50,6 +28,8 @@ export interface ContextProgress {
   beforeTokens: number
   afterTokens?: number
   estimated: boolean
+  inputBudget: number
+  triggerTokens: number
   part?: number
   parts?: number
   retainedTurns?: number
@@ -193,12 +173,7 @@ export async function prepareContext(
   options: ContextOptions = {},
 ) {
   const policy = resolveContextPolicy(provider.contextPolicy)
-  const budget = policy.contextWindowTokens
-    ? Math.min(
-        policy.maxInputTokens,
-        policy.contextWindowTokens - (provider.maxOutputTokens ?? 8192) - 1024,
-      )
-    : policy.maxInputTokens
+  const budget = contextInputBudget(policy, provider.maxOutputTokens ?? 8192)
   if (budget < 8192) {
     throw ErrorCode.CONTEXT_BUDGET_INVALID()
   }
@@ -216,7 +191,10 @@ export async function prepareContext(
   const beforeTokens = await count(input.history)
   const estimated = !policy.tokenCounting
   const threshold = budget * policy.compactionThreshold
-  const last = options.state?.lastAfterTokens
+  const countingVersion = policy.tokenCounting ? 'provider-v1' : 'cl100k-v1'
+  const last = options.state?.countingVersion === countingVersion || (policy.tokenCounting && !options.state?.countingVersion)
+    ? options.state?.lastAfterTokens
+    : undefined
   // Hysteresis prevents repeated paid compression from small prompt/tool-schema changes.
   if (
     beforeTokens <= threshold ||
@@ -236,8 +214,8 @@ export async function prepareContext(
   }
   contextUnits(input.history) // Fail before calling/charging a model for an incomplete tool batch.
   const progress = (
-    event: Omit<ContextProgress, 'beforeTokens' | 'estimated'>,
-  ) => options.onProgress?.({ ...event, beforeTokens, estimated })
+    event: Omit<ContextProgress, 'beforeTokens' | 'estimated' | 'inputBudget' | 'triggerTokens'>,
+  ) => options.onProgress?.({ ...event, beforeTokens, estimated, inputBudget: budget, triggerTokens: Math.floor(threshold) })
   await progress({ phase: 'start' })
   let history: ProviderItem[]
   let retainedTurns: number | undefined
@@ -287,11 +265,11 @@ export async function prepareContext(
         summaryInput(
           input,
           items,
-          'x'.repeat(reserve),
+          '',
           policy.summaryTargetTokens,
           reserve,
         ),
-      ) <= budget
+      ) + reserve <= budget
     for (const unit of prefix) {
       if (!fits(unit)) {
         throw ErrorCode.CONTEXT_ITEM_TOO_LARGE()
@@ -366,6 +344,7 @@ export async function prepareContext(
   if (options.state) {
     options.state.compactions = (options.state.compactions ?? 0) + 1
     options.state.lastAfterTokens = afterTokens
+    options.state.countingVersion = countingVersion
     options.state.retainedTurns = retainedTurns
     options.state.summarizedItems = input.history.length - history.length
   }

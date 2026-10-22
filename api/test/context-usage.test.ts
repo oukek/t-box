@@ -78,7 +78,7 @@ test('usage preserves cached/reasoning subsets; stable cache key is server deriv
 test('context refuses silent truncation and compacts only complete tool pairs', async () => {
   const big = {
     ...input(),
-    history: [{ role: 'user' as const, content: 'x'.repeat(18000) }],
+    history: [{ role: 'user' as const, content: '测'.repeat(18000) }],
   }
   const provider: ChatProvider = {
     mode: 'openai',
