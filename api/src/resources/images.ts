@@ -12,6 +12,7 @@ import { publicRunError } from '../chat/errors.js'
 import { settingNumber, settingText } from '../configuration/defaults.js'
 import { ErrorCode } from '../error-codes.js'
 import { ModelCallAudit } from '../models/audit.js'
+import { imageRequestSize, imageTier } from '../models/image-tier.js'
 import { ModelRouting } from '../models/routing.js'
 import { imageOutput } from './image-output.js'
 
@@ -24,23 +25,28 @@ export class ImageTools {
   ) {}
 
   forRun(principal: Principal, signal: AbortSignal, taskId?: string) {
-    let selected: ReturnType<ConfigurationService['runtime']> | undefined
+    const selected = new Map<import('@t-box/shared').ImageTier, ReturnType<ConfigurationService['runtime']>>()
     const prepare = async (value: unknown, edit = false) => {
       const args = object(
         value,
         edit ? ['prompt', 'resourceIds', 'tier'] : ['prompt', 'tier'],
       )
       const prompt = text(args.prompt, '图片说明', 2000)
-      const tier: unknown = args.tier ?? '1k'
-      if (tier !== '1k' && tier !== '2k' && tier !== '4k') {
-        throw ErrorCode.QUOTA_INVALID('不支持的图片分辨率档位')
-      }
+      const tier = imageTier(args.tier)
       if (!this.configuration) {
         throw ErrorCode.IMAGE_MODEL_REQUIRED()
       }
-      selected ||= this.configuration.runtime('image')
-      const config = await selected
+      let runtime = selected.get(tier)
+      if (!runtime) {
+        runtime = this.configuration.runtime('image', { imageTier: tier }).catch((error: unknown) => {
+          selected.delete(tier)
+          throw error
+        })
+        selected.set(tier, runtime)
+      }
+      const config = await runtime
       if (!config) {
+        selected.delete(tier)
         throw ErrorCode.IMAGE_MODEL_REQUIRED()
       }
       const inputs = edit
@@ -56,7 +62,7 @@ export class ImageTools {
         prompt,
         config,
         inputs,
-        tier: tier as import('@t-box/shared').ImageTier,
+        tier,
       }
     }
     const operation = async (
@@ -65,6 +71,9 @@ export class ImageTools {
       trace?: { messageId?: string, callId?: string },
     ) => {
       const { prompt, config, inputs, tier } = await prepare(value, edit)
+      // Compatible providers can extend the SDK's standard size enum. The
+      // administrator must explicitly configure a model for that exact tier.
+      const size = imageRequestSize(tier, settingText(config.configuration, 'ai.images.size', '1024x1024')) as OpenAI.ImageGenerateParams['size']
       const operationId = randomUUID()
       const execution = {
         operationId,
@@ -96,7 +105,7 @@ export class ImageTools {
         { ...execution, purpose: 'image' },
         metadata,
         edit ? 'images.edit' : 'images.generate',
-        { prompt, resourceIds: inputs.map((r) => r.id) },
+        { prompt, tier, size, resourceIds: inputs.map((r) => r.id) },
         limit,
       )
       let renewal: Promise<unknown> | undefined
@@ -150,15 +159,7 @@ export class ImageTools {
                   model: config.model,
                   prompt,
                   n: 1,
-                  size: (tier === '4k'
-                    ? '4096x4096'
-                    : tier === '2k'
-                      ? '2048x2048'
-                      : settingText(
-                          config.configuration,
-                          'ai.images.size',
-                          '1024x1024',
-                        )) as '1024x1024',
+                  size,
                   image: await Promise.all(
                     inputs.map(async (r) =>
                       toFile(
@@ -176,15 +177,7 @@ export class ImageTools {
                   model: config.model,
                   prompt,
                   n: 1,
-                  size: (tier === '4k'
-                    ? '4096x4096'
-                    : tier === '2k'
-                      ? '2048x2048'
-                      : settingText(
-                          config.configuration,
-                          'ai.images.size',
-                          '1024x1024',
-                        )) as '1024x1024',
+                  size,
                   ...(['dall-e-2', 'dall-e-3'].includes(config.model)
                     ? { response_format: 'b64_json' as const }
                     : {}),

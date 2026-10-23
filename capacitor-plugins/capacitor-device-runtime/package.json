@@ -1,0 +1,12 @@
+{
+  "name": "@t-box/capacitor-device-runtime",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "exports": { ".": { "types": "./index.d.ts", "import": "./index.js" } },
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "capacitor": { "ios": { "src": "ios" } },
+  "peerDependencies": { "@capacitor/core": "^8.5.2" },
+  "devDependencies": { "@capacitor/core": "8.5.2" }
+}

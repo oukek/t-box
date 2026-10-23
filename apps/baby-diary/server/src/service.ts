@@ -194,6 +194,7 @@ export class BabyDiaryService {
 
   backend() {
     return {
+      actions: [{ id: 'care_add', version: 1, title: '记录宝宝照护', description: '记录一次喂养、睡眠或其他照护；仍校验宝宝成员权限', inputSchema: { type: 'object' }, effect: 'write' as const, background: true }],
       lifecycle: (request: LifecycleRequest) => this.lifecycle(request),
       operation: async (request: LifecycleRequest) => {
         this.validateLifecycle(request)

@@ -132,6 +132,8 @@ export const aiSchema: DatabaseSchema = {
       name varchar(80) NOT NULL,
       enabled tinyint(1) NOT NULL DEFAULT '1',
       purpose enum('conversation','image') NOT NULL DEFAULT 'conversation',
+      image_tiers json NOT NULL DEFAULT (JSON_ARRAY('1k')),
+      image_prices json DEFAULT NULL,
       supports_vision tinyint(1) NOT NULL DEFAULT '0',
       supports_reasoning tinyint(1) NOT NULL DEFAULT '0',
       cost_multiplier decimal(10,6) NOT NULL DEFAULT '1',

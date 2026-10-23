@@ -3,7 +3,7 @@ import type { DataSource } from 'typeorm'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '../error-codes.js'
 
-export const DATABASE_BASELINE = '2026-10-22.2'
+export const DATABASE_BASELINE = '2026-10-23.2'
 const marker = 'schema_initialization'
 
 /** Order trusted, static CREATE statements without disabling foreign-key checks. */

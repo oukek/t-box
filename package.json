@@ -11,7 +11,7 @@
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0",
     "check": "pnpm lint && pnpm check:apps && pnpm check:business && pnpm typecheck",
-    "test:unit": "pnpm test && pnpm test:ui-components && pnpm test:app-sdk && pnpm test:native && pnpm test:application-release && node --test scripts/business-code.test.mjs scripts/dev*.test.mjs",
+    "test:unit": "pnpm test && pnpm test:ui-components && pnpm test:admin-controls && pnpm test:app-sdk && pnpm test:native && pnpm test:application-release && node --test scripts/business-code.test.mjs scripts/dev*.test.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:app": "pnpm --filter @t-box/app dev",
     "dev:api": "pnpm --filter @t-box/api dev",
@@ -36,6 +36,7 @@
     "test:media": "pnpm build:contracts && pnpm --filter @t-box/api test:media",
     "test:identity": "pnpm build:contracts && pnpm --filter @t-box/api test:identity",
     "test:ui-components": "pnpm --filter @t-box/api exec tsx --test ../app/test/*.test.ts",
+    "test:admin-controls": "node --test scripts/admin-controls.test.mjs",
     "native:version": "pnpm --filter @t-box/capacitor sync:version",
     "native:run:ios": "node scripts/native.mjs run ios",
     "native:run:android": "node scripts/native.mjs run android",
@@ -85,7 +86,8 @@
     "test:baby-care": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx --test test/baby-care.test.ts && pnpm --filter @t-box/api exec tsx test/baby-care.integration.ts",
     "test:baby-diary": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx --test test/baby-diary.test.ts",
     "test:baby-diary:integration": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/baby-diary.integration.ts",
-    "test:memory": "pnpm build:contracts && pnpm --filter @t-box/api test:memory && pnpm --filter @t-box/api exec tsx --test ../app/test/memory-confirmation.test.ts"
+    "test:memory": "pnpm build:contracts && pnpm --filter @t-box/api test:memory && pnpm --filter @t-box/api exec tsx --test ../app/test/memory-confirmation.test.ts",
+    "test:native-platform": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/native-platform.integration.ts"
   },
   "devDependencies": {
     "@antfu/eslint-config": "9.5.1",

@@ -211,6 +211,9 @@ importers:
       '@t-box/capacitor-app-resources':
         specifier: workspace:*
         version: link:../capacitor-plugins/capacitor-app-resources
+      '@t-box/capacitor-device-runtime':
+        specifier: workspace:*
+        version: link:../capacitor-plugins/capacitor-device-runtime
       '@t-box/capacitor-native-scanner':
         specifier: workspace:*
         version: link:../capacitor-plugins/capacitor-native-scanner
@@ -1128,6 +1131,9 @@ importers:
       '@t-box/capacitor-app-resources':
         specifier: workspace:*
         version: link:../capacitor-plugins/capacitor-app-resources
+      '@t-box/capacitor-device-runtime':
+        specifier: workspace:*
+        version: link:../capacitor-plugins/capacitor-device-runtime
       '@t-box/capacitor-native-scanner':
         specifier: workspace:*
         version: link:../capacitor-plugins/capacitor-native-scanner
@@ -1149,6 +1155,12 @@ importers:
         version: 5.9.3
 
   capacitor-plugins/capacitor-app-resources:
+    devDependencies:
+      '@capacitor/core':
+        specifier: 8.5.2
+        version: 8.5.2
+
+  capacitor-plugins/capacitor-device-runtime:
     devDependencies:
       '@capacitor/core':
         specifier: 8.5.2

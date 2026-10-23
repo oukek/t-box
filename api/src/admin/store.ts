@@ -19,6 +19,7 @@ import {
 import { PlatformConfigurationStateEntity } from '../db/records/configuration-entities.js'
 import { AiModelPoolEntity } from '../db/records/models-entities.js'
 import { ErrorCode } from '../error-codes.js'
+import { storedImagePrices, storedImageTiers } from '../models/image-tier.js'
 import { contextPolicy } from './context-policy.js'
 
 export interface ProviderSecret extends AIProviderConfig {
@@ -89,7 +90,7 @@ export class AdminStore {
   async models(): Promise<AIModelConfig[]> {
     const rows = await this.queryBuilder()
       .select(
-        'm.id,m.provider_id AS providerId,p.name AS providerName,m.model_id AS modelId,m.name,m.enabled,m.max_concurrency AS maxConcurrency,m.purpose,m.invocation_mode AS invocationMode,m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.cost_multiplier AS costMultiplier,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy',
+        'm.id,m.provider_id AS providerId,p.name AS providerName,m.model_id AS modelId,m.name,m.enabled,m.max_concurrency AS maxConcurrency,m.purpose,m.image_tiers AS imageTiers,m.image_prices AS imagePrices,m.invocation_mode AS invocationMode,m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.cost_multiplier AS costMultiplier,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy',
       )
       .from('ai_models', 'm')
       .innerJoin('ai_providers', 'p', 'p.id=m.provider_id')
@@ -98,6 +99,8 @@ export class AdminStore {
       .getRawMany<AIModelConfig>()
     return rows.map((r) => ({
       ...r,
+      imageTiers: storedImageTiers(r.imageTiers),
+      imagePrices: storedImagePrices(r.imagePrices, storedImageTiers(r.imageTiers)),
       contextPolicy: contextPolicy(
         r.contextPolicy,
         Boolean(r.supportsReasoning),

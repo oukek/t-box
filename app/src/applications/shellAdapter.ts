@@ -20,7 +20,9 @@ import {
   navigation,
   openAccountSettings,
   openApplication,
+  openDevicePermissions,
   openProfile,
+  openShortcuts,
   tabLabel,
 } from '../core/navigation'
 import { request } from '../core/network'
@@ -42,6 +44,8 @@ export function initializeApplicationShell() {
     backFromApplication,
     tabLabel: (id) => tabLabel(id as Parameters<typeof tabLabel>[0]),
     openAccountSettings,
+    openDevicePermissions,
+    openShortcuts,
     openProfile,
     setPreference,
     refreshDesktopAppearance,

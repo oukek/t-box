@@ -6,7 +6,7 @@ import { AppIcon, Modal } from '@t-box/ui-kit'
 import { useLauncherClock } from '@t-box/ui-kit/launcherClock'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { computed, ref, watch } from 'vue'
-import { repairInstallation } from '../../core/app-runtime/catalog'
+import { appCatalog, repairInstallation } from '../../core/app-runtime/catalog'
 import { getApplication, presentApplication } from '../../core/applications'
 import {
   openApplication,
@@ -64,7 +64,7 @@ const date = computed(() =>
 const apps = computed(() =>
   order.value.flatMap((id) => {
     const entry = desktop.state.applications.find((x) => x.manifest.id === id)
-    return entry && getApplication(id)
+    return entry && !(id === 'market' && appCatalog.marketHidden) && getApplication(id)
       ? [{ ...entry, manifest: presentApplication(entry.manifest) }]
       : []
   }),

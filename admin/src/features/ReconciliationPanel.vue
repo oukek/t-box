@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { DailyReconciliation } from '@t-box/shared'
 import { onMounted, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
 import { errorMessage, request, save } from '../core/api'
 
 const items = ref<DailyReconciliation[]>([])
@@ -63,7 +65,7 @@ onMounted(load)
         </p>
       </div>
       <div class="actions">
-        <button :disabled="busy" @click="load">刷新</button><button @click="open = true">选择日期核对</button>
+        <AdminButton :disabled="busy" @click="load">刷新</AdminButton><AdminButton @click="open = true">选择日期核对</AdminButton>
       </div>
     </div>
     <p
@@ -92,9 +94,9 @@ onMounted(load)
             <td>{{ item.rows }} / {{ item.differences }}</td>
             <td>{{ new Date(item.updatedAt).toLocaleString() }}</td>
             <td>
-              <button v-if="item.differences" @click="selected = item">
+              <AdminButton v-if="item.differences" @click="selected = item">
                 查看差异
-              </button>
+              </AdminButton>
             </td>
           </tr>
           <tr v-if="!items.length">
@@ -112,11 +114,11 @@ onMounted(load)
     @close="open = false"
   >
     <form id="reconciliation-form" @submit.prevent="submit">
-      <label>账单日期<input
+      <label>账单日期<AdminInput
         v-model="day"
         type="date"
         required
-      ></label>
+      /></label>
       <p class="muted">
         使用当前商户配置申请并校验账单，再核对订单和退款流水。支持近 90
         天内、今天之前的日期。
@@ -127,14 +129,14 @@ onMounted(load)
         role="alert"
       >{{ error }}</p>
     </form>
-    <template #footer><button :disabled="busy" @click="open = false">取消</button><button
+    <template #footer><AdminButton :disabled="busy" @click="open = false">取消</AdminButton><AdminButton
       form="reconciliation-form"
       type="submit"
       class="primary"
       :disabled="busy"
     >
       {{ busy ? '正在核对…' : '开始核对' }}
-    </button></template>
+    </AdminButton></template>
   </AdminDialog>
   <AdminDialog
     :open="!!selected"

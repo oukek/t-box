@@ -6,7 +6,7 @@ const baseMethods: readonly HostMethod[] = ['runtime.context', 'auth.session', '
 const storageMethods: readonly HostMethod[] = ['storage.get', 'storage.set', 'storage.remove']
 /** This allowlist is host policy, independent of any application's business logic. */
 export function isLocalMethod(method: HostMethod) {
-  return baseMethods.includes(method) || storageMethods.includes(method)
+  return (method.startsWith('device.') && method !== 'device.reminders') || baseMethods.includes(method) || storageMethods.includes(method)
 }
 export function resolveLocalLaunch(entries: readonly MarketEntry[], appId: string, platform: AppPlatform) {
   const entry = entries.find((item) => item.release.appId === appId)
@@ -28,7 +28,7 @@ export function resolveLocalLaunch(entries: readonly MarketEntry[], appId: strin
     runtime: release.runtime.type,
     params: {},
     access: 'local',
-    permissions: [],
+    permissions: release.permissions.filter((permission) => permission.startsWith('device.') && permission !== 'device.reminders'),
     capabilities: [...baseMethods, ...(binding.storage ? storageMethods : [])],
   }
   const descriptor: RuntimeDescriptor | undefined = release.runtime.type === 'web'

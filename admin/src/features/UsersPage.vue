@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { Administrator } from '@t-box/shared'
 import { onMounted, reactive, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
 import AdminIcon from '../components/AdminIcon.vue'
+import AdminInput from '../components/AdminInput.vue'
 import { errorMessage, request, save } from '../core/api'
 import { administrator } from '../core/session'
 
@@ -104,13 +106,13 @@ onMounted(load)
       <h1>管理员账号</h1>
       <p>管理后台访问权限，账号与应用用户独立。</p>
     </div>
-    <button
+    <AdminButton
       class="primary"
       :disabled="busy || loading"
       @click="openEditor('create')"
     >
       <AdminIcon name="plus" :size="16" />添加管理员
-    </button>
+    </AdminButton>
   </header>
   <p
     v-if="error"
@@ -166,7 +168,7 @@ onMounted(load)
               }}</span>
             </td>
             <td class="actions">
-              <button
+              <AdminButton
                 :disabled="busy || u.id === administrator?.id"
                 :class="{ 'danger-link': u.enabled }"
                 @click="
@@ -175,7 +177,7 @@ onMounted(load)
                 "
               >
                 {{ u.enabled ? "停用" : "启用" }}
-              </button>
+              </AdminButton>
             </td>
           </tr>
         </tbody>
@@ -188,9 +190,9 @@ onMounted(load)
       <h2>我的账号安全</h2>
       <p>修改密码后，当前账号的所有登录会话会立即失效。</p>
     </div>
-    <button :disabled="busy" @click="openEditor('password')">
+    <AdminButton :disabled="busy" @click="openEditor('password')">
       修改我的密码<AdminIcon name="arrow" :size="15" />
-    </button>
+    </AdminButton>
   </section>
   <AdminDialog
     :open="editor === 'create'"
@@ -212,14 +214,14 @@ onMounted(load)
       @submit.prevent="add"
     >
       <fieldset :disabled="busy">
-        <label>登录账号<input
+        <label>登录账号<AdminInput
           v-model="create.username"
           required
           pattern="[A-Za-z0-9_.\-]{3,64}"
           maxlength="64"
           autocomplete="off"
           placeholder="3–64 位字母、数字或 _ . -"
-        ></label><label>初始密码<input
+        /></label><label>初始密码<AdminInput
           v-model="create.password"
           type="password"
           required
@@ -227,18 +229,18 @@ onMounted(load)
           maxlength="128"
           autocomplete="new-password"
           placeholder="至少 6 个字符"
-        ><small>请通过安全渠道交给账号使用者。</small></label>
+        /><small>请通过安全渠道交给账号使用者。</small></label>
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="closeEditor">取消</button><button
+      <AdminButton :disabled="busy" @click="closeEditor">取消</AdminButton><AdminButton
         form="admin-create-form"
         type="submit"
         class="primary"
         :disabled="busy"
       >
         {{ busy ? "正在添加…" : "添加管理员" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
   <AdminDialog
@@ -261,13 +263,13 @@ onMounted(load)
       @submit.prevent="updatePassword"
     >
       <fieldset :disabled="busy">
-        <label>当前密码<input
+        <label>当前密码<AdminInput
           v-model="change.currentPassword"
           type="password"
           required
           maxlength="128"
           autocomplete="current-password"
-        ></label><label>新密码<input
+        /></label><label>新密码<AdminInput
           v-model="change.newPassword"
           type="password"
           required
@@ -275,18 +277,18 @@ onMounted(load)
           maxlength="128"
           autocomplete="new-password"
           placeholder="至少 6 个字符"
-        ></label>
+        /></label>
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="closeEditor">取消</button><button
+      <AdminButton :disabled="busy" @click="closeEditor">取消</AdminButton><AdminButton
         form="admin-password-form"
         type="submit"
         class="primary"
         :disabled="busy"
       >
         {{ busy ? "正在更新…" : "更新密码并退出" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
   <AdminDialog
@@ -305,13 +307,13 @@ onMounted(load)
       {{ dialogError }}
     </p>
     <template #footer>
-      <button :disabled="busy" @click="toggling = null">取消</button><button
+      <AdminButton :disabled="busy" @click="toggling = null">取消</AdminButton><AdminButton
         :class="toggling?.enabled ? 'danger' : 'primary'"
         :disabled="busy"
         @click="toggle"
       >
         {{ busy ? "正在处理…" : "确认" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>

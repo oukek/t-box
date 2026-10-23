@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { CategoryPreset } from '@t-box/ledger-contracts'
 import { computed, onMounted, reactive, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
 import AdminSelect from '../components/AdminSelect.vue'
 import { errorMessage, request, save } from '../core/api'
 
@@ -101,11 +104,11 @@ onMounted(load)
       <p>统一维护收入、支出分类。用户在账本内管理自己的自定义分类。</p>
     </div>
     <div class="actions">
-      <button
+      <AdminButton
         class="primary"
         :disabled="loading"
         @click="edit()"
-      > 新增系统分类</button><button :disabled="loading" @click="load">刷新</button>
+      > 新增系统分类</AdminButton><AdminButton :disabled="loading" @click="load">刷新</AdminButton>
     </div>
   </header>
   <p
@@ -156,7 +159,7 @@ onMounted(load)
               }}</span>
             </td>
             <td>
-              <button @click="edit(row)">编辑</button>
+              <AdminButton @click="edit(row)">编辑</AdminButton>
             </td>
           </tr>
         </tbody>
@@ -187,37 +190,37 @@ onMounted(load)
           :disabled="!!target || busy"
           required
         /></label>
-        <label>分类名称<input
+        <label>分类名称<AdminInput
           v-model="form.label"
           maxlength="40"
           required
-        ></label>
+        /></label>
         <label>分类图标<AdminSelect
           v-model="form.icon"
           label="分类图标"
           :options="icons"
           required
         /></label>
-        <label>排序（越小越靠前）<input
+        <label>排序（越小越靠前）<AdminInput
           v-model.number="form.sortOrder"
           type="number"
           min="0"
           max="100000"
           step="1"
           required
-        ></label>
-        <label class="category-enabled"><input v-model="form.active" type="checkbox">启用分类</label>
+        /></label>
+        <label class="category-enabled"><AdminCheckbox v-model="form.active" />启用分类</label>
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="open = false">取消</button><button
+      <AdminButton :disabled="busy" @click="open = false">取消</AdminButton><AdminButton
         class="primary"
         type="submit"
         form="category-preset-form"
         :disabled="busy"
       >
         {{ busy ? "正在同步…" : "保存并同步" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>
@@ -239,8 +242,5 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   margin-top: 20px;
-}
-.category-enabled input {
-  width: auto;
 }
 </style>

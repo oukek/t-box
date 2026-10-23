@@ -4,7 +4,9 @@ import type {
   AgentWorkflowPrompts,
 } from '@t-box/shared'
 import { onMounted, reactive, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminTextarea from '../components/AdminTextarea.vue'
 import { errorMessage, request, save } from '../core/api'
 
 const stages = [
@@ -105,7 +107,7 @@ onMounted(load)
       <h1>分析流程</h1>
       <p>控制 AI 如何理解、执行与核对任务，默认 Prompt 已接入。</p>
     </div>
-    <button :disabled="loading" @click="load">刷新</button>
+    <AdminButton :disabled="loading" @click="load">刷新</AdminButton>
   </header>
   <p
     v-if="error"
@@ -136,7 +138,7 @@ onMounted(load)
       <div class="panel-heading">
         <span class="stage-number">0{{ index + 1 }}</span>
         <h2>{{ stage.title }}</h2>
-        <button @click="edit(stage.key)">编辑 Prompt</button>
+        <AdminButton @click="edit(stage.key)">编辑 Prompt</AdminButton>
       </div>
       <p class="muted">
         {{ stage.description }}
@@ -161,7 +163,7 @@ onMounted(load)
           {{ formError }}
         </p>
         <label>{{ stages.find((s) => s.key === selected)?.title
-        }}<textarea
+        }}<AdminTextarea
           v-model="form[selected]"
           required
           minlength="20"
@@ -174,14 +176,14 @@ onMounted(load)
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="restore">填入默认 Prompt</button><button :disabled="busy" @click="open = false">取消</button><button
+      <AdminButton :disabled="busy" @click="restore">填入默认 Prompt</AdminButton><AdminButton :disabled="busy" @click="open = false">取消</AdminButton><AdminButton
         class="primary"
         type="submit"
         form="workflow-form"
         :disabled="busy"
       >
         {{ busy ? "保存中…" : "发布新版本" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>
@@ -239,12 +241,6 @@ onMounted(load)
   padding: 14px;
   color: #60756a;
   margin: 16px 0 0;
-}
-textarea {
-  width: 100%;
-  resize: vertical;
-  line-height: 1.8;
-  font-size: 13px;
 }
 @media (max-width: 900px) {
   .workflow-grid {

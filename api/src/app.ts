@@ -27,6 +27,7 @@ import Fastify, { LogController } from 'fastify'
 import { registerAdmin } from './admin/routes.js'
 import { ApplicationBuildImports } from './application-platform/build-import.js'
 import { registerApplicationBuildImports } from './application-platform/import-routes.js'
+import { registerNativeActions } from './application-platform/native-actions.js'
 import { ApplicationPublishing } from './application-platform/publishing.js'
 import { registerApplicationPlatform } from './application-platform/routes.js'
 import { registerApplicationCatalogSocket } from './application-platform/socket.js'
@@ -345,6 +346,7 @@ export function createApp(deps: AppDependencies) {
   })
   if (deps.platform) {
     if (deps.platform.applications) {
+      registerNativeActions(app, deps.platform)
       registerApplicationPlatform(app, deps.platform.applications, (token) =>
         deps.platform!.identity.authenticate(token))
     }

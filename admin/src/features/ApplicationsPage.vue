@@ -8,11 +8,17 @@ import { validApplicationIcon } from '@t-box/app-contracts'
 import { presentApplicationIcon } from '@t-box/shared'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminFileUpload from '../components/AdminFileUpload.vue'
 import AdminIcon from '../components/AdminIcon.vue'
+import AdminInput from '../components/AdminInput.vue'
 import AdminSelect from '../components/AdminSelect.vue'
+import AdminTextarea from '../components/AdminTextarea.vue'
 import { errorMessage, request, save } from '../core/api'
 import { ErrorCode } from '../error-codes.js'
+import HostDownloadsSettings from './HostDownloadsSettings.vue'
 
 interface Artifact {
   digest: string
@@ -25,6 +31,24 @@ const query = ref('')
 const error = ref('')
 const notice = ref('')
 const loading = ref(true)
+const marketHidden = ref(false)
+const policySaving = ref(false)
+const policyReady = ref(false)
+async function saveMarketPolicy() {
+  if (!policyReady.value) {
+    return
+  }
+  policySaving.value = true
+  error.value = ''
+  try {
+    await save('/application-market/settings', { hidden: marketHidden.value }, 'PATCH')
+    notice.value = marketHidden.value ? '应用市场已隐藏，用户不能自行安装应用；已安装应用仍可更新。' : '应用市场已开放'
+  } catch (cause) {
+    error.value = errorMessage(cause)
+  } finally {
+    policySaving.value = false
+  }
+}
 const busy = ref(false)
 const dialogError = ref('')
 const editorOpen = ref(false)
@@ -148,6 +172,8 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
+    marketHidden.value = (await request<{ hidden: boolean }>('/application-market/settings')).hidden
+    policyReady.value = true
     const result = await request<{
       applications: ManagedApplication[]
       artifactOrigin: string
@@ -363,20 +389,20 @@ onMounted(load)
       <h1>应用版本</h1>
       <p>提交构建产物，检查版本，再发布到应用市场。</p>
     </div>
-    <button
+    <AdminButton
       class="primary"
       :disabled="busy || loading"
       @click="edit(undefined, true)"
     >
       <AdminIcon name="plus" :size="16" />添加应用
-    </button>
+    </AdminButton>
   </header>
   <p
     v-if="error"
     class="alert"
     role="alert"
   >
-    {{ error }} <button @click="load">重试</button>
+    {{ error }} <AdminButton @click="load">重试</AdminButton>
   </p>
   <p
     v-if="notice"
@@ -385,18 +411,24 @@ onMounted(load)
   >
     {{ notice }}
   </p>
+  <div class="panel market-policy-panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:16px">
+    <label style="display:flex;align-items:center;gap:8px"><AdminCheckbox v-model="marketHidden" :disabled="policySaving || !policyReady" />隐藏应用市场</label>
+    <span class="muted" style="flex:1">禁止用户自行安装；已安装应用可继续使用和更新，系统应用仍自动初始化。</span>
+    <AdminButton :disabled="loading || policySaving || !policyReady" @click="saveMarketPolicy">{{ policySaving ? "保存中…" : "保存设置" }}</AdminButton>
+  </div>
+  <HostDownloadsSettings />
   <div class="publication-workspace">
     <aside class="panel application-catalog">
       <div class="search-field">
-        <AdminIcon name="search" :size="16" /><input
+        <AdminIcon name="search" :size="16" /><AdminInput
           v-model="query"
           placeholder="搜索应用"
           aria-label="搜索应用"
-        >
+        />
       </div>
       <p v-if="loading" class="empty">正在读取版本…</p>
       <p v-else-if="!filtered.length" class="empty">没有匹配的应用</p>
-      <button
+      <AdminButton
         v-for="item in filtered"
         :key="item.appId"
         class="application-choice"
@@ -415,7 +447,7 @@ onMounted(load)
         }}</strong><small>{{
           item.kind === "system" ? "系统应用 · 不可卸载" : "用户应用 · 可卸载"
         }}</small></span>
-      </button>
+      </AdminButton>
     </aside>
     <section v-if="current" class="panel release-panel">
       <header class="release-heading">
@@ -429,13 +461,13 @@ onMounted(load)
           <span class="release-identity">{{ current.appId }}</span>
         </div>
         <div class="release-actions">
-          <button :disabled="busy" @click="showHistory">发布记录</button><button
+          <AdminButton :disabled="busy" @click="showHistory">发布记录</AdminButton><AdminButton
             class="primary"
             :disabled="busy"
             @click="edit()"
           >
             <AdminIcon name="plus" :size="15" />新增版本
-          </button>
+          </AdminButton>
         </div>
       </header>
       <div class="live-release">
@@ -498,22 +530,22 @@ onMounted(load)
               entry.readiness.development ? 'Vite 开发预览' : entry.release.releaseId
             }}</span>
             <div v-if="entry.readiness.development">
-              <button :disabled="busy" @click="edit(entry, false, true)">选择产物创建发布草稿</button>
+              <AdminButton :disabled="busy" @click="edit(entry, false, true)">选择产物创建发布草稿</AdminButton>
             </div>
             <div v-else>
-              <button
+              <AdminButton
                 v-if="entry.status === 'draft'"
                 :disabled="busy"
                 @click="edit(entry)"
-              > 编辑草稿</button><button
+              > 编辑草稿</AdminButton><AdminButton
                 v-if="entry.status === 'submitted'"
                 :disabled="busy"
                 @click="edit(entry)"
-              > 编辑更新信息</button><button
+              > 编辑更新信息</AdminButton><AdminButton
                 v-if="entry.status === 'draft'"
                 :disabled="busy || !entry.readiness.ready"
                 @click="prepare(entry, 'submit')"
-              > 提交版本</button><button
+              > 提交版本</AdminButton><AdminButton
                 v-if="
                   entry.status === 'submitted' || entry.status === 'retired'
                 "
@@ -522,7 +554,7 @@ onMounted(load)
                 @click="prepare(entry, 'publish')"
               >
                 {{ entry.status === "retired" ? "切换到此版本" : "发布" }}
-              </button>
+              </AdminButton>
             </div>
           </div>
         </article>
@@ -558,7 +590,7 @@ onMounted(load)
         <p v-if="editingMetadata">{{ form.name }} · v{{ form.version }}</p>
         <template v-else>
           <div class="form-grid">
-            <label>应用标识<input
+            <label>应用标识<AdminInput
               v-model="form.appId"
               :disabled="!newApp"
               maxlength="64"
@@ -566,19 +598,19 @@ onMounted(load)
               required
               placeholder="例如 notes"
               @change="loadArtifacts"
-            ></label><label>版本号<input
+            /></label><label>版本号<AdminInput
               v-model="form.version"
               required
               maxlength="48"
               placeholder="1.0.0"
-            ><small>使用三段版本号，例如 1.0.0、1.1.0。</small></label>
+            /><small>使用三段版本号，例如 1.0.0、1.1.0。</small></label>
           </div>
-          <label>应用名称<input
+          <label>应用名称<AdminInput
             v-model="form.name"
             maxlength="80"
             required
-          ></label>
-          <label>应用说明<textarea
+          /></label>
+          <label>应用说明<AdminTextarea
             v-model="form.description"
             rows="2"
             maxlength="400"
@@ -612,17 +644,16 @@ onMounted(load)
               :animate="false"
             />
             <div><strong>应用图标</strong><p>随版本保存。构建提交会自动读取应用图标，也可在草稿中替换。</p>
-              <label class="icon-upload">选择图片<input
-                type="file"
+              <AdminFileUpload
+                label="上传应用图标"
                 accept=".png,.jpg,.jpeg,.webp,.gif,.svg"
-                aria-label="上传应用图标"
                 @change="uploadIcon"
-              ></label>
+              >选择图片</AdminFileUpload>
               <small>PNG / SVG / JPEG / WebP / GIF · 最大 128 KB，建议正方形</small>
             </div>
           </div>
         </template>
-        <label>更新说明<textarea
+        <label>更新说明<AdminTextarea
           v-model="form.releaseNotes"
           rows="3"
           maxlength="4000"
@@ -636,23 +667,23 @@ onMounted(load)
         /></label>
         <p class="field-hint">此配置随版本安装后生效。自定义弹窗需要应用注册 SDK 处理器；缺失、异常或超时会使用系统提示。</p>
         <div class="form-grid">
-          <label>弹窗标题<input
+          <label>弹窗标题<AdminInput
             v-model="form.updatePrompt.title"
             maxlength="60"
             placeholder="发现新版本"
-          ></label>
-          <label>确认按钮<input
+          /></label>
+          <label>确认按钮<AdminInput
             v-model="form.updatePrompt.confirmText"
             maxlength="24"
             placeholder="前往更新"
-          ></label>
-          <label>稍后按钮<input
+          /></label>
+          <label>稍后按钮<AdminInput
             v-model="form.updatePrompt.deferText"
             maxlength="24"
             placeholder="稍后"
-          ></label>
+          /></label>
         </div>
-        <label>提示说明<textarea
+        <label>提示说明<AdminTextarea
           v-model="form.updatePrompt.description"
           maxlength="400"
           rows="2"
@@ -660,18 +691,13 @@ onMounted(load)
         /></label>
         <div v-if="!editingMetadata && form.runtime === 'web'" class="artifact-picker">
           <div class="artifact-label">
-            <strong>构建产物</strong><label
+            <strong>构建产物</strong><AdminFileUpload
               v-if="artifactDelivery !== 'oss'"
-              class="upload-build"
-              :class="{ disabled: !canUpload || busy }"
-            ><AdminIcon name="plus" :size="14" />上传 dist 目录<input
-              type="file"
-              webkitdirectory
-              multiple
+              label="上传构建目录"
+              directory
               :disabled="!canUpload || busy"
-              aria-label="上传构建目录"
               @change="upload"
-            ></label>
+            ><AdminIcon name="plus" :size="14" />上传 dist 目录</AdminFileUpload>
           </div>
           <AdminSelect
             v-model="form.artifact"
@@ -690,14 +716,14 @@ onMounted(load)
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="editorOpen = false">取消</button><button
+      <AdminButton :disabled="busy" @click="editorOpen = false">取消</AdminButton><AdminButton
         class="primary"
         form="release-form"
         type="submit"
         :disabled="busy || (form.runtime === 'web' && !form.artifact)"
       >
         {{ busy ? "正在保存…" : editingMetadata ? "保存更新信息" : "保存草稿" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
   <AdminDialog
@@ -738,7 +764,7 @@ onMounted(load)
       </p>
     </template>
     <template #footer>
-      <button :disabled="busy" @click="transition = null">取消</button><button
+      <AdminButton :disabled="busy" @click="transition = null">取消</AdminButton><AdminButton
         class="primary"
         :disabled="busy"
         @click="execute"
@@ -750,7 +776,7 @@ onMounted(load)
               ? "确认提交"
               : "确认发布"
         }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
   <AdminDialog
@@ -792,20 +818,6 @@ onMounted(load)
   color: var(--muted);
   line-height: 1.6;
   margin: 4px 0 8px;
-}
-.icon-upload {
-  display: inline-flex;
-  position: relative;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 12px;
-}
-.icon-upload input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  width: 100%;
 }
 
 .publication-workspace {
@@ -1002,27 +1014,6 @@ onMounted(load)
 .artifact-label strong {
   font-size: 13px;
 }
-.upload-build {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: var(--accent);
-  cursor: pointer;
-}
-.upload-build.disabled {
-  opacity: 0.45;
-}
-.upload-build input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-}
 .artifact-picker small,
 .shell-note {
   font-size: 12px;
@@ -1057,20 +1048,6 @@ onMounted(load)
     11px ui-monospace,
     SFMono-Regular,
     monospace;
-}
-.dialog-form textarea {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 12px;
-  resize: vertical;
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface);
-}
-.dialog-form textarea:focus {
-  border-color: var(--focus-border);
-  outline: none;
 }
 .form-grid {
   display: grid;

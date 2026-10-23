@@ -50,6 +50,16 @@ const detailEvent = ref<CalendarEvent | null>(null)
 const deleting = ref(false)
 const deleteOpen = ref(false)
 const mutationBusy = ref(false)
+const systemCalendarAvailable = ref(false)
+const exportNotice = ref('')
+let exportKey = crypto.randomUUID()
+void application.client.device.getCapabilities().then((environment) => {
+  systemCalendarAvailable.value = environment.capabilities.some((capability) => capability.capability === 'calendar.presentCreate' && capability.declared && (capability.supported || environment.platform === 'web'))
+}).catch(() => {})
+watch([details, detailEvent], () => {
+  exportKey = crypto.randomUUID()
+  exportNotice.value = ''
+})
 
 let loadVersion = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -309,6 +319,29 @@ onBeforeUnmount(() => {
   loadVersion++
   clearTimeout(searchTimer)
 })
+async function exportSystemCalendar() {
+  const event = displayedEvent.value
+  if (!event || mutationBusy.value) {
+    return
+  }
+  mutationBusy.value = true
+  exportNotice.value = ''
+  try {
+    const occurrence = details.value
+    const start = event.allDay ? dayjs.tz(occurrence?.occurrenceDate || event.start.slice(0, 10), event.timezone) : occurrence ? dayjs(occurrence.startAt) : dayjs.tz(event.start, event.timezone)
+    const durationDays = dayjs.utc(event.end.slice(0, 10)).diff(dayjs.utc(event.start.slice(0, 10)), 'day')
+    const end = event.allDay ? start.add(Math.max(1, durationDays), 'day') : occurrence ? dayjs(occurrence.endAt) : dayjs.tz(event.end, event.timezone)
+    const result = await application.client.device.calendar.presentCreate({ title: event.title, startAt: start.toISOString(), endAt: end.toISOString(), timeZone: event.timezone, allDay: event.allDay, notes: event.description, location: event.location, reminderMinutes: event.reminders.slice(0, 3) }, { idempotencyKey: exportKey })
+    exportNotice.value = result.status === 'saved' ? '已添加到系统日历。重复日程仅添加当前这一次，不会开启自动同步。' : '已取消添加。'
+    if (result.status === 'cancelled') {
+      exportKey = crypto.randomUUID()
+    }
+  } catch (cause) {
+    exportNotice.value = cause instanceof Error ? cause.message : '系统日历添加失败'
+  } finally {
+    mutationBusy.value = false
+  }
+}
 async function saved(event: CalendarEvent) {
   editorOpen.value = false
   if (['birthday', 'anniversary'].includes(event.kind)) {
@@ -826,7 +859,14 @@ async function remove() {
             </button>
           </div>
         </details>
+        <p v-if="exportNotice" role="status">{{ exportNotice }}</p>
         <div class="temporal-actions">
+          <button
+            v-if="systemCalendarAvailable"
+            class="button button-secondary"
+            :disabled="mutationBusy"
+            @click="exportSystemCalendar"
+          >添加到系统日历</button>
           <button
             class="button button-secondary"
             :disabled="mutationBusy"

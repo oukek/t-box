@@ -169,7 +169,7 @@ export class IdentityService {
     db = this.source.manager,
   ): Promise<Principal> {
     if (!/^[a-f0-9]{64}$/.test(token)) {
-      throw ErrorCode.UNAUTHENTICATED('请登录 T Box')
+      throw ErrorCode.UNAUTHENTICATED('请登录 T方舟')
     }
     return this.authenticateHash(digest(token), db)
   }

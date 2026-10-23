@@ -83,11 +83,11 @@ export const platformDefinitions: ConfigurationDefinition[] = [
   {
     key: 'ai.images.size',
     group: '图片模型请求参数',
-    title: '图片模型默认输出尺寸',
+    title: '1K 图片默认画幅',
     type: 'select',
     defaultValue: '1024x1024',
-    options: ['1024x1024', '1024x1536', '1536x1024', 'auto'],
-    description: '平台图片模型请求参数，须确认服务商支持；每次生成一张。',
+    options: ['1024x1024', '1024x1536', '1536x1024'],
+    description: '仅控制 1K 图片的默认画幅，须确认服务商支持；2K、4K 分别请求 2048、4096 方图。未指定分辨率始终使用 1K，不使用上游自动尺寸。',
     effect: 'next_request',
   },
   {
@@ -159,7 +159,7 @@ export const platformDefinitions: ConfigurationDefinition[] = [
   prompt(
     'ai.prompt.assistant',
     '主助手指导',
-    '你是 T Box 的日常助手。使用中文简洁回答，结合用户目标选择必要的应用能力。',
+    '你是 T方舟（T Ark）的日常助手。使用中文简洁回答，结合用户目标选择必要的应用能力。',
   ),
   prompt('ai.prompt.title', '会话标题', titleInstructions),
   prompt('ai.prompt.memory', '上下文事实摘要', memoryInstructions),

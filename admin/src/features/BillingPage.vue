@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { BillingMode, BillingUser, UsageRecord } from '@t-box/shared'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
 import AdminSelect from '../components/AdminSelect.vue'
 import { errorMessage, request, save } from '../core/api'
 
@@ -145,7 +147,7 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
       <h1>用户与额度</h1>
       <p>配置用户扣费方式，查看实际用量与费用。</p>
     </div>
-    <button :disabled="loading" @click="load">刷新</button>
+    <AdminButton :disabled="loading" @click="load">刷新</AdminButton>
   </header>
   <p
     v-if="error"
@@ -160,12 +162,12 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
         用户账户 <span class="count">{{ users.length }}</span>
       </h2>
       <div class="search-field">
-        <input
+        <AdminInput
           v-model="query"
           aria-label="搜索用户"
           maxlength="64"
           placeholder="搜索昵称或账号"
-        >
+        />
       </div>
     </div>
     <div v-if="loading" class="empty">正在读取账户…</div>
@@ -201,7 +203,7 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
               >{{ u.mode === 'charge' ? '实际扣额度' : '免费用户' }}</span>
             </td>
             <td class="actions">
-              <button @click="edit(u, 'usage')">使用记录</button><button @click="edit(u, 'mode')">扣费设置</button><button @click="edit(u, 'grant')">赠送额度</button>
+              <AdminButton @click="edit(u, 'usage')">使用记录</AdminButton><AdminButton @click="edit(u, 'mode')">扣费设置</AdminButton><AdminButton @click="edit(u, 'grant')">赠送额度</AdminButton>
             </td>
           </tr>
         </tbody>
@@ -249,25 +251,25 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
             { value: 'record_only', label: '免费用户：记录用量，不扣额度' },
           ]"
         /></label>
-        <label v-else>赠送额度<input
+        <label v-else>赠送额度<AdminInput
           v-model="amount"
           inputmode="decimal"
           pattern="[0-9]+([.][0-9]{1,4})?"
           required
-        ></label>
-        <label v-if="operation === 'grant'">有效天数<input
+        /></label>
+        <label v-if="operation === 'grant'">有效天数<AdminInput
           v-model.number="validDays"
           type="number"
           min="1"
           max="3650"
           required
-        ></label>
-        <label>调整原因<input
+        /></label>
+        <label>调整原因<AdminInput
           v-model="reason"
           maxlength="200"
           placeholder="必填，保留操作审计"
           required
-        ></label>
+        /></label>
       </fieldset>
     </form>
     <template v-else>
@@ -308,12 +310,12 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
                 >免费用户</span>
               </td>
               <td>
-                <button
+                <AdminButton
                   v-if="r.status === 'review'"
                   :disabled="busy"
                   @click="startReview(r, 'release')"
                 >
-                  确认免扣</button><button
+                  确认免扣</AdminButton><AdminButton
                   v-if="
                     r.status === 'review'
                       && (r.kind === 'image'
@@ -324,7 +326,7 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
                   @click="startReview(r, 'settle')"
                 >
                   确认核对完成
-                </button>
+                </AdminButton>
               </td>
             </tr>
           </tbody>
@@ -343,15 +345,15 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
               : '确认已核对服务商用量，不再补扣用户额度。'
           }}不会重新调用模型。
         </p>
-        <label>核对原因<input
+        <label>核对原因<AdminInput
           v-model="reason"
           maxlength="200"
           required
-        ></label>
+        /></label>
       </form>
     </template>
     <template #footer>
-      <button :disabled="busy" @click="operation = null">关闭</button><button
+      <AdminButton :disabled="busy" @click="operation = null">关闭</AdminButton><AdminButton
         v-if="operation !== 'usage' || release"
         form="billing-form"
         class="primary"
@@ -359,7 +361,7 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
         :disabled="busy"
       >
         {{ busy ? '正在保存…' : '确认保存' }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>

@@ -41,20 +41,20 @@ export function createImagesModule(images?: ImageToolPort): ApplicationModule {
         id: 'images',
         title: '图片助手',
         description: '使用图片模型生成或编辑用户资源',
-        version: '1.0.0',
+        version: '1.1.0',
         skillIds: ['image_processing'],
         instructions:
-          '你是图片工具协调助手，当前会话模型只理解需求、构造函数调用和总结真实回执，不负责生成像素。实际生成、编辑必须调用 images_generate/images_edit，由工具选择独立图片模型；不要使用模型内置 image_generation。用户明确要求图片创作时才执行。区分描述图片与生成编辑请求。使用真实附件资源 ID；不擅自增加生成次数。返回工具实际生成的资源，不编造链接。',
+          '你是图片工具协调助手，当前会话模型只理解需求、构造函数调用和总结真实回执，不负责生成像素。实际生成、编辑必须调用 images_generate/images_edit，由工具选择独立图片模型；不要使用模型内置 image_generation。用户明确要求图片创作时才执行。区分描述图片与生成编辑请求。使用真实附件资源 ID；不擅自增加生成次数。用户未明确指定分辨率时，生成与编辑一律使用 tier=1k；只有用户明确要求 2K/4K 才填写对应档位。高清、精美等描述不等于升档，不因源图较大自动选择高档位。工具按档位选择模型；没有匹配模型时如实提示，不改档重试。返回工具实际生成的资源，不编造链接。',
       },
     ],
     skills: {
       image_processing: {
         title: '图片生成与编辑',
         description: '按要求生成图片，或编辑会话中的图片',
-        version: '1.0.0',
+        version: '1.1.0',
         tools: ['images_generate', 'images_edit'],
         instructions:
-          '只有用户明确要求生成或修改图片才调用图片工具；看图、描述或识别由普通会话模型处理。编辑必须使用本会话附件或工具结果返回的真实资源 ID，不能编造。生成会消耗模型额度，不自动重复调用。失败如实说明，不能伪造图片或下载链接。',
+          '只有用户明确要求生成或修改图片才调用图片工具；看图、描述或识别由普通会话模型处理。编辑必须使用本会话附件或工具结果返回的真实资源 ID，不能编造。用户未明确指定分辨率时，生成与编辑一律使用 tier=1k；只有用户明确要求 2K/4K 才填写对应档位。高清、精美等描述不等于升档，不因源图较大自动选择高档位。工具按档位选择模型；没有匹配模型时如实提示，不改档重试。生成会消耗模型额度，不自动重复调用。失败如实说明，不能伪造图片或下载链接。',
       },
     },
     tools: {
@@ -67,7 +67,7 @@ export function createImagesModule(images?: ImageToolPort): ApplicationModule {
             tier: {
               type: ['string', 'null'],
               enum: ['1k', '2k', '4k', null],
-              description: '分辨率，默认1k；高档位须用户明确要求，服务商须支持',
+              description: '默认 1k（省略或 null 均为 1k）。仅在用户明确指定 2K/4K 时升档，不能根据高清等形容词自动升档。',
             },
           },
         ),
@@ -101,7 +101,7 @@ export function createImagesModule(images?: ImageToolPort): ApplicationModule {
           '按用户说明修改已有图片，资源 ID 必须来自会话附件或工具结果。',
           {
             prompt: { type: 'string', maxLength: 2000 },
-            tier: { type: ['string', 'null'], enum: ['1k', '2k', '4k', null] },
+            tier: { type: ['string', 'null'], enum: ['1k', '2k', '4k', null], description: '编辑默认 1k；只有用户明确指定 2K/4K 时升档，不继承源图片尺寸。' },
             resourceIds: {
               type: 'array',
               minItems: 1,

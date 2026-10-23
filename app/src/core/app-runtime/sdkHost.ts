@@ -11,6 +11,9 @@ import { watch } from 'vue'
 import { applicationModules } from '../../applications/registry'
 import { applicationMutation } from '../applicationMutation'
 import { createRequestId } from '../identifiers'
+import { applicationActions, saveApplicationShortcut } from '../native-runtime/actions'
+import { promptNativeDownload } from '../native-runtime/downloads'
+import { deviceHostMethods, handleDeviceCall } from '../native-runtime/host'
 import {
   backFromApplication,
   navigation,
@@ -251,6 +254,9 @@ export function createHostTransport(options: HostOptions): AppTransport {
       capabilities: [
         ...new Set([
           ...context.capabilities,
+          ...deviceHostMethods,
+          'automation.actions' as const,
+          ...(platform() === 'ios' ? ['automation.saveShortcut' as const] : []),
           ...(storage
             ? [
                 'storage.get' as const,
@@ -496,20 +502,41 @@ export function createHostTransport(options: HostOptions): AppTransport {
       if (method === 'auth.session' && !identity.user) {
         return session() as T
       }
+      if (method === 'automation.saveShortcut' && promptNativeDownload('快捷指令', 'ios')) {
+        throw SdkErrorCode.DEVICE_UNSUPPORTED('快捷指令需下载 iOS App 后使用')
+      }
+      if (method === 'device.reminders' && module?.sdk?.reminders) {
+        const action = object(args)
+        if (Object.keys(action).some((key) => key !== 'action')) {
+          throw SdkErrorCode.INVALID_ARGUMENTS('提醒操作无效')
+        }
+        if (['enable', 'exact'].includes(String(action.action)) && promptNativeDownload(action.action === 'exact' ? '系统精确提醒' : '后台系统通知')) {
+          throw SdkErrorCode.DEVICE_UNSUPPORTED('后台系统通知需下载 App 后使用，网页前台提醒仍可使用')
+        }
+      }
       if (!isLocalMethod(method) && !identity.user) {
         throw SdkErrorCode.AUTH_REQUIRED('此功能需要登录并联网后使用', 401)
       }
       if (!isLocalMethod(method) && !navigator.onLine) {
         throw SdkErrorCode.NETWORK_REQUIRED()
       }
-      const context = await binding(callOptions.signal, isLocalMethod(method))
+      const context = await binding(callOptions.signal, isLocalMethod(method) || method.startsWith('automation.'))
       assertEpoch(started)
       if (!context.capabilities.includes(method)) {
         throw SdkErrorCode.CAPABILITY_UNAVAILABLE(undefined, 403)
       }
       const a = object(args)
       let value: unknown
-      if (method === 'runtime.context') {
+      if (deviceHostMethods.includes(method)) {
+        value = await handleDeviceCall({ method, args, context, owner: identity.user?.id, name: module?.manifest.name || options.appId, bundled: module?.sdk?.deviceCapabilities, requestId: callOptions.idempotencyKey || createRequestId(), signal: AbortSignal.any([lifetime.signal, ...(callOptions.signal ? [callOptions.signal] : [])]), assertCurrent: () => assertEpoch(started) })
+      } else if (method === 'automation.actions') {
+        if (Object.keys(a).length) {
+          throw SdkErrorCode.INVALID_ARGUMENTS()
+        }
+        value = await applicationActions(options.appId)
+      } else if (method === 'automation.saveShortcut') {
+        value = await saveApplicationShortcut(context, args, AbortSignal.any([lifetime.signal, ...(callOptions.signal ? [callOptions.signal] : [])]), () => assertEpoch(started))
+      } else if (method === 'runtime.context') {
         value = context
       } else if (method === 'updates.getAvailable') {
         value = availableUpdate(

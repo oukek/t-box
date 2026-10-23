@@ -1,4 +1,4 @@
-import type { LifecycleAction, MarketEntry } from '@t-box/app-contracts'
+import type { ApplicationMarketSettings, LifecycleAction, MarketEntry } from '@t-box/app-contracts'
 import type { DeepReadonly } from 'vue'
 import { SdkErrorCode } from '@t-box/app-sdk'
 import { reactive } from 'vue'
@@ -14,7 +14,16 @@ import { readLocalCatalog, saveLocalCatalog } from './localLaunch'
 import { clearApplicationBindings } from './resourceBindings'
 import { prefetchReleases, prepareRelease } from './resources'
 
+const policyKey = 'tbox.host.market-policy.v1'
+function cachedMarketHidden() {
+  try {
+    return JSON.parse(localStorage.getItem(policyKey) || '{}').hidden === true
+  } catch {
+    return false
+  }
+}
 export const appCatalog = reactive({
+  marketHidden: cachedMarketHidden(),
   entries: [] as MarketEntry[],
   loading: false,
   error: '',
@@ -25,6 +34,15 @@ let generation = 0
 let catalogUser: string | undefined
 export async function refreshCatalog(options: { silent?: boolean } = {}) {
   void refreshLocalApplications()
+  void request<{ data: ApplicationMarketSettings }>('/app-market/settings').then(({ data }) => {
+    const changed = appCatalog.marketHidden !== data.hidden
+    appCatalog.marketHidden = data.hidden
+    localStorage.setItem(policyKey, JSON.stringify(data))
+    if (changed) {
+      appCatalog.revision++
+      window.dispatchEvent(new Event('tbox:applications-changed'))
+    }
+  }).catch(() => {})
   const epoch = ++generation
   const user = identity.user?.id
   const token = identity.token
@@ -102,6 +120,9 @@ export async function changeInstallation(
 ) {
   if (!navigator.onLine) {
     throw SdkErrorCode.NETWORK_REQUIRED()
+  }
+  if (action === 'install' && appCatalog.marketHidden) {
+    throw SdkErrorCode.MARKET_HIDDEN()
   }
   const user = identity.user?.id
   const token = identity.token

@@ -126,6 +126,8 @@ export const ProviderEntity = new EntitySchema<ProviderRow>({
   },
 })
 export interface ModelRow {
+  imageTiers: import('@t-box/shared').ImageTier[]
+  imagePrices: Partial<Record<import('@t-box/shared').ImageTier, string>> | null
   maxConcurrency: number
   invocationMode: import('@t-box/shared').ModelInvocationMode
   contextPolicy: import('@t-box/shared').ContextPolicy | null
@@ -146,6 +148,8 @@ export const ModelEntity = new EntitySchema<ModelRow>({
   name: 'AIModel',
   tableName: 'ai_models',
   columns: {
+    imageTiers: { type: 'json', name: 'image_tiers', default: () => '(JSON_ARRAY(\'1k\'))' },
+    imagePrices: { type: 'json', name: 'image_prices', nullable: true },
     maxConcurrency: {
       type: Number,
       name: 'max_concurrency',

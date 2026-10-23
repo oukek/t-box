@@ -7,12 +7,15 @@ import type {
   ApplicationUpdateInfo,
   FilePickOptions,
   HostMethod,
+  InstalledApplicationAction,
   PrivateFileScope,
+  ShortcutTemplateInput,
 } from '@t-box/app-contracts'
 import {
   APPLICATION_FILE_MAX_BYTES,
   createApplicationRequestId,
 } from '@t-box/app-contracts'
+import { createDeviceClient } from './device.js'
 import { SdkErrorCode } from './error-codes.js'
 import { AppSdkError } from './sdk-error.js'
 
@@ -264,7 +267,12 @@ export function createAppClient(transport: AppTransport) {
         return call<T>('api.invoke', { method, arguments: args }, options)
       },
     },
+    automation: {
+      actions: () => call<InstalledApplicationAction[]>('automation.actions', {}),
+      saveShortcut: (input: ShortcutTemplateInput) => call<{ id: string, title: string }>('automation.saveShortcut', input, { timeoutMs: 120_000 }),
+    },
     device: {
+      ...createDeviceClient(call),
       reminders<T = unknown>(action: 'status' | 'sync' | 'enable' | 'exact') {
         return call<T>('device.reminders', { action }, { timeoutMs: 120_000 })
       },
@@ -497,4 +505,6 @@ export type {
   ApplicationUpdateInfo,
   ApplicationUpdatePrompt,
   HostMethod,
+  InstalledApplicationAction,
+  ShortcutTemplateInput,
 } from '@t-box/app-contracts'

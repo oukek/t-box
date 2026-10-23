@@ -8,8 +8,12 @@ import type {
   ConfigurationView,
 } from '@t-box/shared'
 import { computed, onMounted, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
 import AdminSelect from '../components/AdminSelect.vue'
+import AdminTextarea from '../components/AdminTextarea.vue'
 import { errorMessage, request, save } from '../core/api'
 
 const view = ref<ConfigurationView>()
@@ -124,7 +128,7 @@ onMounted(load)
       <h1>配置中心</h1>
       <p>平台 AI 配置统一入库，Redis 按版本缓存。</p>
     </div>
-    <button :disabled="busy" @click="load">刷新</button>
+    <AdminButton :disabled="busy" @click="load">刷新</AdminButton>
   </header>
   <p
     v-if="error"
@@ -145,12 +149,12 @@ onMounted(load)
         Agent、Skill、工具定义及业务设置由应用自身维护。
       </p>
     </div>
-    <input
+    <AdminInput
       v-model="query"
       type="search"
       aria-label="搜索配置"
       placeholder="搜索配置名称或键名"
-    >
+    />
   </section>
   <section
     v-for="group in groups"
@@ -173,7 +177,7 @@ onMounted(load)
         }}</small>
       </div>
       <div class="configuration-actions">
-        <button :disabled="busy" @click="edit(item)">编辑</button><button :disabled="busy" @click="showHistory(item)">历史</button>
+        <AdminButton :disabled="busy" @click="edit(item)">编辑</AdminButton><AdminButton :disabled="busy" @click="showHistory(item)">历史</AdminButton>
       </div>
     </div>
   </section>
@@ -202,9 +206,9 @@ onMounted(load)
           }}</strong><small>{{ new Date(entry.createdAt).toLocaleString() }}</small>
           <pre>{{ entry.value }}</pre>
           <p>{{ entry.note }}</p>
-          <button :disabled="busy" @click="submit(entry.revision)">
+          <AdminButton :disabled="busy" @click="submit(entry.revision)">
             恢复为此值并发布新版本
-          </button>
+          </AdminButton>
         </article>
       </div>
       <form
@@ -220,19 +224,19 @@ onMounted(load)
             v-model="textValue"
             label="提取模型"
             :options="memoryModelOptions"
-          /></label><label v-else-if="selected.type === 'text'">内容<textarea
+          /></label><label v-else-if="selected.type === 'text'">内容<AdminTextarea
             v-model="textValue"
             rows="12"
             :maxlength="selected.maxLength"
             required
-          /></label><label v-else-if="selected.type === 'number'">数值<input
+          /></label><label v-else-if="selected.type === 'number'">数值<AdminInput
             v-model.number="numberValue"
             type="number"
             :min="selected.min"
             :max="selected.max"
             :step="selected.step || 1"
             required
-          ></label><label v-else-if="selected.type === 'select'">选项<AdminSelect
+          /></label><label v-else-if="selected.type === 'select'">选项<AdminSelect
             v-model="textValue"
             :label="selected.title"
             :options="
@@ -241,32 +245,32 @@ onMounted(load)
           /></label><label
             v-else
             class="check"
-          ><input v-model="booleanValue" type="checkbox">启用</label><label>变更说明<input
+          ><AdminCheckbox v-model="booleanValue" />启用</label><label>变更说明<AdminInput
             v-model="note"
             maxlength="500"
             placeholder="可选，用于审计"
-          ></label>
+          /></label>
           <p class="muted">默认值：{{ selected.defaultValue }}
           </p>
         </fieldset>
       </form>
     </template>
     <template #footer>
-      <button
+      <AdminButton
         :disabled="busy"
         @click="
           selected = undefined;
           historyOpen = false;
         "
-      > 关闭</button><template v-if="selected && !historyOpen">
-        <button :disabled="busy" @click="value = selected.defaultValue"> 填入默认值</button><button
+      > 关闭</AdminButton><template v-if="selected && !historyOpen">
+        <AdminButton :disabled="busy" @click="value = selected.defaultValue"> 填入默认值</AdminButton><AdminButton
           class="primary"
           form="configuration-form"
           type="submit"
           :disabled="busy"
         >
           发布新版本
-        </button>
+        </AdminButton>
       </template>
     </template>
   </AdminDialog>
@@ -345,11 +349,6 @@ onMounted(load)
   display: block;
   margin-top: 6px;
   color: #7c8e87;
-}
-textarea {
-  width: 100%;
-  resize: vertical;
-  line-height: 1.8;
 }
 @media (max-width: 700px) {
   .configuration-intro {

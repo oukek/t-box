@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        C80200000000000000000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = C80200000000000000000002 /* InfoPlist.strings */; };
+        C80100000000000000000004 /* NativeBridgePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80100000000000000000006 /* NativeBridgePolicy.swift */; };
+        C80100000000000000000003 /* TBoxBridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80100000000000000000005 /* TBoxBridgeViewController.swift */; };
+        C80100000000000000000001 /* TBoxIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80100000000000000000002 /* TBoxIntents.swift */; };
         B70100000000000000000001 /* tbox-packages in Resources */ = {isa = PBXBuildFile; fileRef = B70100000000000000000002 /* tbox-packages */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
@@ -20,6 +24,12 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+        C80200000000000000000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+        C80200000000000000000004 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+        C80200000000000000000005 /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+        C80100000000000000000006 /* NativeBridgePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeBridgePolicy.swift; sourceTree = "<group>"; };
+        C80100000000000000000005 /* TBoxBridgeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TBoxBridgeViewController.swift; sourceTree = "<group>"; };
+        C80100000000000000000002 /* TBoxIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TBoxIntents.swift; sourceTree = "<group>"; };
         B70100000000000000000002 /* tbox-packages */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "tbox-packages"; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
@@ -80,10 +90,14 @@
 				9582B6842FE996800072D4E8 /* SceneDelegate.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+                C80100000000000000000002 /* TBoxIntents.swift */,
+                C80100000000000000000006 /* NativeBridgePolicy.swift */,
+                C80100000000000000000005 /* TBoxBridgeViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
+                C80200000000000000000002 /* InfoPlist.strings */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 				B70100000000000000000002 /* tbox-packages */,
@@ -144,6 +158,8 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+                "zh-Hans",
+                "zh-Hant",
 				Base,
 			);
 			mainGroup = 504EC2FB1FED79650016851F;
@@ -162,6 +178,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
+                C80200000000000000000001 /* InfoPlist.strings in Resources */,
 				B70100000000000000000001 /* tbox-packages in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
@@ -215,6 +232,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+                C80100000000000000000001 /* TBoxIntents.swift in Sources */,
+                C80100000000000000000004 /* NativeBridgePolicy.swift in Sources */,
+                C80100000000000000000003 /* TBoxBridgeViewController.swift in Sources */,
 				9582B6852FE996820072D4E8 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -222,6 +242,16 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXVariantGroup section */
+        C80200000000000000000002 /* InfoPlist.strings */ = {
+            isa = PBXVariantGroup;
+            children = (
+                C80200000000000000000003 /* en */,
+                C80200000000000000000004 /* zh-Hans */,
+                C80200000000000000000005 /* zh-Hant */,
+            );
+            name = InfoPlist.strings;
+            sourceTree = "<group>";
+        };
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (

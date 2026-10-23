@@ -14,6 +14,18 @@ const preferences = reactive<ConverterPreferences>(readPreferences(null))
 const preferencesReady = ref(false)
 const form = reactive({ category: 'length', from: 'm', to: 'cm', value: '1' })
 const notice = ref('')
+const shortcutAvailable = ref(false)
+void Promise.all([props.client.runtime.supports('automation.saveShortcut'), props.client.auth.getSession()]).then(([supported, session]) => {
+  shortcutAvailable.value = supported && session.status === 'signed_in'
+}).catch(() => {})
+async function saveShortcut() {
+  try {
+    await props.client.automation.saveShortcut({ title: `${form.value} ${form.from} → ${form.to}`.slice(0, 100), actionId: 'convert', actionVersion: 1, arguments: { category: form.category, value: form.value, from: form.from, to: [form.to] } })
+    notice.value = '已保存，可在系统快捷指令中选择“执行 T方舟 快捷动作”。'
+  } catch (cause) {
+    notice.value = cause instanceof Error ? cause.message : '保存失败'
+  }
+}
 const query = ref('')
 const historyOpen = ref(false)
 let inputRevision = 0
@@ -246,7 +258,13 @@ onBeforeUnmount(() => {
             class="subtle-button"
             :disabled="!primary || !preferencesReady"
             @click="remember"
-          >保存记录</button></footer>
+          >保存记录</button><button
+            v-if="shortcutAvailable"
+            type="button"
+            class="subtle-button"
+            :disabled="!primary"
+            @click="saveShortcut"
+          >保存为快捷动作</button></footer>
         </div>
         <p
           v-if="error"

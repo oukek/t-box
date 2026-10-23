@@ -34,6 +34,21 @@ function fixture(handler = async () => null) {
     },
   }
 }
+test('native writes preserve explicit request keys and shortcut requests never contain host credentials', async () => {
+  const f = fixture(async () => ({ status: 'saved', id: 'fixture-id' }))
+  const event = { title: '日程', startAt: '2026-11-01T10:00:00+08:00', endAt: '2026-11-01T11:00:00+08:00' }
+  await f.client.device.calendar.create(event, { idempotencyKey: 'native-stable-1' })
+  assert.equal(f.calls[0].method, 'device.invoke')
+  assert.equal(f.calls[0].options.idempotencyKey, 'native-stable-1')
+  assert.deepEqual(f.calls[0].args, { capability: 'calendar.create', arguments: event })
+  const template = { title: '常用计算', actionId: 'calculate', actionVersion: 1, arguments: { kind: 'basic', values: { expression: '1+1' } } }
+  await f.client.automation.saveShortcut(template)
+  assert.deepEqual(f.calls[1].args, template)
+  assert.equal(f.calls[1].method, 'automation.saveShortcut')
+  assert.equal('scope' in f.calls[1].args, false)
+  assert.equal('token' in f.calls[1].args, false)
+  f.client.dispose()
+})
 test('private files use domain-scoped ports and return Blobs without URLs or credentials', async () => {
   const file = {
     id: 'private-photo',

@@ -64,7 +64,7 @@ try {
       const outputs = model.history.filter(
         (x) => x.type === 'function_call_output',
       )
-      if (model.instructions.includes('你是 T Box 的记账助手')) {
+      if (model.instructions.includes('你是 T方舟 的记账助手')) {
         if (!outputs.length) {
           return call('persist-write', 'bills_create', input)
         }

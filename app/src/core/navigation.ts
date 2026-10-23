@@ -3,6 +3,7 @@ import { nextTick, reactive, readonly } from 'vue'
 import { applicationModules } from '../applications/registry'
 import { ErrorCode } from '../error-codes.js'
 import { parseOpenAppArguments } from './applications'
+import { promptNativeDownload } from './native-runtime/downloads'
 
 export const primaryTabs = [
   { id: 'home', label: 'AI', icon: 'sparkle', hash: '#/' },
@@ -17,7 +18,7 @@ type Screen =
   'account' |
   'wallet' |
   'recharge' |
-  'pricing' | 'memory'
+  'pricing' | 'memory' | 'devicePermissions' | 'shortcuts'
 type BackTarget = Tab | 'profile' | 'wallet'
 export const tabLabel = (id: BackTarget) =>
   id === 'profile'
@@ -86,6 +87,22 @@ function readHash() {
         : 'home'
     return
   }
+  if (path === '/profile/device-permissions' || path === '/profile/shortcuts') {
+    if (path.endsWith('shortcuts') && promptNativeDownload('快捷指令', 'ios')) {
+      state.application = { appId: 'profile', params: {} }
+      state.screen = 'application'
+      state.backTo = 'applications'
+      state.revision++
+      history.replaceState(null, '', '#/applications/profile')
+      return
+    }
+    if (path.endsWith('device-permissions')) {
+      promptNativeDownload('本机设备权限', 'ios')
+    }
+    state.screen = path.endsWith('shortcuts') ? 'shortcuts' : 'devicePermissions'
+    state.backTo = 'profile'
+    return
+  }
   if (path === '/profile/settings') {
     state.screen = 'account'
     state.backTo = 'profile'
@@ -147,13 +164,13 @@ export async function openApplication(value: unknown) {
     state.backTo =
       state.screen === 'capabilities'
         ? 'applications'
-        : state.screen === 'account'
-          ? 'profile'
-          : ['resources', 'wallet', 'recharge', 'pricing', 'memory'].includes(
-              state.screen,
-            )
-              ? 'home'
-              : (state.screen as Tab)
+        : ['account', 'devicePermissions', 'shortcuts'].includes(state.screen)
+            ? state.backTo
+            : ['resources', 'wallet', 'recharge', 'pricing', 'memory'].includes(
+                state.screen,
+              )
+                ? 'home'
+                : (state.screen as Tab)
   }
   if (args.appId === 'profile') {
     state.backTo = 'applications'
@@ -249,4 +266,19 @@ export function openPricing() {
   state.backTo = fromWallet ? 'wallet' : 'home'
   history.pushState(null, '', `#/ai/pricing${fromWallet ? '?from=wallet' : ''}`)
   window.scrollTo({ top: 0 })
+}
+
+export function openDevicePermissions() {
+  promptNativeDownload('本机设备权限', 'ios')
+  state.backTo = state.screen === 'applications' ? 'applications' : 'profile'
+  state.screen = 'devicePermissions'
+  history.pushState(null, '', '#/profile/device-permissions')
+}
+export function openShortcuts() {
+  if (promptNativeDownload('快捷指令', 'ios')) {
+    return
+  }
+  state.screen = 'shortcuts'
+  state.backTo = 'profile'
+  history.pushState(null, '', '#/profile/shortcuts')
 }

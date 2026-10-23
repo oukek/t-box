@@ -10,7 +10,7 @@ import { computed, ref, toRaw, watch } from 'vue'
 import CalculationForm from './CalculationForm.vue'
 import ExpressionCalculator from './ExpressionCalculator.vue'
 import { loadHistory, saveHistory } from './history'
-import { runtime } from './runtime'
+import { runtime, saveCalculationShortcut, shortcutState } from './runtime'
 import './calculator.css'
 
 const props = defineProps<{
@@ -69,6 +69,15 @@ function remember(input: CalculationInput, result: CalculationResult) {
     ...records.value,
   ].slice(0, 20)
   saveHistory(userId(), records.value)
+}
+const shortcutNotice = ref('')
+async function saveShortcut(record: CalculationHistory) {
+  try {
+    await saveCalculationShortcut(record.input, record.input.values.expression || record.result.title)
+    shortcutNotice.value = '已保存，可在系统快捷指令中选择“执行 T方舟 快捷动作”。'
+  } catch (cause) {
+    shortcutNotice.value = cause instanceof Error ? cause.message : '保存失败'
+  }
 }
 function restore(record: CalculationHistory) {
   try {
@@ -206,6 +215,7 @@ async function copy(record: CalculationHistory) {
         </p>
         <pre>{{ record.result.items[0]?.value }}</pre>
         <footer>
+          <button v-if="shortcutState.available" @click="saveShortcut(record)">保存为快捷动作</button>
           <button @click="restore(record)">再次计算</button><button @click="copy(record)">
             {{ copied === record.id ? "已复制" : "复制结果" }}
           </button>
@@ -218,6 +228,7 @@ async function copy(record: CalculationHistory) {
       >
         复制不可用，可选中结果手动复制。
       </p>
+      <p v-if="shortcutNotice" role="status">{{ shortcutNotice }}</p>
       <template #footer>
         <button class="calc-clear-history" @click="clearOpen = true">
           清空计算历史

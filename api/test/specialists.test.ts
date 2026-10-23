@@ -85,7 +85,7 @@ test('manager delegates into isolated context, specialist cannot activate foreig
   const provider: ChatProvider = {
     mode: 'openai',
     async next(input) {
-      if (input.instructions.includes('你是 T Box 的notes专业助手')) {
+      if (input.instructions.includes('你是 T方舟 的notes专业助手')) {
         assert.ok(input.tools.some((t) => t.name === 'notes_save'))
         assert.ok(
           !input.tools.some(

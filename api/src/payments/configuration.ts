@@ -33,7 +33,7 @@ export const emptyWechat: WechatPaymentConfiguration = {
   platformPublicKey: '',
   apiBaseUrl: '',
   frontendUrl: '',
-  description: 'T Box 服务余额充值',
+  description: 'T方舟 服务余额充值',
   native: true,
   h5: false,
   jsapi: false,

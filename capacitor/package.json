@@ -14,7 +14,8 @@
     "dev:android": "node ../scripts/native.mjs dev android",
     "run:ios": "node ../scripts/native.mjs run ios",
     "run:android": "node ../scripts/native.mjs run android",
-    "sync:wechat": "node scripts/sync-wechat-config.mjs"
+    "sync:wechat": "node scripts/sync-wechat-config.mjs && node scripts/sync-navigation-config.mjs",
+    "sync:navigation": "node scripts/sync-navigation-config.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",
@@ -22,6 +23,7 @@
     "@capacitor/ios": "8.5.2",
     "@capacitor/local-notifications": "^8.3.1",
     "@t-box/capacitor-app-resources": "workspace:*",
+    "@t-box/capacitor-device-runtime": "workspace:*",
     "@t-box/capacitor-native-scanner": "workspace:*",
     "@t-box/capacitor-wechat-pay": "workspace:*"
   },

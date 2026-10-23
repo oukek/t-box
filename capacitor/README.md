@@ -46,3 +46,13 @@ pnpm native:version # 只更新版本，不构建网页
 当前 iOS 壳的 AI 余额充值入口固定禁用，显示「iOS 应用内购暂时不可用」，仅保留余额与订单查看；后台 APP 通道开关不会解除该限制。Android 充值继续使用微信 APP 支付。网页不受此 iOS 壳限制。
 
 已通过本地 `@t-box/capacitor-wechat-pay` 插件接入 iOS / Android 官方 OpenSDK。公开打包身份在 `wechat.config.json`（默认关闭），商户凭证和独立 APP 通道在后台支付配置中管理。所有 native sync / dev 命令会先同步公开身份。配置、Universal Link 域名文件部署和真机验证详见 [微信原生支付](../docs/wechat-native-payments.md)。
+
+## 设备能力和快捷指令
+
+`@t-box/capacitor-device-runtime` 提供 iOS 拨号、系统日历、分享、设备设置、按应用授权、Keychain 会话与持久快捷请求。独立应用通过统一应用 SDK 使用，不能直接访问原生插件。原生主页面已增加桥接来源检查，嵌入应用不能直接发送原生调用。
+
+iOS 16+ 的快捷指令可以选择“打开 T方舟 应用”或“执行 T方舟 快捷动作”。计算器历史、单位换算结果可保存动作；设置 → 系统集成中管理权限和快捷动作。未配置云端地址或未登录不影响本地工具与本机能力。
+
+可选 Universal Links 在 `navigation.config.json` 配置，原生同步时自动生成关联文件并保留微信配置。完整接入及验收见 [原生能力与快捷指令](../docs/native-capabilities-and-shortcuts.md)。
+
+iOS 和 Android 的原生显示名称按系统语言区分：中文为「T方舟」，其他语言为「T Ark」。Capacitor 的默认 `appName` 使用英文名；iOS 的 `InfoPlist.strings`、Android 的 `values-zh/strings.xml` 提供中文名称。改名不改变 `com.tbox.app` 或既有快捷链接协议。

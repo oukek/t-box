@@ -21,7 +21,9 @@ import {
   deployedApplications,
   deploymentIssues,
 } from '../application-platform/catalog.js'
+import { HostDownloadConfiguration } from '../application-platform/download-settings.js'
 import { ApplicationPlatform } from '../application-platform/service.js'
+import { ApplicationMarketPolicy } from '../application-platform/settings.js'
 import { createApplicationResourceAdapters } from '../applications/registry.js'
 import { ProviderConcurrency } from '../billing/concurrency.js'
 import { BillingPricingService } from '../billing/pricing.js'
@@ -89,7 +91,7 @@ export class PlatformService {
       source,
       deployedApplications,
       builtinKinds,
-      { shellMigrations: ['ledger', 'calendar', 'time'], deploymentIssues },
+      { shellMigrations: ['ledger', 'calendar', 'time'], deploymentIssues, marketPolicy: new ApplicationMarketPolicy(source, configuration?.cache), downloads: new HostDownloadConfiguration(source, configuration?.cache) },
     )
     this.privateFiles = new PrivateApplicationFiles(source, this.applications)
     this.babyDiary = new BabyDiaryService(

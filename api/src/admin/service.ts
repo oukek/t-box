@@ -19,6 +19,7 @@ import { ModelEntity, ProviderEntity } from '../db/entities.js'
 import { PlatformConfigurationStateEntity } from '../db/records/configuration-entities.js'
 import { AiModelPoolEntity } from '../db/records/models-entities.js'
 import { ErrorCode } from '../error-codes.js'
+import { imageModelPrices, imageModelTiers, imageTier, storedImagePrices, storedImageTiers } from '../models/image-tier.js'
 import { ModelRouting } from '../models/routing.js'
 import { contextPolicy } from './context-policy.js'
 import { bad, baseUrl, body, enabled, text } from './validation.js'
@@ -166,6 +167,8 @@ export class ConfigurationService {
       'imagePrice',
       'contextPolicy',
       'maxConcurrency',
+      'imageTiers',
+      'imagePrices',
     ])
     const providerId = text(input.providerId, '服务商', 36)
     const modelId = text(input.modelId, '模型标识', 200)
@@ -183,6 +186,8 @@ export class ConfigurationService {
         : enabled(input.supportsReasoning)
     const provider = await this.store.provider(providerId)
     const previous = id ? await this.store.model(id) : undefined
+    const resolutions = purpose === 'image' ? imageModelTiers(input.imageTiers === undefined ? previous?.imageTiers : input.imageTiers) : ['1k'] as const
+    const resolutionPrices = purpose === 'image' ? imageModelPrices(input.imagePrices === undefined ? previous?.imagePrices : input.imagePrices, [...resolutions]) : {}
     const maxConcurrency = concurrencyLimit(
       input.maxConcurrency,
       previous?.maxConcurrency ?? 4,
@@ -248,6 +253,8 @@ export class ConfigurationService {
             name,
             enabled: active,
             purpose: purpose as 'conversation' | 'image',
+            imageTiers: [...resolutions],
+            imagePrices: resolutionPrices,
             supportsVision,
             supportsReasoning,
             invocationMode: method,
@@ -267,6 +274,8 @@ export class ConfigurationService {
           name,
           enabled: active,
           purpose: purpose as 'conversation' | 'image',
+          imageTiers: [...resolutions],
+          imagePrices: resolutionPrices,
           supportsVision,
           supportsReasoning,
           invocationMode: method,
@@ -375,6 +384,7 @@ export class ConfigurationService {
       configurationKey?: string
       preferredConfigurationKey?: string
       supportsVision?: boolean
+      imageTier?: import('@t-box/shared').ImageTier
       peek?: boolean
     } = {},
   ) {
@@ -384,13 +394,13 @@ export class ConfigurationService {
       .findOne({ select: { ai_revision: true }, where: { id: 1 } })
       .then((row) => (row ? { revision: row.ai_revision } : null))
     const rows = await this.cache.read(
-      `ai-runtime-pool-v1-${purpose}`,
+      `ai-runtime-pool-v3-${purpose}`,
       Number(state?.revision ?? 0),
       () =>
         this.store
           .queryBuilder()
           .select(
-            'm.id AS modelId,m.name AS modelName,p.name AS providerName,m.model_id AS remoteId,m.purpose,m.invocation_mode AS invocationMode,\n      m.cost_multiplier AS costMultiplier,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy,\n      m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.enabled AS modelEnabled,p.enabled AS providerEnabled,\n      m.max_concurrency AS maxConcurrency,p.max_concurrency AS providerConcurrency,p.id,p.base_url AS baseUrl,p.key_cipher AS keyCipher,p.revision',
+            'm.id AS modelId,m.name AS modelName,p.name AS providerName,m.model_id AS remoteId,m.purpose,m.image_tiers AS imageTiers,m.image_prices AS imagePrices,m.invocation_mode AS invocationMode,\n      m.cost_multiplier AS costMultiplier,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy,\n      m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.enabled AS modelEnabled,p.enabled AS providerEnabled,\n      m.max_concurrency AS maxConcurrency,p.max_concurrency AS providerConcurrency,p.id,p.base_url AS baseUrl,p.key_cipher AS keyCipher,p.revision',
           )
           .from('ai_settings', 's')
           .innerJoin(
@@ -417,6 +427,8 @@ export class ConfigurationService {
           purpose: string
           invocationMode: import('@t-box/shared').ModelInvocationMode
           supportsVision: number
+          imageTiers: unknown
+          imagePrices: unknown
           supportsReasoning: number
           modelEnabled: number
           providerEnabled: number
@@ -434,14 +446,19 @@ export class ConfigurationService {
     if (rows.every((row) => row.purpose !== purpose)) {
       throw ErrorCode.MODEL_PURPOSE_MISMATCH()
     }
+    const resolution = purpose === 'image' ? imageTier(options.imageTier) : undefined
     const eligible = rows.filter(
       (row) =>
         row.purpose === purpose &&
         row.modelEnabled &&
         row.providerEnabled &&
+        (!resolution || storedImageTiers(row.imageTiers).includes(resolution)) &&
         (!options.supportsVision || row.supportsVision),
     )
     if (!eligible.length) {
+      if (resolution) {
+        throw ErrorCode.IMAGE_TIER_UNAVAILABLE(`当前没有可用的 ${resolution.toUpperCase()} 图片模型，请管理员配置并加入图片模型池`)
+      }
       throw options.supportsVision
         ? ErrorCode.VISION_MODEL_REQUIRED.unavailable()
         : ErrorCode.AI_DISABLED()
@@ -479,6 +496,8 @@ export class ConfigurationService {
             preferred?.modelId,
           ))
     const method = invocationMode(row.invocationMode, purpose)
+    const supportedTiers = storedImageTiers(row.imageTiers)
+    const tierPrices = storedImagePrices(row.imagePrices, supportedTiers)
     const policy = invocationContextPolicy(
       method,
       contextPolicy(row.contextPolicy, Boolean(row.supportsReasoning)),
@@ -493,13 +512,14 @@ export class ConfigurationService {
       billingModelId: row.modelId,
       providerId: row.id,
       contextPolicy: policy,
-      prices: prices(row),
+      prices: prices({ ...row, imagePrice: resolution ? tierPrices[resolution] ?? row.imagePrice : row.imagePrice }),
+      imageTier: resolution,
       model: row.remoteId,
       supportsVision: Boolean(Number(row.supportsVision)),
       supportsReasoning: Boolean(Number(row.supportsReasoning)),
       baseURL: row.baseUrl,
       apiKey: this.vault.decrypt(row.keyCipher),
-      configurationKey: `${row.modelId}:${method}:${row.remoteId}:${row.id}:${row.revision}${row.supportsReasoning ? ':reasoning-summary' : ''}:${JSON.stringify(policy)}`,
+      configurationKey: `${row.modelId}:${method}:${row.remoteId}:${row.id}:${row.revision}${row.supportsReasoning ? ':reasoning-summary' : ''}:${JSON.stringify(policy)}${purpose === 'image' ? `:image-${resolution}:${supportedTiers.join(',')}:${JSON.stringify(tierPrices)}` : ''}`,
     }
   }
 

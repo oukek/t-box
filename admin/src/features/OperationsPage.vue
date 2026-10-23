@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { OperationsEvent, OperationsOverview } from '@t-box/shared'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminInput from '../components/AdminInput.vue'
 import { errorMessage, request } from '../core/api'
 import OperationsRecords from './OperationsRecords.vue'
 
@@ -85,9 +87,9 @@ onBeforeUnmount(() => (alive = false))
       <h1>任务与运行记录</h1>
       <p>追踪任务、逐次模型请求、消耗与失败原因。</p>
     </div>
-    <button :disabled="busy" @click="load">
+    <AdminButton :disabled="busy" @click="load">
       {{ busy ? '刷新中…' : '刷新' }}
-    </button>
+    </AdminButton>
   </header>
   <p
     v-if="error"
@@ -121,12 +123,12 @@ onBeforeUnmount(() => (alive = false))
     </div>
   </template>
   <form class="lookup" @submit.prevent="inspect()">
-    <label for="operation-task">定位任务</label><input
+    <label for="operation-task">定位任务</label><AdminInput
       id="operation-task"
       v-model="taskId"
       placeholder="输入任务 ID"
       autocomplete="off"
-    ><button :disabled="!taskId.trim()">查看执行记录</button>
+    /><AdminButton type="submit" :disabled="!taskId.trim()">查看执行记录</AdminButton>
   </form>
   <OperationsRecords ref="records" />
   <section class="panel">
@@ -163,9 +165,9 @@ onBeforeUnmount(() => (alive = false))
               }}<small v-if="event.durationMs !== undefined">{{ event.durationMs }} ms</small>
             </td>
             <td>
-              <button v-if="event.taskId" @click="inspect(event.taskId)">
+              <AdminButton v-if="event.taskId" @click="inspect(event.taskId)">
                 查看任务
-              </button>
+              </AdminButton>
             </td>
           </tr>
           <tr v-if="!events.length">

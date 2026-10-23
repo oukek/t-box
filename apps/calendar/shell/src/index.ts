@@ -16,7 +16,7 @@ export function createCalendarShellModule(load: () => Promise<{ default: Compone
     installation: { kind: 'system' },
     parseParams: parseCalendarParams,
     props: (params, context) => ({ appId: 'calendar', params, openRevision: context.openRevision, persistentNavigation: true }),
-    sdk: { restPrefixes: ['/calendar'], storage: true, reminders: reminderHostAction },
+    sdk: { deviceCapabilities: ['calendar.presentCreate', 'calendar.create', 'calendar.list', 'calendar.update', 'calendar.remove', 'system.openSettings'], restPrefixes: ['/calendar'], storage: true, reminders: reminderHostAction },
     ai: { interactions: calendarClientInteractions, bindings: () => [], clientTools: { calendar_confirm: (args: unknown) => ports.invoke('calendar_confirm', args), calendar_reminders_sync: validateSyncArguments }, async authorize(ref) {
       if (ref.resourceType !== 'event') {
         return false

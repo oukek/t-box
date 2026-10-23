@@ -1,4 +1,5 @@
 import type {
+  ApplicationActionDefinition,
   BackendEventBatch,
   BackendEventRequest,
   BackendInvocation,
@@ -10,6 +11,7 @@ import type {
 import { ErrorCode } from './error-codes.js'
 
 export interface ApplicationBackend {
+  actions?: readonly ApplicationActionDefinition[]
   lifecycle(request: LifecycleRequest): Promise<LifecycleReceipt>
   operation(request: LifecycleRequest): Promise<LifecycleReceipt | null>
   invoke(request: BackendInvocation, signal?: AbortSignal): Promise<unknown>

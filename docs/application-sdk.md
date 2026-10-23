@@ -199,3 +199,7 @@ import '@t-box/ui-kit/application.css'
 `BottomSheet` 已 Teleport 到应用自己的 body，并通过 dialog 顶层绘制；手机端铺满该视口宽度，桌面端保留 560px 面板宽度上限。Modal 和 SidePanel 同样以应用视口定位。应用应在自己的文档内展示标题栏并通过 SDK 返回，让弹层能覆盖标题区域，避免把业务标题留在 iframe 外。兼容原本使用宿主标题栏的应用时，先检查 `context.supportsAppNavigation`，支持才渲染自己的标题栏并调用 `ready({ appNavigation: true })`。宿主收到已验证的就绪消息后隐藏旧标题栏；旧版应用不声明时仍保留返回入口，旧宿主也不会因新版应用而出现双标题。
 
 应用 iframe 的统一沙箱策略允许 scripts、same-origin、forms 和 downloads；`allow-forms` 是 Vue `@submit.prevent` 等本地表单处理收到 submit 事件的必要条件，不能只因应用不使用原生 POST 就禁用它。应用仍使用独立来源，未开放顶层导航和弹出窗口；静态产物服务继续设置 CSP `form-action 'none'`，阻止未被拦截的原生表单跳转。
+
+## 原生设备能力与系统快捷指令
+
+统一 SDK 已增加 `client.device` 和 `client.automation`。应用不引用 Capacitor，也不持有原生凭据；通过宿主完成能力发现、按应用授权、系统权限和动作执行。新接口、声明方式、动作版本、离线边界和 iOS 构建参见 [原生能力与快捷指令](native-capabilities-and-shortcuts.md)。

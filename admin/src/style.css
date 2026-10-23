@@ -20,7 +20,8 @@ body {
   min-width: 320px;
 }
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 button {
@@ -328,6 +329,7 @@ h2 {
 .search-field input:focus {
   border-color: transparent;
   outline: none;
+  box-shadow: none;
 }
 .table-wrap {
   overflow-x: auto;
@@ -618,24 +620,6 @@ strong {
   border-color: #edcfcc;
   color: inherit;
 }
-input {
-  width: 100%;
-  min-width: 0;
-  padding: 10px 11px;
-  border: 1px solid #dce2ed;
-  border-radius: 7px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 13px;
-  transition: border-color 0.15s;
-}
-input::placeholder {
-  color: #a0a8b6;
-}
-input:not([type='checkbox']):focus {
-  outline: none;
-  border-color: var(--focus-border);
-}
 fieldset {
   border: 0;
   margin: 0;
@@ -675,12 +659,6 @@ small {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-}
-.check input {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--accent);
-  margin: 0;
 }
 .admin-dialog {
   margin: auto;
@@ -1117,7 +1095,7 @@ small {
   }
   .dialog-form .check small {
     flex-basis: 100%;
-    margin-left: 23px;
+    margin-left: 0;
   }
   .login-layout {
     display: block;

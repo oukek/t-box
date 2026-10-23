@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>T Box</string>
+    <string>T Ark</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>$(PRODUCT_NAME)</string>
+    <string>T Ark</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -25,6 +25,12 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSCalendarsUsageDescription</key>
+    <string>在你选择添加或管理事件时访问系统日历。</string>
+    <key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+    <string>将你确认的日程添加到系统日历。</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>在你授权的应用中查询、修改或删除系统日历事件。</string>
     <key>NSCameraUsageDescription</key>
     <string>用于扫描二维码和条形码。</string>
     <key>LSRequiresIPhoneOS</key>
@@ -78,12 +84,23 @@
     <key>TBoxWechatUniversalLink</key>
     <string/>
     <key>CFBundleURLTypes</key>
-    <array/>
+    <array>
+      <dict>
+        <key>CFBundleURLName</key>
+        <string>com.tbox.app.navigation</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>tbox</string>
+        </array>
+      </dict>
+    </array>
     <key>LSApplicationQueriesSchemes</key>
     <array>
       <string>weixin</string>
       <string>weixinULAPI</string>
       <string>weixinURLParamsAPI</string>
     </array>
+    <key>TBoxNavigationOrigin</key>
+    <string/>
   </dict>
 </plist>

@@ -3,6 +3,7 @@ import type { DataSource } from 'typeorm'
 import { createHash } from 'node:crypto'
 import { In } from 'typeorm'
 import { ApplicationInstallationEntity } from '../db/records/applications-entities.js'
+import { PlatformConfigurationStateEntity } from '../db/records/configuration-entities.js'
 
 const digest = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -44,7 +45,7 @@ export class ApplicationCatalogMonitor {
     const sessions = [
       ...new Set(subscribers.map((entry) => entry.actor.sessionHash)),
     ]
-    const [published, installations, valid] = await Promise.all([
+    const [published, installations, valid, settings] = await Promise.all([
       this.source
         .createQueryBuilder()
         .select('r.app_id,r.release_id,r.definition_hash,a.kind')
@@ -78,11 +79,12 @@ export class ApplicationCatalogMonitor {
         )
         .setParameters({ p0: sessions })
         .getRawMany(),
+      this.source.getRepository(PlatformConfigurationStateEntity).findOne({ select: { revision: true }, where: { id: 1 } }),
     ])
     const live = new Set(
       valid.map((row: { token_hash: string }) => row.token_hash),
     )
-    const publication = digest(published)
+    const publication = digest([published, settings?.revision])
     const revisions = new Map(
       users.map((user) => [
         user,

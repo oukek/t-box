@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { AdminCustomerSupportConfiguration } from '@t-box/shared'
 import { onMounted, reactive, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
 import { errorMessage, request, save } from '../core/api'
 
 const config = ref<AdminCustomerSupportConfiguration | null>(null)
@@ -64,11 +67,11 @@ onMounted(load)
       <p>管理 iOS 首页的微信客服入口。</p>
     </div>
     <div class="actions">
-      <button
+      <AdminButton
         :disabled="loading || !config"
         class="primary"
         @click="edit"
-      > 编辑配置</button><button :disabled="loading" @click="load">刷新</button>
+      > 编辑配置</AdminButton><AdminButton :disabled="loading" @click="load">刷新</AdminButton>
     </div>
   </header>
   <p
@@ -135,26 +138,26 @@ onMounted(load)
         >
           {{ formError }}
         </p>
-        <label>二维码图片地址<input
+        <label>二维码图片地址<AdminInput
           v-model="form.qrCodeUrl"
           type="url"
           placeholder="https://你的域名/客服二维码.png"
           maxlength="2048"
           :required="form.enabled"
-        ></label>
-        <label class="support-enabled"><input v-model="form.enabled" type="checkbox">开放 iOS
+        /></label>
+        <label class="support-enabled"><AdminCheckbox v-model="form.enabled" />开放 iOS
           客服入口</label>
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="open = false">取消</button><button
+      <AdminButton :disabled="busy" @click="open = false">取消</AdminButton><AdminButton
         type="submit"
         form="support-settings-form"
         class="primary"
         :disabled="busy"
       >
         {{ busy ? "正在保存…" : "保存配置" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>
@@ -196,9 +199,6 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   margin-top: 20px;
-}
-.support-enabled input {
-  width: auto;
 }
 @media (max-width: 700px) {
   .support-settings-content {

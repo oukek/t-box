@@ -49,6 +49,15 @@ export default antfu(
     },
   },
   {
+    files: ['admin/src/App.vue', 'admin/src/features/**/*.vue'],
+    rules: {
+      'vue/no-restricted-html-elements': [
+        'error',
+        { element: ['input', 'textarea', 'select', 'button'], message: 'Use the shared Admin form-control components so styling, accessibility and form behavior stay consistent.' },
+      ],
+    },
+  },
+  {
     files: ['**/*.vue'],
     rules: {
       'vue/max-attributes-per-line': ['error', { singleline: 2, multiline: 1 }],

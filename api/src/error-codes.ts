@@ -5,6 +5,13 @@ import {
 } from '@t-box/errors'
 
 const apiErrors = defineApiErrors({
+  NATIVE_ACTION_INVALID: { statusCode: 400, message: '快捷指令参数无效' },
+  NATIVE_ACTION_UNAVAILABLE: { statusCode: 409, message: '动作未开放、应用已更新或安装已变化，请打开应用重新配置快捷指令' },
+  INVALID_MARKET_SETTINGS: { statusCode: 400, message: '应用市场设置无效' },
+  INVALID_HOST_DOWNLOADS: { statusCode: 400, message: '应用下载配置无效；iOS 请填写 App Store 应用详情链接，Android 请填写 HTTPS 下载链接' },
+  APP_MARKET_HIDDEN: { statusCode: 403, message: '应用市场已关闭，暂不支持自行安装应用' },
+  IMAGE_TIER_INVALID: { statusCode: 400, message: '图片分辨率仅支持 1K、2K 或 4K' },
+  IMAGE_TIER_UNAVAILABLE: { statusCode: 409, message: '当前分辨率没有可用的图片模型，请管理员配置对应档位并加入图片模型池' },
   QUOTA_INVALID: {
     statusCode: 400,
     message: '额度或计费参数无效，额度最多支持四位小数',

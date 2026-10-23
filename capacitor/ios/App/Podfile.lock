@@ -6,6 +6,8 @@ PODS:
     - Capacitor
   - TBoxCapacitorAppResources (0.0.1):
     - Capacitor
+  - TBoxCapacitorDeviceRuntime (0.1.0):
+    - Capacitor
   - TBoxCapacitorNativeScanner (0.0.1):
     - Capacitor
   - TBoxCapacitorWechatPay (0.0.1):
@@ -18,6 +20,7 @@ DEPENDENCIES:
   - "CapacitorCordova (from `../../../node_modules/.pnpm/@capacitor+ios@8.5.2_@capacitor+core@8.5.2/node_modules/@capacitor/ios`)"
   - "CapacitorLocalNotifications (from `../../../node_modules/.pnpm/@capacitor+local-notifications@8.3.1_@capacitor+core@8.5.2/node_modules/@capacitor/local-notifications`)"
   - TBoxCapacitorAppResources (from `../../../capacitor-plugins/capacitor-app-resources`)
+  - TBoxCapacitorDeviceRuntime (from `../../../capacitor-plugins/capacitor-device-runtime`)
   - TBoxCapacitorNativeScanner (from `../../../capacitor-plugins/capacitor-native-scanner`)
   - TBoxCapacitorWechatPay (from `../../../capacitor-plugins/capacitor-wechat-pay`)
 
@@ -34,6 +37,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/@capacitor+local-notifications@8.3.1_@capacitor+core@8.5.2/node_modules/@capacitor/local-notifications"
   TBoxCapacitorAppResources:
     :path: "../../../capacitor-plugins/capacitor-app-resources"
+  TBoxCapacitorDeviceRuntime:
+    :path: "../../../capacitor-plugins/capacitor-device-runtime"
   TBoxCapacitorNativeScanner:
     :path: "../../../capacitor-plugins/capacitor-native-scanner"
   TBoxCapacitorWechatPay:
@@ -44,10 +49,11 @@ SPEC CHECKSUMS:
   CapacitorCordova: 5bec5648cbd09a176ce34ce5e7b6cdabb2c8a327
   CapacitorLocalNotifications: e0747a329ddde3074d52dc74a003688af90e42be
   TBoxCapacitorAppResources: 724150891913815925c0d9c8057274d6a05a38e0
+  TBoxCapacitorDeviceRuntime: 4080a777de22259b467913d597bef0c337356d18
   TBoxCapacitorNativeScanner: 923a7c0fc4908507971b93f6fd6911af8237a938
   TBoxCapacitorWechatPay: 299589926f1216cc5b570a7f2d61cb89e5606b99
   WechatOpenSDK-XCFramework: 996f8fe4f5ca9d75529546f7246da459ef31aa0d
 
-PODFILE CHECKSUM: 43891355c2581421be5e0ee98d0dec8d52bbe504
+PODFILE CHECKSUM: 8e02d6bfba50c4b6105bd6b5dd2ce28894376a3b
 
 COCOAPODS: 1.16.2

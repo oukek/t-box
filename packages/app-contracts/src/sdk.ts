@@ -29,7 +29,8 @@ export interface ApplicationSession {
   profile?: { nickname: string }
 }
 export type HostMethod =
-  | 'updates.getAvailable' |
+  | 'automation.actions' | 'automation.saveShortcut' | 'device.capabilities' | 'device.permissions.request' | 'device.permissions.revoke' | 'device.invoke' |
+  'updates.getAvailable' |
   'updates.openMarket' |
   'updates.presentation' |
   'updates.respond' |

@@ -3,17 +3,22 @@ import type {
   AIModelConfig,
   AIProviderConfig,
   AISettings,
+  ImageTier,
   ModelInvocationMode,
   RemoteModel,
 } from '@t-box/shared'
 import {
   contextInputBudget,
   contextOutputBudget,
+  IMAGE_TIERS,
   resolveContextPolicy,
 } from '@t-box/shared'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
 import AdminIcon from '../components/AdminIcon.vue'
+import AdminInput from '../components/AdminInput.vue'
 import AdminSelect from '../components/AdminSelect.vue'
 import { errorMessage, request, save } from '../core/api'
 
@@ -48,6 +53,8 @@ const form = reactive({
   name: '',
   enabled: true,
   purpose: 'conversation' as 'conversation' | 'image',
+  imageTiers: ['1k'] as ImageTier[],
+  imagePrices: {} as Partial<Record<ImageTier, string>>,
   invocationMode: 'responses' as ModelInvocationMode,
   supportsVision: false,
   supportsReasoning: false,
@@ -58,6 +65,9 @@ const form = reactive({
   contextPolicy: resolveContextPolicy(),
   maxConcurrency: 4,
 })
+function supportedImageTiers(model: AIModelConfig): ImageTier[] {
+  return model.imageTiers ?? ['1k']
+}
 const contextBudget = computed(() =>
   contextInputBudget(
     form.contextPolicy,
@@ -185,6 +195,8 @@ function edit(model?: AIModelConfig) {
   form.name = model?.name || ''
   form.enabled = model?.enabled ?? true
   form.purpose = model?.purpose || 'conversation'
+  form.imageTiers = [...(model?.imageTiers ?? ['1k'])]
+  form.imagePrices = { ...model?.imagePrices }
   form.invocationMode =
     model?.invocationMode ?? (form.purpose === 'image' ? 'images' : 'responses')
   form.supportsVision = model?.supportsVision ?? false
@@ -262,7 +274,7 @@ async function submit() {
       () =>
         save(
           editing.value ? `/models/${editing.value}` : '/models',
-          form,
+          { ...form, imagePrices: Object.fromEntries(form.imageTiers.map((tier) => [tier, form.imagePrices[tier] ?? ''])) },
           editing.value ? 'PATCH' : 'POST',
         ),
       '模型配置已保存',
@@ -326,13 +338,13 @@ onBeforeUnmount(() => controller?.abort())
       <h1>模型管理</h1>
       <p>同一用途可配置多个模型，按负载自动分配新任务。</p>
     </div>
-    <button
+    <AdminButton
       class="primary"
       :disabled="busy || loading"
       @click="edit()"
     >
       <AdminIcon name="plus" :size="16" />添加模型
-    </button>
+    </AdminButton>
   </header>
   <p
     v-if="error"
@@ -351,9 +363,9 @@ onBeforeUnmount(() => controller?.abort())
   <div class="runtime-grid">
     <section class="runtime-card">
       <div class="runtime-card-top">
-        <span class="capability-icon"><AdminIcon name="chat" :size="21" /></span><span class="runtime-label">普通会话</span><button :disabled="busy || loading" @click="configure">
+        <span class="capability-icon"><AdminIcon name="chat" :size="21" /></span><span class="runtime-label">普通会话</span><AdminButton :disabled="busy || loading" @click="configure">
           配置<AdminIcon name="arrow" :size="14" />
-        </button>
+        </AdminButton>
       </div>
       <h2>
         {{ loading ? '正在读取…' : poolName(applied, '未启用会话模型') }}
@@ -370,9 +382,9 @@ onBeforeUnmount(() => controller?.abort())
     </section>
     <section class="runtime-card">
       <div class="runtime-card-top">
-        <span class="capability-icon image"><AdminIcon name="image" :size="21" /></span><span class="runtime-label">图片生成与编辑</span><button :disabled="busy || loading" @click="configure">
+        <span class="capability-icon image"><AdminIcon name="image" :size="21" /></span><span class="runtime-label">图片生成与编辑</span><AdminButton :disabled="busy || loading" @click="configure">
           配置<AdminIcon name="arrow" :size="14" />
-        </button>
+        </AdminButton>
       </div>
       <h2>{{ loading ? '正在读取…' : poolName(appliedImage, '尚未启用') }}</h2>
       <p class="runtime-model">
@@ -392,11 +404,11 @@ onBeforeUnmount(() => controller?.abort())
         模型目录<span class="count">{{ models.length }}</span>
       </h2>
       <div class="search-field">
-        <AdminIcon name="search" :size="16" /><input
+        <AdminIcon name="search" :size="16" /><AdminInput
           v-model="query"
           aria-label="搜索模型"
           placeholder="搜索名称、标识、服务商"
-        >
+        />
       </div>
     </div>
     <div v-if="loading" class="empty">正在读取模型…</div>
@@ -404,7 +416,7 @@ onBeforeUnmount(() => controller?.abort())
       <span class="empty-symbol"><AdminIcon name="model" :size="26" /></span>
       <h3>添加第一个模型</h3>
       <p>先配置服务商，再选择它提供的模型。</p>
-      <button @click="edit()">添加模型</button>
+      <AdminButton @click="edit()">添加模型</AdminButton>
     </div>
     <div v-else-if="!filteredModels.length" class="empty">
       没有匹配的模型，试试其他关键词。
@@ -434,7 +446,7 @@ onBeforeUnmount(() => controller?.abort())
                 :name="m.purpose === 'image' ? 'image' : 'chat'"
                 :size="15"
               />{{
-                m.purpose === 'image' ? '图片生成 / 编辑' : '普通会话'
+                m.purpose === 'image' ? `图片生成 / 编辑 · ${(m.imageTiers ?? ['1k']).map((tier) => tier.toUpperCase()).join(' / ')}` : '普通会话'
               }}</span><span class="cell-secondary">{{
                 invocationLabel(m.invocationMode)
               }}</span><span
@@ -444,7 +456,11 @@ onBeforeUnmount(() => controller?.abort())
             </td>
             <td>
               <template v-if="m.purpose === 'conversation'">
-                <span>输入 {{ m.inputPrice }}</span><span class="cell-secondary">输出 {{ m.outputPrice }} / 百万 token</span> </template><template v-else> {{ m.imagePrice }} / 张</template>
+                <span>输入 {{ m.inputPrice }}</span><span class="cell-secondary">输出 {{ m.outputPrice }} / 百万 token</span> </template><template v-else><span
+                v-for="tier in supportedImageTiers(m)"
+                :key="tier"
+                class="cell-secondary"
+              >{{ tier.toUpperCase() }} · {{ m.imagePrices?.[tier] ?? m.imagePrice }} / 张</span></template>
             </td>
             <td>
               <span class="cell-secondary">最多 {{ m.maxConcurrency ?? 4 }} 个请求</span>
@@ -456,18 +472,18 @@ onBeforeUnmount(() => controller?.abort())
               >参与调度</span>
             </td>
             <td class="actions">
-              <button :disabled="busy" @click="edit(m)">编辑</button><button
+              <AdminButton :disabled="busy" @click="edit(m)">编辑</AdminButton><AdminButton
                 v-if="m.purpose === 'conversation'"
                 :disabled="busy || !m.enabled"
                 @click="test(m)"
               >
-                测试</button><button
+                测试</AdminButton><AdminButton
                 :disabled="busy"
                 class="danger-link"
                 @click="remove(m)"
               >
                 删除
-              </button>
+              </AdminButton>
             </td>
           </tr>
         </tbody>
@@ -526,13 +542,13 @@ onBeforeUnmount(() => controller?.abort())
             role="alert"
           >
             {{ optionError
-            }}<button
+            }}<AdminButton
               type="button"
               :disabled="busy || loadingOptions"
               @click="loadOptions"
             >
               重新加载
-            </button>
+            </AdminButton>
           </p>
           <label>用途<AdminSelect
             v-model="form.purpose"
@@ -542,19 +558,37 @@ onBeforeUnmount(() => controller?.abort())
               { value: 'image', label: '图片生成 / 编辑' },
             ]"
             :disabled="busy"
-          /></label><label>显示名称<input
+          /></label><label>显示名称<AdminInput
             v-model="form.name"
             required
             maxlength="80"
             placeholder="例如：日常助手"
-          ></label>
-          <label class="wide">模型并发上限<input
+          /></label>
+          <fieldset v-if="form.purpose === 'image'" class="wide image-tiers-field">
+            <legend>支持的图片分辨率（可多选）</legend>
+            <div class="image-tier-options">
+              <label
+                v-for="(tier, index) in IMAGE_TIERS"
+                :key="tier"
+                class="image-tier-option"
+                :class="{ selected: form.imageTiers.includes(tier) }"
+              >
+                <AdminCheckbox
+                  v-model="form.imageTiers"
+                  :value="tier"
+                  :required="index === 0 && !form.imageTiers.length"
+                />{{ tier.toUpperCase() }}
+              </label>
+            </div>
+            <small>至少选择一项，按服务商实际能力勾选。只勾选 2K、4K 的模型不会用于默认 1K 请求。</small>
+          </fieldset>
+          <label class="wide">模型并发上限<AdminInput
             v-model.number="form.maxConcurrency"
             type="number"
             min="1"
             max="128"
             required
-          ><small>1–128；同时受服务商总并发上限约束，超限请求会排队。</small></label>
+          /><small>1–128；同时受服务商总并发上限约束，超限请求会排队。</small></label>
           <label class="wide">调用方式<AdminSelect
             v-model="form.invocationMode"
             label="调用方式"
@@ -582,37 +616,46 @@ onBeforeUnmount(() => controller?.abort())
               : '按服务商支持的接口选择。分析、工具循环、回复、摘要及标题统一使用该调用方式。'
           }}</small></label>
           <template v-if="form.purpose === 'conversation'">
-            <label>上游输入报价（元 / 百万 token）<input
+            <label>上游输入报价（元 / 百万 token）<AdminInput
               v-model="form.inputPrice"
               inputmode="decimal"
               required
               maxlength="14"
               pattern="[0-9]+([.][0-9]{1,6})?"
-            ></label>
-            <label>上游输出报价（元 / 百万 token）<input
+            /></label>
+            <label>上游输出报价（元 / 百万 token）<AdminInput
               v-model="form.outputPrice"
               inputmode="decimal"
               required
               maxlength="14"
               pattern="[0-9]+([.][0-9]{1,6})?"
-            ></label>
+            /></label>
           </template>
           <label
             v-else
             class="wide"
-          >上游图片报价（元 / 张）<input
+          >上游图片报价（元 / 张）<AdminInput
             v-model="form.imagePrice"
             inputmode="decimal"
             required
             maxlength="14"
             pattern="[0-9]+([.][0-9]{1,6})?"
-          ><small>生成与编辑统一收费，每次一张 1024 × 1024 图片。</small></label>
-          <label>上游采购倍率<input
+          /><small>统一采购报价；下面未单独填写的档位沿用此价格。生成与编辑每次一张，用于平台采购成本统计。</small></label>
+          <template v-if="form.purpose === 'image'">
+            <label v-for="tier in IMAGE_TIERS.filter((tier) => form.imageTiers.includes(tier))" :key="tier">{{ tier.toUpperCase() }} 采购报价（元 / 张，可选）<AdminInput
+              v-model="form.imagePrices[tier]"
+              inputmode="decimal"
+              maxlength="14"
+              pattern="[0-9]+([.][0-9]{1,6})?"
+              :placeholder="`沿用统一报价 ${form.imagePrice}`"
+            /></label>
+          </template>
+          <label>上游采购倍率<AdminInput
             v-model="form.costMultiplier"
             inputmode="decimal"
             required
             placeholder="1 表示原价，0.8 表示八折"
-          ></label>
+          /></label>
           <p class="footnote">
             以上为供应商采购成本；用户额度费率在“资源包与费率”配置。
           </p>
@@ -620,29 +663,29 @@ onBeforeUnmount(() => controller?.abort())
             0 表示免费，支持 6 位小数。按实际用量结算，标题生成不扣用户余额。
           </p>
           <template v-if="form.purpose === 'conversation'">
-            <label class="wide">输入上下文预算 / token<input
+            <label class="wide">输入上下文预算 / token<AdminInput
               v-model.number="form.contextPolicy.maxInputTokens"
               type="number"
               min="8192"
               max="2000000"
               step="1"
               required
-            ><small>设为服务商实际支持的输入预算，需预留输出空间。</small></label>
-            <label>总上下文窗口 / token<input
+            /><small>设为服务商实际支持的输入预算，需预留输出空间。</small></label>
+            <label>总上下文窗口 / token<AdminInput
               v-model.number="form.contextPolicy.contextWindowTokens"
               type="number"
               min="0"
               max="2000000"
               required
-            ><small>0 表示未知，请按服务商文档填写。自动预留输出和 1024 token
+            /><small>0 表示未知，请按服务商文档填写。自动预留输出和 1024 token
               安全余量。</small></label>
-            <label>输出预算 / token<input
+            <label>输出预算 / token<AdminInput
               v-model.number="form.contextPolicy.maxOutputTokens"
               type="number"
               min="0"
               max="262144"
               required
-            ><small>0 为自动：推理模型 32768，普通模型
+            /><small>0 为自动：推理模型 32768，普通模型
               8192。包含隐藏推理及正文。</small></label>
             <label class="wide">上下文压缩方式<AdminSelect
               v-model="form.contextPolicy.compactionMode"
@@ -674,72 +717,68 @@ onBeforeUnmount(() => controller?.abort())
                 触发压缩</span>。此数值来自当前配置，并非模型容量自动检测结果。
             </p>
             <template v-if="form.contextPolicy.compactionMode !== 'off'">
-              <label>压缩触发比例<input
+              <label>压缩触发比例<AdminInput
                 v-model.number="form.contextPolicy.compactionThreshold"
                 type="number"
                 min="0.5"
                 max="0.9"
                 step="0.05"
                 required
-              ><small>默认 0.75，即有效输入预算的 75%。</small></label>
-              <label>优先保留最近轮数<input
+              /><small>默认 0.75，即有效输入预算的 75%。</small></label>
+              <label>优先保留最近轮数<AdminInput
                 v-model.number="form.contextPolicy.keepRecentTurns"
                 type="number"
                 min="1"
                 max="12"
                 required
-              ><small>默认 4 轮；过大时缩小窗口，始终保留最新请求。</small></label>
+              /><small>默认 4 轮；过大时缩小窗口，始终保留最新请求。</small></label>
               <label
                 v-if="form.contextPolicy.compactionMode === 'summary'"
                 class="wide"
-              >摘要目标长度 / token<input
+              >摘要目标长度 / token<AdminInput
                 v-model.number="form.contextPolicy.summaryTargetTokens"
                 type="number"
                 min="512"
                 max="8192"
                 required
-              ><small>默认
+              /><small>默认
                 2048。分段整理，保留事实、约束、资源引用及真实操作状态。</small></label>
             </template>
-            <label class="check wide"><input
+            <label class="check wide"><AdminCheckbox
               v-model="form.contextPolicy.tokenCounting"
               :disabled="form.invocationMode !== 'responses'"
-              type="checkbox"
-            >使用服务商精确输入计数<small>Chat Completions 使用本地分词估算。Responses 仅在支持
+            />使用服务商精确输入计数<small>Chat Completions 使用本地分词估算。Responses 仅在支持
               /responses/input_tokens
               时开启。否则采用本地分词估算并预留安全余量；不同模型分词可能有差异，图片单独预留。实际扣费以服务商
               usage 为准。</small></label>
-            <label class="check wide"><input
+            <label class="check wide"><AdminCheckbox
               v-model="form.contextPolicy.promptCacheKey"
-              type="checkbox"
-            >发送稳定缓存键<small>仅在服务商支持 prompt_cache_key 时开启。缓存命中以实际 usage
+            />发送稳定缓存键<small>仅在服务商支持 prompt_cache_key 时开启。缓存命中以实际 usage
               为准。</small></label>
           </template>
           <label
             v-if="form.purpose === 'conversation'"
             class="check wide"
-          ><input
+          ><AdminCheckbox
             v-model="form.supportsVision"
-            type="checkbox"
-          >支持图片输入（看图）<small>需确认服务商支持此能力</small></label><label
+          />支持图片输入（看图）<small>需确认服务商支持此能力</small></label><label
             v-if="form.purpose === 'conversation'"
             class="check wide"
-          ><input
+          ><AdminCheckbox
             v-model="form.supportsReasoning"
-            type="checkbox"
-          >推理模型<small>用于自动输出预算；仅在服务商和模型支持推理能力时启用</small></label><label class="check wide"><input v-model="form.enabled" type="checkbox">启用此模型</label>
+          />推理模型<small>用于自动输出预算；仅在服务商和模型支持推理能力时启用</small></label><label class="check wide"><AdminCheckbox v-model="form.enabled" />启用此模型</label>
         </div>
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="closeEditor">取消</button><button
+      <AdminButton :disabled="busy" @click="closeEditor">取消</AdminButton><AdminButton
         form="model-form"
         type="submit"
         class="primary"
         :disabled="busy || loadingOptions || !form.providerId || !form.modelId"
       >
         {{ busy ? '正在保存…' : '保存模型' }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
   <AdminDialog
@@ -787,23 +826,22 @@ onBeforeUnmount(() => controller?.abort())
             v-for="model in poolOptions(purpose)"
             :key="model.id"
             class="pool-choice"
-            :class="{ unavailable: !available(model) }"
+            :class="{ unavailable: !available(model), selected: (purpose === 'conversation' ? selected : selectedImage).includes(model.id) }"
           >
-            <input
+            <AdminCheckbox
               v-if="purpose === 'conversation'"
               v-model="selected"
-              type="checkbox"
               :value="model.id"
               :disabled="!available(model) && !selected.includes(model.id)"
-            >
-            <input
+            />
+            <AdminCheckbox
               v-else
               v-model="selectedImage"
-              type="checkbox"
               :value="model.id"
               :disabled="!available(model) && !selectedImage.includes(model.id)"
-            >
+            />
             <span><strong>{{ model.name }}</strong><small>{{ model.providerName }} · {{ model.modelId }}</small><small>{{ invocationLabel(model.invocationMode)
+            }}{{ model.purpose === 'image' ? ` · ${(model.imageTiers ?? ['1k']).map((tier) => tier.toUpperCase()).join(' / ')}` : ''
             }}{{
               model.purpose === 'conversation' && model.supportsVision
                 ? ' · 支持图片输入'
@@ -821,14 +859,14 @@ onBeforeUnmount(() => controller?.abort())
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="runtimeOpen = false">取消</button><button
+      <AdminButton :disabled="busy" @click="runtimeOpen = false">取消</AdminButton><AdminButton
         form="runtime-form"
         type="submit"
         class="primary"
         :disabled="busy"
       >
         {{ busy ? '正在保存…' : '保存配置' }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
   <AdminDialog
@@ -847,7 +885,7 @@ onBeforeUnmount(() => controller?.abort())
       {{ dialogError }}
     </p>
     <template #footer>
-      <button :disabled="busy" @click="confirmation = null">取消</button><button
+      <AdminButton :disabled="busy" @click="confirmation = null">取消</AdminButton><AdminButton
         :class="confirmation?.danger ? 'danger' : 'primary'"
         :disabled="busy"
         @click="confirmAction"
@@ -855,12 +893,42 @@ onBeforeUnmount(() => controller?.abort())
         {{
           busy ? '正在处理…' : confirmation?.danger ? '确认删除' : '开始测试'
         }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>
 
 <style scoped>
+.image-tiers-field {
+  margin-bottom: 20px;
+}
+.image-tiers-field legend {
+  padding: 0;
+  margin-bottom: 10px;
+  color: #506078;
+  font-size: 12px;
+}
+.image-tier-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 9px;
+}
+.dialog-form .image-tier-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  padding: 12px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.image-tier-option.selected {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: #b4c3f3;
+}
 .pool-section + .pool-section {
   margin-top: 24px;
 }
@@ -891,19 +959,14 @@ onBeforeUnmount(() => controller?.abort())
   border-radius: 9px;
   cursor: pointer;
 }
-.pool-choice:has(input:checked) {
-  background: #f0f7f5;
-  border-color: #98beb0;
+.pool-choice.selected {
+  background: var(--accent-soft);
+  border-color: #b4c3f3;
 }
 .pool-choice.unavailable {
   opacity: 0.65;
 }
-.pool-choice input {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-.pool-choice > span {
+.pool-choice > span:not(.admin-checkbox) {
   flex: 1;
   min-width: 0;
 }

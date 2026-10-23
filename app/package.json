@@ -21,6 +21,7 @@
     "@t-box/calculator-shell": "workspace:*",
     "@t-box/calendar-shell": "workspace:*",
     "@t-box/capacitor-app-resources": "workspace:*",
+    "@t-box/capacitor-device-runtime": "workspace:*",
     "@t-box/capacitor-native-scanner": "workspace:*",
     "@t-box/capacitor-wechat-pay": "workspace:*",
     "@t-box/converter-shell": "workspace:*",

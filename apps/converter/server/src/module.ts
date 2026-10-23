@@ -10,6 +10,7 @@ const properties = {
   to: { type: 'array', minItems: 1, maxItems: 40, items: { type: 'string', maxLength: 120 }, description: '一个或多个目标单位 ID。' },
 }
 export const converterBackend: ApplicationBackend = {
+  actions: [{ id: 'convert', version: 1, title: '换算单位', description: '将数值换算为指定单位', inputSchema: { type: 'object', properties, required: Object.keys(properties), additionalProperties: false }, effect: 'read', background: true }],
   async lifecycle(request) {
     return { status: 'completed', receipt: { appId: request.appId, generation: request.generation, action: request.action } }
   },

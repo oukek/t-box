@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { iconSizeOptions } from '@t-box/app-contracts'
-import { appInfo, backFromApplication, identity, navigation, openAccountSettings, preferences, setPreference, tabLabel } from '@t-box/app-shell-sdk'
+import { appInfo, backFromApplication, identity, navigation, openAccountSettings, openDevicePermissions, openShortcuts, preferences, setPreference, tabLabel } from '@t-box/app-shell-sdk'
 import { AppIcon, Modal } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, ref } from 'vue'
@@ -98,6 +98,13 @@ function sizeKeydown(event: KeyboardEvent) {
       <WallpaperSettings />
     </div>
     <div class="settings-group">
+      <h2>系统集成</h2>
+      <div class="profile-menu">
+        <button class="profile-action" @click="openDevicePermissions"><span class="profile-action-icon"><AppIcon name="settings" :size="20" /></span><span>设备权限<small>管理各应用的本机能力授权</small></span><AppIcon name="right" :size="17" /></button>
+        <button class="profile-action" @click="openShortcuts"><span class="profile-action-icon"><AppIcon name="apps" :size="20" /></span><span>快捷指令<small>配置系统快捷动作</small></span><AppIcon name="right" :size="17" /></button>
+      </div>
+    </div>
+    <div class="settings-group">
       <h2>关于</h2>
       <div class="profile-menu">
         <button class="profile-action" @click="aboutOpen = true">
@@ -122,9 +129,19 @@ function sizeKeydown(event: KeyboardEvent) {
           :size="26"
         /></span>
         <h3>{{ appInfo.name }}</h3>
+        <p class="profile-english-name" lang="en">{{ appInfo.englishName }}</p>
         <p>{{ appInfo.description }}</p>
         <span class="profile-version">版本 {{ appInfo.version }}</span>
       </div>
     </Modal>
   </section>
 </template>
+
+<style scoped>
+.profile-about .profile-english-name {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--muted, #708276);
+}
+</style>

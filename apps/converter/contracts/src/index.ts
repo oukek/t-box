@@ -11,7 +11,7 @@ export interface ConversionInput { category: string, value: string, from: string
 export interface ConvertedValue { unit: ConversionUnit, value: string, approximate: boolean }
 export interface ConversionResult { category: ConversionCategoryId, value: string, from: ConversionUnit, results: ConvertedValue[], note: string, significantDigits: number }
 export interface ConverterParams { category?: string, value?: string, from?: string, to?: string }
-export const converterManifest = { id: 'converter', name: '单位换算', description: '长度、面积、温度、数据与工程单位换算，支持批量与 AI 工具。', icon: 'exchange', iconAsset: applicationIcon, color: 'blue', version: '1.0.2', skillIds: ['unit-conversion'] } as const satisfies ApplicationManifest
+export const converterManifest = { id: 'converter', name: '单位换算', description: '长度、面积、温度、数据与工程单位换算，支持批量与 AI 工具。', icon: 'exchange', iconAsset: applicationIcon, color: 'blue', version: '1.1.0', skillIds: ['unit-conversion'] } as const satisfies ApplicationManifest
 export function parseConverterParams(value: unknown): Record<string, string> {
   if (value == null) {
     return {}

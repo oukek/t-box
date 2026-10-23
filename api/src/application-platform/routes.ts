@@ -13,6 +13,14 @@ export function registerApplicationPlatform(
 ) {
   const actor = async (authorization: string | undefined) =>
     authenticate(bearer(authorization))
+  app.get('/api/v1/host/downloads', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store')
+    return { data: await service.downloads.read() }
+  })
+  app.get('/api/v1/app-market/settings', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store')
+    return { data: await service.marketPolicy.read() }
+  })
   app.get('/api/v1/app-market/local', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (_req, reply) => {
     // No user lookup, install, grant, or backend lifecycle is performed here.
     reply.header('Cache-Control', 'no-store')
@@ -41,7 +49,8 @@ export function registerApplicationPlatform(
   app.get('/api/v1/app-market', async (req, reply) => {
     const a = await actor(req.headers.authorization)
     reply.header('Cache-Control', 'no-store')
-    return { data: await service.catalog(a.user.id) }
+    const [entries, settings] = await Promise.all([service.catalog(a.user.id), service.marketPolicy.read()])
+    return { data: settings.hidden ? entries.filter((entry) => entry.installation && entry.installation.status !== 'revoked') : entries, settings }
   })
   app.post<{ Params: { id: string } }>(
     '/api/v1/app-market/:id/repair',

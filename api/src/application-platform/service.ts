@@ -2,6 +2,7 @@ import type {
   AppInstallation,
   ApplicationContext,
   AppRelease,
+  InstalledApplicationAction,
   LifecycleAction,
   LifecycleReceipt,
   MarketEntry,
@@ -24,7 +25,9 @@ import {
   ApplicationReleaseEntity,
 } from '../db/records/applications-entities.js'
 import { ErrorCode } from '../error-codes.js'
+import { HostDownloadConfiguration } from './download-settings.js'
 import { publicLocalReleases } from './public-local.js'
+import { ApplicationMarketPolicy } from './settings.js'
 
 const json = <T>(value: unknown): T =>
   typeof value === 'string' ? JSON.parse(value) : (value as T)
@@ -50,6 +53,8 @@ export class ApplicationPlatform {
   private readonly bootstraps = new Map<string, Promise<void>>()
   private readonly bootstrapTimes = new Map<string, number>()
   private readonly faults = new Map<string, string>()
+  readonly marketPolicy: ApplicationMarketPolicy
+  readonly downloads: HostDownloadConfiguration
   private catalogStamp = ''
   constructor(
     private readonly source: DataSource,
@@ -58,8 +63,13 @@ export class ApplicationPlatform {
     private readonly options: {
       shellMigrations?: readonly string[]
       deploymentIssues?: Record<string, string>
+      marketPolicy?: ApplicationMarketPolicy
+      downloads?: HostDownloadConfiguration
     } = {},
-  ) {}
+  ) {
+    this.marketPolicy = options.marketPolicy ?? new ApplicationMarketPolicy(source)
+    this.downloads = options.downloads ?? new HostDownloadConfiguration(source)
+  }
 
   bind(name: string, backend: ApplicationBackend) {
     if (this.backends.has(name)) {
@@ -76,6 +86,7 @@ export class ApplicationPlatform {
   }
 
   private async seed() {
+    await this.marketPolicy.initialize()
     for (const release of this.releases) {
       if (this.options.deploymentIssues?.[release.appId]) {
         continue
@@ -782,6 +793,9 @@ export class ApplicationPlatform {
         action === 'uninstall' && row ? row.release_id : releaseId,
         db,
       )
+      if (action === 'install' && target.kind !== 'system' && (!row || row.status === 'revoked') && (await this.marketPolicy.read(db)).hidden) {
+        throw ErrorCode.APP_MARKET_HIDDEN()
+      }
       if (target.appId !== appId) {
         throw ErrorCode.APP_RELEASE_MISMATCH()
       }
@@ -1291,6 +1305,17 @@ export class ApplicationPlatform {
           : []),
       ],
     }
+  }
+
+  async actions(userId: string): Promise<InstalledApplicationAction[]> {
+    const catalog = await this.catalog(userId)
+    return catalog.flatMap((entry) => {
+      if (entry.installation?.status !== 'active') {
+        return []
+      }
+      const release = entry.installedRelease ?? entry.release
+      return (this.backends.get(release.backend.binding)?.actions ?? release.actions ?? []).filter((action) => entry.installation!.grants.includes(`${release.appId}.${action.id}`)).map((action) => ({ ...action, appId: release.appId, releaseId: release.releaseId, generation: entry.installation!.generation }))
+    })
   }
 
   async invoke(

@@ -372,7 +372,7 @@ watch(
         <div class="welcome-symbol" aria-hidden="true">
           <span /><span /><span /><span />
         </div>
-        <p class="welcome-eyebrow">T BOX · 你的日常助手</p>
+        <p class="welcome-eyebrow">T方舟 · 你的日常助手</p>
         <h1>有什么<span>想聊的？</span></h1>
         <p class="welcome-description">
           聊聊想法，安排事情。<br>从一句话开始。
@@ -386,7 +386,7 @@ watch(
           :class="message.role"
         >
           <div class="message-body">
-            <span class="sr-only">{{ message.role === "user" ? "你" : "T Box" }}：</span>
+            <span class="sr-only">{{ message.role === "user" ? "你" : "T方舟" }}：</span>
             <div :class="{ 'message-bubble': message.role === 'user' }">
               <div
                 v-if="message.applicationIds?.length"

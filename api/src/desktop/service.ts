@@ -43,12 +43,13 @@ export class DesktopService {
       }))
     }
     const catalog = await this.platform.catalog(userId)
+    const market = await this.platform.marketPolicy.read()
     const entries = await Promise.all(
       catalog
         .filter(
           (e) =>
-            e.release.kind === 'system' ||
-            (e.installation && e.installation.status !== 'revoked'),
+            !(market.hidden && e.release.appId === 'market') && (e.release.kind === 'system' ||
+              (e.installation && e.installation.status !== 'revoked')),
         )
         .map(async (e) => ({
           manifest:
@@ -70,6 +71,7 @@ export class DesktopService {
     )
     for (const manifest of this.manifests) {
       if (
+        !(market.hidden && manifest.id === 'market') &&
         this.platform.applicationKind(manifest.id) === 'system' &&
         !entries.some((e) => e.manifest.id === manifest.id)
       ) {

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { AIProviderConfig } from '@t-box/shared'
 import { computed, onMounted, reactive, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
 import AdminIcon from '../components/AdminIcon.vue'
+import AdminInput from '../components/AdminInput.vue'
 import { errorMessage, request, save } from '../core/api'
 
 const providers = ref<AIProviderConfig[]>([])
@@ -106,13 +109,13 @@ onMounted(load)
       <h1>服务商管理</h1>
       <p>统一管理 API 地址与密钥，供多个模型共用。</p>
     </div>
-    <button
+    <AdminButton
       class="primary"
       :disabled="busy || loading"
       @click="edit()"
     >
       <AdminIcon name="plus" :size="16" />添加服务商
-    </button>
+    </AdminButton>
   </header>
   <p
     v-if="error"
@@ -134,11 +137,11 @@ onMounted(load)
         连接目录<span class="count">{{ providers.length }}</span>
       </h2>
       <div class="search-field">
-        <AdminIcon name="search" :size="16" /><input
+        <AdminIcon name="search" :size="16" /><AdminInput
           v-model="query"
           aria-label="搜索服务商"
           placeholder="搜索名称或 API 地址"
-        >
+        />
       </div>
     </div>
     <div v-if="loading" class="empty">正在读取服务商…</div>
@@ -149,7 +152,7 @@ onMounted(load)
       /></span>
       <h3>连接第一个服务商</h3>
       <p>保存 API 地址和密钥，然后添加它提供的模型。</p>
-      <button @click="edit()">添加服务商</button>
+      <AdminButton @click="edit()">添加服务商</AdminButton>
     </div>
     <div v-else-if="!filtered.length" class="empty">
       没有匹配的服务商，试试其他关键词。
@@ -186,7 +189,7 @@ onMounted(load)
               }}</span>
             </td>
             <td class="actions">
-              <button :disabled="busy" @click="edit(p)">编辑</button><button
+              <AdminButton :disabled="busy" @click="edit(p)">编辑</AdminButton><AdminButton
                 class="danger-link"
                 :disabled="busy"
                 @click="
@@ -195,7 +198,7 @@ onMounted(load)
                 "
               >
                 删除
-              </button>
+              </AdminButton>
             </td>
           </tr>
         </tbody>
@@ -228,18 +231,18 @@ onMounted(load)
       @submit.prevent="submit"
     >
       <fieldset :disabled="busy">
-        <label>服务商名称<input
+        <label>服务商名称<AdminInput
           v-model="form.name"
           maxlength="80"
           required
           placeholder="例如：OpenAI"
-        ></label><label>API 地址<input
+        /></label><label>API 地址<AdminInput
           v-model="form.baseUrl"
           type="url"
           maxlength="500"
           required
           placeholder="https://api.openai.com/v1"
-        ><small>填写基础地址，通常以 /v1 结尾，不要添加 /models。</small></label><label>API Key<input
+        /><small>填写基础地址，通常以 /v1 结尾，不要添加 /models。</small></label><label>API Key<AdminInput
           v-model="form.apiKey"
           type="password"
           autocomplete="new-password"
@@ -250,24 +253,24 @@ onMounted(load)
               ? '留空保留原密钥；修改地址时须重新填写'
               : '输入服务商密钥'
           "
-        ><small>只提交到后端加密保存，不会回显到浏览器。</small></label><label>服务商总并发上限<input
+        /><small>只提交到后端加密保存，不会回显到浏览器。</small></label><label>服务商总并发上限<AdminInput
           v-model.number="form.maxConcurrency"
           type="number"
           min="0"
           max="128"
           required
-        ><small>同一服务商的所有模型共享此上限。0 跟随平台配置，默认 8；可填 1–128。</small></label><label class="check"><input v-model="form.enabled" type="checkbox">启用此服务商</label>
+        /><small>同一服务商的所有模型共享此上限。0 跟随平台配置，默认 8；可填 1–128。</small></label><label class="check"><AdminCheckbox v-model="form.enabled" />启用此服务商</label>
       </fieldset>
     </form>
     <template #footer>
-      <button :disabled="busy" @click="closeEditor">取消</button><button
+      <AdminButton :disabled="busy" @click="closeEditor">取消</AdminButton><AdminButton
         form="provider-form"
         type="submit"
         class="primary"
         :disabled="busy"
       >
         {{ busy ? "正在保存…" : "保存服务商" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
   <AdminDialog
@@ -286,13 +289,13 @@ onMounted(load)
       {{ dialogError }}
     </p>
     <template #footer>
-      <button :disabled="busy" @click="removing = null">取消</button><button
+      <AdminButton :disabled="busy" @click="removing = null">取消</AdminButton><AdminButton
         class="danger"
         :disabled="busy"
         @click="remove"
       >
         {{ busy ? "正在删除…" : "确认删除" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>

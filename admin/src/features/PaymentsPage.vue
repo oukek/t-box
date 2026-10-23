@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AdminPaymentOrder, PaymentCapabilities } from '@t-box/shared'
 import { onMounted, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
 import { errorMessage, request, save } from '../core/api'
 import ReconciliationPanel from './ReconciliationPanel.vue'
@@ -57,7 +58,7 @@ onMounted(load)
       <p>资源包订单与权益发放由服务端确认。</p>
     </div>
     <div class="actions">
-      <button @click="settingsOpen = true">微信支付配置</button><button :disabled="loading" @click="load">刷新</button>
+      <AdminButton @click="settingsOpen = true">微信支付配置</AdminButton><AdminButton :disabled="loading" @click="load">刷新</AdminButton>
     </div>
   </header>
   <p
@@ -116,7 +117,7 @@ onMounted(load)
               }}</span>
             </td>
             <td class="actions">
-              <button :disabled="busy" @click="selected = o">渠道核对</button>
+              <AdminButton :disabled="busy" @click="selected = o">渠道核对</AdminButton>
             </td>
           </tr>
         </tbody>
@@ -145,13 +146,13 @@ onMounted(load)
       查询支付渠道的真实结果。仅核对成功支付、金额一致的订单，重复核对不会重复入账。
     </p>
     <template #footer>
-      <button :disabled="busy" @click="selected = null">取消</button><button
+      <AdminButton :disabled="busy" @click="selected = null">取消</AdminButton><AdminButton
         class="primary"
         :disabled="busy"
         @click="reconcile"
       >
         {{ busy ? '正在核对…' : '开始核对' }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>

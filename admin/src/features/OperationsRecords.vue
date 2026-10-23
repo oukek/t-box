@@ -9,7 +9,9 @@ import type {
   OperationsTaskRow,
 } from '@t-box/shared'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
 import AdminSelect from '../components/AdminSelect.vue'
 import { errorMessage, request } from '../core/api'
 import ModelCallDetail from './ModelCallDetail.vue'
@@ -231,29 +233,29 @@ onBeforeUnmount(() => {
         role="tablist"
         aria-label="执行记录类型"
       >
-        <button
+        <AdminButton
           role="tab"
           :aria-selected="tab === 'tasks'"
           @click="switchTab('tasks')"
         >
-          任务列表</button><button
+          任务列表</AdminButton><AdminButton
           role="tab"
           :aria-selected="tab === 'calls'"
           @click="switchTab('calls')"
         >
           逐次模型调用
-        </button>
+        </AdminButton>
       </div>
-      <span>每 5 秒自动刷新 · 详情含输入输出</span><button :disabled="busy" @click="load()">
+      <span>每 5 秒自动刷新 · 详情含输入输出</span><AdminButton :disabled="busy" @click="load()">
         {{ busy ? '刷新中…' : '刷新列表' }}
-      </button>
+      </AdminButton>
     </div>
     <form class="records-filters" @submit.prevent="apply">
-      <label>搜索<input
+      <label>搜索<AdminInput
         v-model="search"
         maxlength="100"
         placeholder="任务 / 调用 ID、用户账号、昵称"
-      ></label>
+      /></label>
       <label>状态<AdminSelect
         v-model="status"
         label="执行状态"
@@ -271,7 +273,7 @@ onBeforeUnmount(() => {
         :options="modelOptions"
         searchable
       /></label>
-      <button type="submit" class="primary">查询</button>
+      <AdminButton type="submit" class="primary">查询</AdminButton>
     </form>
     <p
       v-if="error"
@@ -347,7 +349,7 @@ onBeforeUnmount(() => {
               }}</small>
             </td>
             <td class="record-actions">
-              <button @click="inspectTask(row.id)">详情</button>
+              <AdminButton @click="inspectTask(row.id)">详情</AdminButton>
             </td>
           </tr>
           <tr v-if="!tasks.length">
@@ -418,7 +420,7 @@ onBeforeUnmount(() => {
               >{{ row.userError || '—' }}</small>
             </td>
             <td class="record-actions">
-              <button @click="openCall(row.callId)">详情</button>
+              <AdminButton @click="openCall(row.callId)">详情</AdminButton>
             </td>
           </tr>
           <tr v-if="!calls.length">
@@ -432,10 +434,10 @@ onBeforeUnmount(() => {
     <footer class="records-pagination">
       <span>共 {{ total }} 条 · 每页 20 条</span>
       <div>
-        <button :disabled="page <= 1 || busy" @click="movePage(-1)">
-          上一页</button><span>{{ page }} / {{ pages }}</span><button :disabled="page >= pages || busy" @click="movePage(1)">
+        <AdminButton :disabled="page <= 1 || busy" @click="movePage(-1)">
+          上一页</AdminButton><span>{{ page }} / {{ pages }}</span><AdminButton :disabled="page >= pages || busy" @click="movePage(1)">
           下一页
-        </button>
+        </AdminButton>
       </div>
     </footer>
   </section>
@@ -452,13 +454,13 @@ onBeforeUnmount(() => {
       role="alert"
     >{{ detailError }}</p>
     <template v-if="!detailBusy">
-      <button
+      <AdminButton
         v-if="call && task"
         class="detail-back"
         @click="call = null"
       >
         ‹ 返回任务
-      </button>
+      </AdminButton>
       <ModelCallDetail v-if="call" :call="call" />
       <TaskRecordDetail
         v-else-if="task"
@@ -466,11 +468,11 @@ onBeforeUnmount(() => {
         @call="inspectCall"
       />
     </template>
-    <template #footer><button
+    <template #footer><AdminButton
       v-if="task && !call"
       :disabled="detailBusy"
       @click="inspectTask(task.id)"
     >
-      刷新任务</button><button @click="close">关闭</button></template>
+      刷新任务</AdminButton><AdminButton @click="close">关闭</AdminButton></template>
   </AdminDialog>
 </template>

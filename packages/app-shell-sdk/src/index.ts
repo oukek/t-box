@@ -41,6 +41,8 @@ export interface ShellServices {
   openApplication(value: unknown): Promise<unknown>
   backFromApplication(): void
   tabLabel(id: string): string
+  openDevicePermissions(): void
+  openShortcuts(): void
   openAccountSettings(): void
   openProfile(): Promise<unknown>
   setPreference(key: 'iconSize', value: DesktopIconSize): void
@@ -65,8 +67,9 @@ export interface ShellState {
   navigation: { backTo: string }
   preferences: { iconSize: DesktopIconSize }
   desktopAppearance: DesktopAppearanceState
-  appInfo: { name: string, version: string, description: string }
+  appInfo: { name: string, englishName: string, version: string, description: string }
   appCatalog: {
+    marketHidden?: boolean
     entries: MarketEntry[]
     loading: boolean
     error: string
@@ -86,7 +89,7 @@ const state = reactive<ShellState>({
     error: '',
     imageUrls: {},
   },
-  appInfo: { name: '', version: '', description: '' },
+  appInfo: { name: '', englishName: '', version: '', description: '' },
   appCatalog: { entries: [], loading: false, error: '', revision: 0 },
 })
 export const identity = readonly(state.identity)
@@ -125,6 +128,8 @@ export const createRequestId = () => host().createRequestId()
 export const openApplication = (value: unknown) => host().openApplication(value)
 export const backFromApplication = () => host().backFromApplication()
 export const tabLabel = (id: string) => host().tabLabel(id)
+export const openDevicePermissions = () => host().openDevicePermissions()
+export const openShortcuts = () => host().openShortcuts()
 export const openAccountSettings = () => host().openAccountSettings()
 export const openProfile = () => host().openProfile()
 export const setPreference = (key: 'iconSize', value: DesktopIconSize) =>

@@ -79,6 +79,8 @@ export interface AppRelease {
   permissions: string[]
   clientTools: string[]
   updatePrompt?: ApplicationUpdatePrompt
+  /** App-owned system entry points. Remote apps may publish these with a new immutable release. */
+  actions?: import('./actions.js').ApplicationActionDefinition[]
   defaultInstalled: boolean
   /** App-owned opt-in: guests may run local features, never backend methods or grants. */
   guestAccess?: 'local'
@@ -173,6 +175,9 @@ export function validateRelease(release: AppRelease): void {
   if (release.guestAccess !== undefined && (release.guestAccess !== 'local' || release.kind !== 'system' || !release.defaultInstalled || release.runtime.type !== 'web')) {
     throw ErrorCode.INTERNAL_INVALID_APPLICATION_RELEASE()
   }
+  if (release.actions !== undefined && (!Array.isArray(release.actions) || release.actions.length > 64 || new Set(release.actions.map((action) => action.id)).size !== release.actions.length || release.actions.some((action) => !validId(action.id) || !Number.isSafeInteger(action.version) || action.version < 1 || typeof action.title !== 'string' || !action.title || action.title.length > 100 || typeof action.description !== 'string' || action.description.length > 1000 || typeof action.background !== 'boolean' || !['read', 'write'].includes(action.effect) || !action.inputSchema || typeof action.inputSchema !== 'object' || Array.isArray(action.inputSchema) || !release.permissions.includes(`${release.appId}.${action.id}`)))) {
+    throw ErrorCode.INTERNAL_INVALID_APPLICATION_RELEASE()
+  }
   if (release.updatePrompt !== undefined) {
     validateUpdatePrompt(release.updatePrompt)
   }
@@ -242,12 +247,18 @@ export interface ApplicationPublicationEvent {
   createdAt: string
 }
 
+export * from './actions.js'
 export * from './backend.js'
+export * from './brand.js'
 export * from './capabilities.js'
 export * from './desktop-appearance.js'
+export * from './device.js'
 export * from './files.js'
+export * from './host-downloads.js'
 export * from './icons.js'
 export * from './identifiers.js'
+export * from './market-settings.js'
+
 export * from './resources.js'
 export * from './sdk.js'
 export * from './wallpapers.js'

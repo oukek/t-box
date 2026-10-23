@@ -54,3 +54,5 @@ capacitor/generated/
 output/app-artifacts/
 output/application-releases/
 apps/*/deployment.local.json
+
+output/

@@ -1,6 +1,7 @@
 /** Service credits are not cash. One credit has 10,000 indivisible accounting atoms. */
 export const QUOTA_SCALE = 10000
-export type ImageTier = '1k' | '2k' | '4k'
+export const IMAGE_TIERS = ['1k', '2k', '4k'] as const
+export type ImageTier = (typeof IMAGE_TIERS)[number]
 export interface ResourcePackageDraft {
   code: string
   name: string

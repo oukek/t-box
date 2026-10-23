@@ -10,9 +10,10 @@ import {
 <template>
   <details class="reminder-settings">
     <summary>提醒设置</summary>
-    <p v-if="reminderStatus.platform === 'web'">
-      网页版仅在页面打开时显示提醒；关闭页面后不会发出通知。App 可授权系统通知。
-    </p>
+    <template v-if="reminderStatus.platform === 'web'">
+      <p>网页版仅在页面打开时显示提醒；关闭页面后不会发出通知。</p>
+      <button class="temporal-text-button" @click="enableDeviceReminders">使用后台系统通知</button>
+    </template>
     <template v-else>
       <p>
         {{

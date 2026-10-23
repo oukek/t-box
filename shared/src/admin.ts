@@ -32,6 +32,10 @@ export interface AIProviderConfig {
 }
 export type ModelInvocationMode = 'responses' | 'chat_completions' | 'images'
 export interface AIModelConfig extends ModelPrices {
+  /** Explicitly supported resolutions; requests never upgrade implicitly. */
+  imageTiers?: import('./quota.js').ImageTier[]
+  /** Optional procurement price overrides for each supported resolution. */
+  imagePrices?: Partial<Record<import('./quota.js').ImageTier, string>>
   maxConcurrency?: number
   /** Legacy clients may omit this; the backend always returns the stored mode. */
   invocationMode?: ModelInvocationMode

@@ -264,7 +264,7 @@ defineExpose({ focus: () => input.value?.focus(), closeMenus })
       >
         <AppIcon name="close" :size="12" /></button></span>
     </div>
-    <label class="sr-only" :for="inputId">发给 T Box 的消息</label><textarea
+    <label class="sr-only" :for="inputId">发给 T方舟 的消息</label><textarea
       :id="inputId"
       ref="input"
       :value="modelValue"

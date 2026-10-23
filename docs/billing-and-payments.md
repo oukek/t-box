@@ -50,7 +50,7 @@ iOS 原生端仍可查看额度、资源包和记录，购买按钮保持禁用�
 
 微信支付通知为 `/api/v1/payments/webhooks/wechat`，退款通知为 `/api/v1/payments/webhooks/wechat/refunds`。服务器需可公网 HTTPS 访问，配置公众号授权域名、JSAPI 支付目录、H5 域名、APP 应用身份及相应产品权限。代理应正确传递客户端 IP；只信任已配置的代理地址。宝塔/Nginx 应放行 REST 与 WebSocket 转发，支付通知保持原始请求体，不得由网关改写后再验签。
 
-使用数据库基线 `2026-10-22.2`。PM2/Docker 仍通过 `node dist/init-db.js --check` 预检，空库执行 `node dist/init-db.js` 初始化。旧开发库不会自动转换、覆盖或删除，请配置新数据库后初始化。发布工作流保持手动触发，不需要增加新密钥或构建依赖。
+使用数据库基线 `2026-10-23.2`。PM2/Docker 仍通过 `node dist/init-db.js --check` 预检，空库执行 `node dist/init-db.js` 初始化。旧开发库不会自动转换、覆盖或删除，请配置新数据库后初始化。发布工作流保持手动触发，不需要增加新密钥或构建依赖。
 
 ## 主要接口
 

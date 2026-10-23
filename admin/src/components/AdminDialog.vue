@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { lockScroll } from '../core/overlay'
+import AdminButton from './AdminButton.vue'
 import AdminIcon from './AdminIcon.vue'
 
 const props = withDefaults(
@@ -57,7 +58,11 @@ watch(
           dialog.value.querySelector<HTMLElement>(
             '.dialog-body input:not([aria-hidden]):not(:disabled), .dialog-body textarea:not(:disabled), .dialog-body [role="combobox"]:not(:disabled)',
           ) || dialog.value.querySelector<HTMLElement>('.dialog-footer button')
-        initial?.focus()
+        initial?.focus({ preventScroll: true })
+        if (initial instanceof HTMLTextAreaElement) {
+          initial.setSelectionRange(0, 0)
+          initial.scrollTop = 0
+        }
       }
     } else {
       dialog.value?.close()
@@ -98,7 +103,7 @@ onBeforeUnmount(() => {
           {{ description }}
         </p>
       </div>
-      <button
+      <AdminButton
         type="button"
         class="icon-button"
         aria-label="关闭弹窗"
@@ -106,9 +111,9 @@ onBeforeUnmount(() => {
         @click="requestClose"
       >
         <AdminIcon name="close" />
-      </button>
+      </AdminButton>
     </header>
-    <div v-if="open" class="dialog-body">
+    <div v-if="open" class="dialog-body dialog-form">
       <slot />
     </div>
     <footer v-if="open && $slots.footer" class="dialog-footer">

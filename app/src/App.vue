@@ -19,11 +19,17 @@ import { localApplications } from './core/app-runtime/localApplications'
 import { clearApplicationBindings } from './core/app-runtime/resourceBindings'
 import { getApplication } from './core/applications'
 import { online } from './core/connectivity'
+import DeviceConsentDialog from './core/native-runtime/DeviceConsentDialog.vue'
+import DevicePermissionsPage from './core/native-runtime/DevicePermissionsPage.vue'
+import { startNativeRuntime } from './core/native-runtime/lifecycle'
+import NativeDownloadDialog from './core/native-runtime/NativeDownloadDialog.vue'
+import ShortcutsPage from './core/native-runtime/ShortcutsPage.vue'
 import {
   backFromApplication,
   navigateTab,
   navigation,
   openApplication,
+  openDevicePermissions,
   primaryTabs,
   startNavigation,
   tabLabel,
@@ -60,7 +66,7 @@ const currentView = computed(() =>
     : null,
 )
 const currentInstallation = computed(() => appCatalog.entries.find((e) => e.release.appId === navigation.application?.appId)?.installation)
-const loginRequired = computed(() => !identity.user && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
+const loginRequired = computed(() => !identity.user && !['devicePermissions', 'shortcuts'].includes(navigation.screen) && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
 const installationError = computed(() => appCatalog.error || currentInstallation.value?.error || '')
 async function retryCurrentApplication() {
   const id = navigation.application?.appId
@@ -74,6 +80,7 @@ async function retryCurrentApplication() {
   }
 }
 const stopCatalogSync = startCatalogSync()
+const stopNativeRuntime = startNativeRuntime()
 function hostCompatible(appId: string) {
   const entry = appCatalog.entries.find((e) => e.release.appId === appId)
   const module = applicationModules.find((m) => m.manifest.id === appId)
@@ -115,12 +122,15 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   stopCatalogSync()
+  stopNativeRuntime()
   stopChat()
   stopViewport?.()
 })
 </script>
 
 <template>
+  <DeviceConsentDialog />
+  <NativeDownloadDialog />
   <MemoryConfirmationDialog v-if="identity.user" />
   <aside
     v-if="localApplications.error"
@@ -184,8 +194,11 @@ onBeforeUnmount(() => {
       </section>
       <div v-if="!identity.user && navigation.screen === 'applications'" class="guest-mode-notice">
         <span>本地模式 · 系统工具无需登录</span>
+        <button class="button button-secondary" @click="openDevicePermissions">设备权限</button>
         <button class="button button-secondary" @click="navigateTab('home')">登录</button>
       </div>
+      <ShortcutsPage v-if="navigation.screen === 'shortcuts'" />
+      <DevicePermissionsPage v-if="navigation.screen === 'devicePermissions'" />
       <ApplicationsPage v-show="navigation.screen === 'applications'" />
       <ApplicationCapabilitiesPage
         v-if="
@@ -237,7 +250,7 @@ onBeforeUnmount(() => {
           <p v-if="!appCatalog.loading">
             {{
               installationError || (!currentCompatible
-                ? (isWebHost ? "请刷新网页后重试。" : "请更新 T Box 应用后再打开。")
+                ? (isWebHost ? "请刷新网页后重试。" : "请更新 T方舟 应用后再打开。")
                 : "安装后可以继续使用，卸载前保存的数据仍然保留。")
             }}
           </p>

@@ -1,4 +1,6 @@
-# T Box
+# T方舟 · T Ark
+
+中文名称为 **T方舟**，英文名称为 **T Ark**。网页关于页展示两者；原生应用在中文系统显示「T方舟」，其他语言系统显示「T Ark」。包名、Bundle ID、数据库名和链接协议沿用现有技术标识。
 
 一个 pnpm workspace：同一套 Vue 页面用于 PC、手机浏览器及 Capacitor iOS / Android 应用。所有页面组件自行实现，不依赖第三方 UI 库。
 
@@ -55,7 +57,7 @@ pnpm dev
 
 `db:init` 创建不存在的数据库并执行当前完整初始化，重复运行不修改数据或配置，不插入演示账单。旧开发库或旧迁移失败留下的库不能直接接管，请改用新库；不会自动清空原库。详见 [数据库初始化](docs/database-initialization.md)。数据库密码只保存在 `api/.env`，该文件已经加入 `.gitignore`；前端环境变量中不要放数据库连接信息。
 
-**当前额度体系使用新基线 `2026-10-22.2`，旧开发库不能直接使用。请配置新的 `MYSQL_DATABASE` 后初始化，原库保留。** 不实现旧余额兼容，见 [资源包实施规格](docs/ai-resource-pack-implementation.md) 与 [数据库初始化](docs/database-initialization.md)。
+**当前额度体系使用新基线 `2026-10-23.2`，旧开发库不能直接使用。请配置新的 `MYSQL_DATABASE` 后初始化，原库保留。** 不实现旧余额兼容，见 [资源包实施规格](docs/ai-resource-pack-implementation.md) 与 [数据库初始化](docs/database-initialization.md)。
 
 本地配置 MySQL 和可选 Redis，使用 [api/.env.example](api/.env.example)；生产还需在 PM2 服务器填写业务文件 OSS AccessKey，地域和 Bucket 由 Actions 自动写入发布包。用户文件、AI 图片、记账附件及分类图标统一存 `tboxos/uploads/resources/`，数据库只保存相对路径。网站发布凭据和应用导入 Token 在 GitHub 配置，微信支付与 AI 密钥在后台填写。跨域默认开放；全部配置见 [API 环境配置](docs/api-environment.md)，生产按 [首次部署步骤](docs/first-deployment.md) 操作。
 
@@ -189,7 +191,7 @@ pnpm native:android    # 重新构建 / 同步，再打开 Android Studio
 
 原生构建链路和版本规则见 [Capacitor 说明](capacitor/README.md)。`capacitor/package.json` 的 `version` 自动同步到两端；通过 `APP_BUILD_NUMBER` 指定构建号，未指定时保留现有构建号。
 
-当前应用标识为 `com.tbox.app`，名称为 `T Box`。iOS 使用 Xcode 的 Archive / Signing & Capabilities 配置签名，Android 使用 Android Studio 的 Build / Generate Signed Bundle or APK 配置发布签名。发布前请同时调整 Capacitor 配置及已生成原生工程中的 Bundle Identifier / applicationId。
+当前应用标识为 `com.tbox.app`，名称为 `T方舟`。iOS 使用 Xcode 的 Archive / Signing & Capabilities 配置签名，Android 使用 Android Studio 的 Build / Generate Signed Bundle or APK 配置发布签名。发布前请同时调整 Capacitor 配置及已生成原生工程中的 Bundle Identifier / applicationId。
 
 项目最低支持 iOS 15.4（使用原生 HTML dialog）及 Android API 24，Android System WebView 需保持更新。开发工具使用 Xcode 26+、CocoaPods 1.16+、Android Studio Otter 2025.2.1+；本机 Android Studio GUI 版本较旧，但已经使用其自带 JBR 21 成功完成 Gradle CLI 构建。
 

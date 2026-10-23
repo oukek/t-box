@@ -1,6 +1,14 @@
 import { AppSdkError } from './sdk-error.js'
 
 const definitions = {
+  DEVICE_BUSY: '另一个设备操作或授权窗口尚未结束',
+  DEVICE_UNSUPPORTED: '当前设备不支持此功能',
+  DEVICE_PERMISSION_DENIED: '未授权此应用使用该设备能力',
+  DEVICE_RESULT_UNKNOWN: '设备操作结果尚待核对，请勿重复提交',
+  DEVICE_REQUEST_CONFLICT: '同一请求标识不能用于不同操作',
+  DEVICE_EVENT_NOT_FOUND: '系统日历事件不存在或已被删除',
+  DEVICE_FOREGROUND_REQUIRED: '请打开应用后继续此操作',
+  MARKET_HIDDEN: '应用市场已关闭，暂不支持自行安装应用',
   EVENT_FAILED: '应用事件订阅失败',
   REQUEST_FAILED: '应用请求失败',
   API_SCOPE_DENIED: '应用未注册此接口范围',

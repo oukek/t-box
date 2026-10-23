@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>T Box</string>
+    <string>T Ark</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>$(PRODUCT_NAME)</string>
+    <string>T Ark</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -72,7 +72,7 @@
       <true/>
     </dict>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>在开发调试时连接电脑上的 T Box 服务，以实时更新页面。</string>
+    <string>在开发调试时连接电脑上的 T方舟 服务，以实时更新页面。</string>
     <key>TBoxWechatEnabled</key>
     <false/>
     <key>TBoxWechatAppId</key>
@@ -80,12 +80,23 @@
     <key>TBoxWechatUniversalLink</key>
     <string/>
     <key>CFBundleURLTypes</key>
-    <array/>
+    <array>
+      <dict>
+        <key>CFBundleURLName</key>
+        <string>com.tbox.app.navigation</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>tbox</string>
+        </array>
+      </dict>
+    </array>
     <key>LSApplicationQueriesSchemes</key>
     <array>
       <string>weixin</string>
       <string>weixinULAPI</string>
       <string>weixinURLParamsAPI</string>
     </array>
+    <key>TBoxNavigationOrigin</key>
+    <string/>
   </dict>
 </plist>

@@ -8,6 +8,6 @@ export const profileManifest: ApplicationManifest = {
   icon: 'user',
   iconAsset: applicationIcon,
   color: 'violet',
-  version: '1.0.2',
+  version: '1.1.0',
   skillIds: [],
 }

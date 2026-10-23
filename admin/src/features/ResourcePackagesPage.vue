@@ -5,7 +5,11 @@ import type {
   ResourcePackageDraft,
 } from '@t-box/shared'
 import { onMounted, reactive, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
+import AdminTextarea from '../components/AdminTextarea.vue'
 import { errorMessage, request, save } from '../core/api'
 
 const packages = ref<AdminResourcePackage[]>([])
@@ -126,7 +130,7 @@ onMounted(load)
       </p>
     </div>
     <div class="actions">
-      <button :disabled="loading" @click="load">刷新</button><button class="primary" @click="edit()">新增资源包</button>
+      <AdminButton :disabled="loading" @click="load">刷新</AdminButton><AdminButton class="primary" @click="edit()">新增资源包</AdminButton>
     </div>
   </header>
   <p
@@ -174,7 +178,7 @@ onMounted(load)
               >有待发布修改</span>
             </td>
             <td class="actions">
-              <button @click="edit(p)">编辑草稿</button><button @click="publish(p)">发布版本</button>
+              <AdminButton @click="edit(p)">编辑草稿</AdminButton><AdminButton @click="publish(p)">发布版本</AdminButton>
             </td>
           </tr>
         </tbody>
@@ -189,7 +193,7 @@ onMounted(load)
           tariff.enabled ? '已启用' : '未启用'
         }}</span>
       </h2>
-      <button @click="editTariff">配置并发布费率</button>
+      <AdminButton @click="editTariff">配置并发布费率</AdminButton>
     </div>
     <dl class="tariff-grid">
       <div>
@@ -244,101 +248,99 @@ onMounted(load)
       <fieldset :disabled="busy">
         <template v-if="dialog === 'product'">
           <div class="form-grid">
-            <label>商品编码<input
+            <label>商品编码<AdminInput
               v-model="productForm.code"
               :disabled="!!selected"
               required
               pattern="[a-z][a-z0-9-]{1,39}"
               maxlength="40"
-            ></label><label>名称<input
+            /></label><label>名称<AdminInput
               v-model="productForm.name"
               required
               maxlength="60"
-            ></label><label>售价 / 元<input
+            /></label><label>售价 / 元<AdminInput
               v-model="productForm.price"
               required
               inputmode="decimal"
               pattern="[0-9]+([.][0-9]{1,2})?"
-            ></label><label>基础额度<input
+            /></label><label>基础额度<AdminInput
               v-model="productForm.quota"
               required
               inputmode="numeric"
               pattern="[0-9]+"
-            ></label><label>赠送额度<input
+            /></label><label>赠送额度<AdminInput
               v-model="productForm.bonusQuota"
               required
               inputmode="numeric"
               pattern="[0-9]+"
-            ></label><label>有效天数<input
+            /></label><label>有效天数<AdminInput
               v-model.number="productForm.validDays"
               type="number"
               min="1"
               max="3650"
               required
-            ></label><label>排序<input
+            /></label><label>排序<AdminInput
               v-model.number="productForm.sort"
               type="number"
               min="0"
               max="10000"
               required
-            ></label>
+            /></label>
           </div>
-          <label>说明<textarea
+          <label>说明<AdminTextarea
             v-model="productForm.description"
             maxlength="500"
             rows="3"
-          /></label><label class="check-row"><input
+          /></label><label class="check-row"><AdminCheckbox
             v-model="productForm.enabled"
-            type="checkbox"
-          >发布后上架</label>
+          />发布后上架</label>
           <p class="footnote">
             编码创建后不能修改。保存仅更新草稿，点击发布版本后生效。
           </p>
         </template>
         <template v-else-if="dialog === 'tariff' && tariffForm">
-          <label class="check-row"><input
+          <label class="check-row"><AdminCheckbox
             v-model="tariffForm.enabled"
-            type="checkbox"
-          >启用公开费率</label>
+          />启用公开费率</label>
           <div class="form-grid">
-            <label>输入 / 百万 token<input
+            <label>输入 / 百万 token<AdminInput
               v-model="tariffForm.inputPerMillion"
               inputmode="decimal"
               required
-            ></label><label>输出 / 百万 token<input
+            /></label><label>输出 / 百万 token<AdminInput
               v-model="tariffForm.outputPerMillion"
               inputmode="decimal"
               required
-            ></label><label>缓存输入 / 百万 token<input
+            /></label><label>缓存输入 / 百万 token<AdminInput
               v-model="tariffForm.cachedInputPerMillion"
               inputmode="decimal"
               required
-            ></label><label>单任务额度上限<input
+            /></label><label>单任务额度上限<AdminInput
               v-model="tariffForm.taskLimit"
               inputmode="decimal"
               required
-            ></label><label>单任务图片张数<input
+            /></label><label>单任务图片张数<AdminInput
               v-model.number="tariffForm.imageLimit"
               type="number"
               min="1"
               max="20"
               required
-            ></label>
+            /></label>
           </div>
           <div
             v-for="tier in ['1k', '2k', '4k'] as const"
             :key="tier"
             class="form-grid"
           >
-            <label>{{ tier.toUpperCase() }} 生成 / 张<input
+            <label>{{ tier.toUpperCase() }} 生成 / 张<AdminInput
               v-model="tariffForm.images[tier]"
               inputmode="numeric"
               required
-            ></label><label>{{ tier.toUpperCase() }} 编辑 / 张<input
+            /></label><label>{{ tier.toUpperCase() }} 编辑 / 张<AdminInput
               v-model="tariffForm.edits[tier]"
               inputmode="numeric"
               required
-            ></label>
+            /></label>
           </div>
           <p class="footnote">
             价格单位均为额度。发布将创建新版本；模型服务的采购报价在模型页面单独配置。
@@ -358,7 +360,7 @@ onMounted(load)
           </p></template>
       </fieldset>
     </form>
-    <template #footer><button :disabled="busy" @click="dialog = null">取消</button><button
+    <template #footer><AdminButton :disabled="busy" @click="dialog = null">取消</AdminButton><AdminButton
       class="primary"
       type="submit"
       form="quota-config-form"
@@ -367,7 +369,7 @@ onMounted(load)
       {{
         busy ? '正在保存…' : dialog === 'product' ? '保存草稿' : '确认发布'
       }}
-    </button></template>
+    </AdminButton></template>
   </AdminDialog>
 </template>
 

@@ -5,7 +5,10 @@ import type {
   HolidayYearAdmin,
 } from '@t-box/calendar-contracts'
 import { onMounted, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
+import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
 import AdminSelect from '../components/AdminSelect.vue'
 import { errorMessage, request, save } from '../core/api'
 
@@ -139,7 +142,7 @@ onMounted(load)
       <p>管理中国大陆年度放假、调休安排。发布后网页与 App 自动获取。</p>
     </div>
     <div class="actions">
-      <button class="primary" @click="open('sync')">同步年度</button><button @click="open('settings')">同步配置</button><button :disabled="loading" @click="load">刷新</button>
+      <AdminButton class="primary" @click="open('sync')">同步年度</AdminButton><AdminButton @click="open('settings')">同步配置</AdminButton><AdminButton :disabled="loading" @click="load">刷新</AdminButton>
     </div>
   </header>
   <p
@@ -202,10 +205,10 @@ onMounted(load)
             </td>
             <td>
               <div class="actions">
-                <button @click="open('edit', row)">查看 / 编辑</button><button
+                <AdminButton @click="open('edit', row)">查看 / 编辑</AdminButton><AdminButton
                   :disabled="!row.candidate"
                   @click="open('publish', row)"
-                > 发布候选</button><button v-if="row.manual" @click="open('automatic', row)"> 恢复自动</button><button @click="history(row)">记录</button>
+                > 发布候选</AdminButton><AdminButton v-if="row.manual" @click="open('automatic', row)"> 恢复自动</AdminButton><AdminButton @click="history(row)">记录</AdminButton>
               </div>
             </td>
           </tr>
@@ -248,25 +251,23 @@ onMounted(load)
     >
       <fieldset :disabled="busy">
         <template v-if="dialog === 'sync'">
-          <label>年度<input
+          <label>年度<AdminInput
             v-model.number="year"
             type="number"
             min="1900"
             max="2100"
             required
-          ></label>
+          /></label>
           <p class="muted">
             将获取对应年度的公告数据。未公布、未收录或网络失败时保留原数据。手动保护的年度不会被覆盖。
           </p>
         </template>
         <template v-else-if="dialog === 'settings'">
-          <label class="holiday-check"><input
+          <label class="holiday-check"><AdminCheckbox
             v-model="config.enabled"
-            type="checkbox"
-          >开启后端定期同步</label><label class="holiday-check"><input
+          />开启后端定期同步</label><label class="holiday-check"><AdminCheckbox
             v-model="config.autoPublish"
-            type="checkbox"
-          >校验通过后自动发布</label>
+          />校验通过后自动发布</label>
           <p class="muted">
             启动后检查上一年、本年和下一年，每日最多自动更新一次。关闭自动发布后，新数据进入候选，待管理员发布。
           </p>
@@ -281,20 +282,20 @@ onMounted(load)
             :title="source"
           >官方原文 {{ index + 1 }}
             <div class="holiday-source">
-              <input
+              <AdminInput
                 v-model="draft.papers[index]"
                 type="url"
                 required
                 placeholder="国务院或政府网站公告网址"
-              ><button type="button" @click="draft.papers.splice(index, 1)">
+              /><AdminButton type="button" @click="draft.papers.splice(index, 1)">
                 移除
-              </button>
+              </AdminButton>
             </div></label>
-          <button type="button" @click="draft.papers.push('')">
+          <AdminButton type="button" @click="draft.papers.push('')">
             添加官方原文
-          </button>
+          </AdminButton>
           <div class="holiday-edit-heading">
-            <strong>{{ draft.days.length }} 条日期</strong><button
+            <strong>{{ draft.days.length }} 条日期</strong><AdminButton
               type="button"
               :disabled="draft.days.length >= 120"
               @click="
@@ -306,25 +307,25 @@ onMounted(load)
               "
             >
               新增日期
-            </button>
+            </AdminButton>
           </div>
           <div
             v-for="(day, index) in draft.days"
             :key="index"
             class="holiday-edit-day"
           >
-            <label>日期<input
+            <label>日期<AdminInput
               v-model="day.date"
               type="date"
               required
               :aria-label="`第 ${index + 1} 条日期`"
-            ></label>
-            <label>节日<input
+            /></label>
+            <label>节日<AdminInput
               v-model="day.name"
               maxlength="50"
               required
               :aria-label="`第 ${index + 1} 条节日名称`"
-            ></label>
+            /></label>
             <label>安排<AdminSelect
               v-model="day.status"
               :options="[
@@ -333,14 +334,14 @@ onMounted(load)
               ]"
               :label="`第 ${index + 1} 条安排`"
             /></label>
-            <button
+            <AdminButton
               type="button"
               class="holiday-remove"
               :aria-label="`删除第 ${index + 1} 条日期`"
               @click="draft.days.splice(index, 1)"
             >
               删除
-            </button>
+            </AdminButton>
           </div>
         </template>
         <p v-else-if="dialog === 'publish'">
@@ -364,9 +365,9 @@ onMounted(load)
       <li v-if="!audits.length">暂无记录</li>
     </ul>
     <template #footer>
-      <button :disabled="busy" @click="dialog = null">
+      <AdminButton :disabled="busy" @click="dialog = null">
         {{ dialog === "audit" ? "关闭" : "取消" }}
-      </button><button
+      </AdminButton><AdminButton
         v-if="dialog !== 'audit'"
         class="primary"
         form="holiday-form"
@@ -374,7 +375,7 @@ onMounted(load)
         :disabled="busy"
       >
         {{ busy ? "正在处理…" : dialog === "edit" ? "保存草稿" : "确认" }}
-      </button>
+      </AdminButton>
     </template>
   </AdminDialog>
 </template>
@@ -403,9 +404,6 @@ td .sync-error {
   align-items: center;
   gap: 10px;
   margin: 16px 0;
-}
-.holiday-check input {
-  width: auto;
 }
 .holiday-json {
   width: 100%;

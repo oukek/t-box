@@ -5,7 +5,7 @@ import { createApp, h } from 'vue'
 import CalculatorPage from './CalculatorPage.vue'
 import { ErrorCode } from './error-codes.js'
 import { restoreHistory } from './history'
-import { bindHistory, runtime } from './runtime'
+import { bindAutomation, bindHistory, runtime } from './runtime'
 import './base.css'
 
 const node = document.getElementById('app')!
@@ -24,6 +24,7 @@ connectAppClient({
 })
   .then(async (connection) => {
     runtime.subject = connection.context.subject
+    bindAutomation(connection.client)
     bindHistory((records) =>
       connection.client.storage.set('calculator.history.v1', records),
     )

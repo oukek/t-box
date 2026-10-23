@@ -4,6 +4,7 @@ import { ApplicationErrorCode } from '@t-box/app-server-sdk'
 import { runCalculation } from './service.js'
 
 export const calculatorBackend: ApplicationBackend = {
+  actions: [{ id: 'calculate', version: 1, title: '执行数学计算', description: '使用计算器已有计算引擎返回结果', inputSchema: { type: 'object' }, effect: 'read', background: true }],
   async lifecycle(request) {
     return {
       status: 'completed',

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { OperationsTaskDetail } from '@t-box/shared'
+import AdminButton from '../components/AdminButton.vue'
 import {
   billingLabels,
   callLabels,
@@ -55,7 +56,7 @@ defineEmits<{ call: [id: string] }>()
     </details>
     <h3>逐次模型调用 · {{ task.modelCalls.length }}</h3>
     <div v-if="task.modelCalls.length" class="call-stack">
-      <button
+      <AdminButton
         v-for="(call, index) in task.modelCalls"
         :key="call.callId"
         class="call-record"
@@ -72,7 +73,7 @@ defineEmits<{ call: [id: string] }>()
         }}<small>{{
           call.billingStatus ? billingLabels[call.billingStatus] : '未计费'
         }}</small></span><span aria-hidden="true">›</span>
-      </button>
+      </AdminButton>
     </div>
     <p v-else class="muted">
       暂无逐次调用记录。审计功能启用前的输入输出和底层错误无法追溯补录。

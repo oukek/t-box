@@ -348,7 +348,7 @@ export class WechatGateway implements PaymentGateway {
       }
       body.scene_info = {
         payer_client_ip: context.clientIp,
-        h5_info: { type: 'Wap', app_name: 'T Box', app_url: c.frontendUrl },
+        h5_info: { type: 'Wap', app_name: 'T方舟', app_url: c.frontendUrl },
       }
     }
     const response = await this.request(

@@ -1,3 +1,4 @@
+import type { DeviceCapability } from '@t-box/app-contracts'
 import type {
   ApplicationClientInteraction,
   ApplicationContractVersion,
@@ -11,6 +12,7 @@ export interface ClientApplicationModule {
   sdk?: {
     restPrefixes?: readonly string[]
     storage?: boolean
+    deviceCapabilities?: readonly DeviceCapability[]
     /** One-way migration from app-owned legacy host keys into app-scoped SDK storage. */
     legacyStorageKeys?: Readonly<Record<string, (userId: string) => string>>
     /** Trusted native adapter; the Web app receives only a status snapshot. */

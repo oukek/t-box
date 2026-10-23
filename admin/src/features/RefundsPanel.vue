@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { AdminPaymentOrder, PaymentRefund } from '@t-box/shared'
 import { computed, onMounted, ref } from 'vue'
+import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
+import AdminInput from '../components/AdminInput.vue'
 import AdminSelect from '../components/AdminSelect.vue'
 import { errorMessage, request } from '../core/api'
 
@@ -103,7 +105,7 @@ onMounted(load)
         </p>
       </div>
       <div class="actions">
-        <button :disabled="busy" @click="load">刷新</button><button @click="begin">发起退款</button>
+        <AdminButton :disabled="busy" @click="load">刷新</AdminButton><AdminButton @click="begin">发起退款</AdminButton>
       </div>
     </div>
     <p
@@ -137,13 +139,13 @@ onMounted(load)
             </td>
             <td>{{ refund.reason }}</td>
             <td>
-              <button
+              <AdminButton
                 v-if="!['succeeded', 'closed'].includes(refund.status)"
                 :disabled="busy"
                 @click="reconcile(refund.id)"
               >
                 核对原退款单
-              </button>
+              </AdminButton>
             </td>
           </tr>
           <tr v-if="!refunds.length">
@@ -170,12 +172,12 @@ onMounted(load)
         label="已支付订单"
         placeholder="选择订单"
       /></label>
-      <label>退款原因<input
+      <label>退款原因<AdminInput
         v-model="reason"
         required
         maxlength="26"
         placeholder="最多 26 个字"
-      ></label>
+      /></label>
       <div v-if="selected" class="refund-summary">
         <span>原实付金额<strong>¥{{ Number(selected.amount) }}</strong></span><span>原基础 / 赠送额度<strong>{{ selected.quota }} / {{ selected.bonusQuota }}</strong></span>
       </div>
@@ -188,14 +190,14 @@ onMounted(load)
         role="alert"
       >{{ dialogError }}</p>
     </form>
-    <template #footer><button :disabled="busy" @click="open = false">取消</button><button
+    <template #footer><AdminButton :disabled="busy" @click="open = false">取消</AdminButton><AdminButton
       class="danger"
       type="submit"
       form="refund-form"
       :disabled="busy || !orderId || !reason.trim()"
     >
       {{ busy ? '正在提交…' : '确认申请原路退款' }}
-    </button></template>
+    </AdminButton></template>
   </AdminDialog>
 </template>
 

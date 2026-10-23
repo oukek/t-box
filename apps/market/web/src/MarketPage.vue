@@ -30,12 +30,15 @@ const filters = computed(() => [
 const entries = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
   return appCatalog.entries.filter((entry) => {
+    if (appCatalog.marketHidden && !isInstalled(entry)) {
+      return false
+    }
     const app = displayApp(entry)
     return matchesFilter(entry, filter.value) && `${app.name} ${app.description}`.toLocaleLowerCase().includes(keyword)
   })
 })
 const sections = computed(() => [
-  { id: 'user', title: '可选应用', caption: '按需安装，自由选择', entries: entries.value.filter((entry) => entry.release.kind === 'user') },
+  { id: 'user', title: '可选应用', caption: appCatalog.marketHidden ? '已安装的应用' : '按需安装，自由选择', entries: entries.value.filter((entry) => entry.release.kind === 'user') },
   { id: 'system', title: '系统应用', caption: '系统内置，持续更新', entries: entries.value.filter((entry) => entry.release.kind === 'system') },
 ].filter((section) => section.entries.length))
 const emptyTitle = computed(() => query.value.trim() ? '没有找到相关应用' : filter.value === 'updates' ? '当前没有可更新的应用' : filter.value === 'installed' ? '还没有已安装的应用' : '应用正在准备中')
@@ -123,8 +126,13 @@ watch(() => [props.focusAppId, props.openRevision, appCatalog.revision] as const
 
 <template>
   <section class="market-page" aria-label="应用市场">
+    <p
+      v-if="appCatalog.marketHidden"
+      class="market-notice"
+      role="status"
+    >应用市场已关闭，当前仅提供已安装应用的更新与维护。</p>
     <ApplicationHeader
-      title="应用市场"
+      :title="appCatalog.marketHidden ? '应用更新' : '应用市场'"
       :back-label="tabLabel(navigation.backTo)"
       @back="backFromApplication"
     >

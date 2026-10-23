@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { hostBrand } from '@t-box/app-contracts'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import AdminButton from './components/AdminButton.vue'
 import AdminDialog from './components/AdminDialog.vue'
 import AdminIcon from './components/AdminIcon.vue'
+import AdminInput from './components/AdminInput.vue'
 import { errorMessage } from './core/api'
 import { administrator, login, logout, restoreSession } from './core/session'
 import ApplicationsPage from './features/ApplicationsPage.vue'
@@ -131,14 +134,13 @@ function openLogout() {
       <a
         class="brand"
         href="#/"
-      ><span class="brand-icon"><AdminIcon name="grid" :size="21" /></span>T
-        BOX <small>CONTROL</small></a>
+      ><span class="brand-icon"><AdminIcon name="grid" :size="21" /></span>T方舟 <small>管理工作台</small></a>
       <div>
         <p class="eyebrow">应用的能力，从这里连接</p>
         <h1>每个模型，<br><span>各就其位。</span></h1>
-        <p>连接服务商，配置模型。<br>为 T Box 的日常对话准备合适的能力。</p>
+        <p>连接服务商，配置模型。<br>为 T方舟 的日常对话准备合适的能力。</p>
       </div>
-      <span class="login-footer">T BOX / 管理工作台</span>
+      <span class="login-footer">{{ hostBrand.englishName }} / 管理工作台</span>
     </section>
     <section class="login-panel">
       <p class="eyebrow">ADMINISTRATOR</p>
@@ -153,21 +155,21 @@ function openLogout() {
       </p>
       <form @submit.prevent="signIn">
         <fieldset :disabled="busy">
-          <label>账号<input
+          <label>账号<AdminInput
             v-model="username"
             autocomplete="username"
             required
             maxlength="64"
             autofocus
-          ></label><label>密码<input
+          /></label><label>密码<AdminInput
             v-model="password"
             type="password"
             autocomplete="current-password"
             required
             maxlength="128"
-          ></label><button class="primary login-button">
+          /></label><AdminButton type="submit" class="primary login-button">
             {{ busy ? '正在登录…' : '登录 →' }}
-          </button>
+          </AdminButton>
         </fieldset>
       </form>
       <p class="login-help">
@@ -181,9 +183,9 @@ function openLogout() {
       <a
         class="brand"
         href="#/providers"
-      ><span class="brand-icon"><AdminIcon name="grid" :size="21" /></span><span>T BOX<small>管理工作台</small></span></a><span class="nav-caption">工作空间</span>
+      ><span class="brand-icon"><AdminIcon name="grid" :size="21" /></span><span>T方舟<small>管理工作台</small></span></a><span class="nav-caption">工作空间</span>
       <nav aria-label="后台导航">
-        <button
+        <AdminButton
           v-for="(item, key) in pages"
           :key="key"
           :class="{ active: page === key }"
@@ -191,10 +193,10 @@ function openLogout() {
           @click="navigate(key)"
         >
           <AdminIcon :name="item.symbol" />{{ item.title }}
-        </button>
+        </AdminButton>
       </nav>
       <div class="sidebar-note">
-        <span class="sidebar-note-title">T Box Control</span>
+        <span class="sidebar-note-title">{{ hostBrand.englishName }} · 管理工作台</span>
         <p>管理连接，配置应用能力。</p>
       </div>
     </aside>
@@ -204,14 +206,14 @@ function openLogout() {
         <div>
           <span class="avatar" aria-hidden="true">{{
             administrator.username[0]?.toUpperCase()
-          }}</span><span class="topbar-username">{{ administrator.username }}</span><button
+          }}</span><span class="topbar-username">{{ administrator.username }}</span><AdminButton
             class="icon-button"
             aria-label="退出登录"
             :disabled="busy"
             @click="openLogout"
           >
             <AdminIcon name="logout" :size="17" />
-          </button>
+          </AdminButton>
         </div>
       </header>
       <main class="page-content">
@@ -241,13 +243,13 @@ function openLogout() {
         {{ error }}
       </p>
       <template #footer>
-        <button :disabled="busy" @click="logoutOpen = false">取消</button><button
+        <AdminButton :disabled="busy" @click="logoutOpen = false">取消</AdminButton><AdminButton
           class="primary"
           :disabled="busy"
           @click="signOut"
         >
           {{ busy ? '正在退出…' : '退出登录' }}
-        </button>
+        </AdminButton>
       </template>
     </AdminDialog>
   </div>

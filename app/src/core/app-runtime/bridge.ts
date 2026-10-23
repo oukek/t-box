@@ -397,3 +397,20 @@ export function cancelApplicationInteractions(appId: string) {
     .then((connection) => connection.cancelInteractions())
     .catch(() => {})
 }
+
+/** Wait for the existing SDK handshake before acknowledging a native cold-start request. */
+export async function waitForApplicationRuntime(appId: string, signal?: AbortSignal) {
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    if (signal?.aborted) {
+      throw SdkErrorCode.REQUEST_CANCELLED()
+    }
+    const connection = connections.get(appId)
+    if (connection) {
+      await connection.promise
+      return
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+  }
+  throw SdkErrorCode.REQUEST_TIMEOUT('应用尚未完成初始化，打开后可继续处理快捷指令')
+}

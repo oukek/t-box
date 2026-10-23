@@ -96,6 +96,10 @@ export function registerAdmin(
             platform.calendar.holidays,
             (r) => auth.authenticate(sessionToken(r)),
           )
+          secure.get('/application-market/settings', async () => ({ data: await platform.applications.marketPolicy.read() }))
+          secure.get('/host/downloads', async () => ({ data: await platform.applications.downloads.read() }))
+          secure.patch('/host/downloads', async (r) => ({ data: await platform.applications.downloads.save(r.body, (await auth.authenticate(sessionToken(r))).id) }))
+          secure.patch('/application-market/settings', async (r) => ({ data: await platform.applications.marketPolicy.save(r.body, (await auth.authenticate(sessionToken(r))).id) }))
           registerApplicationPublishing(
             secure,
             new ApplicationPublishing(
