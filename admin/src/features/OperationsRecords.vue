@@ -1,11 +1,25 @@
 <script setup lang="ts">
-import type { AIModelConfig, AIProviderConfig, OperationsModelCall, OperationsModelCallDetail, OperationsPage, OperationsTaskDetail, OperationsTaskRow } from '@t-box/shared'
+import type {
+  AIModelConfig,
+  AIProviderConfig,
+  OperationsModelCall,
+  OperationsModelCallDetail,
+  OperationsPage,
+  OperationsTaskDetail,
+  OperationsTaskRow,
+} from '@t-box/shared'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AdminDialog from '../components/AdminDialog.vue'
 import AdminSelect from '../components/AdminSelect.vue'
 import { errorMessage, request } from '../core/api'
 import ModelCallDetail from './ModelCallDetail.vue'
-import { callLabels, duration, purposeLabels, taskLabels, time } from './operation-format'
+import {
+  callLabels,
+  duration,
+  purposeLabels,
+  taskLabels,
+  time,
+} from './operation-format'
 import TaskRecordDetail from './TaskRecordDetail.vue'
 import './operations-records.css'
 
@@ -32,9 +46,24 @@ let listController: AbortController | undefined
 let detailController: AbortController | undefined
 let timer: ReturnType<typeof setInterval> | undefined
 let alive = true
-const statusOptions = computed(() => [{ value: '', label: '全部状态' }, ...Object.entries(tab.value === 'tasks' ? taskLabels : callLabels).map(([value, label]) => ({ value, label }))])
-const modelOptions = computed(() => [{ value: '', label: '全部模型' }, ...models.value.map((m) => ({ value: m.id, label: m.name, description: `${m.providerName} · ${m.modelId}` }))])
-const providerOptions = computed(() => [{ value: '', label: '全部服务商' }, ...providers.value.map((p) => ({ value: p.id, label: p.name }))])
+const statusOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...Object.entries(tab.value === 'tasks' ? taskLabels : callLabels).map(
+    ([value, label]) => ({ value, label }),
+  ),
+])
+const modelOptions = computed(() => [
+  { value: '', label: '全部模型' },
+  ...models.value.map((m) => ({
+    value: m.id,
+    label: m.name,
+    description: `${m.providerName} · ${m.modelId}`,
+  })),
+])
+const providerOptions = computed(() => [
+  { value: '', label: '全部服务商' },
+  ...providers.value.map((p) => ({ value: p.id, label: p.name })),
+])
 const pages = computed(() => Math.max(1, Math.ceil(total.value / 20)))
 async function load(quiet = false) {
   if (quiet && busy.value) {
@@ -45,7 +74,11 @@ async function load(quiet = false) {
   listController = current
   busy.value = true
   try {
-    const result = await request<OperationsPage<OperationsTaskRow> | OperationsPage<OperationsModelCall>>(`/operations/${tab.value}?page=${page.value}&${filterQuery}`, { signal: current.signal })
+    const result = await request<
+      OperationsPage<OperationsTaskRow> | OperationsPage<OperationsModelCall>
+    >(`/operations/${tab.value}?page=${page.value}&${filterQuery}`, {
+      signal: current.signal,
+    })
     if (current.signal.aborted || !alive) {
       return
     }
@@ -113,7 +146,10 @@ async function inspectTask(id: string) {
   detailBusy.value = true
   detailError.value = ''
   try {
-    const value = await request<OperationsTaskDetail>(`/operations/tasks/${encodeURIComponent(id)}`, { signal: current.signal })
+    const value = await request<OperationsTaskDetail>(
+      `/operations/tasks/${encodeURIComponent(id)}`,
+      { signal: current.signal },
+    )
     if (!current.signal.aborted && alive) {
       task.value = value
     }
@@ -136,7 +172,10 @@ async function inspectCall(id: string) {
   detailBusy.value = true
   detailError.value = ''
   try {
-    const value = await request<OperationsModelCallDetail>(`/operations/calls/${encodeURIComponent(id)}`, { signal: current.signal })
+    const value = await request<OperationsModelCallDetail>(
+      `/operations/calls/${encodeURIComponent(id)}`,
+      { signal: current.signal },
+    )
     if (!current.signal.aborted && alive) {
       call.value = value
     }
@@ -162,7 +201,10 @@ onMounted(async () => {
       void load(true)
     }
   }, 5000)
-  const result = await Promise.allSettled([request<AIModelConfig[]>('/models'), request<AIProviderConfig[]>('/providers')])
+  const result = await Promise.allSettled([
+    request<AIModelConfig[]>('/models'),
+    request<AIProviderConfig[]>('/providers'),
+  ])
   if (!alive) {
     return
   }
@@ -188,15 +230,23 @@ onBeforeUnmount(() => {
         class="records-tabs"
         role="tablist"
         aria-label="执行记录类型"
-      ><button
-        role="tab"
-        :aria-selected="tab === 'tasks'"
-        @click="switchTab('tasks')"
-      >任务列表</button><button
-        role="tab"
-        :aria-selected="tab === 'calls'"
-        @click="switchTab('calls')"
-      >逐次模型调用</button></div><span>每 5 秒自动刷新 · 详情含输入输出</span><button :disabled="busy" @click="load()">{{ busy ? '刷新中…' : '刷新列表' }}</button>
+      >
+        <button
+          role="tab"
+          :aria-selected="tab === 'tasks'"
+          @click="switchTab('tasks')"
+        >
+          任务列表</button><button
+          role="tab"
+          :aria-selected="tab === 'calls'"
+          @click="switchTab('calls')"
+        >
+          逐次模型调用
+        </button>
+      </div>
+      <span>每 5 秒自动刷新 · 详情含输入输出</span><button :disabled="busy" @click="load()">
+        {{ busy ? '刷新中…' : '刷新列表' }}
+      </button>
     </div>
     <form class="records-filters" @submit.prevent="apply">
       <label>搜索<input
@@ -240,19 +290,71 @@ onBeforeUnmount(() => {
           <col>
           <col class="record-col-actions">
         </colgroup>
-        <thead><tr><th>任务 / 创建时间</th><th>用户</th><th>模型 / 服务商</th><th>状态</th><th>消耗 / 实扣</th><th>调用 / 重试</th><th>失败原因</th><th class="record-actions">操作</th></tr></thead>
+        <thead>
+          <tr>
+            <th>任务 / 创建时间</th>
+            <th>用户</th>
+            <th>模型 / 服务商</th>
+            <th>状态</th>
+            <th>消耗 / 实扣</th>
+            <th>调用 / 重试</th>
+            <th>失败原因</th>
+            <th class="record-actions">操作</th>
+          </tr>
+        </thead>
         <tbody>
           <tr v-for="row in tasks" :key="row.id">
-            <td><time>{{ time(row.createdAt) }}</time><code class="record-id" :title="row.id">{{ row.id }}</code></td>
-            <td><strong>{{ row.user.nickname || row.user.username }}</strong><small>{{ row.user.username }}</small></td>
-            <td class="record-models"><div v-for="(model, index) in row.models" :key="`${model.id}-${index}`"><strong>{{ model.name }}</strong><small>{{ model.providerName }}</small></div><small v-if="!row.models.length">尚未分配 / 无历史快照</small></td>
-            <td class="record-state"><span class="badge" :class="{ disabled: row.status !== 'completed' }">{{ taskLabels[row.status] || row.status }}</span></td>
-            <td>¥{{ row.cost }}<small>实扣 ¥{{ row.charged }}</small><small>{{ row.inputTokens }} 入 / {{ row.outputTokens }} 出</small><small v-if="row.unresolved" class="failure-text">{{ row.unresolved }} 次用量待核对</small></td>
-            <td>{{ row.calls }} 次调用<small>{{ row.retryCount }} 次重试 · {{ row.recoveryAttempts }} 次恢复</small></td>
-            <td class="record-problem"><small :title="row.reason || undefined" :class="{ 'failure-text': row.reason }">{{ row.reason || (row.failedCalls ? `${row.failedCalls} 次调用异常，详见执行记录` : '—') }}</small></td>
-            <td class="record-actions"><button @click="inspectTask(row.id)">详情</button></td>
+            <td>
+              <time>{{ time(row.createdAt) }}</time><code class="record-id" :title="row.id">{{ row.id }}</code>
+            </td>
+            <td>
+              <strong>{{ row.user.nickname || row.user.username }}</strong><small>{{ row.user.username }}</small>
+            </td>
+            <td class="record-models">
+              <div
+                v-for="(model, index) in row.models"
+                :key="`${model.id}-${index}`"
+              >
+                <strong>{{ model.name }}</strong><small>{{ model.providerName }}</small>
+              </div>
+              <small v-if="!row.models.length">尚未分配 / 无历史快照</small>
+            </td>
+            <td class="record-state">
+              <span
+                class="badge"
+                :class="{ disabled: row.status !== 'completed' }"
+              >{{ taskLabels[row.status] || row.status }}</span>
+            </td>
+            <td>
+              ¥{{ row.cost }}<small>实扣额度 {{ row.charged }}</small><small>{{ row.inputTokens }} 入 / {{ row.outputTokens }} 出</small><small
+                v-if="row.unresolved"
+                class="failure-text"
+              >{{ row.unresolved }} 次用量待核对</small>
+            </td>
+            <td>
+              {{ row.calls }} 次调用<small>{{ row.retryCount }} 次重试 ·
+                {{ row.recoveryAttempts }} 次恢复</small>
+            </td>
+            <td class="record-problem">
+              <small
+                :title="row.reason || undefined"
+                :class="{ 'failure-text': row.reason }"
+              >{{
+                row.reason
+                  || (row.failedCalls
+                    ? `${row.failedCalls} 次调用异常，详见执行记录`
+                    : '—')
+              }}</small>
+            </td>
+            <td class="record-actions">
+              <button @click="inspectTask(row.id)">详情</button>
+            </td>
           </tr>
-          <tr v-if="!tasks.length"><td colspan="8" class="muted">{{ busy ? '正在读取…' : '暂无符合条件的任务' }}</td></tr>
+          <tr v-if="!tasks.length">
+            <td colspan="8" class="muted">
+              {{ busy ? '正在读取…' : '暂无符合条件的任务' }}
+            </td>
+          </tr>
         </tbody>
       </table>
       <table v-else class="records-table">
@@ -266,23 +368,76 @@ onBeforeUnmount(() => {
           <col>
           <col class="record-col-actions">
         </colgroup>
-        <thead><tr><th>请求时间 / 调用 ID</th><th>用户</th><th>模型 / 服务商</th><th>阶段 / 状态</th><th>消耗 / 实扣</th><th>用时 / 重试</th><th>用户失败原因</th><th class="record-actions">操作</th></tr></thead>
+        <thead>
+          <tr>
+            <th>请求时间 / 调用 ID</th>
+            <th>用户</th>
+            <th>模型 / 服务商</th>
+            <th>阶段 / 状态</th>
+            <th>消耗 / 实扣</th>
+            <th>用时 / 重试</th>
+            <th>用户失败原因</th>
+            <th class="record-actions">操作</th>
+          </tr>
+        </thead>
         <tbody>
           <tr v-for="row in calls" :key="row.callId">
-            <td>{{ time(row.createdAt) }}<code class="record-id" :title="row.callId">{{ row.callId }}</code></td>
-            <td><strong>{{ row.user.nickname || row.user.username }}</strong><small>{{ row.user.username }}</small></td>
-            <td class="record-models"><strong>{{ row.name }}</strong><small>{{ row.providerName }} · {{ row.remoteModel }}</small></td>
-            <td class="record-state">{{ purposeLabels[row.purpose] || row.purpose }}<small>{{ callLabels[row.status] }}</small></td>
-            <td>{{ row.cost == null ? '—' : `¥${row.cost}` }}<small>实扣 {{ row.charged == null ? '—' : `¥${row.charged}` }}</small><small>{{ row.inputTokens ?? '未知' }} 入 / {{ row.outputTokens ?? '未知' }} 出</small><small v-if="row.billingStatus === 'review'" class="failure-text">用量待核对</small></td>
-            <td>{{ duration(row.durationMs) }}<small>{{ row.retryIndex }} 次重试</small></td>
-            <td class="record-problem"><small :title="row.userError || undefined" :class="{ 'failure-text': row.userError }">{{ row.userError || '—' }}</small></td>
-            <td class="record-actions"><button @click="openCall(row.callId)">详情</button></td>
+            <td>
+              {{ time(row.createdAt)
+              }}<code class="record-id" :title="row.callId">{{
+                row.callId
+              }}</code>
+            </td>
+            <td>
+              <strong>{{ row.user.nickname || row.user.username }}</strong><small>{{ row.user.username }}</small>
+            </td>
+            <td class="record-models">
+              <strong>{{ row.name }}</strong><small>{{ row.providerName }} · {{ row.remoteModel }}</small>
+            </td>
+            <td class="record-state">
+              {{ purposeLabels[row.purpose] || row.purpose
+              }}<small>{{ callLabels[row.status] }}</small>
+            </td>
+            <td>
+              {{ row.cost == null ? '—' : `¥${row.cost}`
+              }}<small>实扣
+                {{ row.charged == null ? '—' : `${row.charged} 额度` }}</small><small>{{ row.inputTokens ?? '未知' }} 入 /
+                {{ row.outputTokens ?? '未知' }} 出</small><small
+                v-if="row.billingStatus === 'review'"
+                class="failure-text"
+              >用量待核对</small>
+            </td>
+            <td>
+              {{ duration(row.durationMs)
+              }}<small>{{ row.retryIndex }} 次重试</small>
+            </td>
+            <td class="record-problem">
+              <small
+                :title="row.userError || undefined"
+                :class="{ 'failure-text': row.userError }"
+              >{{ row.userError || '—' }}</small>
+            </td>
+            <td class="record-actions">
+              <button @click="openCall(row.callId)">详情</button>
+            </td>
           </tr>
-          <tr v-if="!calls.length"><td colspan="8" class="muted">{{ busy ? '正在读取…' : '暂无调用记录；历史调用不补录输入输出' }}</td></tr>
+          <tr v-if="!calls.length">
+            <td colspan="8" class="muted">
+              {{ busy ? '正在读取…' : '暂无调用记录；历史调用不补录输入输出' }}
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
-    <footer class="records-pagination"><span>共 {{ total }} 条 · 每页 20 条</span><div><button :disabled="page <= 1 || busy" @click="movePage(-1)">上一页</button><span>{{ page }} / {{ pages }}</span><button :disabled="page >= pages || busy" @click="movePage(1)">下一页</button></div></footer>
+    <footer class="records-pagination">
+      <span>共 {{ total }} 条 · 每页 20 条</span>
+      <div>
+        <button :disabled="page <= 1 || busy" @click="movePage(-1)">
+          上一页</button><span>{{ page }} / {{ pages }}</span><button :disabled="page >= pages || busy" @click="movePage(1)">
+          下一页
+        </button>
+      </div>
+    </footer>
   </section>
   <AdminDialog
     :open="open"
@@ -301,7 +456,9 @@ onBeforeUnmount(() => {
         v-if="call && task"
         class="detail-back"
         @click="call = null"
-      >‹ 返回任务</button>
+      >
+        ‹ 返回任务
+      </button>
       <ModelCallDetail v-if="call" :call="call" />
       <TaskRecordDetail
         v-else-if="task"
@@ -313,6 +470,7 @@ onBeforeUnmount(() => {
       v-if="task && !call"
       :disabled="detailBusy"
       @click="inspectTask(task.id)"
-    >刷新任务</button><button @click="close">关闭</button></template>
+    >
+      刷新任务</button><button @click="close">关闭</button></template>
   </AdminDialog>
 </template>

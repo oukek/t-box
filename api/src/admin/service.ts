@@ -161,6 +161,7 @@ export class ConfigurationService {
       'supportsReasoning',
       'invocationMode',
       'inputPrice',
+      'costMultiplier',
       'outputPrice',
       'imagePrice',
       'contextPolicy',
@@ -199,6 +200,9 @@ export class ConfigurationService {
       ),
     )
     const pricing = prices({
+      costMultiplier:
+        (input.costMultiplier as string | undefined) ??
+        previous?.costMultiplier,
       inputPrice:
         (input.inputPrice as string | undefined) ?? previous?.inputPrice,
       outputPrice:
@@ -247,6 +251,7 @@ export class ConfigurationService {
             supportsVision,
             supportsReasoning,
             invocationMode: method,
+            costMultiplier: pricing.costMultiplier,
             inputPrice: pricing.inputPrice,
             outputPrice: pricing.outputPrice,
             imagePrice: pricing.imagePrice,
@@ -265,6 +270,7 @@ export class ConfigurationService {
           supportsVision,
           supportsReasoning,
           invocationMode: method,
+          costMultiplier: pricing.costMultiplier,
           inputPrice: pricing.inputPrice,
           outputPrice: pricing.outputPrice,
           imagePrice: pricing.imagePrice,
@@ -384,7 +390,7 @@ export class ConfigurationService {
         this.store
           .queryBuilder()
           .select(
-            'm.id AS modelId,m.name AS modelName,p.name AS providerName,m.model_id AS remoteId,m.purpose,m.invocation_mode AS invocationMode,\n      m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy,\n      m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.enabled AS modelEnabled,p.enabled AS providerEnabled,\n      m.max_concurrency AS maxConcurrency,p.max_concurrency AS providerConcurrency,p.id,p.base_url AS baseUrl,p.key_cipher AS keyCipher,p.revision',
+            'm.id AS modelId,m.name AS modelName,p.name AS providerName,m.model_id AS remoteId,m.purpose,m.invocation_mode AS invocationMode,\n      m.cost_multiplier AS costMultiplier,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy,\n      m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.enabled AS modelEnabled,p.enabled AS providerEnabled,\n      m.max_concurrency AS maxConcurrency,p.max_concurrency AS providerConcurrency,p.id,p.base_url AS baseUrl,p.key_cipher AS keyCipher,p.revision',
           )
           .from('ai_settings', 's')
           .innerJoin(
@@ -399,6 +405,7 @@ export class ConfigurationService {
           .orderBy('m.id', 'ASC')
           .setParameters({ p0: purpose, p1: purpose })
           .getRawMany<{
+          costMultiplier: string
           inputPrice: string
           outputPrice: string
           imagePrice: string
@@ -454,12 +461,15 @@ export class ConfigurationService {
             options.preferredConfigurationKey?.startsWith(row.modelId + ':'),
           )
         : undefined
-    const explicit = options.modelId ? eligible.find((row) => row.modelId === options.modelId) : undefined
+    const explicit = options.modelId
+      ? eligible.find((row) => row.modelId === options.modelId)
+      : undefined
     if (options.modelId && !explicit) {
       throw ErrorCode.AI_DISABLED('记忆提取模型不在可用普通会话模型池中')
     }
     const row =
-      pinned ?? explicit ??
+      pinned ??
+      explicit ??
       (options.peek
         ? eligible[0]!
         : await new ModelRouting(this.store.source).select(

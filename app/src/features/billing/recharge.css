@@ -75,51 +75,6 @@
   top: 8px;
   color: #557c6d;
 }
-.recharge-custom {
-  display: block;
-  background: white;
-  border: 1px solid #e0e7e3;
-  border-radius: 14px;
-  padding: 18px 16px;
-}
-.recharge-custom > span {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
-  color: #344e47;
-}
-.recharge-custom small {
-  font-size: 11px;
-  color: #8a9690;
-  font-weight: 400;
-}
-.recharge-custom > div {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 14px;
-  color: #547467;
-}
-.recharge-custom input {
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  border: 0 !important;
-  box-shadow: none !important;
-  background: transparent;
-  outline: 0;
-  font-size: 26px;
-  color: #243c34;
-  font-variant-numeric: tabular-nums;
-}
-.recharge-custom:focus-within {
-  border-color: #719582;
-}
-.recharge-custom input::placeholder {
-  font-size: 18px;
-  color: #b0b9b3;
-}
 .recharge-hint {
   font-size: 11px;
   color: #8a9690;
@@ -298,5 +253,14 @@
   }
   .billing-price-card h2 > span {
     margin-left: 0;
+  }
+}
+
+.recharge-presets.resource-pack-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 680px) {
+  .recharge-presets.resource-pack-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

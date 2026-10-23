@@ -47,8 +47,6 @@
     "test:configuration": "tsx test/configuration.integration.ts",
     "test:ledger-features": "tsx test/ledger-features.integration.ts",
     "test:db-init": "tsx test/database-initialization.integration.ts",
-    "db:upgrade:baby": "tsx src/db/upgrades/baby-diary-cli.ts",
-    "db:upgrade:memory": "tsx src/db/upgrades/memory-cli.ts",
     "test:memory": "tsx --test test/memory.test.ts test/memory-runtime.test.ts && tsx test/memory.integration.ts"
   },
   "dependencies": {

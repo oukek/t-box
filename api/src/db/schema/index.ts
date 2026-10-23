@@ -12,6 +12,7 @@ import { identitySchema } from './identity.js'
 import { memorySchema } from './memory.js'
 import { operationsSchema } from './operations.js'
 import { privateMediaSchema } from './private-media.js'
+import { quotaSchema } from './quota.js'
 import { resourcesSchema } from './resources.js'
 
 /** Composition only: application business tables and defaults belong to each app. */
@@ -19,6 +20,7 @@ export const databaseSchemas: readonly DatabaseSchema[] = [
   identitySchema,
   aiSchema,
   billingSchema,
+  quotaSchema,
   applicationsSchema,
   resourcesSchema,
   configurationSchema,

@@ -2,18 +2,16 @@
 import type {
   PaymentCapabilities,
   PaymentOrder,
-  RechargeConfiguration,
+  ResourcePackage,
 } from '@t-box/shared'
 import { WechatPay } from '@t-box/capacitor-wechat-pay'
-import { rechargeCents, rechargeOfferBonusCents } from '@t-box/shared'
 import { AppIcon } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { openWallet } from '../../core/navigation'
 import { request, RequestError } from '../../core/network'
-import { ErrorCode } from '../../error-codes.js'
 import CheckoutDialog from './CheckoutDialog.vue'
-import { centsYuan, displayMoney as fee } from './format'
+import { displayMoney as fee } from './format'
 import {
   paymentMode,
   purchaseBlockReason,
@@ -22,44 +20,24 @@ import {
 import './recharge.css'
 
 const unavailable = purchaseBlockReason()
-const config = ref<RechargeConfiguration | null>(null)
-const amount = ref('')
+const products = ref<ResourcePackage[]>([])
+const selected = ref('')
 const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
 const enabled = ref(false)
-const reason = ref(unavailable || '在线充值尚未开放。')
+const reason = ref(unavailable || '当前支付方式暂未开放。')
 const pendingOrder = ref<PaymentOrder | null>(null)
-const attemptedAmount = ref<string | null>(null)
+// Freeze selection on an unknown network outcome; retry the same idempotent order.
+const attempted = ref<{ packageId: string, version: number } | null>(null)
 const checkout = useWechatCheckout(async () => {
   pendingOrder.value = checkout.order.value
 })
-const cents = computed(() => rechargeCents(amount.value))
-const bonus = computed(() =>
-  pendingOrder.value
-    ? fee(pendingOrder.value.bonusAmount)
-    : centsYuan(
-        cents.value === null
-          ? 0
-          : config.value
-            ? (rechargeOfferBonusCents(cents.value, config.value) ?? 0)
-            : 0,
-      ),
-)
-const total = computed(() =>
-  pendingOrder.value
-    ? fee(pendingOrder.value.creditedAmount)
-    : centsYuan(
-        (cents.value ?? 0) +
-        (cents.value === null
-          ? 0
-          : config.value
-            ? (rechargeOfferBonusCents(cents.value, config.value) ?? 0)
-            : 0),
-      ),
+const product = computed(() =>
+  products.value.find((p) => p.id === selected.value),
 )
 const locked = computed(
-  () => busy.value || attemptedAmount.value !== null || !!pendingOrder.value,
+  () => busy.value || !!attempted.value || !!pendingOrder.value,
 )
 const payable = computed(
   () =>
@@ -74,13 +52,11 @@ async function load() {
   controller = new AbortController()
   const signal = controller.signal
   loading.value = true
-  enabled.value = false
   error.value = ''
+  enabled.value = false
   try {
-    const [options, capabilities] = await Promise.all([
-      request<{ data: RechargeConfiguration }>('/payments/recharge-options', {
-        signal,
-      }),
+    const [options, caps] = await Promise.all([
+      request<{ data: ResourcePackage[] }>('/wallet/packages', { signal }),
       request<{ data: PaymentCapabilities }>('/payments/capabilities', {
         signal,
       }),
@@ -88,47 +64,30 @@ async function load() {
     if (signal.aborted) {
       return
     }
-    config.value = options.data
-    if (
-      !pendingOrder.value &&
-      attemptedAmount.value === null &&
-      (!amount.value ||
-        (!options.data.customEnabled &&
-          !options.data.presets.some(
-            (preset) =>
-              rechargeCents(preset.amount) === rechargeCents(amount.value),
-          )))
-    ) {
-      amount.value = options.data.presets[0]?.amount ?? ''
+    products.value = options.data
+    if (!products.value.some((p) => p.id === selected.value)) {
+      selected.value = products.value[0]?.id ?? ''
     }
     enabled.value =
       !unavailable &&
-      capabilities.data.enabled &&
-      (!capabilities.data.modes ||
-        capabilities.data.modes.includes(paymentMode()))
-    reason.value = unavailable || '当前支付方式暂未开放。'
+      caps.data.enabled &&
+      (!caps.data.modes || caps.data.modes.includes(paymentMode()))
     if (paymentMode() === 'app' && !unavailable) {
-      enabled.value = false
       const status = await WechatPay.getStatus()
       if (signal.aborted) {
         return
       }
-      if (
-        !status.configured ||
-        status.appId !== capabilities.data.mobileAppId
-      ) {
-        reason.value = '当前 App 的微信支付尚未开放。'
-      } else if (!status.installed) {
-        reason.value = '请安装微信后刷新此页面再充值。'
-      } else {
-        enabled.value =
-          capabilities.data.enabled &&
-          (!capabilities.data.modes || capabilities.data.modes.includes('app'))
+      enabled.value &&=
+        status.configured &&
+        status.installed &&
+        status.appId === caps.data.mobileAppId
+      if (!enabled.value) {
+        reason.value = '请检查微信安装状态及当前 App 的支付配置。'
       }
     }
   } catch (cause) {
     if (!signal.aborted) {
-      error.value = cause instanceof Error ? cause.message : '读取充值配置失败'
+      error.value = cause instanceof Error ? cause.message : '读取资源包失败'
     }
   } finally {
     if (!signal.aborted) {
@@ -142,53 +101,52 @@ async function submit() {
     !enabled.value ||
     loading.value ||
     busy.value ||
-    !payable.value
+    !payable.value ||
+    (!product.value && !pendingOrder.value)
   ) {
-    return
-  }
-  if (
-    cents.value === null ||
-    (config.value &&
-      rechargeOfferBonusCents(cents.value, config.value) === null &&
-      !pendingOrder.value &&
-      attemptedAmount.value === null)
-  ) {
-    error.value = '充值金额至少 1 元，最多 10000 元，支持 2 位小数。'
     return
   }
   busy.value = true
   error.value = ''
-  attemptedAmount.value ??= amount.value
   try {
     if (!pendingOrder.value) {
-      const previewBonus = bonus.value
+      attempted.value ??= {
+        packageId: product.value!.id,
+        version: product.value!.version,
+      }
       pendingOrder.value = (
         await request<{ data: PaymentOrder }>('/payments/orders', {
           method: 'POST',
           headers: { 'Idempotency-Key': key },
-          body: JSON.stringify({ amount: attemptedAmount.value }),
+          body: JSON.stringify(attempted.value),
         })
       ).data
-      if (fee(pendingOrder.value.bonusAmount) !== previewBonus) {
-        throw ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED()
-      }
     }
-    amount.value = fee(pendingOrder.value.amount)
     await checkout.pay(pendingOrder.value)
   } catch (cause) {
+    const message = cause instanceof Error ? cause.message : '发起支付失败'
     if (
       !pendingOrder.value &&
       cause instanceof RequestError &&
-      cause.code === 'CUSTOM_RECHARGE_DISABLED'
+      cause.code === 'PACKAGE_NOT_AVAILABLE'
     ) {
-      attemptedAmount.value = null
+      attempted.value = null
       key = crypto.randomUUID()
       await load()
     }
-    error.value = cause instanceof Error ? cause.message : '发起支付失败'
+    error.value = message
   } finally {
     busy.value = false
   }
+}
+function newOrder() {
+  if (busy.value || pendingOrder.value?.status === 'pending') {
+    return
+  }
+  pendingOrder.value = null
+  attempted.value = null
+  key = crypto.randomUUID()
+  void load()
 }
 onMounted(async () => {
   await load()
@@ -196,12 +154,8 @@ onMounted(async () => {
     return
   }
   await checkout.resume()
-  if (controller?.signal.aborted) {
-    return
-  }
-  if (checkout.order.value) {
+  if (!controller?.signal.aborted && checkout.order.value) {
     pendingOrder.value = checkout.order.value
-    amount.value = fee(checkout.order.value.amount)
   }
 })
 onBeforeUnmount(() => controller?.abort())
@@ -210,121 +164,95 @@ onBeforeUnmount(() => controller?.abort())
 <template>
   <section class="billing-detail-page">
     <ApplicationHeader
-      title="余额充值"
-      back-label="余额"
+      title="购买资源包"
+      back-label="额度"
       @back="openWallet"
     >
-      <template #actions>
-        <button
-          class="wallet-refresh"
-          aria-label="刷新充值配置"
-          :disabled="loading"
-          @click="load"
-        >
-          <AppIcon name="refresh" :size="19" />
-        </button>
-      </template>
+      <template #actions><button
+        class="wallet-refresh"
+        aria-label="刷新资源包"
+        :disabled="loading || locked"
+        @click="load"
+      >
+        <AppIcon name="refresh" :size="19" /></button></template>
     </ApplicationHeader>
-    <p class="billing-page-intro">选择充值金额，用于 AI 会话与图片处理。</p>
+    <p class="billing-page-intro">
+      会话与图片共用额度，每个资源包独立计算有效期。
+    </p>
     <p
       v-if="error"
       class="wallet-error"
       role="alert"
     >
-      {{ error }}
-      <button
-        v-if="!config"
+      {{ error
+      }}<button
+        v-if="!locked"
         class="billing-text-button"
         @click="load"
       >
         重新加载
       </button>
     </p>
-    <div v-if="loading" class="wallet-empty">正在读取充值配置…</div>
+    <div v-if="loading" class="wallet-empty">正在读取资源包…</div>
     <form
-      v-else-if="config"
+      v-else
       class="recharge-form"
       @submit.prevent="submit"
     >
       <fieldset :disabled="locked">
-        <legend>选择金额</legend>
-        <div class="recharge-presets">
+        <legend>选择资源包</legend>
+        <div class="recharge-presets resource-pack-grid">
           <button
-            v-for="preset in config.presets"
-            :key="preset.amount"
+            v-for="p in products"
+            :key="p.id"
             type="button"
-            :class="{
-              selected: rechargeCents(amount) === rechargeCents(preset.amount),
-            }"
-            :aria-pressed="
-              rechargeCents(amount) === rechargeCents(preset.amount)
-            "
-            @click="amount = fee(preset.amount)"
+            :class="{ selected: selected === p.id }"
+            :aria-pressed="selected === p.id"
+            @click="selected = p.id"
           >
-            <strong><small>¥</small>{{ fee(preset.amount) }}</strong>
-            <span v-if="Number(preset.bonusAmount) > 0">赠 ¥{{ fee(preset.bonusAmount) }}</span>
-            <span v-else>到账 ¥{{ fee(preset.amount) }}</span>
+            <span>{{ p.name }}</span><strong>{{ p.quota }}<small> 额度</small></strong>
+            <span v-if="p.bonusQuota !== '0'">另赠 {{ p.bonusQuota }} 额度</span>
+            <span>{{ p.validDays }} 天有效 · ¥{{ p.price }}</span>
             <AppIcon
-              v-if="rechargeCents(amount) === rechargeCents(preset.amount)"
+              v-if="selected === p.id"
               name="check"
               :size="13"
             />
           </button>
         </div>
-        <label
-          v-if="config.customEnabled"
-          class="recharge-custom"
-          for="recharge-amount"
-        ><span>自定义金额<small>最低 ¥{{ config.minAmount }}</small></span>
-          <div>
-            <span>¥</span><input
-              id="recharge-amount"
-              v-model="amount"
-              aria-describedby="recharge-amount-help"
-              inputmode="decimal"
-              autocomplete="off"
-              maxlength="8"
-              placeholder="输入金额"
-              required
-              pattern="[0-9]+([.][0-9]{1,2})?"
-            ></div></label>
-        <p
-          v-if="config.customEnabled"
-          id="recharge-amount-help"
-          class="recharge-hint"
-        >
-          1–10000 元，最多 2 位小数
-        </p>
       </fieldset>
-      <p
-        v-if="!config.presets.length && !config.customEnabled && !pendingOrder"
-        class="recharge-hint"
-      >
-        暂无可用充值套餐，请稍后再试。
+      <p v-if="!products.length" class="recharge-hint">
+        暂无上架资源包，请稍后再试。
       </p>
-      <div class="recharge-summary">
+      <div v-if="pendingOrder || product" class="recharge-summary">
         <div>
-          <span>实付金额</span><strong>¥{{ cents === null ? "—" : centsYuan(cents) }}</strong>
+          <span>{{ pendingOrder?.packageName ?? product?.name }}</span><strong>¥{{ fee(pendingOrder?.amount ?? product?.price ?? '0') }}</strong>
         </div>
-        <div v-if="Number(bonus) > 0" class="recharge-bonus">
-          <span>赠送余额</span><strong>+ ¥{{ bonus }}</strong>
+        <div>
+          <span>额度 / 赠送</span><strong>{{ pendingOrder?.quota ?? product?.quota }} /
+            {{ pendingOrder?.bonusQuota ?? product?.bonusQuota }}</strong>
         </div>
-        <div class="recharge-total">
-          <span>到账余额</span><strong>¥{{ cents === null ? "—" : total }}</strong>
-        </div>
+        <p class="recharge-hint">
+          支付成功起
+          {{ pendingOrder?.validDays ?? product?.validDays }}
+          天有效，优先使用最早到期的额度。
+        </p>
+        <p v-if="!pendingOrder && product?.description" class="recharge-hint">
+          {{ product.description }}
+        </p>
       </div>
       <p v-if="pendingOrder" class="recharge-hint">
-        此订单金额与赠送已固定。{{
-          pendingOrder.status === "paid"
-            ? "已支付到账。"
-            : pendingOrder.status === "closed" || !payable
-              ? "订单已关闭或过期。"
-              : "可继续支付原订单。"
+        订单权益已固定。{{
+          pendingOrder.status === 'paid'
+            ? '已到账。'
+            : !payable
+              ? '订单已关闭或过期。'
+              : '可继续支付原订单。'
         }}
       </p>
       <p
         v-if="unavailable || !enabled"
-        id="recharge-unavailable"
+        id="purchase-unavailable"
         class="recharge-unavailable"
         role="status"
       >
@@ -332,43 +260,32 @@ onBeforeUnmount(() => controller?.abort())
       </p>
       <button
         class="button button-primary recharge-submit"
-        :disabled="
-          busy
-            || !enabled
-            || cents === null
-            || !payable
-            || (!pendingOrder
-              && !attemptedAmount
-              && config
-              && rechargeOfferBonusCents(cents, config) === null)
-        "
-        :aria-describedby="!enabled ? 'recharge-unavailable' : undefined"
+        :disabled="busy || !enabled || !payable || (!product && !pendingOrder)"
+        :aria-describedby="!enabled ? 'purchase-unavailable' : undefined"
       >
         {{
           busy
-            ? "正在发起…"
-            : pendingOrder?.status === "paid"
-              ? "已到账"
+            ? '正在发起…'
+            : pendingOrder?.status === 'paid'
+              ? '已到账'
               : !payable
-                ? "订单不可支付"
-                : pendingOrder || attemptedAmount
-                  ? "继续支付原订单"
-                  : "微信支付"
+                ? '订单不可支付'
+                : attempted || pendingOrder
+                  ? '继续支付原订单'
+                  : '微信支付'
         }}
       </button>
-      <p class="recharge-hint">支付确认后自动到账，可在余额页查看充值订单。</p>
-      <details
-        v-if="config.customEnabled && config.bonusRules.length"
-        class="recharge-rules"
+      <button
+        v-if="pendingOrder && pendingOrder.status !== 'pending'"
+        type="button"
+        class="billing-text-button"
+        @click="newOrder"
       >
-        <summary>自定义充值满赠规则</summary>
-        <p v-for="rule in config.bonusRules" :key="rule.threshold">
-          单笔满 ¥{{ fee(rule.threshold) }}，赠 ¥{{ fee(rule.bonus) }}
-        </p>
-        <p>
-          套餐使用各自的赠送优惠；自定义金额只取最高达标档，不叠加。实际赠送以订单为准。
-        </p>
-      </details>
+        购买其他资源包
+      </button>
+      <p class="recharge-hint">
+        支付结果由服务端确认。额度不等同于人民币，不支持提现。
+      </p>
     </form>
     <CheckoutDialog
       :open="checkout.open.value"

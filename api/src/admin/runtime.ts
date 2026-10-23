@@ -31,12 +31,12 @@ export class DatabaseChatProvider implements ChatProvider {
     })
     const metered = this.billing
       ? new MeteredChatProvider(
-          provider,
+          new ProtectedChatProvider(provider, config),
           this.billing,
           config.billingModelId,
           config.prices,
         )
-      : provider
+      : new ProtectedChatProvider(provider, config)
     const audited = this.concurrency
       ? new AuditedChatProvider(
           metered,
@@ -45,7 +45,7 @@ export class DatabaseChatProvider implements ChatProvider {
           this.configuration.configuration,
         )
       : metered
-    return new ProtectedChatProvider(audited, config)
+    return audited
   }
 
   async next(_input: ProviderInput): Promise<never> {

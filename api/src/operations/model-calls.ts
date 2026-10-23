@@ -9,6 +9,8 @@ import type { StoredAiModelCall } from '../db/records/models-entities.js'
 import type { StoredAgentTask } from '../db/records/tasks-entities.js'
 import { isoTime } from '@t-box/server-foundation/time'
 import { decimal } from '../billing/money.js'
+import { QuotaInventory } from '../billing/quota/inventory.js'
+import { quotaText } from '../billing/quota/math.js'
 import { ErrorCode } from '../error-codes.js'
 import { ModelCallAudit } from '../models/audit.js'
 import { jsonValue, operationFilters } from './queries.js'
@@ -50,7 +52,7 @@ ModelSnapshot &
 UserSnapshot & {
   billing_status: string | null
   fee_micro: string | null
-  charged_micro: string | null
+  quota_charged: string | null
   cache_write_tokens: SqlNumber | null
   created_at: Date | string
   started_at: Date | string | null
@@ -64,7 +66,13 @@ type CallDetailRow = CallRow &
     'diagnostics_json' |
     'provider_request_id' |
     'response_id'
-  > & { prices_json: unknown }
+  > & {
+    prices_json: unknown
+    upstream_original_micro: string | null
+    quota_due: string | null
+    mode: import('@t-box/shared').BillingMode | null
+    tariff_json: unknown
+  }
 type TaskRow = Pick<
   StoredAgentTask,
   | 'id' |
@@ -122,7 +130,8 @@ function callView(row: CallRow): OperationsModelCall {
     status: row.status,
     billingStatus: row.billing_status,
     cost: row.fee_micro == null ? null : amount(row.fee_micro),
-    charged: row.charged_micro == null ? null : amount(row.charged_micro),
+    charged:
+      row.quota_charged == null ? null : quotaText(BigInt(row.quota_charged)),
     inputTokens: nullableNumber(row.input_tokens),
     outputTokens: nullableNumber(row.output_tokens),
     cachedInputTokens: nullableNumber(row.cached_tokens),
@@ -140,7 +149,7 @@ function callView(row: CallRow): OperationsModelCall {
 const summaryColumns = `c.id,c.logical_id,c.retry_index,c.task_id,c.message_id,c.user_id,u.username,u.nickname,
   c.provider_id,c.provider_name,c.model_id,c.model_name,c.remote_model,c.invocation_mode,c.purpose,c.method,c.status,
   c.user_error,c.input_tokens,c.output_tokens,c.cached_tokens,c.reasoning_tokens,c.images,c.duration_ms,c.queue_ms,c.created_at,c.started_at,c.finished_at,
-  b.status AS billing_status,b.fee_micro,b.charged_micro,b.cache_write_tokens`
+  b.status AS billing_status,b.fee_micro,b.quota_charged,b.cache_write_tokens`
 /** Immutable model/provider snapshots survive configuration edits and removal. Large payloads are detail-only. */
 export class ModelOperations {
   constructor(readonly source: DataSource) {}
@@ -184,7 +193,7 @@ export class ModelOperations {
   async call(id: string): Promise<OperationsModelCallDetail> {
     const row = await this.callSelection()
       .addSelect(
-        'c.input_json,c.output_json,c.diagnostics_json,c.provider_request_id,c.response_id,b.prices_json',
+        'c.input_json,c.output_json,c.diagnostics_json,c.provider_request_id,c.response_id,b.prices_json,b.upstream_original_micro,b.quota_due,b.mode,b.tariff_json',
       )
       .where('c.id=:id', { id })
       .getRawOne<CallDetailRow>()
@@ -199,6 +208,19 @@ export class ModelOperations {
       providerRequestId: row.provider_request_id,
       responseId: row.response_id,
       prices: jsonValue(row.prices_json),
+      originalCost:
+        row.upstream_original_micro == null
+          ? null
+          : amount(row.upstream_original_micro),
+      expectedQuota:
+        row.quota_due == null ? null : quotaText(BigInt(row.quota_due)),
+      billingMode: row.mode,
+      tariff: jsonValue(row.tariff_json),
+      allocations: await new QuotaInventory().allocations(
+        this.source.manager,
+        row.user_id,
+        row.id,
+      ),
     }
   }
 
@@ -249,7 +271,7 @@ export class ModelOperations {
     const [charges, calls, models] = await Promise.all([
       // native-sql: aggregate/correlated snapshot; preserve join cardinality and exact monetary totals
       this.source.query<TaskCharges[]>(
-        `SELECT b.task_id,COUNT(*) AS calls,SUM(c.id IS NULL) AS legacy_calls,SUM(b.fee_micro) AS cost,SUM(b.charged_micro) AS charged,SUM(b.status IN ('reserved','review')) AS unresolved,
+        `SELECT b.task_id,COUNT(*) AS calls,SUM(c.id IS NULL) AS legacy_calls,SUM(b.fee_micro) AS cost,SUM(b.quota_charged) AS charged,SUM(b.status IN ('reserved','review')) AS unresolved,
         SUM(b.input_tokens) AS input_tokens,SUM(b.output_tokens) AS output_tokens FROM billing_usage b LEFT JOIN ai_model_calls c ON c.id=b.id WHERE b.task_id IN (${placeholders}) GROUP BY b.task_id`,
         ids,
       ),
@@ -291,7 +313,7 @@ export class ModelOperations {
           failedCalls: Number(invoked?.failures || 0),
           models: models.filter((value) => value.task_id === row.id).map(model),
           cost: amount(billed?.cost),
-          charged: amount(billed?.charged),
+          charged: quotaText(BigInt(billed?.charged ?? 0)),
           unresolved: Number(billed?.unresolved || 0),
           inputTokens: Number(billed?.input_tokens || 0),
           outputTokens: Number(billed?.output_tokens || 0),

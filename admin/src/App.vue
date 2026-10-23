@@ -13,13 +13,17 @@ import ModelsPage from './features/ModelsPage.vue'
 import OperationsPage from './features/OperationsPage.vue'
 import PaymentsPage from './features/PaymentsPage.vue'
 import ProvidersPage from './features/ProvidersPage.vue'
-import RechargeSettingsPage from './features/RechargeSettingsPage.vue'
+import ResourcePackagesPage from './features/ResourcePackagesPage.vue'
 import SupportPage from './features/SupportPage.vue'
 import UsersPage from './features/UsersPage.vue'
 import WorkflowPage from './features/WorkflowPage.vue'
 
 const pages = {
-  'operations': { title: '任务与运行记录', symbol: 'connection', component: OperationsPage },
+  'operations': {
+    title: '任务与运行记录',
+    symbol: 'connection',
+    component: OperationsPage,
+  },
   'configuration': {
     title: '配置中心',
     symbol: 'model',
@@ -43,11 +47,11 @@ const pages = {
     component: ProvidersPage,
   },
   'models': { title: '模型', symbol: 'model', component: ModelsPage },
-  'billing': { title: '用户与余额', symbol: 'users', component: BillingPage },
-  'recharge': {
-    title: '充值配置',
+  'billing': { title: '用户与额度', symbol: 'users', component: BillingPage },
+  'packages': {
+    title: '资源包与费率',
     symbol: 'model',
-    component: RechargeSettingsPage,
+    component: ResourcePackagesPage,
   },
   'payments': { title: '支付订单', symbol: 'model', component: PaymentsPage },
   'users': { title: '管理员', symbol: 'users', component: UsersPage },
@@ -114,6 +118,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('hashchange', readHash)
   window.removeEventListener('admin-session-expired', expired)
 })
+function openLogout() {
+  logoutOpen.value = true
+  error.value = ''
+}
 </script>
 
 <template>
@@ -158,7 +166,7 @@ onBeforeUnmount(() => {
             required
             maxlength="128"
           ></label><button class="primary login-button">
-            {{ busy ? "正在登录…" : "登录 →" }}
+            {{ busy ? '正在登录…' : '登录 →' }}
           </button>
         </fieldset>
       </form>
@@ -200,10 +208,7 @@ onBeforeUnmount(() => {
             class="icon-button"
             aria-label="退出登录"
             :disabled="busy"
-            @click="
-              logoutOpen = true;
-              error = '';
-            "
+            @click="openLogout"
           >
             <AdminIcon name="logout" :size="17" />
           </button>
@@ -241,7 +246,7 @@ onBeforeUnmount(() => {
           :disabled="busy"
           @click="signOut"
         >
-          {{ busy ? "正在退出…" : "退出登录" }}
+          {{ busy ? '正在退出…' : '退出登录' }}
         </button>
       </template>
     </AdminDialog>

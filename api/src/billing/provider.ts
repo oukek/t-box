@@ -5,7 +5,7 @@ import { ApiError } from '@t-box/server-foundation/errors'
 import { estimateAdmissionTokens } from '../agent/token-estimate.js'
 import { settingNumber } from '../configuration/defaults.js'
 import { ErrorCode } from '../error-codes.js'
-import { money, tokenFee } from './money.js'
+import { supplierCost, tokenFee } from './money.js'
 
 export class MeteredChatProvider implements ChatProvider {
   readonly mode
@@ -75,7 +75,12 @@ export class MeteredChatProvider implements ChatProvider {
     input.signal.throwIfAborted()
     // Conservative admission budget, not billable usage. JSON/UTF-8 includes
     // tool schemas, attachments and prior reasoning; final fee uses usage only.
-    const estimate = estimateAdmissionTokens(input)
+    const estimate = estimateAdmissionTokens({
+      ...input,
+      instructions: [this.provider.admissionInstructions, input.instructions]
+        .filter(Boolean)
+        .join('\n\n'),
+    })
     const mode = await this.billing.begin({
       id: execution.operationId,
       userId: execution.userId,
@@ -83,16 +88,29 @@ export class MeteredChatProvider implements ChatProvider {
       messageId: execution.messageId,
       agentId: execution.agentId,
       purpose,
-      free: purpose === 'memory_extraction',
+      free: purpose === 'memory_extraction' || purpose === 'compaction',
+      logicalRequestId: execution.logicalRequestId,
+      retryIndex: execution.retryIndex,
+      budget: {
+        inputTokens: estimate,
+        outputTokens: input.outputTokenBudget ?? this.maxOutputTokens ?? 8192,
+      },
       modelId: this.modelId,
       prices: this.prices,
       kind: 'conversation',
-      reserve: tokenFee(
+      reserve: supplierCost(
+        tokenFee(
+          this.prices,
+          estimate,
+          input.outputTokenBudget ?? this.maxOutputTokens ?? 8192,
+        ),
         this.prices,
-        estimate,
-        input.outputTokenBudget ?? this.maxOutputTokens ?? 8192,
       ),
     })
+    const stopHeartbeat = this.billing.keepAlive(
+      execution.userId,
+      execution.operationId,
+    )
     let settled = false
     try {
       const turn = await invoke({
@@ -118,21 +136,17 @@ export class MeteredChatProvider implements ChatProvider {
         await this.billing.uncertain(execution.userId, execution.operationId)
         // Missing metering must not disable genuine free/waived model output.
         // Keep an unknown-usage audit record, but only paid calls need a fee gate.
-        if (
-          mode === 'record_only' ||
-          (money(this.prices.inputPrice) === 0n &&
-            money(this.prices.outputPrice) === 0n)
-        ) {
+        if (mode === 'record_only') {
           return turn
         }
         throw ErrorCode.USAGE_MISSING()
       }
       return turn
     } catch (error) {
-      if (!settled) {
-        await this.billing.uncertain(execution.userId, execution.operationId)
-      }
+      await this.billing.failed(execution.userId, execution.operationId)
       throw error
+    } finally {
+      await stopHeartbeat()
     }
   }
 
@@ -151,7 +165,9 @@ export class MeteredChatProvider implements ChatProvider {
     const estimate = estimateAdmissionTokens({
       history: [{ role: 'user', content: input.text.slice(0, 2000) }],
       tools: [],
-      instructions: input.instructions || '',
+      instructions: [this.provider.admissionInstructions, input.instructions]
+        .filter(Boolean)
+        .join('\n\n'),
     })
     await this.billing.begin({
       id: execution.operationId,
@@ -162,8 +178,16 @@ export class MeteredChatProvider implements ChatProvider {
       kind: 'conversation',
       purpose: 'title',
       free: true,
-      reserve: tokenFee(this.prices, estimate, output),
+      budget: { inputTokens: estimate, outputTokens: output },
+      reserve: supplierCost(
+        tokenFee(this.prices, estimate, output),
+        this.prices,
+      ),
     })
+    const stopHeartbeat = this.billing.keepAlive(
+      execution.userId,
+      execution.operationId,
+    )
     let settled = false
     try {
       const title = await this.provider.title({
@@ -183,10 +207,10 @@ export class MeteredChatProvider implements ChatProvider {
       }
       return title
     } catch (error) {
-      if (!settled) {
-        await this.billing.uncertain(execution.userId, execution.operationId)
-      }
+      await this.billing.failed(execution.userId, execution.operationId)
       throw error
+    } finally {
+      await stopHeartbeat()
     }
   }
 }

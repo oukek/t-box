@@ -33,19 +33,4 @@ API 内置 worker 或独立 `t-box-worker` 每 10 秒扫描；每个进程串行
 
 ## 升级与验证
 
-空库执行 `pnpm db:init`。上一版基线的已有库，备份并停止旧 API/worker 写入后执行：
-
-```sh
-pnpm --filter @t-box/api db:upgrade:memory --check
-pnpm --filter @t-box/api db:upgrade:memory
-```
-
-旧本地库没有统一初始化标记时，可显式追加 `--extensions-only` 补齐已声明的扩展，不接管旧全库结构。当前本机已补齐，日常直接 `pnpm dev`。服务器编译产物为 `dist/db/upgrades/memory-cli.js`，部署不会隐式升级数据库。详见 [数据库升级](database-initialization.md)。
-
-```sh
-pnpm test:memory
-MYSQL_DATABASE=t_box_test_init pnpm test:db-init
-MYSQL_DATABASE=t_box_test_upgrade pnpm --filter @t-box/api exec tsx test/baby-diary-upgrade.integration.ts
-```
-
-测试创建独立临时数据库，账号需有建库/删库权限；使用模拟模型，覆盖隔离、版本冲突、平台付费、来源失效、确认、自动重试、忘记与提取并发、会话开关及简单问题不增调用，不请求付费模型。
+空库执行 `pnpm db:init`。当前资源包体系采用新基线 `2026-10-22.2`，旧资金结构不做兼容，请配置新数据库初始化，原有数据不自动删除。记忆整理成本由平台承担，免费用户与收费用户均不扣记忆整理额度。数据库流程见 [初始化说明](database-initialization.md)。

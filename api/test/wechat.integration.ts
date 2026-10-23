@@ -16,6 +16,7 @@ import { PaymentService } from '../src/payments/service.js'
 import { merchantOrder, WechatGateway } from '../src/payments/wechat.js'
 import { PlatformService } from '../src/platform/service.js'
 import { cleanupUsers } from './fixtures.js'
+import { paymentSelection } from './quota-fixtures.js'
 
 const source = await createDataSource().initialize()
 const users: string[] = []
@@ -28,8 +29,7 @@ const rewrite = (sql: string) =>
 const isolated = new Proxy(source, {
   get(target, key) {
     if (key === 'query') {
-      return (sql: string, args?: unknown[]) =>
-        target.query(rewrite(sql), args)
+      return (sql: string, args?: unknown[]) => target.query(rewrite(sql), args)
     }
     if (key === 'transaction') {
       return (work: (db: EntityManager) => Promise<unknown>) =>
@@ -183,11 +183,9 @@ const p = new PlatformService(
   config,
   gateway.authorization,
 )
-const fixturePayments = new PaymentService(source, p.billing, gateway, {
-  async bonusCents() {
-    return 0
-  },
-})
+const fixturePayments = new PaymentService(source, p.billing, gateway)
+let productSelection: ReturnType<typeof paymentSelection> | undefined
+const selection = () => (productSelection ??= paymentSelection(p.billing))
 function notify(
   id: string,
   total = 1000,
@@ -236,9 +234,7 @@ function notify(
   return { raw, headers: signed(raw, key, serial) }
 }
 try {
-  await source.query('INSERT INTO payment_settings(id) VALUES(?)', [
-    settingsId,
-  ])
+  await source.query('INSERT INTO payment_settings(id) VALUES(?)', [settingsId])
   await source.query(
     'INSERT INTO admin_users(id,username,password_hash) VALUES(?,?,?)',
     [adminId, `wx_${adminId.slice(0, 8)}`, await hashPassword('fixture123')],
@@ -260,7 +256,11 @@ try {
     'wechat-fixture',
   )
   users.push(a.user.id)
-  const native = await fixturePayments.create(a.user.id, '10', randomUUID())
+  const native = await fixturePayments.create(
+    a.user.id,
+    await selection(),
+    randomUUID(),
+  )
   const qr = await p.payments.intent(a.user.id, native.id, 'native')
   assert.equal(qr.type, 'qr')
   await assert.rejects(
@@ -271,20 +271,24 @@ try {
   await assert.rejects(p.payments.notify(wrong.raw, wrong.headers), {
     code: 'PAYMENT_MISMATCH',
   })
-  assert.equal((await p.billing.wallet(a.user.id)).balance, '0.000000')
+  assert.equal((await p.billing.wallet(a.user.id)).balance, '0.0000')
   const valid = notify(native.id)
   await Promise.all([
     p.payments.notify(valid.raw, valid.headers),
     p.payments.notify(valid.raw, valid.headers),
   ])
-  assert.equal((await p.billing.wallet(a.user.id)).balance, '10.000000')
+  assert.equal((await p.billing.wallet(a.user.id)).balance, '10.0000')
   await assert.rejects(
     p.payments.notify(Buffer.from(valid.raw.toString() + ' '), valid.headers),
   )
   console.info(
     '✓ Native request/response signatures, exact merchant order number, forged callbacks and concurrent duplicate credit',
   )
-  const h5 = await fixturePayments.create(a.user.id, '10', randomUUID())
+  const h5 = await fixturePayments.create(
+    a.user.id,
+    await selection(),
+    randomUUID(),
+  )
   const link = await p.payments.intent(a.user.id, h5.id, 'h5', '203.0.113.10')
   assert.equal(link.type, 'redirect')
   if (link.type === 'redirect') {
@@ -293,7 +297,11 @@ try {
       `https://app.fixture.example/#/ai/recharge?paymentOrder=${h5.id}`,
     )
   }
-  const js = await fixturePayments.create(a.user.id, '10', randomUUID())
+  const js = await fixturePayments.create(
+    a.user.id,
+    await selection(),
+    randomUUID(),
+  )
   const auth = await p.payments.intent(a.user.id, js.id, 'jsapi')
   assert.equal(auth.type, 'redirect')
   if (auth.type !== 'redirect') {
@@ -337,8 +345,12 @@ try {
     amount: { total: 1000, currency: 'CNY' },
   }
   await p.payments.refresh(a.user.id, h5.id)
-  assert.equal((await p.billing.wallet(a.user.id)).balance, '20.000000')
-  const appOrder = await fixturePayments.create(a.user.id, '10', randomUUID())
+  assert.equal((await p.billing.wallet(a.user.id)).balance, '20.0000')
+  const appOrder = await fixturePayments.create(
+    a.user.id,
+    await selection(),
+    randomUUID(),
+  )
   const appIntent = await p.payments.intent(a.user.id, appOrder.id, 'app')
   assert.equal(appIntent.type, 'app')
   if (appIntent.type !== 'app') {
@@ -381,7 +393,7 @@ try {
   await assert.rejects(
     p.payments.notify(foreignAccount.raw, foreignAccount.headers),
   )
-  assert.equal((await p.billing.wallet(a.user.id)).balance, '20.000000')
+  assert.equal((await p.billing.wallet(a.user.id)).balance, '20.0000')
   // Query uses the mode stored on the order, not an AppID supplied by the client.
   transaction = {
     ...transaction,
@@ -406,7 +418,7 @@ try {
     p.payments.notify(appSuccess.raw, appSuccess.headers),
     p.payments.notify(appSuccess.raw, appSuccess.headers),
   ])
-  assert.equal((await p.billing.wallet(a.user.id)).balance, '30.000000')
+  assert.equal((await p.billing.wallet(a.user.id)).balance, '30.0000')
   const caps = await p.payments.capabilities()
   assert(caps.modes?.includes('app'))
   assert.equal(caps.mobileAppId, settings.mobileAppId)
@@ -453,9 +465,12 @@ try {
   const oldPayment = await gateway.query(native.id, { configurationId: oldId })
   assert.equal(oldPayment!.configurationId, oldId)
   assert.equal((await p.payments.capabilities()).enabled, false)
-  await assert.rejects(fixturePayments.create(a.user.id, '1', randomUUID()), {
-    code: 'PAYMENT_NOT_CONFIGURED',
-  })
+  await assert.rejects(
+    fixturePayments.create(a.user.id, await selection(), randomUUID()),
+    {
+      code: 'PAYMENT_NOT_CONFIGURED',
+    },
+  )
   const late = notify(js.id, 1000, rotated.privateKey, 'PUB_KEY_ID_rotated')
   // Different order needs a different channel transaction id.
   const payload = JSON.parse(late.raw.toString())
@@ -481,7 +496,7 @@ try {
     lateRaw,
     signed(lateRaw, rotated.privateKey, 'PUB_KEY_ID_rotated'),
   )
-  assert.equal((await p.billing.wallet(a.user.id)).balance, '40.000000')
+  assert.equal((await p.billing.wallet(a.user.id)).balance, '40.0000')
   await assert.rejects(config.save({ ...settings, id: oldId }, adminId), {
     code: 'PAYMENT_CONFIG_STALE',
   })

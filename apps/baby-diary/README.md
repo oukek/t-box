@@ -55,28 +55,11 @@ OSS_PRIVATE_RESOURCE_BUCKET=your-private-bucket
 
 ## 开发、升级和发布
 
-已有 `2026-10-18.1` 初始化库先备份，再运行：
-
-```bash
-pnpm --filter @t-box/api db:upgrade:baby --check
-pnpm db:upgrade:baby
-```
-
-当前升级入口同时补齐已声明的平台扩展（宝宝日记、私有文件及 AI 记忆表）、更新初始化标记，不重建旧表、不重写默认配置、不运行旧 seed。未知基线默认拒绝升级。若本地仍保留 `schema_migrations`，可显式使用 `pnpm --filter @t-box/api db:upgrade:baby --extensions-only` 只增加应用表，不接管或改写原平台基线；先带 `--check` 检查。首次空库仍使用 `pnpm db:init`。数据库升级是操作员显式操作，API 启动不自动执行 DDL。
-
-`pnpm dev` 启动全部服务；宝宝应用开发端口 5181。开发环境通过应用市场安装后打开；`pnpm --filter @t-box/baby-diary-web build` 生成校验过的独立产物。Actions「Independent application release」下拉列表已包含宝宝日记，上传/入库后由后台选择版本发布；运行 `pnpm apps:workflow` 可重新生成列表。
-
-```bash
-pnpm test:baby-diary
-MYSQL_DATABASE=t_box_test_baby_diary pnpm db:init
-MYSQL_DATABASE=t_box_test_baby_diary pnpm test:baby-diary:integration
-```
-
-测试必须使用显式的 `t_box_test_*` 临时库，不使用个人业务库；测试 OSS 使用内存或临时本地文件，不发真实云端请求。
+当前采用统一新库初始化，不再提供旧开发库兼容升级。配置新的 `MYSQL_DATABASE` 后执行 `pnpm db:init`，已有数据库保持原样。资源包基线及部署步骤见 [数据库初始化](../../docs/database-initialization.md)。
 
 ## 1.2 升级
 
-先按 `docs/database-initialization.md` 执行 `db:upgrade:baby --check` 并升级数据库；历史本地库使用明确的 `--extensions-only`。在管理后台发布 1.2.0 后，由应用市场更新安装，才能获得新增 care 方法权限。仅修改源图标或开发源码不会重写不可变的已发布版本。旧安装的开发页面会显示更新入口。
+先按 `docs/database-initialization.md` 初始化新数据库，不转换旧开发库。在管理后台发布 1.2.0 后，由应用市场更新安装，才能获得新增 care 方法权限。仅修改源图标或开发源码不会重写不可变的已发布版本。旧安装的开发页面会显示更新入口。
 
 运行 `pnpm test:baby-care` 可检查纯计算/离线队列和独立临时数据库的照护事务、权限、协作、修改历史；测试会自行创建并删除随机命名的数据库，不改个人业务库。
 

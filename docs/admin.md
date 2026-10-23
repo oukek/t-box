@@ -68,3 +68,5 @@ erDiagram
 `pnpm test:admin` 使用本地 MySQL 与本地模拟 OpenAI 服务，验证登录撤销、CSRF、密钥加密、模型发现、配置依赖、Responses 探测及真实 WebSocket 使用数据库配置。测试临时切换当前模型，结束后恢复原配置并删除自己创建的记录；在开发数据库执行。真实服务商连通性仍需填写凭据后在后台验证。
 
 官方参考：[List models](https://developers.openai.com/api/reference/resources/models/methods/list)。
+
+资源包商品支持草稿、发布版本与上架开关；公开额度费率独立于模型采购成本。免费用户在「用户与额度」设置，完整审计但不扣额度。操作和初始化要求见 [计费与支付](billing-and-payments.md)。

@@ -131,7 +131,7 @@ export function useWechatCheckout(onPaid: () => Promise<void>) {
       }
       order.value = result.data
       if (result.data.status === 'paid') {
-        notice.value = '充值已到账'
+        notice.value = '资源包已到账'
         qr.value = ''
         forgetCheckout()
         await onPaid()
@@ -143,13 +143,13 @@ export function useWechatCheckout(onPaid: () => Promise<void>) {
       ) {
         notice.value = purchaseBlockReason()
           ? '订单已关闭或过期'
-          : '订单已关闭或过期，请重新充值'
+          : '订单已关闭或过期，请重新购买'
         qr.value = ''
         forgetCheckout()
         return
       }
       error.value = ''
-      notice.value = clientHint || '等待支付确认，完成后余额会自动更新'
+      notice.value = clientHint || '等待支付确认，完成后额度会自动更新'
     } catch (e) {
       if (version === generation) {
         error.value = e instanceof Error ? e.message : '核对支付结果失败'
@@ -257,7 +257,7 @@ export function useWechatCheckout(onPaid: () => Promise<void>) {
     } catch (e) {
       if (!disposed) {
         error.value = e instanceof Error ? e.message : '发起支付失败'
-        notice.value = purchaseBlockReason() || '可在充值订单中核对或继续支付'
+        notice.value = purchaseBlockReason() || '可在购买订单中核对或继续支付'
       }
       if (open.value && order.value?.status === 'pending') {
         void poll(order.value.id, generation)

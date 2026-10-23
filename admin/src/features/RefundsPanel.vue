@@ -98,7 +98,9 @@ onMounted(load)
     <div class="refund-heading">
       <div>
         <h2>退款记录</h2>
-        <p class="muted">全额原路退回实付金额，同时收回对应赠送额度。</p>
+        <p class="muted">
+          按原订单未使用权益比例退回人民币，并收回对应额度（含赠送）。
+        </p>
       </div>
       <div class="actions">
         <button :disabled="busy" @click="load">刷新</button><button @click="begin">发起退款</button>
@@ -127,7 +129,7 @@ onMounted(load)
             </td>
             <td>
               ¥{{ Number(refund.amount)
-              }}<small>收回 ¥{{ Number(refund.reclaimedCredit) }}</small>
+              }}<small>收回 {{ Number(refund.reclaimedQuota) }} 额度</small>
             </td>
             <td>
               {{ labels[refund.status]
@@ -153,7 +155,7 @@ onMounted(load)
   </section>
   <AdminDialog
     :open="open"
-    title="申请充值退款"
+    title="申请资源包退款"
     :busy="busy"
     @close="open = false"
   >
@@ -175,10 +177,10 @@ onMounted(load)
         placeholder="最多 26 个字"
       ></label>
       <div v-if="selected" class="refund-summary">
-        <span>原路退回<strong>¥{{ Number(selected.amount) }}</strong></span><span>收回余额（含赠送）<strong>¥{{ Number(selected.creditedAmount) }}</strong></span>
+        <span>原实付金额<strong>¥{{ Number(selected.amount) }}</strong></span><span>原基础 / 赠送额度<strong>{{ selected.quota }} / {{ selected.bonusQuota }}</strong></span>
       </div>
       <p class="muted">
-        只有可用余额足够收回充值及赠送额度时才能申请。提交后先冻结对应额度，渠道确认成功再记退款流水。超时将继续核对原退款单，请勿重复发起。
+        仅退款原订单未使用的权益，实际退款金额由后台按比例计算，向下取整到分。使用中的额度需先完成结算；提交后冻结对应权益，退款成功再收回，其他资源包不受影响。超时继续核对原退款单。
       </p>
       <p
         v-if="dialogError"

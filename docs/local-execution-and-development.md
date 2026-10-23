@@ -77,7 +77,7 @@ pnpm apps:submit:local all
 
 - `api/.env`：首次拉取从 `.env.example` 复制并填写；已有配置不要覆盖。MySQL 必须启动。使用 Redis 时同时启动 Redis；暂不使用可将 `REDIS_ADDR` 留空。
 - 新的空数据库：先 `pnpm install`，再 `pnpm db:init`、`pnpm admin:init`；普通用户可从网页注册，或可选运行 `pnpm user:init`。
-- 已有数据库：日常直接 `pnpm dev`。`db:init` 不是升级工具，也不会自动接管旧迁移库。当前本机旧开发库已经补齐宝宝日记扩展表，不需要重复升级。其他环境按 [数据库初始化与升级](database-initialization.md) 选择对应流程。
+- 已有数据库：日常直接 `pnpm dev`。`db:init` 不是升级工具，也不会自动接管旧迁移库。额度体系现已使用新基线 `2026-10-22.2`，旧库不能直接用于当前代码，请配置新库并初始化，原库保持原样。按 [数据库初始化与升级](database-initialization.md) 选择对应流程。
 - `ECONNREFUSED ...:3306` / MySQL 连接失败：检查数据库服务及 `.env` 的地址。`Table ... doesn't exist`：核对当前连接的数据库与初始化/升级状态，不要删库重来。
 - `EADDRINUSE` / `Port ... is already in use`：另一个开发进程占用了端口，先在对应终端 Ctrl+C 停止旧进程；不要同时运行 `pnpm dev` 和单独启动命令。
 - `Found 0 errors` 是 TypeScript 成功提示，不是业务报错；新的完整启动不再启动大量包编译监听器。开发模式也不再逐条输出成功 HTTP 请求，错误日志仍保留。

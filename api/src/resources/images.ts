@@ -3,10 +3,11 @@ import type { ConfigurationService } from '../admin/service.js'
 import type { ProviderConcurrency } from '../billing/concurrency.js'
 import type { BillingService } from '../billing/service.js'
 import type { ResourceService } from './service.js'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { object, text } from '@t-box/server-foundation/input'
 import OpenAI, { toFile } from 'openai'
-import { money } from '../billing/money.js'
+import sharp from 'sharp'
+import { money, supplierCost } from '../billing/money.js'
 import { publicRunError } from '../chat/errors.js'
 import { settingNumber, settingText } from '../configuration/defaults.js'
 import { ErrorCode } from '../error-codes.js'
@@ -25,8 +26,15 @@ export class ImageTools {
   forRun(principal: Principal, signal: AbortSignal, taskId?: string) {
     let selected: ReturnType<ConfigurationService['runtime']> | undefined
     const prepare = async (value: unknown, edit = false) => {
-      const args = object(value, edit ? ['prompt', 'resourceIds'] : ['prompt'])
+      const args = object(
+        value,
+        edit ? ['prompt', 'resourceIds', 'tier'] : ['prompt', 'tier'],
+      )
       const prompt = text(args.prompt, '图片说明', 2000)
+      const tier: unknown = args.tier ?? '1k'
+      if (tier !== '1k' && tier !== '2k' && tier !== '4k') {
+        throw ErrorCode.QUOTA_INVALID('不支持的图片分辨率档位')
+      }
       if (!this.configuration) {
         throw ErrorCode.IMAGE_MODEL_REQUIRED()
       }
@@ -44,11 +52,33 @@ export class ImageTools {
       ) {
         throw ErrorCode.IMAGE_REQUIRED()
       }
-      return { prompt, config, inputs }
+      return {
+        prompt,
+        config,
+        inputs,
+        tier: tier as import('@t-box/shared').ImageTier,
+      }
     }
-    const operation = async (value: unknown, edit = false) => {
-      const { prompt, config, inputs } = await prepare(value, edit)
+    const operation = async (
+      value: unknown,
+      edit = false,
+      trace?: { messageId?: string, callId?: string },
+    ) => {
+      const { prompt, config, inputs, tier } = await prepare(value, edit)
       const operationId = randomUUID()
+      const execution = {
+        operationId,
+        userId: principal.user.id,
+        taskId,
+        messageId: trace?.messageId,
+        agentId: 'images',
+        logicalRequestId: trace?.callId
+          ? createHash('sha256')
+              .update(`${taskId}:${trace.callId}`)
+              .digest('hex')
+              .slice(0, 32)
+          : operationId,
+      }
       const audit = new ModelCallAudit(this.resources.source)
       const routing = new ModelRouting(this.resources.source)
       const metadata = {
@@ -63,7 +93,7 @@ export class ImageTools {
         262144,
       )
       await audit.begin(
-        { operationId, userId: principal.user.id, taskId, purpose: 'image' },
+        { ...execution, purpose: 'image' },
         metadata,
         edit ? 'images.edit' : 'images.generate',
         { prompt, resourceIds: inputs.map((r) => r.id) },
@@ -71,8 +101,10 @@ export class ImageTools {
       )
       let renewal: Promise<unknown> | undefined
       const heartbeat = setInterval(() => {
-        renewal ??= audit
-          .heartbeat(operationId)
+        renewal ??= Promise.all([
+          audit.heartbeat(operationId),
+          this.billing?.heartbeat(principal.user.id, operationId),
+        ])
           .catch(() => {})
           .finally(() => {
             renewal = undefined
@@ -90,13 +122,14 @@ export class ImageTools {
         signal.throwIfAborted()
         await audit.running(operationId)
         await this.billing?.begin({
+          ...execution,
           id: operationId,
-          userId: principal.user.id,
-          taskId,
           modelId: config.billingModelId,
           prices: config.prices,
           kind: 'image',
-          reserve: money(config.prices.imagePrice),
+          budget: { images: 1, tier, editing: edit },
+          purpose: 'response',
+          reserve: supplierCost(money(config.prices.imagePrice), config.prices),
         })
         const client = new OpenAI({
           ...config,
@@ -117,11 +150,15 @@ export class ImageTools {
                   model: config.model,
                   prompt,
                   n: 1,
-                  size: settingText(
-                    config.configuration,
-                    'ai.images.size',
-                    '1024x1024',
-                  ) as '1024x1024',
+                  size: (tier === '4k'
+                    ? '4096x4096'
+                    : tier === '2k'
+                      ? '2048x2048'
+                      : settingText(
+                          config.configuration,
+                          'ai.images.size',
+                          '1024x1024',
+                        )) as '1024x1024',
                   image: await Promise.all(
                     inputs.map(async (r) =>
                       toFile(
@@ -139,11 +176,15 @@ export class ImageTools {
                   model: config.model,
                   prompt,
                   n: 1,
-                  size: settingText(
-                    config.configuration,
-                    'ai.images.size',
-                    '1024x1024',
-                  ) as '1024x1024',
+                  size: (tier === '4k'
+                    ? '4096x4096'
+                    : tier === '2k'
+                      ? '2048x2048'
+                      : settingText(
+                          config.configuration,
+                          'ai.images.size',
+                          '1024x1024',
+                        )) as '1024x1024',
                   ...(['dall-e-2', 'dall-e-3'].includes(config.model)
                     ? { response_format: 'b64_json' as const }
                     : {}),
@@ -174,6 +215,17 @@ export class ImageTools {
             providerRequestId: response?._request_id || undefined,
           }
           const { bytes, mime } = await imageOutput(response?.data?.[0], signal)
+          const dimensions = await sharp(bytes).metadata()
+          const shortSide = Math.min(
+            dimensions.width ?? 0,
+            dimensions.height ?? 0,
+          )
+          const required = tier === '4k' ? 4096 : tier === '2k' ? 2048 : 1024
+          if (shortSide < required) {
+            throw ErrorCode.IMAGE_OUTPUT_INVALID(
+              '服务商返回的图片未达到请求分辨率，本次不扣额度',
+            )
+          }
           const extension =
             mime === 'image/jpeg'
               ? 'jpg'
@@ -189,6 +241,9 @@ export class ImageTools {
           persisted = resource
           await this.billing?.settle(principal.user.id, operationId, {
             images: 1,
+            tier,
+            inputTokens: imageUsage.inputTokens,
+            outputTokens: imageUsage.outputTokens,
           })
           return { resources: [resource] }
         } catch (error) {

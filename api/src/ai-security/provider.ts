@@ -18,8 +18,9 @@ interface ProtectedConfiguration {
   configuration?: ConfigurationSnapshot
 }
 
-/** Outside metering/auditing: keep original diagnostics server-side and gate output before dispatch. */
+/** Gates output before dispatch; metering wraps this gate so blocked calls can be reversed. */
 export class ProtectedChatProvider implements ChatProvider {
+  readonly admissionInstructions = systemSecurityPolicy
   readonly mode
   readonly configurationKey
   readonly contextPolicy
@@ -104,7 +105,7 @@ export class ProtectedChatProvider implements ChatProvider {
       try {
         args = JSON.parse(call.arguments)
       } catch {
-        /* Ordinary dispatch reports malformed JSON. */
+        throw ErrorCode.PROVIDER_FAILED('模型返回的工具参数不是有效 JSON')
       }
       if (filter.contains(args) || filter.contains(call.name)) {
         throw ErrorCode.AI_DISCLOSURE_BLOCKED()

@@ -12,7 +12,10 @@ import { ledgerDomainEntities } from '@t-box/ledger-server'
 import { BillEntity, CategoryEntity } from '@t-box/ledger-server/entities'
 import { ledgerRecordEntities } from '@t-box/ledger-server/persistence/index'
 import { ApplicationOperationEntity } from '@t-box/server-foundation/persistence/entities'
-import { PrivateFileEntity, PrivateFileQuotaEntity } from '@t-box/server-foundation/persistence/private-media'
+import {
+  PrivateFileEntity,
+  PrivateFileQuotaEntity,
+} from '@t-box/server-foundation/persistence/private-media'
 import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
 import { TimerEntity } from '@t-box/time-server/entity'
 import { EntitySchema } from 'typeorm'
@@ -20,7 +23,6 @@ import {
   DesktopAppearanceEntity,
   DesktopLayoutEntity,
 } from '../desktop/entity.js'
-import { RechargeSettingsEntity } from '../payments/recharge.js'
 import { SupportSettingsEntity } from '../support/entity.js'
 import { platformEntities } from './platform-entities.js'
 import { platformRecordEntities } from './records/index.js'
@@ -130,6 +132,7 @@ export interface ModelRow {
   purpose: 'conversation' | 'image'
   supportsVision: boolean
   supportsReasoning: boolean
+  costMultiplier: string
   inputPrice: string
   outputPrice: string
   imagePrice: string
@@ -163,6 +166,13 @@ export const ModelEntity = new EntitySchema<ModelRow>({
       default: 'conversation',
     },
     supportsVision: { type: Boolean, name: 'supports_vision', default: false },
+    costMultiplier: {
+      type: 'decimal',
+      precision: 10,
+      scale: 6,
+      name: 'cost_multiplier',
+      default: '1',
+    },
     inputPrice: {
       type: 'decimal',
       precision: 18,
@@ -248,7 +258,6 @@ export const entities = [
   ModelEntity,
   SettingsEntity,
   SupportSettingsEntity,
-  RechargeSettingsEntity,
   HolidayYearEntity,
   HolidaySettingsEntity,
   HolidayAuditEntity,

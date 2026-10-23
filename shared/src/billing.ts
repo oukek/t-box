@@ -1,11 +1,13 @@
 export interface ModelPrices {
+  costMultiplier?: string // upstream procurement multiplier; never a public tariff
   inputPrice: string // CNY / 1M tokens
   outputPrice: string
   imagePrice: string // CNY / image (generation and editing)
 }
 export type BillingMode = 'charge' | 'record_only'
 export interface Wallet {
-  currency: 'CNY'
+  currency: 'QUOTA'
+  revision: number
   balance: string
   reserved: string
   available: string
@@ -14,7 +16,7 @@ export interface Wallet {
 export interface UsageRecord {
   id: string
   kind: 'conversation' | 'image'
-  status: 'reserved' | 'settled' | 'review' | 'released'
+  status: 'reserved' | 'settled' | 'review' | 'released' | 'reversed'
   fee: string
   charged: string
   mode: BillingMode
@@ -28,13 +30,24 @@ export interface UsageRecord {
   purpose?: import('./agent-workflow.js').ModelCallPurpose
   images: number | null
   taskId: string | null
+  allocations?: import('./quota.js').QuotaAllocation[]
+  imageTier?: import('./quota.js').ImageTier
   createdAt: string
 }
 export interface WalletEntry {
   id: string
-  kind: 'usage' | 'recharge' | 'grant' | 'refund'
+  kind:
+    | 'purchase' |
+    'grant' |
+    'reserve' |
+    'release' |
+    'consume' |
+    'reverse' |
+    'expire' |
+    'revoke'
   amount: string
-  balance: string
+  reason: string
+  lotId: string | null
   createdAt: string
 }
 export interface BillingUser extends Wallet {
@@ -45,8 +58,12 @@ export interface BillingUser extends Wallet {
 export interface PaymentOrder {
   id: string
   amount: string
-  bonusAmount: string
-  creditedAmount: string
+  packageId: string
+  packageVersion: number
+  packageName: string
+  quota: string
+  bonusQuota: string
+  validDays: number
   currency: 'CNY'
   status: 'pending' | 'paid' | 'closed'
   createdAt: string

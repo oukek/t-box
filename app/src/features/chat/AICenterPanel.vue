@@ -2,10 +2,16 @@
 import type { Wallet } from '@t-box/shared'
 import { AppIcon, SidePanel } from '@t-box/ui-kit'
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { openMemory, openPricing, openResources, openWallet } from '../../core/navigation'
+import {
+  openMemory,
+  openPricing,
+  openResources,
+  openWallet,
+} from '../../core/navigation'
 import { request } from '../../core/network'
 import { identity } from '../../core/session'
 import { displayMoney } from '../billing/format'
+import { useQuotaRefresh } from '../billing/quota-events'
 import NotificationPanel from './NotificationPanel.vue'
 
 const props = defineProps<{ open: boolean }>()
@@ -13,10 +19,25 @@ const emit = defineEmits<{ close: [], tasks: [] }>()
 const wallet = ref<Wallet | null>(null)
 const loading = ref(false)
 const error = ref(false)
+useQuotaRefresh(
+  async () => {
+    if (props.open && identity.user) {
+      try {
+        wallet.value = (await request<{ data: Wallet }>('/wallet')).data
+      } catch {
+        error.value = true
+      }
+    }
+  },
+  () => props.open,
+)
 const notificationsOpen = ref(false)
-watch(() => [props.open, identity.user?.id], () => {
-  notificationsOpen.value = false
-})
+watch(
+  () => [props.open, identity.user?.id],
+  () => {
+    notificationsOpen.value = false
+  },
+)
 let controller: AbortController | undefined
 watch(
   () => [props.open, identity.user?.id] as const,
@@ -53,6 +74,10 @@ function openPage(action: () => void) {
   emit('close')
   action()
 }
+function openTasksFromNotification() {
+  notificationsOpen.value = false
+  emit('tasks')
+}
 </script>
 
 <template>
@@ -62,25 +87,31 @@ function openPage(action: () => void) {
     @close="emit('close')"
   >
     <div class="ai-center">
-      <button class="ai-center-link" @click="openPage(openMemory)"><span class="ai-center-icon"><AppIcon name="history" :size="18" /></span><span>记忆<small>管理已记住的信息与待确认建议</small></span><AppIcon name="right" :size="16" /></button>
+      <button class="ai-center-link" @click="openPage(openMemory)">
+        <span class="ai-center-icon"><AppIcon name="history" :size="18" /></span><span>记忆<small>管理已记住的信息与待确认建议</small></span><AppIcon name="right" :size="16" />
+      </button>
       <button
         class="ai-center-balance"
-        aria-label="查看我的余额"
+        aria-label="查看我的额度"
         @click="openPage(openWallet)"
       >
-        <span><AppIcon name="wallet" :size="18" />我的余额<AppIcon
+        <span><AppIcon name="wallet" :size="18" />我的额度<AppIcon
           name="right"
           :size="16"
         /></span>
         <strong>{{
-          loading ? "…" : wallet ? `¥ ${displayMoney(wallet.available)}` : "—"
+          loading
+            ? '…'
+            : wallet
+              ? `${displayMoney(wallet.available)} 额度`
+              : '—'
         }}</strong>
         <small>{{
           error
-            ? "暂时无法读取，点击查看或重试"
-            : wallet?.mode === "record_only"
-              ? "仅记录使用费用，不实际扣款"
-              : "查看明细、充值与使用记录"
+            ? '暂时无法读取，点击查看或重试'
+            : wallet?.mode === 'record_only'
+              ? '免费用户 · 记录用量，不扣额度'
+              : '查看资源包、到期时间与使用记录'
         }}</small>
       </button>
       <h3>使用与费用</h3>
@@ -110,7 +141,7 @@ function openPage(action: () => void) {
   <NotificationPanel
     :open="notificationsOpen"
     @close="notificationsOpen = false"
-    @tasks="notificationsOpen = false; emit('tasks')"
+    @tasks="openTasksFromNotification"
   />
 </template>
 

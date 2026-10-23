@@ -55,7 +55,7 @@ pnpm dev
 
 `db:init` 创建不存在的数据库并执行当前完整初始化，重复运行不修改数据或配置，不插入演示账单。旧开发库或旧迁移失败留下的库不能直接接管，请改用新库；不会自动清空原库。详见 [数据库初始化](docs/database-initialization.md)。数据库密码只保存在 `api/.env`，该文件已经加入 `.gitignore`；前端环境变量中不要放数据库连接信息。
 
-**当前本机的已有开发库已保留并补齐宝宝日记与 AI 记忆扩展表，日常启动不需要再执行 `db:init` 或升级命令。** 从旧版本升级与初始化新库是两条不同流程，请先看 [数据库初始化与升级](docs/database-initialization.md)。启动排错、端口和本地计算边界见 [本地开发说明](docs/local-execution-and-development.md)。
+**当前额度体系使用新基线 `2026-10-22.2`，旧开发库不能直接使用。请配置新的 `MYSQL_DATABASE` 后初始化，原库保留。** 不实现旧余额兼容，见 [资源包实施规格](docs/ai-resource-pack-implementation.md) 与 [数据库初始化](docs/database-initialization.md)。
 
 本地配置 MySQL 和可选 Redis，使用 [api/.env.example](api/.env.example)；生产还需在 PM2 服务器填写业务文件 OSS AccessKey，地域和 Bucket 由 Actions 自动写入发布包。用户文件、AI 图片、记账附件及分类图标统一存 `tboxos/uploads/resources/`，数据库只保存相对路径。网站发布凭据和应用导入 Token 在 GitHub 配置，微信支付与 AI 密钥在后台填写。跨域默认开放；全部配置见 [API 环境配置](docs/api-environment.md)，生产按 [首次部署步骤](docs/first-deployment.md) 操作。
 
@@ -217,7 +217,7 @@ API 默认监听 `127.0.0.1`，HTTP 和 WebSocket 来源默认开放，后台回
 
 图片会话、独立图片模型、历史、资源管理与 10 分钟账本授权的实现和接口见 [会话与资源架构](docs/conversations-resources.md)。后台「模型」分别选择普通会话与图片工具模型；普通模型需勾选看图能力。未配置真实模型时直接提示尚未接入 AI；附件仍可上传和保管，不进行本地识别或生成。新增链路可通过 `pnpm test:media` 验证，不产生真实模型调用费用。
 
-价格、余额与支付见 [计费与支付架构](docs/billing-and-payments.md)。后台「模型」配置人民币输入/输出单价及按张图片价格，「用户与余额」设置仅记录用户和审计赠送，「支付订单」管理充值订单。用户在「AI → AI 中心 → 我的余额」查看费用；标题生成免费，模型配置不向用户接口暴露。现有价格默认 0，需先设定价格并提供余额后才实际扣费。微信 Native / H5 / JSAPI 支付已实现，需在「支付订单 → 微信支付配置」填写商户信息并完成微信侧域名配置才开放充值。运行 `pnpm test:billing`、`pnpm test:wechat` 验证，不产生真实费用。
+资源包、额度与支付见 [计费与支付架构](docs/billing-and-payments.md)。后台「模型」管理采购成本，「资源包与费率」管理用户额度价格和商品版本，「用户与额度」设置免费用户与赠送。用户在「AI → AI 中心 → 我的额度」查看资源包、到期和使用明细。初始公开文本费率未启用，须确认并发布；标题、记忆整理、自动上下文压缩由平台承担。免费用户完整记录但不预占、不扣额度。微信支付通过商品版本快照发放资源包，需配置商户信息后开放；`pnpm test:billing` 不产生真实费用。
 
 失败任务不会锁死输入框，可直接发送新消息结束旧暂停任务。修改重发创建新分支并保留原对话；删除前确认问题和回答一起删除，应用业务记录不撤销。协议与恢复边界见 [消息修改与删除](docs/chat-messages.md)。
 

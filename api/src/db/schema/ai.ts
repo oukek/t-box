@@ -6,8 +6,13 @@ export const aiSchema: DatabaseSchema = {
   async seed(db) {
     await db.query('INSERT INTO ai_settings(id) VALUES(1)')
     await db.query('INSERT INTO ai_cost_guard(id) VALUES(1)')
-    await db.query('INSERT INTO ai_model_route_guard(purpose) VALUES(\'conversation\'),(\'image\')')
-    await db.query('INSERT INTO ai_workflow_configurations(revision,prompts_json) VALUES(1,?)', [JSON.stringify(defaultWorkflowPrompts)])
+    await db.query(
+      'INSERT INTO ai_model_route_guard(purpose) VALUES(\'conversation\'),(\'image\')',
+    )
+    await db.query(
+      'INSERT INTO ai_workflow_configurations(revision,prompts_json) VALUES(1,?)',
+      [JSON.stringify(defaultWorkflowPrompts)],
+    )
     await db.query('INSERT INTO ai_workflow_settings(id,revision) VALUES(1,1)')
   },
   tables: [
@@ -129,6 +134,7 @@ export const aiSchema: DatabaseSchema = {
       purpose enum('conversation','image') NOT NULL DEFAULT 'conversation',
       supports_vision tinyint(1) NOT NULL DEFAULT '0',
       supports_reasoning tinyint(1) NOT NULL DEFAULT '0',
+      cost_multiplier decimal(10,6) NOT NULL DEFAULT '1',
       input_price decimal(18,6) NOT NULL DEFAULT '0.000000',
       output_price decimal(18,6) NOT NULL DEFAULT '0.000000',
       image_price decimal(18,6) NOT NULL DEFAULT '0.000000',

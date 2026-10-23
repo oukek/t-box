@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import type {
-  OperationsEvent,
-  OperationsOverview,
-} from '@t-box/shared'
+import type { OperationsEvent, OperationsOverview } from '@t-box/shared'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { errorMessage, request } from '../core/api'
 import OperationsRecords from './OperationsRecords.vue'
@@ -103,7 +100,7 @@ onBeforeUnmount(() => (alive = false))
         <span>模型调用 · 近 24 小时</span><strong>{{ overview.usage.calls }}</strong><small>记录成本 ¥{{ overview.usage.cost }}</small>
       </article>
       <article>
-        <span>实际扣费 · 近 24 小时</span><strong>¥{{ overview.usage.charged }}</strong><small>记录不扣费用户也计入模型成本</small>
+        <span>实际扣额度 · 近 24 小时</span><strong>{{ overview.usage.charged }}</strong><small>免费用户也计入模型成本</small>
       </article>
       <article>
         <span>自动续办队列</span><strong>{{ overview.recoveryBacklog }}</strong><small>等待前端和待核对写入不会自动执行</small>
@@ -166,10 +163,7 @@ onBeforeUnmount(() => (alive = false))
               }}<small v-if="event.durationMs !== undefined">{{ event.durationMs }} ms</small>
             </td>
             <td>
-              <button
-                v-if="event.taskId"
-                @click="inspect(event.taskId)"
-              >
+              <button v-if="event.taskId" @click="inspect(event.taskId)">
                 查看任务
               </button>
             </td>

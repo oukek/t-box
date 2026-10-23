@@ -1,246 +1,349 @@
 import type {
   BillingUser,
   ModelPrices,
+  QuotaUsageBudget,
   UsageRecord,
   Wallet,
   WalletEntry,
 } from '@t-box/shared'
 import type { DataSource, EntityManager } from 'typeorm'
+import type { ConfigurationCache } from '../configuration/cache.js'
 import type { StoredBillingUsage } from '../db/records/billing-entities.js'
 import { randomUUID } from 'node:crypto'
+import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
 import { isoTime } from '@t-box/server-foundation/time'
-import { Raw } from 'typeorm'
+import { LessThan, Like } from 'typeorm'
 import {
   BillingAuditEntity,
-  BillingEntryEntity,
   BillingUsageEntity,
-  BillingWalletEntity,
 } from '../db/records/billing-entities.js'
 import { ErrorCode } from '../error-codes.js'
 import { admitCost } from './budget.js'
-import { count, decimal, money, tokenFee } from './money.js'
+import { count, money, tokenFee } from './money.js'
+import { QuotaCatalog } from './quota/catalog.js'
+import { QuotaAccountEntity, QuotaEntryEntity } from './quota/entities.js'
+import { now, QuotaInventory } from './quota/inventory.js'
+import { quota, quotaFee, quotaText } from './quota/math.js'
 
-interface WalletRow {
-  balance_micro: string
-  reserved_micro: string
-  mode: Wallet['mode']
+export interface BillingBegin {
+  id: string
+  userId: string
+  taskId?: string
+  messageId?: string
+  agentId?: string
+  logicalRequestId?: string
+  retryIndex?: number
+  purpose?: import('@t-box/shared').ModelCallPurpose
+  modelId: string
+  prices: ModelPrices
+  kind: UsageRecord['kind']
+  /** Supplier cost admission reserve, in integer micro-yuan, independent of public credit prices. */
+  reserve: bigint
+  budget: QuotaUsageBudget
+  free?: boolean
 }
-type UsageRow = StoredBillingUsage
-
-const viewWallet = (w: WalletRow): Wallet => ({
-  currency: 'CNY',
-  mode: w.mode,
-  balance: decimal(BigInt(w.balance_micro)),
-  reserved: decimal(BigInt(w.reserved_micro)),
-  available: decimal(BigInt(w.balance_micro) - BigInt(w.reserved_micro)),
-})
+export interface ActualUsage {
+  inputTokens?: number
+  outputTokens?: number
+  images?: number
+  responseId?: string
+  cachedInputTokens?: number | null
+  cacheWriteTokens?: number | null
+  reasoningTokens?: number | null
+  durationMs?: number
+  tier?: import('@t-box/shared').ImageTier
+}
+export const usageFields = {
+  id: true,
+  user_id: true,
+  task_id: true,
+  message_id: true,
+  agent_id: true,
+  purpose: true,
+  model_config_id: true,
+  prices_json: true,
+  kind: true,
+  mode: true,
+  status: true,
+  fee_micro: true,
+  upstream_original_micro: true,
+  cost_reserved_micro: true,
+  quota_reserved: true,
+  quota_budget: true,
+  quota_due: true,
+  quota_charged: true,
+  tariff_json: true,
+  budget_json: true,
+  platform_free: true,
+  logical_id: true,
+  retry_index: true,
+  input_tokens: true,
+  output_tokens: true,
+  images: true,
+  response_id: true,
+  created_at: true,
+  updated_at: true,
+  cached_tokens: true,
+  reasoning_tokens: true,
+  duration_ms: true,
+  cache_write_tokens: true,
+} as const
 export class BillingService {
+  readonly inventory = new QuotaInventory()
+  readonly catalog: QuotaCatalog
+  private readonly listeners = new Set<(userId: string) => void>()
   constructor(
     readonly source: DataSource,
     private readonly configuration?: {
       snapshot(): Promise<import('@t-box/shared').ConfigurationSnapshot>
     },
-  ) {}
+    cache?: ConfigurationCache,
+  ) {
+    this.catalog = new QuotaCatalog(source, cache)
+  }
 
-  async lock(db: EntityManager, userId: string): Promise<WalletRow> {
-    await db
-      .createQueryBuilder()
-      .insert()
-      .into('billing_wallets')
-      .values({ user_id: () => ':p0' })
-      .updateEntity(false)
-      .setParameters({ p0: userId })
-      .orUpdate(['user_id'])
-      .execute()
-    const row = await db.getRepository(BillingWalletEntity).findOne({
-      select: { balance_micro: true, reserved_micro: true, mode: true },
-      where: { user_id: userId },
-      lock: { mode: 'pessimistic_write' },
-    })
-    if (!row) {
-      throw ErrorCode.SCHEMA_REQUIRED('余额账户初始化失败')
+  onChange(listener: (userId: string) => void) {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  changed(userId: string) {
+    for (const listener of this.listeners) {
+      try {
+        listener(userId)
+      } catch {
+        /* Notification never rolls back committed accounting. */
+      }
     }
-    return row
   }
 
-  async wallet(userId: string): Promise<Wallet> {
-    return this.source.transaction(async (db) =>
-      viewWallet(await this.lock(db, userId)),
-    )
+  lock(db: EntityManager, userId: string) {
+    return this.inventory.lock(db, userId)
   }
 
-  async begin(input: {
-    id: string
-    userId: string
-    taskId?: string
-    messageId?: string
-    agentId?: string
-    purpose?: import('@t-box/shared').ModelCallPurpose
-    modelId: string
-    prices: ModelPrices
-    kind: UsageRecord['kind']
-    reserve: bigint
-    /** Internal metadata request; records provider cost without any wallet debit. */
-    free?: boolean
-  }) {
+  wallet(userId: string): Promise<Wallet> {
+    return this.source.transaction((db) => this.inventory.wallet(db, userId))
+  }
+
+  lots(userId: string) {
+    return this.source.transaction((db) => this.inventory.lots(db, userId))
+  }
+
+  async begin(input: BillingBegin) {
+    const configured = await this.catalog.tariff()
     const configuration = await this.configuration?.snapshot()
-    return this.source.transaction(async (db) => {
+    const result = await this.source.transaction(async (db) => {
       await admitCost(db, input, configuration)
-      const wallet = await this.lock(db, input.userId)
-      const old = await db
-        .getRepository(BillingUsageEntity)
-        .findOne({ select: { id: true }, where: { id: input.id } })
-      if (old) {
+      const account = await this.lock(db, input.userId)
+      if (
+        await db.getRepository(BillingUsageEntity).existsBy({ id: input.id })
+      ) {
         throw ErrorCode.USAGE_REPLAY()
       }
-      const mode = input.free ? 'record_only' : wallet.mode
-      const reserve = mode === 'record_only' ? 0n : input.reserve
-      if (
-        reserve < 0n ||
-        BigInt(wallet.balance_micro) - BigInt(wallet.reserved_micro) < reserve
-      ) {
-        throw ErrorCode.BALANCE_INSUFFICIENT()
+      const task = input.taskId
+        ? await db.getRepository(BillingUsageEntity).find({
+            select: {
+              tariff_json: true,
+              platform_free: true,
+              status: true,
+              quota_budget: true,
+              quota_due: true,
+              budget_json: true,
+              images: true,
+            },
+            where: { user_id: input.userId, task_id: input.taskId },
+            order: { created_at: 'ASC' },
+          })
+        : []
+      const tariff =
+        task.find((row) => !row.platform_free)?.tariff_json ?? configured
+      const free = input.free === true
+      if (!free && !tariff.enabled) {
+        throw ErrorCode.QUOTA_TARIFF_REQUIRED()
       }
-      await db
-        .createQueryBuilder()
-        .update('billing_wallets')
-        .set({ reserved_micro: () => 'reserved_micro+:p0' })
-        .updateEntity(false)
-        .where('user_id=:p1')
-        .setParameters({ p0: reserve.toString(), p1: input.userId })
-        .execute()
+      const budget = input.budget
+      if (
+        !free &&
+        input.kind === 'conversation' &&
+        (budget.inputTokens === undefined || budget.outputTokens === undefined)
+      ) {
+        throw ErrorCode.QUOTA_INVALID('模型调用必须提供输入与输出预算')
+      }
+      if (input.kind === 'image' && budget.images !== 1) {
+        throw ErrorCode.QUOTA_INVALID('每个图片计费单元仅生成一张图片')
+      }
+      const quoted = free ? 0n : quotaFee(tariff, budget)
+      const running = task.filter(
+        (row) =>
+          !row.platform_free && ['reserved', 'settled'].includes(row.status),
+      )
+      const used = running.reduce(
+        (sum, row) =>
+          sum +
+          BigInt(row.status === 'reserved' ? row.quota_budget : row.quota_due),
+        0n,
+      )
+      const images = running.reduce(
+        (sum, row) =>
+          sum +
+          (row.status === 'reserved'
+            ? (row.budget_json.images ?? 0)
+            : (row.images ?? 0)),
+        0,
+      )
+      if (
+        !free &&
+        (used + quoted > quota(tariff.taskLimit) ||
+          images + (budget.images ?? 0) > tariff.imageLimit)
+      ) {
+        throw ErrorCode.QUOTA_TASK_LIMIT()
+      }
+      const mode = free ? 'record_only' : account.mode
+      const reserved = mode === 'charge' ? quoted : 0n
+      await this.inventory.reserve(db, input.userId, input.id, reserved)
       await db.getRepository(BillingUsageEntity).insert({
         id: input.id,
         user_id: input.userId,
         task_id: input.taskId ?? null,
+        message_id: input.messageId ?? null,
+        agent_id: input.agentId ?? null,
+        purpose: input.purpose ?? 'response',
         model_config_id: input.modelId,
         prices_json: input.prices,
         kind: input.kind,
         mode,
-        reserved_micro: reserve.toString(),
-        message_id: input.messageId ?? null,
-        agent_id: input.agentId ?? null,
-        purpose: input.purpose ?? 'response',
+        platform_free: free,
+        quota_reserved: reserved.toString(),
+        quota_budget: quoted.toString(),
+        quota_due: '0',
+        quota_charged: '0',
+        tariff_json: tariff,
+        budget_json: budget,
         cost_reserved_micro: input.reserve.toString(),
+        logical_id: input.logicalRequestId ?? input.id,
+        retry_index: input.retryIndex ?? 0,
       })
       return mode
     })
+    this.changed(input.userId)
+    return result
   }
 
   async settle(
     userId: string,
     id: string,
-    usage: {
-      inputTokens?: number
-      outputTokens?: number
-      images?: number
-      responseId?: string
-      cachedInputTokens?: number | null
-      cacheWriteTokens?: number | null
-      reasoningTokens?: number | null
-      durationMs?: number
-    },
+    usage: ActualUsage,
     audit?: { administrator: string, reason: string },
   ) {
-    const result = await this.source.transaction(async (db) => {
-      const wallet = await this.lock(db, userId)
-      const row = await db.getRepository(BillingUsageEntity).findOne({
-        select: {
-          id: true,
-          user_id: true,
-          task_id: true,
-          model_config_id: true,
-          prices_json: true,
-          kind: true,
-          mode: true,
-          status: true,
-          reserved_micro: true,
-          fee_micro: true,
-          charged_micro: true,
-          input_tokens: true,
-          output_tokens: true,
-          images: true,
-          response_id: true,
-          created_at: true,
-          updated_at: true,
-          message_id: true,
-          agent_id: true,
-          purpose: true,
-          cached_tokens: true,
-          reasoning_tokens: true,
-          duration_ms: true,
-          cache_write_tokens: true,
-          cost_reserved_micro: true,
-        },
+    await this.source.transaction(async (db) => {
+      await this.lock(db, userId)
+      const repo = db.getRepository(BillingUsageEntity)
+      const row = await repo.findOne({
+        select: usageFields,
         where: { id, user_id: userId },
         lock: { mode: 'pessimistic_write' },
       })
       if (!row) {
         throw ErrorCode.USAGE_NOT_FOUND()
       }
-      if (row.status === 'settled') {
-        if (
-          (usage.inputTokens ?? null) !==
-          (row.input_tokens === null ? null : Number(row.input_tokens)) ||
-          (usage.outputTokens ?? null) !==
-          (row.output_tokens === null ? null : Number(row.output_tokens)) ||
-          (usage.cachedInputTokens ?? null) !==
-          (row.cached_tokens === null ? null : Number(row.cached_tokens)) ||
-          (usage.cacheWriteTokens ?? null) !==
-          (row.cache_write_tokens === null
+      const fingerprint = (value: ActualUsage) =>
+        JSON.stringify([
+          value.inputTokens ?? null,
+          value.outputTokens ?? null,
+          value.images ?? null,
+          value.responseId?.slice(0, 200) ?? null,
+          value.cachedInputTokens ?? null,
+          value.cacheWriteTokens ?? null,
+          value.reasoningTokens ?? null,
+        ])
+      const previous: ActualUsage = {
+        inputTokens:
+          row.input_tokens == null ? undefined : Number(row.input_tokens),
+        outputTokens:
+          row.output_tokens == null ? undefined : Number(row.output_tokens),
+        images: row.images ?? undefined,
+        responseId: row.response_id ?? undefined,
+        cachedInputTokens:
+          row.cached_tokens == null ? null : Number(row.cached_tokens),
+        cacheWriteTokens:
+          row.cache_write_tokens == null
             ? null
-            : Number(row.cache_write_tokens)) ||
-            (usage.reasoningTokens ?? null) !==
-            (row.reasoning_tokens === null
-              ? null
-              : Number(row.reasoning_tokens)) ||
-              (usage.images ?? null) !== row.images ||
-              (usage.responseId?.slice(0, 200) ?? null) !== row.response_id
-        ) {
+            : Number(row.cache_write_tokens),
+        reasoningTokens:
+          row.reasoning_tokens == null ? null : Number(row.reasoning_tokens),
+      }
+      if (row.status === 'settled') {
+        if (fingerprint(previous) !== fingerprint(usage)) {
           throw ErrorCode.USAGE_CONFLICT()
         }
-        return true
+        return
       }
-      if (row.status === 'released') {
+      if (['released', 'reversed'].includes(row.status)) {
         throw ErrorCode.USAGE_RELEASED()
       }
-      const price =
-        typeof row.prices_json === 'string'
-          ? (JSON.parse(row.prices_json) as ModelPrices)
-          : row.prices_json
+      const input = count(usage.inputTokens ?? 0)
+      const output = count(usage.outputTokens ?? 0)
       if (
-        usage.cachedInputTokens != null &&
-        count(usage.cachedInputTokens) > count(usage.inputTokens)
+        (usage.cachedInputTokens != null &&
+          count(usage.cachedInputTokens) > input) ||
+          (usage.reasoningTokens != null &&
+            count(usage.reasoningTokens) > output) ||
+            (usage.cacheWriteTokens != null &&
+              count(usage.cacheWriteTokens) + (usage.cachedInputTokens ?? 0) >
+              input)
       ) {
-        throw ErrorCode.USAGE_INVALID('缓存用量超过输入用量')
+        throw ErrorCode.USAGE_INVALID()
       }
       if (
-        usage.reasoningTokens != null &&
-        count(usage.reasoningTokens) > count(usage.outputTokens)
+        row.kind === 'conversation' &&
+        (usage.inputTokens === undefined || usage.outputTokens === undefined)
       ) {
-        throw ErrorCode.USAGE_INVALID('推理用量超过输出用量')
+        throw ErrorCode.USAGE_MISSING()
       }
-      if (
-        usage.cacheWriteTokens != null &&
-        count(usage.cacheWriteTokens) + (usage.cachedInputTokens ?? 0) >
-        count(usage.inputTokens)
-      ) {
-        throw ErrorCode.USAGE_INVALID('缓存读写用量超过输入用量')
+      if (row.kind === 'image' && usage.images !== 1) {
+        throw ErrorCode.USAGE_INVALID()
       }
-      const fee =
+      const price = row.prices_json
+      const original =
         row.kind === 'image'
           ? money(price.imagePrice) * BigInt(count(usage.images))
-          : tokenFee(price, count(usage.inputTokens), count(usage.outputTokens))
-      const debit = row.mode === 'record_only' ? 0n : fee
-      const otherReserved =
-        BigInt(wallet.reserved_micro) - BigInt(row.reserved_micro)
-      // A compatible provider may exceed the provisional budget. Preserve the actual
-      // usage for review; never create negative balances or partially debit silently.
-      const canPay = BigInt(wallet.balance_micro) - otherReserved >= debit
-      await db.getRepository(BillingUsageEntity).update(
+          : tokenFee(price, input, output)
+      const cost =
+        (original * money(price.costMultiplier ?? '1') + 999999n) / 1000000n
+      const rawFee = row.platform_free
+        ? 0n
+        : quotaFee(row.tariff_json, {
+            ...row.budget_json,
+            inputTokens: input,
+            outputTokens: output,
+            cachedInputTokens: usage.cachedInputTokens,
+            ...(row.kind === 'image'
+              ? {
+                  images: usage.images,
+                  tier: usage.tier ?? row.budget_json.tier,
+                }
+              : {}),
+          })
+      // A supplier exceeding the admitted envelope cannot debit unreserved user credits.
+      const due =
+        rawFee > BigInt(row.quota_budget) ? BigInt(row.quota_budget) : rawFee
+      if (rawFee > BigInt(row.quota_budget)) {
+        console.warn('QUOTA_AUTHORIZATION_EXCEEDED', id)
+      }
+      const charged =
+        row.mode === 'charge'
+          ? await this.inventory.capture(db, userId, id, due)
+          : 0n
+      await repo.update(
         { id },
         {
-          fee_micro: fee.toString(),
+          status: 'settled',
+          fee_micro: cost.toString(),
+          upstream_original_micro: original.toString(),
+          quota_due: rawFee.toString(),
+          quota_charged: charged.toString(),
+          quota_reserved: '0',
+          quota_budget: '0',
           input_tokens: usage.inputTokens ?? null,
           output_tokens: usage.outputTokens ?? null,
           images: usage.images ?? null,
@@ -248,29 +351,10 @@ export class BillingService {
           cached_tokens: usage.cachedInputTokens ?? null,
           cache_write_tokens: usage.cacheWriteTokens ?? null,
           reasoning_tokens: usage.reasoningTokens ?? null,
-          duration_ms:
-            usage.durationMs == null ? null : count(usage.durationMs),
-          status: canPay ? 'settled' : 'review',
-          updated_at: () => 'UTC_TIMESTAMP(3)',
+          duration_ms: usage.durationMs ?? null,
+          updated_at: now(),
         },
       )
-      if (!canPay) {
-        return false
-      }
-      const balance = BigInt(wallet.balance_micro) - debit
-      await db.getRepository(BillingWalletEntity).update(
-        { user_id: userId },
-        {
-          balance_micro: balance.toString(),
-          reserved_micro: otherReserved.toString(),
-        },
-      )
-      await db
-        .getRepository(BillingUsageEntity)
-        .update({ id }, { charged_micro: debit.toString() })
-      if (debit) {
-        await this.entry(db, userId, 'usage', `usage:${id}`, -debit, balance)
-      }
       if (audit) {
         await this.audit(
           db,
@@ -280,102 +364,87 @@ export class BillingService {
           `${id}: ${audit.reason}`,
         )
       }
-      return true
     })
-    if (!result) {
-      throw ErrorCode.USAGE_REVIEW()
-    }
+    this.changed(userId)
   }
 
-  async resolve(
-    userId: string,
-    id: string,
-    administrator: string,
-    reason: string,
-  ) {
-    const row = await this.source.getRepository(BillingUsageEntity).findOne({
-      select: {
-        id: true,
-        user_id: true,
-        task_id: true,
-        model_config_id: true,
-        prices_json: true,
-        kind: true,
-        mode: true,
-        status: true,
-        reserved_micro: true,
-        fee_micro: true,
-        charged_micro: true,
-        input_tokens: true,
-        output_tokens: true,
-        images: true,
-        response_id: true,
-        created_at: true,
-        updated_at: true,
-        message_id: true,
-        agent_id: true,
-        purpose: true,
-        cached_tokens: true,
-        reasoning_tokens: true,
-        duration_ms: true,
-        cache_write_tokens: true,
-        cost_reserved_micro: true,
-      },
-      where: { id, user_id: userId },
+  /** Known failed attempt: compensate any early usage charge, preserve upstream costs and usage. */
+  async failed(userId: string, id: string) {
+    await this.source.transaction(async (db) => {
+      await this.lock(db, userId)
+      const row = await db.getRepository(BillingUsageEntity).findOne({
+        select: { status: true },
+        where: { id, user_id: userId },
+        lock: { mode: 'pessimistic_write' },
+      })
+      if (!row || ['released', 'reversed'].includes(row.status)) {
+        return
+      }
+      if (row.status === 'settled') {
+        await this.inventory.reverse(db, userId, id)
+      } else {
+        await this.inventory.capture(db, userId, id, 0n)
+      }
+      await db.getRepository(BillingUsageEntity).update(
+        { id },
+        {
+          status: row.status === 'settled' ? 'reversed' : 'review',
+          quota_reserved: '0',
+          quota_budget: '0',
+          quota_charged: '0',
+          updated_at: now(),
+        },
+      )
     })
-    if (
-      !row ||
-      !['review', 'settled'].includes(row.status) ||
-      (row.kind === 'conversation' &&
-        (row.input_tokens === null || row.output_tokens === null)) ||
-        (row.kind === 'image' && row.images === null)
-    ) {
-      throw ErrorCode.USAGE_UNKNOWN()
-    }
-    await this.settle(
-      userId,
-      id,
-      {
-        inputTokens:
-          row.input_tokens === null ? undefined : Number(row.input_tokens),
-        outputTokens:
-          row.output_tokens === null ? undefined : Number(row.output_tokens),
-        cacheWriteTokens:
-          row.cache_write_tokens === null
-            ? null
-            : Number(row.cache_write_tokens),
-        cachedInputTokens:
-          row.cached_tokens === null ? null : Number(row.cached_tokens),
-        reasoningTokens:
-          row.reasoning_tokens === null ? null : Number(row.reasoning_tokens),
-        durationMs: row.duration_ms ?? undefined,
-        images: row.images ?? undefined,
-        responseId: row.response_id ?? undefined,
-      },
-      { administrator, reason },
-    )
+    this.changed(userId)
   }
 
-  async uncertain(userId: string, id: string) {
+  uncertain(userId: string, id: string) {
+    return this.failed(userId, id)
+  }
+
+  async heartbeat(userId: string, id: string) {
     await this.source
       .getRepository(BillingUsageEntity)
       .update(
         { id, user_id: userId, status: 'reserved' },
-        { status: 'review', updated_at: () => 'UTC_TIMESTAMP(3)' },
+        { updated_at: now() },
       )
   }
 
+  keepAlive(userId: string, id: string) {
+    let pending: Promise<unknown> | undefined
+    const timer = setInterval(() => {
+      pending ??= this.heartbeat(userId, id)
+        .catch(() => {})
+        .finally(() => {
+          pending = undefined
+        })
+    }, 25000)
+    timer.unref()
+    return async () => {
+      clearInterval(timer)
+      await pending
+    }
+  }
+
   async recover() {
-    await this.source.getRepository(BillingUsageEntity).update(
-      {
+    const rows = await this.source.getRepository(BillingUsageEntity).find({
+      select: { id: true, user_id: true },
+      where: {
         status: 'reserved',
-        updated_at: Raw(
-          (column) =>
-            `${column} < DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 10 MINUTE)`,
+        updated_at: LessThan(
+          new Date(Date.now() - 10 * 60000)
+            .toISOString()
+            .replace('T', ' ')
+            .slice(0, -1),
         ),
       },
-      { status: () => '\'review\'', updated_at: () => 'UTC_TIMESTAMP(3)' },
-    )
+      take: 100,
+    })
+    for (const row of rows) {
+      await this.failed(row.user_id, row.id)
+    }
   }
 
   async release(
@@ -385,57 +454,44 @@ export class BillingService {
     reason: string,
   ) {
     await this.source.transaction(async (db) => {
-      const wallet = await this.lock(db, userId)
+      await this.lock(db, userId)
       const row = await db.getRepository(BillingUsageEntity).findOne({
-        select: {
-          id: true,
-          user_id: true,
-          task_id: true,
-          model_config_id: true,
-          prices_json: true,
-          kind: true,
-          mode: true,
-          status: true,
-          reserved_micro: true,
-          fee_micro: true,
-          charged_micro: true,
-          input_tokens: true,
-          output_tokens: true,
-          images: true,
-          response_id: true,
-          created_at: true,
-          updated_at: true,
-          message_id: true,
-          agent_id: true,
-          purpose: true,
-          cached_tokens: true,
-          reasoning_tokens: true,
-          duration_ms: true,
-          cache_write_tokens: true,
-          cost_reserved_micro: true,
-        },
+        select: { status: true },
         where: { id, user_id: userId },
         lock: { mode: 'pessimistic_write' },
       })
       if (!row || row.status !== 'review') {
         throw ErrorCode.REVIEW_REQUIRED()
       }
-      await db.getRepository(BillingWalletEntity).update(
-        { user_id: userId },
+      await this.inventory.capture(db, userId, id, 0n)
+      await db.getRepository(BillingUsageEntity).update(
+        { id },
         {
-          reserved_micro: (
-            BigInt(wallet.reserved_micro) - BigInt(row.reserved_micro)
-          ).toString(),
+          status: 'released',
+          quota_reserved: '0',
+          quota_budget: '0',
+          updated_at: now(),
         },
       )
-      await db
-        .getRepository(BillingUsageEntity)
-        .update(
-          { id },
-          { status: 'released', updated_at: () => 'UTC_TIMESTAMP(3)' },
-        )
       await this.audit(db, userId, administrator, 'release', `${id}: ${reason}`)
     })
+    this.changed(userId)
+  }
+
+  async resolve(
+    userId: string,
+    id: string,
+    administrator: string,
+    reason: string,
+  ) {
+    const row = await this.source
+      .getRepository(BillingUsageEntity)
+      .findOne({ select: usageFields, where: { id, user_id: userId } })
+    // Reconciliation records supplier cost only. Released user authorizations are never silently re-debited.
+    if (!row || row.status !== 'review' || row.input_tokens === null) {
+      throw ErrorCode.USAGE_UNKNOWN()
+    }
+    await this.release(userId, id, administrator, reason)
   }
 
   async setMode(
@@ -444,11 +500,14 @@ export class BillingService {
     administrator: string,
     reason: string,
   ) {
+    if (!['charge', 'record_only'].includes(mode)) {
+      throw ErrorCode.QUOTA_INVALID()
+    }
     await this.source.transaction(async (db) => {
       const previous = await this.lock(db, userId)
       await db
-        .getRepository(BillingWalletEntity)
-        .update({ user_id: userId }, { mode })
+        .getRepository(QuotaAccountEntity)
+        .update({ userId }, { mode, revision: previous.revision + 1 })
       await this.audit(
         db,
         userId,
@@ -457,9 +516,10 @@ export class BillingService {
         `${previous.mode} -> ${mode}: ${reason}`,
       )
     })
+    this.changed(userId)
   }
 
-  private async audit(
+  async audit(
     db: EntityManager,
     userId: string,
     administrator: string,
@@ -471,82 +531,8 @@ export class BillingService {
       user_id: userId,
       administrator_id: administrator,
       action,
-      detail,
+      detail: detail.slice(0, 300),
     })
-  }
-
-  async entry(
-    db: EntityManager,
-    userId: string,
-    kind: WalletEntry['kind'],
-    reference: string,
-    amount: bigint,
-    balance: bigint,
-    reason = '',
-    administrator?: string,
-  ) {
-    await db.getRepository(BillingEntryEntity).insert({
-      id: randomUUID(),
-      user_id: userId,
-      kind,
-      reference_key: reference,
-      amount_micro: amount.toString(),
-      balance_micro: balance.toString(),
-      reason,
-      administrator_id: administrator ?? null,
-    })
-  }
-
-  async credit(
-    db: EntityManager,
-    userId: string,
-    amount: bigint,
-    reference: string,
-    kind: 'recharge' | 'grant',
-    reason = '',
-    administrator?: string,
-  ) {
-    const wallet = await this.lock(db, userId)
-    const existing = await db.getRepository(BillingEntryEntity).findOne({
-      select: {
-        user_id: true,
-        amount_micro: true,
-        reason: true,
-        administrator_id: true,
-      },
-      where: { reference_key: reference },
-    })
-    if (existing) {
-      if (
-        existing.user_id !== userId ||
-        BigInt(existing.amount_micro) !== amount ||
-        existing.reason !== reason ||
-        existing.administrator_id !== (administrator ?? null)
-      ) {
-        throw ErrorCode.IDEMPOTENCY_CONFLICT()
-      }
-      return
-    }
-    if (
-      amount <= 0n ||
-      BigInt(wallet.balance_micro) + amount > 9_223_372_036_854_775_807n
-    ) {
-      throw ErrorCode.BALANCE_LIMIT()
-    }
-    const balance = BigInt(wallet.balance_micro) + amount
-    await db
-      .getRepository(BillingWalletEntity)
-      .update({ user_id: userId }, { balance_micro: balance.toString() })
-    await this.entry(
-      db,
-      userId,
-      kind,
-      reference,
-      amount,
-      balance,
-      reason,
-      administrator,
-    )
   }
 
   async grant(
@@ -555,131 +541,110 @@ export class BillingService {
     key: string,
     reason: string,
     administrator: string,
+    validDays = 180,
   ) {
-    await this.source.transaction((db) =>
-      this.credit(
+    await this.source.transaction(async (db) => {
+      await this.inventory.grant(db, {
+        userId,
+        amount: quota(amount),
+        sourceKey: `grant:${userId}:${key}`,
+        name: reason.slice(0, 80),
+        validDays,
+        source: 'grant',
+      })
+      await this.audit(
         db,
         userId,
-        money(amount),
-        `grant:${userId}:${key}`,
-        'grant',
-        reason,
         administrator,
-      ),
-    )
+        'grant',
+        `${amount}额度 / ${validDays}天：${reason}`,
+      )
+    })
+    this.changed(userId)
   }
 
   async users(search = ''): Promise<BillingUser[]> {
-    const pattern = `%${search.replace(/[=%_]/g, '=$&')}%`
-    const rows = await this.source
-      .createQueryBuilder()
-      .select(
-        'u.id,u.username,u.nickname,COALESCE(w.balance_micro,0) balance_micro,COALESCE(w.reserved_micro,0) reserved_micro,COALESCE(w.mode,\'charge\') mode',
-      )
-      .from('app_users', 'u')
-      .leftJoin('billing_wallets', 'w', 'w.user_id=u.id')
-      .where('u.username LIKE :p0 ESCAPE \'=\' OR u.nickname LIKE :p1 ESCAPE \'=\'')
-      .orderBy('u.created_at', 'DESC')
-      .limit(200)
-      .setParameters({ p0: pattern, p1: pattern })
-      .getRawMany()
-    return rows.map(
-      (r: WalletRow & { id: string, username: string, nickname: string }) => ({
-        id: r.id,
-        username: r.username,
-        nickname: r.nickname,
-        ...viewWallet(r),
-      }),
-    )
+    const rows = await this.source.getRepository(AppUserEntity).find({
+      select: { id: true, username: true, nickname: true },
+      where: [
+        { username: Like(`%${search}%`) },
+        { nickname: Like(`%${search}%`) },
+      ],
+      order: { createdAt: 'DESC' },
+      take: 100,
+    })
+    const result: BillingUser[] = []
+    for (const row of rows) {
+      result.push({ ...row, ...(await this.wallet(row.id)) })
+    }
+    return result
   }
 
   async records(userId: string): Promise<UsageRecord[]> {
-    const rows: UsageRow[] = await this.source
+    const rows: StoredBillingUsage[] = await this.source
       .getRepository(BillingUsageEntity)
       .find({
-        select: {
-          id: true,
-          user_id: true,
-          task_id: true,
-          model_config_id: true,
-          prices_json: true,
-          kind: true,
-          mode: true,
-          status: true,
-          reserved_micro: true,
-          fee_micro: true,
-          charged_micro: true,
-          input_tokens: true,
-          output_tokens: true,
-          images: true,
-          response_id: true,
-          created_at: true,
-          updated_at: true,
-          message_id: true,
-          agent_id: true,
-          purpose: true,
-          cached_tokens: true,
-          reasoning_tokens: true,
-          duration_ms: true,
-          cache_write_tokens: true,
-          cost_reserved_micro: true,
-        },
+        select: usageFields,
         where: { user_id: userId },
         order: { created_at: 'DESC', id: 'DESC' },
         take: 100,
       })
-    // An explicit allowlist keeps server model IDs, prices and upstream response IDs private.
-    return rows.map((r) => ({
-      id: r.id,
-      kind: r.kind,
-      status: r.status,
-      mode: r.mode,
-      fee: decimal(BigInt(r.fee_micro)),
-      charged: decimal(BigInt(r.charged_micro)),
-      inputTokens: r.input_tokens === null ? null : Number(r.input_tokens),
-      outputTokens: r.output_tokens === null ? null : Number(r.output_tokens),
-      cacheWriteTokens:
-        r.cache_write_tokens == null ? null : Number(r.cache_write_tokens),
-      cachedInputTokens:
-        r.cached_tokens == null ? null : Number(r.cached_tokens),
-      reasoningTokens:
-        r.reasoning_tokens == null ? null : Number(r.reasoning_tokens),
-      messageId: r.message_id,
-      agentId: r.agent_id,
-      purpose: r.purpose,
-      images: r.images,
-      taskId: r.task_id,
-      createdAt: isoTime(r.created_at),
-    }))
+    const result: UsageRecord[] = []
+    for (const r of rows) {
+      result.push({
+        id: r.id,
+        kind: r.kind,
+        status: r.status,
+        mode: r.mode,
+        fee: quotaText(BigInt(r.quota_due)),
+        charged: quotaText(BigInt(r.quota_charged)),
+        inputTokens: r.input_tokens === null ? null : Number(r.input_tokens),
+        outputTokens: r.output_tokens === null ? null : Number(r.output_tokens),
+        cacheWriteTokens:
+          r.cache_write_tokens === null ? null : Number(r.cache_write_tokens),
+        cachedInputTokens:
+          r.cached_tokens === null ? null : Number(r.cached_tokens),
+        reasoningTokens:
+          r.reasoning_tokens === null ? null : Number(r.reasoning_tokens),
+        messageId: r.message_id,
+        agentId: r.agent_id,
+        purpose: r.purpose,
+        images: r.images,
+        imageTier: r.budget_json.tier,
+        taskId: r.task_id,
+        createdAt: isoTime(r.created_at),
+        allocations: await this.inventory.allocations(
+          this.source.manager,
+          userId,
+          r.id,
+        ),
+      })
+    }
+    return result
   }
 
   async entries(userId: string): Promise<WalletEntry[]> {
-    const rows = await this.source.getRepository(BillingEntryEntity).find({
-      select: {
-        id: true,
-        kind: true,
-        amount_micro: true,
-        balance_micro: true,
-        created_at: true,
-      },
-      where: { user_id: userId },
-      order: { created_at: 'DESC', id: 'DESC' },
-      take: 100,
-    })
-    return rows.map(
-      (r: {
-        id: string
-        kind: WalletEntry['kind']
-        amount_micro: string
-        balance_micro: string
-        created_at: Date | string
-      }) => ({
-        id: r.id,
-        kind: r.kind,
-        amount: decimal(BigInt(r.amount_micro)),
-        balance: decimal(BigInt(r.balance_micro)),
-        createdAt: isoTime(r.created_at),
-      }),
-    )
+    return (
+      await this.source.getRepository(QuotaEntryEntity).find({
+        select: {
+          id: true,
+          kind: true,
+          amount: true,
+          reason: true,
+          lotId: true,
+          createdAt: true,
+        },
+        where: { userId },
+        order: { createdAt: 'DESC', id: 'DESC' },
+        take: 100,
+      })
+    ).map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      amount: quotaText(BigInt(row.amount)),
+      reason: row.reason,
+      lotId: row.lotId,
+      createdAt: isoTime(row.createdAt),
+    }))
   }
 }

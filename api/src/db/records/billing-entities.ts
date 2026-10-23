@@ -1,4 +1,9 @@
-import type { ModelCallPurpose, ModelPrices } from '@t-box/shared'
+import type {
+  ModelCallPurpose,
+  ModelPrices,
+  QuotaTariff,
+  QuotaUsageBudget,
+} from '@t-box/shared'
 import { utcSqlDateTime } from '@t-box/server-foundation/persistence/columns'
 import { EntitySchema } from 'typeorm'
 
@@ -31,48 +36,6 @@ export const BillingAuditEntity = new EntitySchema<StoredBillingAudit>({
   indices: [{ name: 'fk_billing_audit_user', columns: ['user_id'] }],
 })
 
-export interface StoredBillingEntry {
-  id: string
-  user_id: string
-  kind: 'usage' | 'recharge' | 'grant' | 'refund'
-  reference_key: string
-  amount_micro: string
-  balance_micro: string
-  reason: string
-  administrator_id: string | null
-  created_at: string
-}
-
-export const BillingEntryEntity = new EntitySchema<StoredBillingEntry>({
-  name: 'BillingEntry',
-  tableName: 'billing_entries',
-  columns: {
-    id: { type: 'char', length: 36, primary: true },
-    user_id: { type: 'char', name: 'user_id', length: 36 },
-    kind: { type: 'enum', enum: ['usage', 'recharge', 'grant', 'refund'] },
-    reference_key: { type: 'varchar', name: 'reference_key', length: 120 },
-    amount_micro: { type: 'bigint', name: 'amount_micro' },
-    balance_micro: { type: 'bigint', name: 'balance_micro' },
-    reason: { type: 'varchar', length: 200 },
-    administrator_id: {
-      type: 'char',
-      name: 'administrator_id',
-      length: 36,
-      nullable: true,
-    },
-    created_at: {
-      type: 'datetime',
-      name: 'created_at',
-      precision: 3,
-      transformer: utcSqlDateTime,
-    },
-  },
-  indices: [
-    { name: 'ix_entry_user', columns: ['user_id', 'created_at'] },
-    { name: 'ux_entry_reference', columns: ['reference_key'], unique: true },
-  ],
-})
-
 export interface StoredBillingUsage {
   id: string
   user_id: string
@@ -81,10 +44,8 @@ export interface StoredBillingUsage {
   prices_json: ModelPrices
   kind: 'conversation' | 'image'
   mode: 'charge' | 'record_only'
-  status: 'reserved' | 'settled' | 'review' | 'released'
-  reserved_micro: string
+  status: 'reserved' | 'settled' | 'review' | 'released' | 'reversed'
   fee_micro: string
-  charged_micro: string
   input_tokens: string | number | null
   output_tokens: string | number | null
   images: number | null
@@ -99,6 +60,16 @@ export interface StoredBillingUsage {
   duration_ms: number | null
   cache_write_tokens: string | number | null
   cost_reserved_micro: string
+  quota_reserved: string
+  quota_budget: string
+  quota_due: string
+  quota_charged: string
+  upstream_original_micro: string
+  tariff_json: QuotaTariff
+  budget_json: QuotaUsageBudget
+  platform_free: boolean
+  logical_id: string
+  retry_index: number
 }
 
 export const BillingUsageEntity = new EntitySchema<StoredBillingUsage>({
@@ -114,11 +85,9 @@ export const BillingUsageEntity = new EntitySchema<StoredBillingUsage>({
     mode: { type: 'enum', enum: ['charge', 'record_only'] },
     status: {
       type: 'enum',
-      enum: ['reserved', 'settled', 'review', 'released'],
+      enum: ['reserved', 'settled', 'review', 'released', 'reversed'],
     },
-    reserved_micro: { type: 'bigint', name: 'reserved_micro' },
     fee_micro: { type: 'bigint', name: 'fee_micro' },
-    charged_micro: { type: 'bigint', name: 'charged_micro' },
     input_tokens: { type: 'bigint', name: 'input_tokens', nullable: true },
     output_tokens: { type: 'bigint', name: 'output_tokens', nullable: true },
     images: { type: 'int', nullable: true },
@@ -166,6 +135,16 @@ export const BillingUsageEntity = new EntitySchema<StoredBillingUsage>({
       nullable: true,
     },
     cost_reserved_micro: { type: 'bigint', name: 'cost_reserved_micro' },
+    quota_reserved: { type: 'bigint', default: '0' },
+    quota_budget: { type: 'bigint', default: '0' },
+    quota_due: { type: 'bigint', default: '0' },
+    quota_charged: { type: 'bigint', default: '0' },
+    upstream_original_micro: { type: 'bigint', default: '0' },
+    tariff_json: { type: 'json' },
+    budget_json: { type: 'json' },
+    platform_free: { type: Boolean, default: false },
+    logical_id: { type: 'char', length: 36 },
+    retry_index: { type: 'int', default: 0 },
   },
   indices: [
     { name: 'ix_usage_status', columns: ['status', 'updated_at'] },
@@ -173,23 +152,4 @@ export const BillingUsageEntity = new EntitySchema<StoredBillingUsage>({
     { name: 'usage_daily_cost', columns: ['created_at'] },
     { name: 'usage_task_cost', columns: ['task_id'] },
   ],
-})
-
-export interface StoredBillingWallet {
-  user_id: string
-  balance_micro: string
-  reserved_micro: string
-  mode: 'charge' | 'record_only'
-}
-
-export const BillingWalletEntity = new EntitySchema<StoredBillingWallet>({
-  name: 'BillingWallet',
-  tableName: 'billing_wallets',
-  columns: {
-    user_id: { type: 'char', name: 'user_id', length: 36, primary: true },
-    balance_micro: { type: 'bigint', name: 'balance_micro' },
-    reserved_micro: { type: 'bigint', name: 'reserved_micro' },
-    mode: { type: 'enum', enum: ['charge', 'record_only'] },
-  },
-  indices: [],
 })

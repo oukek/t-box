@@ -20,6 +20,7 @@ export interface VerifiedPayment {
   paidAt: Date
 }
 export interface RefundRequest {
+  totalCents: number
   id: string
   orderId: string
   transactionId: string
@@ -45,9 +46,18 @@ export interface VerifiedRefund {
  */
 export interface PaymentGateway {
   statement?(day: string, context: PaymentContext): Promise<MerchantStatement>
-  refund?(input: RefundRequest, context: PaymentContext): Promise<VerifiedRefund>
-  queryRefund?(id: string, context: PaymentContext): Promise<VerifiedRefund | null>
-  verifyRefund?(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): Promise<VerifiedRefund>
+  refund?(
+    input: RefundRequest,
+    context: PaymentContext,
+  ): Promise<VerifiedRefund>
+  queryRefund?(
+    id: string,
+    context: PaymentContext,
+  ): Promise<VerifiedRefund | null>
+  verifyRefund?(
+    rawBody: Buffer,
+    headers: Record<string, string | string[] | undefined>,
+  ): Promise<VerifiedRefund>
   readonly channel: 'wechat'
   capabilities?(): Promise<PaymentCapabilities>
   configurationId?(): Promise<string>
@@ -70,5 +80,12 @@ export interface MerchantStatement {
   day: string
   merchantId: string
   sha1: string
-  rows: { kind: 'payment' | 'refund' | 'reversal', orderId: string, transactionId: string, refundId?: string, merchantRefundId?: string, amountCents: number }[]
+  rows: {
+    kind: 'payment' | 'refund' | 'reversal'
+    orderId: string
+    transactionId: string
+    refundId?: string
+    merchantRefundId?: string
+    amountCents: number
+  }[]
 }

@@ -17,7 +17,8 @@ export interface OperationsPage<T> {
   page: number
   pageSize: number
 }
-export type ModelCallStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted'
+export type ModelCallStatus =
+  'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted'
 export interface OperationsModelCall extends OperationsModel {
   callId: string
   logicalId: string
@@ -46,6 +47,11 @@ export interface OperationsModelCall extends OperationsModel {
   finishedAt: string | null
 }
 export interface OperationsModelCallDetail extends OperationsModelCall {
+  originalCost?: string | null
+  expectedQuota?: string | null
+  billingMode?: import('./billing.js').BillingMode | null
+  tariff?: unknown
+  allocations?: import('./quota.js').QuotaAllocation[]
   input: unknown
   output: unknown
   diagnostics: unknown

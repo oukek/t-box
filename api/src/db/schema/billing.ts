@@ -4,13 +4,6 @@ export const billingSchema: DatabaseSchema = {
   id: 'billing',
   async seed(db) {
     await db.query('INSERT INTO payment_settings(id) VALUES(1)')
-    await db.query('INSERT INTO recharge_settings(id,configuration) VALUES(1,?)', [JSON.stringify({
-      presets: ['10', '30', '50', '100', '200', '500'].map((amount) => ({ amount, bonusAmount: '0', enabled: true })),
-      customEnabled: false,
-      bonusRules: [],
-      minAmount: '1',
-      maxAmount: '10000',
-    })])
   },
   tables: [
     `CREATE TABLE billing_audit (
@@ -24,21 +17,6 @@ export const billingSchema: DatabaseSchema = {
       KEY fk_billing_audit_user (user_id),
       CONSTRAINT fk_billing_audit_user FOREIGN KEY (user_id) REFERENCES app_users (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-    `CREATE TABLE billing_entries (
-      id char(36) NOT NULL,
-      user_id char(36) NOT NULL,
-      kind enum('usage','recharge','grant','refund') NOT NULL,
-      reference_key varchar(120) NOT NULL,
-      amount_micro bigint NOT NULL,
-      balance_micro bigint NOT NULL,
-      reason varchar(200) NOT NULL DEFAULT '',
-      administrator_id char(36) DEFAULT NULL,
-      created_at datetime(3) NOT NULL DEFAULT (utc_timestamp(3)),
-      PRIMARY KEY (id),
-      UNIQUE KEY ux_entry_reference (reference_key),
-      KEY ix_entry_user (user_id,created_at),
-      CONSTRAINT fk_entry_user FOREIGN KEY (user_id) REFERENCES app_users (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     `CREATE TABLE billing_usage (
       id char(36) NOT NULL,
       user_id char(36) NOT NULL,
@@ -47,10 +25,8 @@ export const billingSchema: DatabaseSchema = {
       prices_json json NOT NULL,
       kind enum('conversation','image') NOT NULL,
       mode enum('charge','record_only') NOT NULL,
-      status enum('reserved','settled','review','released') NOT NULL DEFAULT 'reserved',
-      reserved_micro bigint NOT NULL,
+      status enum('reserved','settled','review','released','reversed') NOT NULL DEFAULT 'reserved',
       fee_micro bigint NOT NULL DEFAULT '0',
-      charged_micro bigint NOT NULL DEFAULT '0',
       input_tokens bigint DEFAULT NULL,
       output_tokens bigint DEFAULT NULL,
       images int DEFAULT NULL,
@@ -65,23 +41,14 @@ export const billingSchema: DatabaseSchema = {
       duration_ms int DEFAULT NULL,
       cache_write_tokens bigint DEFAULT NULL,
       cost_reserved_micro bigint NOT NULL DEFAULT '0',
+      quota_reserved bigint NOT NULL DEFAULT '0', quota_budget bigint NOT NULL DEFAULT '0', quota_due bigint NOT NULL DEFAULT '0', quota_charged bigint NOT NULL DEFAULT '0', upstream_original_micro bigint NOT NULL DEFAULT '0',
+      tariff_json json NOT NULL, budget_json json NOT NULL, platform_free tinyint(1) NOT NULL DEFAULT '0', logical_id char(36) NOT NULL, retry_index int NOT NULL DEFAULT '0',
       PRIMARY KEY (id),
       KEY ix_usage_user (user_id,created_at),
       KEY ix_usage_status (status,updated_at),
       KEY usage_task_cost (task_id),
       KEY usage_daily_cost (created_at),
       CONSTRAINT fk_usage_user FOREIGN KEY (user_id) REFERENCES app_users (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-    `CREATE TABLE billing_wallets (
-      user_id char(36) NOT NULL,
-      balance_micro bigint NOT NULL DEFAULT '0',
-      reserved_micro bigint NOT NULL DEFAULT '0',
-      mode enum('charge','record_only') NOT NULL DEFAULT 'charge',
-      PRIMARY KEY (user_id),
-      CONSTRAINT fk_wallet_user FOREIGN KEY (user_id) REFERENCES app_users (id) ON DELETE CASCADE,
-      CONSTRAINT billing_wallets_chk_1 CHECK ((balance_micro >= 0)),
-      CONSTRAINT billing_wallets_chk_2 CHECK ((reserved_micro >= 0)),
-      CONSTRAINT billing_wallets_chk_3 CHECK ((balance_micro >= reserved_micro))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     `CREATE TABLE payment_configurations (
       id char(36) NOT NULL,
@@ -121,13 +88,13 @@ export const billingSchema: DatabaseSchema = {
       configuration_id char(36) DEFAULT NULL,
       payment_mode varchar(10) DEFAULT NULL,
       next_query_at datetime(3) DEFAULT NULL,
-      bonus_cents int NOT NULL DEFAULT '0',
+      package_version_id char(36) NOT NULL,
+      package_snapshot json NOT NULL,
       PRIMARY KEY (id),
       UNIQUE KEY ux_order_request (user_id,request_key),
       UNIQUE KEY ux_gateway_transaction (channel,transaction_id),
       KEY ix_orders_user (user_id,created_at),
       CONSTRAINT fk_order_user FOREIGN KEY (user_id) REFERENCES app_users (id) ON DELETE CASCADE,
-      CONSTRAINT nonnegative_payment_bonus CHECK ((bonus_cents >= 0)),
       CONSTRAINT payment_orders_chk_1 CHECK ((amount_cents > 0))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     `CREATE TABLE payment_reconciliations (
@@ -157,7 +124,7 @@ export const billingSchema: DatabaseSchema = {
       administrator_id char(36) NOT NULL,
       reason varchar(80) NOT NULL,
       amount_cents int NOT NULL,
-      credit_micro bigint NOT NULL,
+      quota_atoms bigint NOT NULL,
       status varchar(24) NOT NULL DEFAULT 'prepared',
       refund_id varchar(64) DEFAULT NULL,
       submitted tinyint(1) NOT NULL DEFAULT '0',
@@ -175,7 +142,7 @@ export const billingSchema: DatabaseSchema = {
       KEY refund_success (succeeded_at),
       CONSTRAINT refund_order FOREIGN KEY (order_id) REFERENCES payment_orders (id) ON DELETE CASCADE,
       CONSTRAINT payment_refunds_chk_1 CHECK ((amount_cents > 0)),
-      CONSTRAINT payment_refunds_chk_2 CHECK ((credit_micro > 0))
+      CONSTRAINT payment_refunds_chk_2 CHECK ((quota_atoms > 0))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     `CREATE TABLE payment_settings (
       id int NOT NULL,
@@ -189,15 +156,6 @@ export const billingSchema: DatabaseSchema = {
       updated_at datetime(3) NOT NULL DEFAULT (utc_timestamp(3)),
       PRIMARY KEY (user_id,app_id),
       CONSTRAINT fk_wechat_user FOREIGN KEY (user_id) REFERENCES app_users (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-    `CREATE TABLE recharge_settings (
-      id tinyint NOT NULL,
-      configuration json NOT NULL,
-      revision int NOT NULL DEFAULT '1',
-      updated_at datetime(3) DEFAULT NULL,
-      updated_by char(36) DEFAULT NULL,
-      PRIMARY KEY (id),
-      CONSTRAINT recharge_settings_chk_1 CHECK ((id = 1))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   ],
 }

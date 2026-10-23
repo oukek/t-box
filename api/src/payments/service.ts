@@ -8,18 +8,21 @@ import type { BillingService } from '../billing/service.js'
 import type { StoredPaymentOrder } from '../db/records/payments-entities.js'
 import type { PaymentGateway, VerifiedPayment } from './gateway.js'
 import { randomUUID } from 'node:crypto'
+import { object } from '@t-box/server-foundation/input'
+import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
 import { isoTime } from '@t-box/server-foundation/time'
+import { parseId } from '@t-box/server-foundation/validation'
 import { Raw } from 'typeorm'
 import { decimal, money } from '../billing/money.js'
+import { quota } from '../billing/quota/math.js'
 import { PaymentOrderEntity } from '../db/records/payments-entities.js'
 import { ErrorCode } from '../error-codes.js'
-import { RechargeSettingsService } from './recharge.js'
 
 type OrderRow = Pick<
   StoredPaymentOrder,
   | 'id' |
   'amount_cents' |
-  'bonus_cents' |
+  'package_snapshot' |
   'currency' |
   'status' |
   'created_at' |
@@ -30,7 +33,7 @@ type OrderRow = Pick<
 const orderViewFields = {
   id: true,
   amount_cents: true,
-  bonus_cents: true,
+  package_snapshot: true,
   currency: true,
   status: true,
   created_at: true,
@@ -40,10 +43,12 @@ const orderViewFields = {
 const view = (r: OrderRow): PaymentOrder => ({
   id: r.id,
   amount: decimal(BigInt(r.amount_cents) * 10_000n),
-  bonusAmount: decimal(BigInt(r.bonus_cents ?? 0) * 10_000n),
-  creditedAmount: decimal(
-    BigInt(r.amount_cents + (r.bonus_cents ?? 0)) * 10_000n,
-  ),
+  packageId: r.package_snapshot.id,
+  packageVersion: r.package_snapshot.version,
+  packageName: r.package_snapshot.name,
+  quota: r.package_snapshot.quota,
+  bonusQuota: r.package_snapshot.bonusQuota,
+  validDays: r.package_snapshot.validDays,
   currency: r.currency,
   status: r.status,
   createdAt: isoTime(r.created_at),
@@ -61,7 +66,6 @@ export class PaymentService {
     readonly source: DataSource,
     readonly billing: BillingService,
     private readonly gateway?: PaymentGateway,
-    private readonly bonusPolicy?: Pick<RechargeSettingsService, 'bonusCents'>,
   ) {}
 
   async capabilities(): Promise<PaymentCapabilities> {
@@ -79,18 +83,16 @@ export class PaymentService {
 
   async create(
     userId: string,
-    amount: unknown,
+    selection: unknown,
     key: string,
   ): Promise<PaymentOrder> {
     const gateway = this.adapter()
     const configurationId = await gateway.configurationId?.()
-    const micros = money(amount)
-    if (
-      micros < 1_000_000n ||
-      micros > 10_000n * 1_000_000n ||
-      micros % 10_000n
-    ) {
-      throw ErrorCode.INVALID_RECHARGE()
+    const input = object(selection, ['packageId', 'version'])
+    const packageId = parseId(input.packageId)
+    const version = Number(input.version)
+    if (!Number.isSafeInteger(version) || version < 1) {
+      throw ErrorCode.PACKAGE_NOT_AVAILABLE()
     }
     requestKey(key)
     return this.source.transaction(async (db) => {
@@ -101,8 +103,11 @@ export class PaymentService {
         where: { user_id: userId, request_key: key },
       })
       if (old) {
-        if (old.amount_cents !== Number(micros / 10_000n)) {
-          throw ErrorCode.IDEMPOTENCY_CONFLICT('重复请求金额不一致')
+        if (
+          old.package_snapshot.id !== packageId ||
+          old.package_snapshot.version !== version
+        ) {
+          throw ErrorCode.IDEMPOTENCY_CONFLICT('重复请求的资源包不一致')
         }
         return view(old)
       }
@@ -116,17 +121,27 @@ export class PaymentService {
       if (pending >= 10) {
         throw ErrorCode.ORDER_LIMIT()
       }
-      const bonusCents = await (
-        this.bonusPolicy ?? new RechargeSettingsService(db)
-      ).bonusCents(Number(micros / 10_000n))
+      const product = await this.billing.catalog.purchaseVersion(
+        db,
+        packageId,
+        version,
+      )
+      const snapshot = {
+        ...product.configuration,
+        id: packageId,
+        version,
+        revision: 0,
+        publishedAt: null,
+      }
       const id = randomUUID()
       await db.getRepository(PaymentOrderEntity).insert({
         id,
         user_id: userId,
         request_key: key,
-        amount_cents: Number(micros / 10_000n),
+        amount_cents: Number(money(snapshot.price) / 10_000n),
         configuration_id: configurationId ?? null,
-        bonus_cents: bonusCents,
+        package_version_id: product.id,
+        package_snapshot: snapshot,
         expires_at: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 MINUTE)',
       })
       const row = await db.getRepository(PaymentOrderEntity).findOne({
@@ -162,27 +177,25 @@ export class PaymentService {
   }
 
   async adminList() {
-    const rows = await this.source
-      .createQueryBuilder()
-      .select(
-        'o.id,o.user_id,o.amount_cents,o.bonus_cents,o.currency,o.status,o.created_at,o.expires_at,o.paid_at,u.username,u.nickname',
-      )
-      .from('payment_orders', 'o')
-      .innerJoin('app_users', 'u', 'u.id=o.user_id')
-      .orderBy('o.created_at', 'DESC')
-      .addOrderBy('o.id', 'DESC')
-      .limit(100)
-      .getRawMany()
-    return rows.map(
-      (
-        r: OrderRow & { user_id: string, username: string, nickname: string },
-      ) => ({
-        ...view(r),
-        userId: r.user_id,
-        username: r.username,
-        nickname: r.nickname,
-      }),
-    )
+    const rows = await this.source.getRepository(PaymentOrderEntity).find({
+      select: { ...orderViewFields, user_id: true },
+      order: { created_at: 'DESC', id: 'DESC' },
+      take: 100,
+    })
+    const result = []
+    for (const row of rows) {
+      const user = await this.source.getRepository(AppUserEntity).findOne({
+        select: { username: true, nickname: true },
+        where: { id: row.user_id },
+      })
+      result.push({
+        ...view(row),
+        userId: row.user_id,
+        username: user?.username ?? '',
+        nickname: user?.nickname ?? '',
+      })
+    }
+    return result
   }
 
   async intent(
@@ -345,7 +358,8 @@ export class PaymentService {
             configuration_id: true,
             payment_mode: true,
             next_query_at: true,
-            bonus_cents: true,
+            package_snapshot: true,
+            package_version_id: true,
           },
           where: { id: event.orderId },
           lock: { mode: 'pessimistic_write' },
@@ -378,23 +392,19 @@ export class PaymentService {
             paid_at: event.paidAt.toISOString().replace('T', ' ').slice(0, -1),
           },
         )
-        await this.billing.credit(
-          db,
-          row.user_id,
-          BigInt(event.amountCents) * 10_000n,
-          `payment:${row.id}`,
-          'recharge',
-        )
-        if (row.bonus_cents > 0) {
-          await this.billing.credit(
-            db,
-            row.user_id,
-            BigInt(row.bonus_cents) * 10_000n,
-            `payment-bonus:${row.id}`,
-            'grant',
-            '充值满赠',
-          )
-        }
+        await this.billing.inventory.grant(db, {
+          userId: row.user_id,
+          amount:
+            quota(row.package_snapshot.quota) +
+            quota(row.package_snapshot.bonusQuota),
+          sourceKey: `payment:${row.id}`,
+          name: row.package_snapshot.name,
+          source: 'purchase',
+          validDays: row.package_snapshot.validDays,
+          orderId: row.id,
+          packageVersionId: row.package_version_id,
+          createdAt: event.paidAt,
+        })
       })
       .catch((error: unknown) => {
         if ((error as { code?: string }).code === 'ER_DUP_ENTRY') {
@@ -404,5 +414,11 @@ export class PaymentService {
         }
         throw error
       })
+    const owner = await this.source
+      .getRepository(PaymentOrderEntity)
+      .findOne({ select: { user_id: true }, where: { id: event.orderId } })
+    if (owner) {
+      this.billing.changed(owner.user_id)
+    }
   }
 }

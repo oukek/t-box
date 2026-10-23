@@ -36,9 +36,18 @@ export function tokenFee(prices: ModelPrices, input: number, output: number) {
   return (numerator + SCALE - 1n) / SCALE
 }
 export function prices(value: Partial<ModelPrices>): ModelPrices {
+  const multiplier = money(value.costMultiplier ?? '1')
+  if (multiplier <= 0n || multiplier > 10000000n) {
+    throw ErrorCode.INVALID_PRICE('采购倍率须大于 0 且不超过 10')
+  }
   return {
+    costMultiplier: decimal(multiplier),
     inputPrice: decimal(money(value.inputPrice ?? '0')),
     outputPrice: decimal(money(value.outputPrice ?? '0')),
     imagePrice: decimal(money(value.imagePrice ?? '0')),
   }
+}
+
+export function supplierCost(original: bigint, prices: ModelPrices) {
+  return (original * money(prices.costMultiplier ?? '1') + 999999n) / 1000000n
 }

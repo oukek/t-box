@@ -144,7 +144,7 @@ app/src/
 
 ## 计费与支付边界
 
-计费装饰 Provider，不在编排循环内判断模型价格、用户扣费规则或应用名称。编排仅提供执行上下文；`billing/MeteredChatProvider` 与图片服务调用 `BillingService`，价格、用户模式及费用审计在独立模块持久化。标题生成记录平台用量和成本，用户不预留余额、不扣费；同样受成本与服务商并发约束。支付订单经 `payments/PaymentGateway` 验签或查单后，在本地事务中调用同一个钱包入账服务；前端支付结果不授权入账。具体规则及微信接入点见 [计费与支付](billing-and-payments.md)。
+计费装饰 Provider，不在编排循环内判断模型价格、用户扣费规则或应用名称。编排仅提供执行上下文；`billing/MeteredChatProvider` 与图片服务调用 `BillingService`，价格、用户模式及费用审计在独立模块持久化。标题生成记录平台用量和成本，用户不预占额度、不扣费；同样受成本与服务商并发约束。支付订单经 `payments/PaymentGateway` 验签或查单后，在本地事务中发放商品版本对应的独立额度批次；前端支付结果不授权入账。具体规则及微信接入点见 [计费与支付](billing-and-payments.md)。
 
 上下文预算、真实 Responses 压缩及公开 usage 回调是通用 Provider / Agent 能力。附件投影由 AttachmentPort 还原，模型配置、费用和支付适配器分别由独立服务承载。完整边界见 [上下文与用量](ai-context-and-usage.md)。微信三个网页场景通过 PaymentGateway 接入，账户授权与凭据轮换留在 payments 模块，AI 不读取商户配置或支付认证。
 

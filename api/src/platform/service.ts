@@ -33,7 +33,6 @@ import { IdentityService } from '../identity/service.js'
 import { MemoryService } from '../memory/store.js'
 import { NotificationService } from '../notifications/service.js'
 import { OperationsService } from '../operations/service.js'
-import { RechargeSettingsService } from '../payments/recharge.js'
 import { PaymentReconciliationService } from '../payments/reconciliation.js'
 import { PaymentRefundService } from '../payments/refunds.js'
 import { PaymentService } from '../payments/service.js'
@@ -53,7 +52,6 @@ export class PlatformService {
   readonly calendar: CalendarService
   readonly time: TimeService
   readonly pricing: BillingPricingService
-  readonly recharge: RechargeSettingsService
   readonly support: CustomerSupportService
   readonly billing: BillingService
   readonly providerConcurrency: ProviderConcurrency
@@ -81,7 +79,11 @@ export class PlatformService {
     resources?: ResourceService,
     memoryCache?: MemoryCache,
   ) {
-    this.memory = new MemoryService(source, memoryCache, configuration?.configuration)
+    this.memory = new MemoryService(
+      source,
+      memoryCache,
+      configuration?.configuration,
+    )
     this.applicationCatalogUpdates = new ApplicationCatalogMonitor(source)
     this.applications = new ApplicationPlatform(
       source,
@@ -90,7 +92,10 @@ export class PlatformService {
       { shellMigrations: ['ledger', 'calendar', 'time'], deploymentIssues },
     )
     this.privateFiles = new PrivateApplicationFiles(source, this.applications)
-    this.babyDiary = new BabyDiaryService(source, this.privateFiles.port('baby-diary'))
+    this.babyDiary = new BabyDiaryService(
+      source,
+      this.privateFiles.port('baby-diary'),
+    )
     this.privateFiles.bind('baby-diary', this.babyDiary.mediaPolicy)
     this.applications.bind('baby-diary', this.babyDiary.backend())
     this.applications.bind('calculator', calculatorBackend)
@@ -98,18 +103,26 @@ export class PlatformService {
     this.desktop = new DesktopService(source, this.applications)
     this.calendar = new CalendarService(source, configuration?.cache)
     this.time = new TimeService(source)
-    this.pricing = new BillingPricingService(source, configuration?.cache)
-    this.recharge = new RechargeSettingsService(source, configuration?.cache)
     this.support = new CustomerSupportService(source, configuration?.cache)
-    this.billing = new BillingService(source, configuration?.configuration)
+    this.billing = new BillingService(
+      source,
+      configuration?.configuration,
+      configuration?.cache,
+    )
+    this.pricing = new BillingPricingService(this.billing.catalog)
     this.providerConcurrency = new ProviderConcurrency(source)
     this.payments = new PaymentService(source, this.billing, gateway)
     this.refunds = new PaymentRefundService(source, this.billing, gateway)
-    this.paymentReconciliation = new PaymentReconciliationService(source, gateway, paymentConfiguration)
+    this.paymentReconciliation = new PaymentReconciliationService(
+      source,
+      gateway,
+      paymentConfiguration,
+    )
     this.tasks = new TaskStore(source)
     this.notifications = new NotificationService(source)
     this.operations = new OperationsService(source)
-    this.identity = new IdentityService(source, (db, userId) => createLedgerRows(db, userId, { name: '我的账本', template: 'daily' }))
+    this.identity = new IdentityService(source, (db, userId) =>
+      createLedgerRows(db, userId, { name: '我的账本', template: 'daily' }))
     this.accountSecurity = new AccountSecurityService(this.identity)
     this.access = new LedgerAccess(source, this.identity)
     this.ledgers = new LedgerService(this.access)
@@ -121,6 +134,11 @@ export class PlatformService {
       new ResourceAccessRegistry(createApplicationResourceAdapters(this)),
       this.memory,
     )
-    this.images = new ImageTools(this.resources, configuration, this.billing, this.providerConcurrency)
+    this.images = new ImageTools(
+      this.resources,
+      configuration,
+      this.billing,
+      this.providerConcurrency,
+    )
   }
 }

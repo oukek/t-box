@@ -5,23 +5,76 @@ import {
 } from '@t-box/errors'
 
 const apiErrors = defineApiErrors({
+  QUOTA_INVALID: {
+    statusCode: 400,
+    message: '额度或计费参数无效，额度最多支持四位小数',
+  },
+  QUOTA_INSUFFICIENT: {
+    statusCode: 402,
+    message: '可用额度不足，请购买资源包',
+  },
+  QUOTA_TASK_LIMIT: {
+    statusCode: 409,
+    message: '本次任务额度预算不足，已完成的结果保留',
+  },
+  QUOTA_TARIFF_REQUIRED: {
+    statusCode: 503,
+    message: 'AI 公开费率尚未发布，请管理员先配置费率',
+  },
+  PACKAGE_NOT_AVAILABLE: {
+    statusCode: 409,
+    message: '资源包未上架或版本已变化，请刷新后重新选择',
+  },
+  PACKAGE_PRICE_ORDER: {
+    statusCode: 400,
+    message: '套餐单位价格倒挂，请调整售价或额度后发布',
+  },
+  PACKAGE_CONFLICT: { statusCode: 409, message: '资源包已更新，请刷新后重试' },
+
   MEMORY_INVALID: { statusCode: 400, message: '记忆内容或范围无效' },
-  MEMORY_SENSITIVE: { statusCode: 400, message: '不能保存凭据、系统指令或受保护应用数据为通用记忆' },
+  MEMORY_SENSITIVE: {
+    statusCode: 400,
+    message: '不能保存凭据、系统指令或受保护应用数据为通用记忆',
+  },
   MEMORY_NOT_FOUND: { statusCode: 404, message: '记忆不存在或已失效' },
   MEMORY_CONFLICT: { statusCode: 409, message: '记忆已更新，请刷新后重试' },
-  MEMORY_DISABLED: { statusCode: 409, message: '记忆功能已关闭，可在 AI 记忆中开启' },
-  MEMORY_LIMIT: { statusCode: 409, message: '记忆数量已达上限，请整理后再保存' },
-  MEMORY_EXTRACTION_INVALID: { statusCode: 502, message: '记忆整理结果格式无效' },
+  MEMORY_DISABLED: {
+    statusCode: 409,
+    message: '记忆功能已关闭，可在 AI 记忆中开启',
+  },
+  MEMORY_LIMIT: {
+    statusCode: 409,
+    message: '记忆数量已达上限，请整理后再保存',
+  },
+  MEMORY_EXTRACTION_INVALID: {
+    statusCode: 502,
+    message: '记忆整理结果格式无效',
+  },
   MEMORY_LEASE_LOST: { statusCode: 409, message: '记忆整理任务已失效' },
-  PRIVATE_MEDIA_CONFIG_REQUIRED: { statusCode: 503, message: '私有文件存储尚未配置，请管理员配置独立的私有 OSS Bucket' },
+  PRIVATE_MEDIA_CONFIG_REQUIRED: {
+    statusCode: 503,
+    message: '私有文件存储尚未配置，请管理员配置独立的私有 OSS Bucket',
+  },
   PRIVATE_MEDIA_SCOPE_INVALID: { statusCode: 400, message: '文件所属资源无效' },
   PRIVATE_MEDIA_FORBIDDEN: { statusCode: 403, message: '无法访问此私有文件' },
-  PRIVATE_MEDIA_QUOTA: { statusCode: 409, message: '此档案的文件容量已达上限（2 GB 或 5000 个文件）' },
-  PRIVATE_MEDIA_INVALID_IMAGE: { statusCode: 400, message: '图片无法处理，请使用有效的 JPEG、PNG、WebP 或受支持的 HEIC 图片' },
+  PRIVATE_MEDIA_QUOTA: {
+    statusCode: 409,
+    message: '此档案的文件容量已达上限（2 GB 或 5000 个文件）',
+  },
+  PRIVATE_MEDIA_INVALID_IMAGE: {
+    statusCode: 400,
+    message: '图片无法处理，请使用有效的 JPEG、PNG、WebP 或受支持的 HEIC 图片',
+  },
   PRIVATE_MEDIA_MISSING: { statusCode: 404, message: '私有文件不存在或已删除' },
-  APP_ROLLBACK_REJECTED: { statusCode: 409, message: '无法安全回退此版本，请前往应用市场修复或更新' },
+  APP_ROLLBACK_REJECTED: {
+    statusCode: 409,
+    message: '无法安全回退此版本，请前往应用市场修复或更新',
+  },
   ALREADY_EXISTS: { statusCode: 409, message: '此记录已存在' },
-  BAD_REQUEST: { statusCode: 400, message: '请求格式不正确，请使用 application/json' },
+  BAD_REQUEST: {
+    statusCode: 400,
+    message: '请求格式不正确，请使用 application/json',
+  },
   PAYLOAD_TOO_LARGE: { statusCode: 413, message: '请求内容过大' },
   INTERNAL_ERROR: { statusCode: 500, message: '服务暂时不可用，请稍后重试' },
   NOT_FOUND: { statusCode: 404, message: '接口不存在' },
@@ -1141,7 +1194,8 @@ const internalErrors = defineInternalErrors('API', {
   INTERNAL_DATABASE_SCHEMA_INCOMPLETE: '数据库初始化结构不完整',
   INTERNAL_INVALID_INITIALIZATION_ARGUMENTS:
     'Usage: node dist/init-db.js [--check]',
-  INTERNAL_AGENT_SKILLS_MUST_BELONG_TO_ITS_MODULE: '专业助手只能使用所属应用的技能',
+  INTERNAL_AGENT_SKILLS_MUST_BELONG_TO_ITS_MODULE:
+    '专业助手只能使用所属应用的技能',
   INTERNAL_IMPORT_ADMIN_REQUIRED:
     'An enabled administrator is required before import credential synchronization',
   INTERNAL_APP_ARTIFACT_ORIGIN_MUST_BE_A_SEPARATE_HTTPS_ORIGIN_IN_PRODUCTION:
@@ -1202,12 +1256,14 @@ const internalErrors = defineInternalErrors('API', {
   INTERNAL_INVALID_WECHAT_OAUTH_RESPONSE: 'Invalid Wechat OAuth response',
   INTERNAL_LOCAL_CLEANUP_REFUSED_STORED_OBJECT_DIFFERS_FROM_ITS_OSS_COPY:
     'Local cleanup refused: stored object differs from its OSS copy',
-  INTERNAL_MANIFEST_SKILLS_MUST_BELONG_TO_THEIR_MODULE: '应用清单只能引用所属应用的技能',
+  INTERNAL_MANIFEST_SKILLS_MUST_BELONG_TO_THEIR_MODULE:
+    '应用清单只能引用所属应用的技能',
   INTERNAL_MISSING_CLIENT_PARSER: '前端工具缺少参数解析器',
   INTERNAL_MISSING_HANDLER: '后端工具缺少处理函数',
   INTERNAL_MISSING_OR_CIRCULAR_SCHEMA_DEPENDENCY: '数据库表依赖缺失或存在循环',
   INTERNAL_MISSING_WRITE_FINGERPRINT: '写入工具缺少幂等参数指纹',
-  INTERNAL_ONLY_CONFIGURATION_TOOLS_MAY_RESTORE_LOCAL_STATE: '只有配置工具可以恢复本地状态',
+  INTERNAL_ONLY_CONFIGURATION_TOOLS_MAY_RESTORE_LOCAL_STATE:
+    '只有配置工具可以恢复本地状态',
   INTERNAL_OSS_APPLICATIONS_REQUIRE_AN_EXACT_PUBLIC_HTTPS_ORIGIN:
     'OSS applications require an exact public HTTPS origin',
   INTERNAL_OSS_CONFIGURATION_REQUIRED:
@@ -1238,11 +1294,13 @@ const internalErrors = defineInternalErrors('API', {
     'Remote service credential is required',
   INTERNAL_RESOLVE_A_DATABASE_PROVIDER_BEFORE_RUNNING:
     'Resolve a database provider before running',
-  INTERNAL_RESOURCE_ADAPTER_MUST_BELONG_TO_ITS_MODULE: '资源适配器必须归属于当前应用',
+  INTERNAL_RESOURCE_ADAPTER_MUST_BELONG_TO_ITS_MODULE:
+    '资源适配器必须归属于当前应用',
   INTERNAL_RESOURCE_STORAGE_IDS_MUST_BE_UNIQUE_AND_IMMUTABLE:
     'Resource storage IDs must be unique and immutable',
   INTERNAL_SIZE: 'size',
-  INTERNAL_SKILL_TOOLS_MUST_BELONG_TO_THEIR_MODULE: '技能只能引用所属应用的工具',
+  INTERNAL_SKILL_TOOLS_MUST_BELONG_TO_THEIR_MODULE:
+    '技能只能引用所属应用的工具',
   INTERNAL_TIMELINE_ITEM_TYPE_CONFLICT: 'Timeline item type conflict',
   INTERNAL_TITLE_GENERATION_STOPPED: 'Title generation stopped',
   INTERNAL_TITLE_RESPONSE_INCOMPLETE: 'Title response incomplete',
@@ -1260,4 +1318,8 @@ const internalErrors = defineInternalErrors('API', {
   INTERNAL_USER_BOOTSTRAP_BUSY: '无法获取初始普通用户创建锁，请稍后重试',
 })
 
-export const ErrorCode = Object.freeze({ ...CommonErrorCode, ...apiErrors, ...internalErrors })
+export const ErrorCode = Object.freeze({
+  ...CommonErrorCode,
+  ...apiErrors,
+  ...internalErrors,
+})

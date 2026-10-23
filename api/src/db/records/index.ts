@@ -1,3 +1,4 @@
+import { quotaEntities } from '../../billing/quota/entities.js'
 import {
   ApplicationBuildImportEntity,
   ApplicationFileGrantEntity,
@@ -8,12 +9,7 @@ import {
   ApplicationRegistryEntity,
   ApplicationReleaseEntity,
 } from './applications-entities.js'
-import {
-  BillingAuditEntity,
-  BillingEntryEntity,
-  BillingUsageEntity,
-  BillingWalletEntity,
-} from './billing-entities.js'
+import { BillingAuditEntity, BillingUsageEntity } from './billing-entities.js'
 import {
   PlatformConfigurationEntity,
   PlatformConfigurationHistoryEntity,
@@ -64,12 +60,7 @@ export {
   ApplicationRegistryEntity,
   ApplicationReleaseEntity,
 } from './applications-entities.js'
-export {
-  BillingAuditEntity,
-  BillingEntryEntity,
-  BillingUsageEntity,
-  BillingWalletEntity,
-} from './billing-entities.js'
+export { BillingAuditEntity, BillingUsageEntity } from './billing-entities.js'
 export {
   PlatformConfigurationEntity,
   PlatformConfigurationHistoryEntity,
@@ -110,6 +101,7 @@ export {
 } from './workflow-entities.js'
 
 export const platformRecordEntities = [
+  ...quotaEntities,
   ...memoryEntities,
   UserRecoveryCodeEntity,
   AgentTaskToolEntity,
@@ -126,9 +118,7 @@ export const platformRecordEntities = [
   ConversationAnswerVersionEntity,
   ConversationEntity,
   BillingAuditEntity,
-  BillingEntryEntity,
   BillingUsageEntity,
-  BillingWalletEntity,
   PaymentConfigurationEntity,
   PaymentOauthStateEntity,
   PaymentOrderEntity,

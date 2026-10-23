@@ -31,6 +31,7 @@ import { ApplicationPublishing } from './application-platform/publishing.js'
 import { registerApplicationPlatform } from './application-platform/routes.js'
 import { registerApplicationCatalogSocket } from './application-platform/socket.js'
 import { registerBilling } from './billing/routes.js'
+import { registerQuotaSocket } from './billing/socket.js'
 import { ApplicationChatService as ChatService } from './bootstrap/chat.js'
 import { UnconfiguredProvider } from './chat/provider.js'
 import { registerChatSocket } from './chat/websocket.js'
@@ -77,15 +78,15 @@ export function createApp(deps: AppDependencies) {
     genReqId: () => randomUUID(),
     trustProxy: deps.trustedProxies ?? false,
     logger: deps.logger ?? false,
-    logController: new LogController({ disableRequestLogging: deps.disableRequestLogging ?? false }),
+    logController: new LogController({
+      disableRequestLogging: deps.disableRequestLogging ?? false,
+    }),
     bodyLimit: 16 * 1024,
     requestTimeout: 15_000,
   })
   app.register(cors, {
     delegator: (request, callback) => {
-      const admin = /^\/api\/v1\/admin(?:\/|$)/.test(
-        request.url.split('?')[0]!,
-      )
+      const admin = /^\/api\/v1\/admin(?:\/|$)/.test(request.url.split('?')[0]!)
       const origin = request.headers.origin
       const origins = (admin ? deps.adminOrigins : deps.corsOrigins) ?? ['*']
       const allowed = admin
@@ -232,9 +233,16 @@ export function createApp(deps: AppDependencies) {
     })
   }
   app.addHook('onReady', async () => worker?.start())
-  const memoryWorker = deps.taskWorker && deps.platform?.memory && deps.chatProvider
-    ? new MemoryWorker(deps.platform.memory, deps.chatProvider, deps.administration?.configuration, (code, id) => app.log.warn({ code, jobId: id }, 'Memory extraction paused'))
-    : undefined
+  const memoryWorker =
+    deps.taskWorker && deps.platform?.memory && deps.chatProvider
+      ? new MemoryWorker(
+          deps.platform.memory,
+          deps.chatProvider,
+          deps.administration?.configuration,
+          (code, id) =>
+            app.log.warn({ code, jobId: id }, 'Memory extraction paused'),
+        )
+      : undefined
   app.addHook('onReady', async () => memoryWorker?.start())
   app.addHook('onRequest', async (request, reply) => {
     reply.header('X-Request-Id', request.id)
@@ -257,6 +265,7 @@ export function createApp(deps: AppDependencies) {
       registerLedgerSocket(scope, deps.platform, allowed)
       if (deps.platform.applicationCatalogUpdates) {
         registerApplicationCatalogSocket(scope, deps.platform, allowed)
+        registerQuotaSocket(scope, deps.platform, allowed)
       }
     }
   })
@@ -351,10 +360,7 @@ export function createApp(deps: AppDependencies) {
     registerMemory(app, deps.platform)
     registerCalendar(app, deps.platform.calendar, async (token) => {
       const actor = await deps.platform!.identity.authenticate(token)
-      await deps.platform!.applications?.assertActive(
-        actor.user.id,
-        'calendar',
-      )
+      await deps.platform!.applications?.assertActive(actor.user.id, 'calendar')
       return actor
     })
     registerTime(app, deps.platform.time, async (token) => {

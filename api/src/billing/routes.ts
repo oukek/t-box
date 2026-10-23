@@ -22,10 +22,16 @@ export function registerBilling(app: FastifyInstance, p: PlatformService) {
     await user(r)
     return { data: await p.pricing.schedule() }
   })
-  app.get('/api/v1/payments/recharge-options', async (r) => {
+  app.get('/api/v1/wallet/packages', async (r) => {
     await user(r)
-    return { data: await p.recharge.publicConfiguration() }
+    return { data: await p.billing.catalog.products() }
   })
+  app.get('/api/v1/wallet/lots', async (r) => ({
+    data: await p.billing.lots(await user(r)),
+  }))
+  app.get('/api/v1/wallet/refunds', async (r) => ({
+    data: await p.refunds.forUser(await user(r)),
+  }))
   app.get('/api/v1/wallet/usage', async (r) => ({
     data: await p.billing.records(await user(r)),
   }))
@@ -44,11 +50,11 @@ export function registerBilling(app: FastifyInstance, p: PlatformService) {
   }))
   app.post('/api/v1/payments/orders', async (r, reply) => {
     const uid = await user(r)
-    const body = object(r.body, ['amount'])
+    const body = object(r.body, ['packageId', 'version'])
     return reply.code(201).send({
       data: await p.payments.create(
         uid,
-        body.amount,
+        body,
         requestKey(r.headers['idempotency-key']),
       ),
     })

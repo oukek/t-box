@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { isoTime } from '@t-box/server-foundation/time'
 import { In, Not, Raw } from 'typeorm'
 import { decimal } from '../billing/money.js'
-import { BillingWalletEntity } from '../db/records/billing-entities.js'
+import { quotaText } from '../billing/quota/math.js'
 import {
   PaymentOrderEntity,
   PaymentRefundEntity,
@@ -21,7 +21,7 @@ const view = (
     | 'id' |
     'order_id' |
     'amount_cents' |
-    'credit_micro' |
+    'quota_atoms' |
     'status' |
     'reason' |
     'error' |
@@ -32,7 +32,7 @@ const view = (
   id: row.id,
   orderId: row.order_id,
   amount: decimal(BigInt(row.amount_cents) * 10000n),
-  reclaimedCredit: decimal(BigInt(row.credit_micro)),
+  reclaimedQuota: quotaText(BigInt(row.quota_atoms)),
   status: row.status,
   reason: row.reason,
   error: row.error || undefined,
@@ -45,7 +45,7 @@ const pending: RefundStatus[] = [
   'uncertain',
   'abnormal',
 ]
-/** Full original-route refunds. Bonus credit is reclaimed together; no negative wallet or fabricated success. */
+/** Refund only unused rights from the original purchase lot, including bonus rights proportionally. */
 export class PaymentRefundService {
   private recovering?: Promise<void>
   constructor(
@@ -61,7 +61,7 @@ export class PaymentRefundService {
           id: true,
           order_id: true,
           amount_cents: true,
-          credit_micro: true,
+          quota_atoms: true,
           status: true,
           reason: true,
           error: true,
@@ -72,6 +72,30 @@ export class PaymentRefundService {
         take: 100,
       })
     ).map(view)
+  }
+
+  async forUser(userId: string): Promise<PaymentRefund[]> {
+    const rows = await this.source
+      .getRepository(PaymentRefundEntity)
+      .createQueryBuilder('r')
+      .select([
+        'r.id',
+        'r.order_id',
+        'r.amount_cents',
+        'r.quota_atoms',
+        'r.status',
+        'r.reason',
+        'r.error',
+        'r.created_at',
+        'r.updated_at',
+      ])
+      .innerJoin('payment_orders', 'o', 'o.id=r.order_id')
+      .where('o.user_id=:userId', { userId })
+      .orderBy('r.created_at', 'DESC')
+      .addOrderBy('r.id', 'DESC')
+      .take(100)
+      .getMany()
+    return rows.map(view)
   }
 
   async create(
@@ -108,7 +132,7 @@ export class PaymentRefundService {
           configuration_id: true,
           payment_mode: true,
           next_query_at: true,
-          bonus_cents: true,
+          package_snapshot: true,
         },
         where: { id: orderId },
         lock: { mode: 'pessimistic_write' },
@@ -124,7 +148,7 @@ export class PaymentRefundService {
           administrator_id: true,
           reason: true,
           amount_cents: true,
-          credit_micro: true,
+          quota_atoms: true,
           status: true,
           refund_id: true,
           submitted: true,
@@ -155,31 +179,27 @@ export class PaymentRefundService {
       ) {
         throw ErrorCode.REFUND_EXISTS()
       }
-      const wallet = await this.billing.lock(db, order.user_id)
-      const credit = BigInt(order.amount_cents + order.bonus_cents) * 10000n
-      if (
-        BigInt(wallet.balance_micro) - BigInt(wallet.reserved_micro) <
-          credit
-      ) {
-        throw ErrorCode.REFUND_BALANCE_USED()
-      }
       const id = randomUUID()
-      await db
-        .createQueryBuilder()
-        .update('billing_wallets')
-        .set({ reserved_micro: () => 'reserved_micro+:p0' })
-        .updateEntity(false)
-        .where('user_id=:p1')
-        .setParameters({ p0: credit.toString(), p1: order.user_id })
-        .execute()
+      const held = await this.billing.inventory.refundReserve(
+        db,
+        order.user_id,
+        order.id,
+        `refund:${id}`,
+      )
+      const refundCents = Number(
+        (BigInt(order.amount_cents) * held.amount) / held.total,
+      )
+      if (refundCents < 1) {
+        throw ErrorCode.REFUND_BALANCE_USED('未使用权益不足以退回一分钱')
+      }
       await db.getRepository(PaymentRefundEntity).insert({
         id,
         order_id: orderId,
         request_key: key,
         administrator_id: administratorId,
         reason: reason.trim(),
-        amount_cents: order.amount_cents,
-        credit_micro: credit.toString(),
+        amount_cents: refundCents,
+        quota_atoms: held.amount.toString(),
       })
       const row = await db.getRepository(PaymentRefundEntity).findOne({
         select: {
@@ -189,7 +209,7 @@ export class PaymentRefundService {
           administrator_id: true,
           reason: true,
           amount_cents: true,
-          credit_micro: true,
+          quota_atoms: true,
           status: true,
           refund_id: true,
           submitted: true,
@@ -222,7 +242,7 @@ export class PaymentRefundService {
         administrator_id: true,
         reason: true,
         amount_cents: true,
-        credit_micro: true,
+        quota_atoms: true,
         status: true,
         refund_id: true,
         submitted: true,
@@ -267,7 +287,7 @@ export class PaymentRefundService {
       const [row] = await this.source
         .createQueryBuilder()
         .select(
-          'r.id,r.order_id,r.reason,r.amount_cents,r.submitted,o.configuration_id,o.transaction_id',
+          'r.id,r.order_id,r.reason,r.amount_cents,r.submitted,o.amount_cents AS total_cents,o.configuration_id,o.transaction_id',
         )
         .from('payment_refunds', 'r')
         .innerJoin('payment_orders', 'o', 'o.id=r.order_id')
@@ -283,6 +303,7 @@ export class PaymentRefundService {
             orderId: row.order_id,
             transactionId: row.transaction_id,
             amountCents: row.amount_cents,
+            totalCents: row.total_cents,
             reason: row.reason,
           },
           context,
@@ -369,7 +390,7 @@ export class PaymentRefundService {
           configuration_id: true,
           payment_mode: true,
           next_query_at: true,
-          bonus_cents: true,
+          package_snapshot: true,
         },
         where: { id: event.orderId },
         lock: { mode: 'pessimistic_write' },
@@ -382,7 +403,7 @@ export class PaymentRefundService {
           administrator_id: true,
           reason: true,
           amount_cents: true,
-          credit_micro: true,
+          quota_atoms: true,
           status: true,
           refund_id: true,
           submitted: true,
@@ -425,34 +446,16 @@ export class PaymentRefundService {
               ? 'abnormal'
               : 'processing'
       if (status === 'succeeded' || status === 'closed') {
-        const wallet = await this.billing.lock(db, order.user_id)
-        const credit = BigInt(row.credit_micro)
-        const balance =
-          BigInt(wallet.balance_micro) - (status === 'succeeded' ? credit : 0n)
-        const reserved = BigInt(wallet.reserved_micro) - credit
-        if (balance < 0n || reserved < 0n || balance < reserved) {
-          throw ErrorCode.REFUND_WALLET_MISMATCH()
-        }
-        await db.getRepository(BillingWalletEntity).update(
-          { user_id: order.user_id },
-          {
-            balance_micro: balance.toString(),
-            reserved_micro: reserved.toString(),
-          },
+        await this.billing.lock(db, order.user_id)
+        await this.billing.inventory.capture(
+          db,
+          order.user_id,
+          `refund:${row.id}`,
+          status === 'succeeded' ? BigInt(row.quota_atoms) : 0n,
+          true,
         )
-        if (status === 'succeeded') {
-          await this.billing.entry(
-            db,
-            order.user_id,
-            'refund',
-            `refund:${row.id}`,
-            -credit,
-            balance,
-            '充值原路退款并收回赠送额度',
-            row.administrator_id,
-          )
-        }
       }
+
       await db
         .createQueryBuilder()
         .update('payment_refunds')

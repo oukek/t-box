@@ -17,6 +17,7 @@ import { createDataSource } from '../src/db/data-source.js'
 import { ErrorCode } from '../src/error-codes.js'
 import { PlatformService } from '../src/platform/service.js'
 import { cleanupUsers } from './fixtures.js'
+import { enableTestTariff } from './quota-fixtures.js'
 
 const source = await createDataSource().initialize()
 const platform = new PlatformService(source)
@@ -52,6 +53,7 @@ const wait = async (check: () => boolean) => {
   }
 }
 try {
+  await enableTestTariff(platform.billing)
   const login = await platform.identity.register(
     {
       username: `retry_${randomUUID().replaceAll('-', '')}`,
@@ -63,7 +65,7 @@ try {
   const actor = await platform.identity.authenticate(login.token)
   await platform.billing.wallet(userId)
   await source.query(
-    'UPDATE billing_wallets SET mode=\'record_only\' WHERE user_id=?',
+    'UPDATE ai_quota_accounts SET mode=\'record_only\' WHERE userId=?',
     [userId],
   )
   await source.query(
@@ -87,13 +89,9 @@ try {
       operations.add(input.execution!.operationId)
       const child = input.execution?.agentId === 'time'
       const has = (name: string) =>
-        input.history.some(
-          (i) => i.type === 'function_call' && i.name === name,
-        )
+        input.history.some((i) => i.type === 'function_call' && i.name === name)
       const forced =
-        typeof input.toolChoice === 'object'
-          ? input.toolChoice.name
-          : undefined
+        typeof input.toolChoice === 'object' ? input.toolChoice.name : undefined
       if (child && has('time_timer_create') && !childFailed && !forced) {
         childFailed = true
         input.onDelta('截断的执行分析')

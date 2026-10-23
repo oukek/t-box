@@ -6,15 +6,12 @@ import type {
   ModelInvocationMode,
   RemoteModel,
 } from '@t-box/shared'
-import { contextInputBudget, contextOutputBudget, resolveContextPolicy } from '@t-box/shared'
 import {
-  computed,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  ref,
-  watch,
-} from 'vue'
+  contextInputBudget,
+  contextOutputBudget,
+  resolveContextPolicy,
+} from '@t-box/shared'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AdminDialog from '../components/AdminDialog.vue'
 import AdminIcon from '../components/AdminIcon.vue'
 import AdminSelect from '../components/AdminSelect.vue'
@@ -54,14 +51,22 @@ const form = reactive({
   invocationMode: 'responses' as ModelInvocationMode,
   supportsVision: false,
   supportsReasoning: false,
+  costMultiplier: '1',
   inputPrice: '0',
   outputPrice: '0',
   imagePrice: '0',
   contextPolicy: resolveContextPolicy(),
   maxConcurrency: 4,
 })
-const contextBudget = computed(() => contextInputBudget(form.contextPolicy, contextOutputBudget(form.contextPolicy, form.supportsReasoning)))
-const compactionTrigger = computed(() => Math.floor(contextBudget.value * form.contextPolicy.compactionThreshold))
+const contextBudget = computed(() =>
+  contextInputBudget(
+    form.contextPolicy,
+    contextOutputBudget(form.contextPolicy, form.supportsReasoning),
+  ),
+)
+const compactionTrigger = computed(() =>
+  Math.floor(contextBudget.value * form.contextPolicy.compactionThreshold),
+)
 const filteredModels = computed(() =>
   models.value.filter((m) =>
     `${m.name} ${m.modelId} ${m.providerName}`
@@ -100,13 +105,18 @@ function poolOptions(purpose: 'conversation' | 'image') {
   return models.value.filter((m) => m.purpose === purpose)
 }
 function available(model: AIModelConfig) {
-  return model.enabled && providers.value.some((p) => p.id === model.providerId && p.enabled)
+  return (
+    model.enabled &&
+    providers.value.some((p) => p.id === model.providerId && p.enabled)
+  )
 }
 function poolName(ids: string[], fallback: string) {
   return ids.length ? `${ids.length} 个模型参与调度` : fallback
 }
 function poolSummary(ids: string[]) {
-  return ids.map((id) => models.value.find((m) => m.id === id)?.name || '模型不可用').join('、')
+  return ids
+    .map((id) => models.value.find((m) => m.id === id)?.name || '模型不可用')
+    .join('、')
 }
 let controller: AbortController | undefined
 async function load() {
@@ -120,7 +130,8 @@ async function load() {
     providers.value = p
     models.value = m
     applied.value = s.modelIds ?? (s.modelId ? [s.modelId] : [])
-    appliedImage.value = s.imageModelIds ?? (s.imageModelId ? [s.imageModelId] : [])
+    appliedImage.value =
+      s.imageModelIds ?? (s.imageModelId ? [s.imageModelId] : [])
   } catch (e) {
     error.value = errorMessage(e)
   } finally {
@@ -175,10 +186,10 @@ function edit(model?: AIModelConfig) {
   form.enabled = model?.enabled ?? true
   form.purpose = model?.purpose || 'conversation'
   form.invocationMode =
-    model?.invocationMode ??
-    (form.purpose === 'image' ? 'images' : 'responses')
+    model?.invocationMode ?? (form.purpose === 'image' ? 'images' : 'responses')
   form.supportsVision = model?.supportsVision ?? false
   form.supportsReasoning = model?.supportsReasoning ?? false
+  form.costMultiplier = model?.costMultiplier ?? '1'
   form.inputPrice = model?.inputPrice ?? '0'
   form.outputPrice = model?.outputPrice ?? '0'
   form.imagePrice = model?.imagePrice ?? '0'
@@ -345,13 +356,16 @@ onBeforeUnmount(() => controller?.abort())
         </button>
       </div>
       <h2>
-        {{ loading ? "正在读取…" : poolName(applied, "未启用会话模型") }}
+        {{ loading ? '正在读取…' : poolName(applied, '未启用会话模型') }}
       </h2>
       <p class="runtime-model">
-        {{ poolSummary(applied) || "配置并保存后启用 AI 对话" }}
+        {{ poolSummary(applied) || '配置并保存后启用 AI 对话' }}
       </p>
       <div class="runtime-caption">
-        <span class="status-dot" :class="{ neutral: !applied.length }" />用于日常对话与应用工具调用
+        <span
+          class="status-dot"
+          :class="{ neutral: !applied.length }"
+        />用于日常对话与应用工具调用
       </div>
     </section>
     <section class="runtime-card">
@@ -360,12 +374,15 @@ onBeforeUnmount(() => controller?.abort())
           配置<AdminIcon name="arrow" :size="14" />
         </button>
       </div>
-      <h2>{{ loading ? "正在读取…" : poolName(appliedImage, "尚未启用") }}</h2>
+      <h2>{{ loading ? '正在读取…' : poolName(appliedImage, '尚未启用') }}</h2>
       <p class="runtime-model">
-        {{ poolSummary(appliedImage) || "配置图片模型后，可通过对话调用" }}
+        {{ poolSummary(appliedImage) || '配置图片模型后，可通过对话调用' }}
       </p>
       <div class="runtime-caption">
-        <span class="status-dot" :class="{ neutral: !appliedImage.length }" />按需调用，上传图片不会触发生成
+        <span
+          class="status-dot"
+          :class="{ neutral: !appliedImage.length }"
+        />按需调用，上传图片不会触发生成
       </div>
     </section>
   </div>
@@ -399,7 +416,7 @@ onBeforeUnmount(() => controller?.abort())
             <th>模型</th>
             <th>服务商</th>
             <th>用途 / 调用方式</th>
-            <th>价格（元）</th>
+            <th>采购报价（元）</th>
             <th>并发 / 状态</th>
             <th class="actions-heading">操作</th>
           </tr>
@@ -417,7 +434,7 @@ onBeforeUnmount(() => controller?.abort())
                 :name="m.purpose === 'image' ? 'image' : 'chat'"
                 :size="15"
               />{{
-                m.purpose === "image" ? "图片生成 / 编辑" : "普通会话"
+                m.purpose === 'image' ? '图片生成 / 编辑' : '普通会话'
               }}</span><span class="cell-secondary">{{
                 invocationLabel(m.invocationMode)
               }}</span><span
@@ -427,14 +444,12 @@ onBeforeUnmount(() => controller?.abort())
             </td>
             <td>
               <template v-if="m.purpose === 'conversation'">
-                <span>输入 {{ m.inputPrice }}</span><span class="cell-secondary">输出 {{ m.outputPrice }} / 百万 token</span>
-              </template><template v-else>
-                {{ m.imagePrice }} / 张</template>
+                <span>输入 {{ m.inputPrice }}</span><span class="cell-secondary">输出 {{ m.outputPrice }} / 百万 token</span> </template><template v-else> {{ m.imagePrice }} / 张</template>
             </td>
             <td>
               <span class="cell-secondary">最多 {{ m.maxConcurrency ?? 4 }} 个请求</span>
               <span class="badge" :class="{ disabled: !m.enabled }">{{
-                m.enabled ? "已启用" : "已停用"
+                m.enabled ? '已启用' : '已停用'
               }}</span><span
                 v-if="applied.includes(m.id) || appliedImage.includes(m.id)"
                 class="cell-secondary"
@@ -445,7 +460,8 @@ onBeforeUnmount(() => controller?.abort())
                 v-if="m.purpose === 'conversation'"
                 :disabled="busy || !m.enabled"
                 @click="test(m)"
-              > 测试</button><button
+              >
+                测试</button><button
                 :disabled="busy"
                 class="danger-link"
                 @click="remove(m)"
@@ -561,19 +577,19 @@ onBeforeUnmount(() => controller?.abort())
             "
             :disabled="busy || form.purpose === 'image'"
           /><small>{{
-            form.purpose === "image"
-              ? "使用独立图片模型，调用生成和编辑接口。"
-              : "按服务商支持的接口选择。分析、工具循环、回复、摘要及标题统一使用该调用方式。"
+            form.purpose === 'image'
+              ? '使用独立图片模型，调用生成和编辑接口。'
+              : '按服务商支持的接口选择。分析、工具循环、回复、摘要及标题统一使用该调用方式。'
           }}</small></label>
           <template v-if="form.purpose === 'conversation'">
-            <label>输入价格（元 / 百万 token）<input
+            <label>上游输入报价（元 / 百万 token）<input
               v-model="form.inputPrice"
               inputmode="decimal"
               required
               maxlength="14"
               pattern="[0-9]+([.][0-9]{1,6})?"
             ></label>
-            <label>输出价格（元 / 百万 token）<input
+            <label>上游输出报价（元 / 百万 token）<input
               v-model="form.outputPrice"
               inputmode="decimal"
               required
@@ -584,13 +600,22 @@ onBeforeUnmount(() => controller?.abort())
           <label
             v-else
             class="wide"
-          >图片价格（元 / 张）<input
+          >上游图片报价（元 / 张）<input
             v-model="form.imagePrice"
             inputmode="decimal"
             required
             maxlength="14"
             pattern="[0-9]+([.][0-9]{1,6})?"
           ><small>生成与编辑统一收费，每次一张 1024 × 1024 图片。</small></label>
+          <label>上游采购倍率<input
+            v-model="form.costMultiplier"
+            inputmode="decimal"
+            required
+            placeholder="1 表示原价，0.8 表示八折"
+          ></label>
+          <p class="footnote">
+            以上为供应商采购成本；用户额度费率在“资源包与费率”配置。
+          </p>
           <p class="wide muted">
             0 表示免费，支持 6 位小数。按实际用量结算，标题生成不扣用户余额。
           </p>
@@ -642,7 +667,12 @@ onBeforeUnmount(() => controller?.abort())
               ]"
             /><small>每轮模型调用前检查，包括工具执行过程中。摘要/原生压缩按实际
               token 计费，原始会话与操作记录保留。</small></label>
-            <p class="wide muted">当前有效输入预算 {{ contextBudget.toLocaleString() }} token<span v-if="form.contextPolicy.compactionMode !== 'off'">，达到 {{ compactionTrigger.toLocaleString() }} token 触发压缩</span>。此数值来自当前配置，并非模型容量自动检测结果。</p>
+            <p class="wide muted">
+              当前有效输入预算 {{ contextBudget.toLocaleString() }} token<span
+                v-if="form.contextPolicy.compactionMode !== 'off'"
+              >，达到 {{ compactionTrigger.toLocaleString() }} token
+                触发压缩</span>。此数值来自当前配置，并非模型容量自动检测结果。
+            </p>
             <template v-if="form.contextPolicy.compactionMode !== 'off'">
               <label>压缩触发比例<input
                 v-model.number="form.contextPolicy.compactionThreshold"
@@ -677,7 +707,8 @@ onBeforeUnmount(() => controller?.abort())
               type="checkbox"
             >使用服务商精确输入计数<small>Chat Completions 使用本地分词估算。Responses 仅在支持
               /responses/input_tokens
-              时开启。否则采用本地分词估算并预留安全余量；不同模型分词可能有差异，图片单独预留。实际扣费以服务商 usage 为准。</small></label>
+              时开启。否则采用本地分词估算并预留安全余量；不同模型分词可能有差异，图片单独预留。实际扣费以服务商
+              usage 为准。</small></label>
             <label class="check wide"><input
               v-model="form.contextPolicy.promptCacheKey"
               type="checkbox"
@@ -707,7 +738,7 @@ onBeforeUnmount(() => controller?.abort())
         class="primary"
         :disabled="busy || loadingOptions || !form.providerId || !form.modelId"
       >
-        {{ busy ? "正在保存…" : "保存模型" }}
+        {{ busy ? '正在保存…' : '保存模型' }}
       </button>
     </template>
   </AdminDialog>
@@ -732,12 +763,26 @@ onBeforeUnmount(() => controller?.abort())
     >
       <fieldset :disabled="busy">
         <section
-          v-for="purpose in (['conversation', 'image'] as const)"
+          v-for="purpose in ['conversation', 'image'] as const"
           :key="purpose"
           class="pool-section"
         >
-          <div class="pool-heading"><h3>{{ purpose === 'conversation' ? '普通会话' : '图片生成与编辑' }}</h3><span>{{ (purpose === 'conversation' ? selected : selectedImage).length }} / 32 已选</span></div>
-          <p>{{ purpose === 'conversation' ? '对话、分析、标题和工具循环；看图任务仅调度支持图片输入的模型。' : '独立调用 Images API，与会话模型分开调度。' }}</p>
+          <div class="pool-heading">
+            <h3>
+              {{ purpose === 'conversation' ? '普通会话' : '图片生成与编辑' }}
+            </h3>
+            <span>{{
+              (purpose === 'conversation' ? selected : selectedImage).length
+            }}
+              / 32 已选</span>
+          </div>
+          <p>
+            {{
+              purpose === 'conversation'
+                ? '对话、分析、标题和工具循环；看图任务仅调度支持图片输入的模型。'
+                : '独立调用 Images API，与会话模型分开调度。'
+            }}
+          </p>
           <label
             v-for="model in poolOptions(purpose)"
             :key="model.id"
@@ -758,12 +803,21 @@ onBeforeUnmount(() => controller?.abort())
               :value="model.id"
               :disabled="!available(model) && !selectedImage.includes(model.id)"
             >
-            <span><strong>{{ model.name }}</strong><small>{{ model.providerName }} · {{ model.modelId }}</small><small>{{ invocationLabel(model.invocationMode) }}{{ model.purpose === 'conversation' && model.supportsVision ? ' · 支持图片输入' : '' }}{{ available(model) ? '' : ' · 已停用' }}</small></span>
+            <span><strong>{{ model.name }}</strong><small>{{ model.providerName }} · {{ model.modelId }}</small><small>{{ invocationLabel(model.invocationMode)
+            }}{{
+              model.purpose === 'conversation' && model.supportsVision
+                ? ' · 支持图片输入'
+                : ''
+            }}{{ available(model) ? '' : ' · 已停用' }}</small></span>
             <b>{{ model.maxConcurrency ?? 4 }} 并发</b>
           </label>
-          <p v-if="!poolOptions(purpose).length" class="muted">暂无模型，请先添加对应用途的模型。</p>
+          <p v-if="!poolOptions(purpose).length" class="muted">
+            暂无模型，请先添加对应用途的模型。
+          </p>
         </section>
-        <p class="muted">未选任何模型会关闭对应用途。不同价格按实际调度模型计费；服务商报错会暂时冷却，排队与冷却参数可在平台配置调整。</p>
+        <p class="muted">
+          未选任何模型会关闭对应用途。用户统一按公开额度费率计费，上游成本按实际调度模型记录；服务商报错会暂时冷却，排队与冷却参数可在平台配置调整。
+        </p>
       </fieldset>
     </form>
     <template #footer>
@@ -773,7 +827,7 @@ onBeforeUnmount(() => controller?.abort())
         class="primary"
         :disabled="busy"
       >
-        {{ busy ? "正在保存…" : "保存配置" }}
+        {{ busy ? '正在保存…' : '保存配置' }}
       </button>
     </template>
   </AdminDialog>
@@ -799,7 +853,7 @@ onBeforeUnmount(() => controller?.abort())
         @click="confirmAction"
       >
         {{
-          busy ? "正在处理…" : confirmation?.danger ? "确认删除" : "开始测试"
+          busy ? '正在处理…' : confirmation?.danger ? '确认删除' : '开始测试'
         }}
       </button>
     </template>

@@ -62,7 +62,14 @@ export function createImagesModule(images?: ImageToolPort): ApplicationModule {
         definition: definition(
           'images_generate',
           '根据用户明确要求生成一张图片，使用独立图片模型，结果存入我的资源。',
-          { prompt: { type: 'string', maxLength: 2000 } },
+          {
+            prompt: { type: 'string', maxLength: 2000 },
+            tier: {
+              type: ['string', 'null'],
+              enum: ['1k', '2k', '4k', null],
+              description: '分辨率，默认1k；高档位须用户明确要求，服务商须支持',
+            },
+          },
         ),
         title: '生成图片',
         execution: 'server',
@@ -82,7 +89,10 @@ export function createImagesModule(images?: ImageToolPort): ApplicationModule {
           await (await operation(ctx)).prepare(args)
         },
         async handler(args, ctx) {
-          return (await operation(ctx))(args)
+          return (await operation(ctx))(args, false, {
+            messageId: ctx.session.messages.at(-1)?.id,
+            callId: ctx.callId,
+          })
         },
       },
       images_edit: {
@@ -91,6 +101,7 @@ export function createImagesModule(images?: ImageToolPort): ApplicationModule {
           '按用户说明修改已有图片，资源 ID 必须来自会话附件或工具结果。',
           {
             prompt: { type: 'string', maxLength: 2000 },
+            tier: { type: ['string', 'null'], enum: ['1k', '2k', '4k', null] },
             resourceIds: {
               type: 'array',
               minItems: 1,
@@ -127,7 +138,10 @@ export function createImagesModule(images?: ImageToolPort): ApplicationModule {
           await (await operation(ctx)).prepare(args, true)
         },
         async handler(args, ctx) {
-          return (await operation(ctx))(args, true)
+          return (await operation(ctx))(args, true, {
+            messageId: ctx.session.messages.at(-1)?.id,
+            callId: ctx.callId,
+          })
         },
       },
     },

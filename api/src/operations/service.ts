@@ -9,6 +9,7 @@ import type { AuditMessage } from './audit-checkpoint.js'
 import { randomUUID } from 'node:crypto'
 import { isoTime } from '@t-box/server-foundation/time'
 import { decimal } from '../billing/money.js'
+import { quotaText } from '../billing/quota/math.js'
 import { BillingUsageEntity } from '../db/records/billing-entities.js'
 import { OperationsEventEntity } from '../db/records/operations-entities.js'
 import { AgentTaskToolEntity } from '../db/records/tasks-entities.js'
@@ -65,7 +66,7 @@ export class OperationsService {
         this.source
           .createQueryBuilder()
           .select(
-            'COUNT(*) AS calls,COALESCE(SUM(fee_micro),0) AS cost,COALESCE(SUM(charged_micro),0) AS charged,\n        SUM(status IN (\'reserved\',\'review\')) AS unresolved',
+            'COUNT(*) AS calls,COALESCE(SUM(fee_micro),0) AS cost,COALESCE(SUM(quota_charged),0) AS charged,\n        SUM(status IN (\'reserved\',\'review\')) AS unresolved',
           )
           .from('billing_usage', 'billing_usage')
           .where('created_at>=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 1 DAY)')
@@ -112,7 +113,7 @@ export class OperationsService {
       usage: {
         calls: Number(usage?.calls ?? 0),
         cost: decimal(BigInt(usage?.cost ?? 0)),
-        charged: decimal(BigInt(usage?.charged ?? 0)),
+        charged: quotaText(BigInt(usage?.charged ?? 0)),
         unresolved: Number((usage?.unresolved ?? 0) || 0),
       },
       resources: {
@@ -211,7 +212,7 @@ export class OperationsService {
           purpose: true,
           status: true,
           fee_micro: true,
-          charged_micro: true,
+          quota_charged: true,
           input_tokens: true,
           output_tokens: true,
           duration_ms: true,
@@ -284,7 +285,7 @@ export class OperationsService {
         purpose: row.purpose,
         status: row.status,
         cost: decimal(BigInt(row.fee_micro)),
-        charged: decimal(BigInt(row.charged_micro)),
+        charged: quotaText(BigInt(row.quota_charged)),
         inputTokens:
           row.input_tokens === null ? null : Number(row.input_tokens),
         outputTokens:

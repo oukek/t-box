@@ -54,7 +54,7 @@ onMounted(load)
     <div>
       <p class="eyebrow">PAYMENTS</p>
       <h1>支付订单</h1>
-      <p>充值订单与余额入账由服务端确认。</p>
+      <p>资源包订单与权益发放由服务端确认。</p>
     </div>
     <div class="actions">
       <button @click="settingsOpen = true">微信支付配置</button><button :disabled="loading" @click="load">刷新</button>
@@ -68,7 +68,7 @@ onMounted(load)
     {{ error }}
   </p>
   <p v-if="!loading && !enabled" class="alert">
-    在线充值未开放，请在“微信支付配置”中填写商户信息并启用对应支付方式。
+    在线购买未开放，请在“微信支付配置”中填写商户信息并启用对应支付方式。
   </p>
   <section class="panel">
     <div class="panel-heading">
@@ -76,7 +76,7 @@ onMounted(load)
       <span class="muted">最多 100 条</span>
     </div>
     <div v-if="loading" class="empty">正在读取订单…</div>
-    <div v-else-if="!orders.length" class="empty">暂无充值订单</div>
+    <div v-else-if="!orders.length" class="empty">暂无资源包订单</div>
     <div v-else class="table-wrap">
       <table>
         <thead>
@@ -95,34 +95,28 @@ onMounted(load)
             </td>
             <td>
               {{ o.amount
-              }}<span
-                v-if="Number(o.bonusAmount) > 0"
-                class="cell-secondary"
-              >赠 ¥{{ Number(o.bonusAmount) }} · 到账 ¥{{
-                Number(o.creditedAmount)
-              }}</span>
+              }}<span class="cell-secondary">{{ o.packageName }} v{{ o.packageVersion }} · {{ o.quota }} +
+                {{ o.bonusQuota }} 额度</span>
             </td>
             <td>
               <span class="badge" :class="{ disabled: o.status !== 'paid' }">{{
-                o.status === "paid"
-                  ? "已支付"
-                  : o.status === "closed"
-                    ? "已关闭"
+                o.status === 'paid'
+                  ? '已支付'
+                  : o.status === 'closed'
+                    ? '已关闭'
                     : Date.parse(o.expiresAt) <= Date.now()
-                      ? "已过期，待渠道核对"
-                      : "待支付"
+                      ? '已过期，待渠道核对'
+                      : '待支付'
               }}</span>
             </td>
             <td>
               {{ new Date(o.createdAt).toLocaleString()
               }}<span class="cell-secondary">{{
-                o.paidAt ? new Date(o.paidAt).toLocaleString() : "—"
+                o.paidAt ? new Date(o.paidAt).toLocaleString() : '—'
               }}</span>
             </td>
             <td class="actions">
-              <button :disabled="busy" @click="selected = o">
-                渠道核对
-              </button>
+              <button :disabled="busy" @click="selected = o">渠道核对</button>
             </td>
           </tr>
         </tbody>
@@ -156,7 +150,7 @@ onMounted(load)
         :disabled="busy"
         @click="reconcile"
       >
-        {{ busy ? "正在核对…" : "开始核对" }}
+        {{ busy ? '正在核对…' : '开始核对' }}
       </button>
     </template>
   </AdminDialog>

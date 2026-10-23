@@ -4,7 +4,7 @@ export interface PaymentRefund {
   id: string
   orderId: string
   amount: string
-  reclaimedCredit: string
+  reclaimedQuota: string
   status: RefundStatus
   reason: string
   error?: string

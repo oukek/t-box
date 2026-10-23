@@ -24,7 +24,7 @@ export async function admitCost(
   const [totals] = await db
     .createQueryBuilder()
     .select(
-      'COALESCE(SUM(IF(created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR,IF(status=\'settled\',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS platform_cost,\n    COALESCE(SUM(IF(user_id=:p0 AND created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR,IF(status=\'settled\',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS user_cost,\n    COALESCE(SUM(IF(task_id=:p1,IF(status=\'settled\',fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS task_cost',
+      'COALESCE(SUM(IF(created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR,IF(status IN (\'settled\',\'reversed\'),fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS platform_cost,\n    COALESCE(SUM(IF(user_id=:p0 AND created_at>=TIMESTAMP(DATE(UTC_TIMESTAMP()+INTERVAL 8 HOUR))-INTERVAL 8 HOUR,IF(status IN (\'settled\',\'reversed\'),fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS user_cost,\n    COALESCE(SUM(IF(task_id=:p1,IF(status IN (\'settled\',\'reversed\'),fee_micro,GREATEST(cost_reserved_micro,fee_micro)),0)),0) AS task_cost',
     )
     .from('billing_usage', 'billing_usage')
     .where(

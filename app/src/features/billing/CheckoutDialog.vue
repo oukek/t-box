@@ -22,11 +22,12 @@ defineEmits<{ close: [] }>()
     @close="$emit('close')"
   >
     <div class="wallet-checkout">
-      <span class="wallet-checkout-label">余额充值</span>
+      <span class="wallet-checkout-label">{{
+        order?.packageName ?? '资源包'
+      }}</span>
       <strong v-if="order">¥{{ fee(order.amount) }}</strong>
-      <small v-if="order && Number(order.bonusAmount) > 0">赠送 ¥{{ fee(order.bonusAmount) }}，到账 ¥{{
-        fee(order.creditedAmount)
-      }}</small>
+      <small v-if="order">{{ order.quota }} 额度，另赠 {{ order.bonusQuota }} 额度 ·
+        {{ order.validDays }} 天有效</small>
       <img
         v-if="qr"
         :src="qr"

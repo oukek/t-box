@@ -63,6 +63,8 @@ export interface ProviderUsage {
   durationMs?: number
 }
 export interface ChatProvider {
+  /** Static instructions injected by an inner decorator; included in admission estimates only. */
+  admissionInstructions?: string
   maxOutputTokens?: number
   mode: ChatMode
   contextPolicy?: ContextPolicy
@@ -284,6 +286,15 @@ export class OpenAIResponsesProvider implements ChatProvider {
     }
     if (!output) {
       throw ErrorCode.PROVIDER_STREAM_CLOSED()
+    }
+    if (
+      output.some(
+        (item) =>
+          item.type === 'message' &&
+          item.content.some((part) => part.type === 'refusal'),
+      )
+    ) {
+      throw ErrorCode.PROVIDER_REFUSED()
     }
     return {
       // Preserve reasoning (including encrypted_content), messages and every call.

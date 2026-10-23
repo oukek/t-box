@@ -89,7 +89,7 @@ export class AdminStore {
   async models(): Promise<AIModelConfig[]> {
     const rows = await this.queryBuilder()
       .select(
-        'm.id,m.provider_id AS providerId,p.name AS providerName,m.model_id AS modelId,m.name,m.enabled,m.max_concurrency AS maxConcurrency,m.purpose,m.invocation_mode AS invocationMode,m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy',
+        'm.id,m.provider_id AS providerId,p.name AS providerName,m.model_id AS modelId,m.name,m.enabled,m.max_concurrency AS maxConcurrency,m.purpose,m.invocation_mode AS invocationMode,m.supports_vision AS supportsVision,m.supports_reasoning AS supportsReasoning,m.cost_multiplier AS costMultiplier,m.input_price AS inputPrice,m.output_price AS outputPrice,m.image_price AS imagePrice,m.context_policy AS contextPolicy',
       )
       .from('ai_models', 'm')
       .innerJoin('ai_providers', 'p', 'p.id=m.provider_id')

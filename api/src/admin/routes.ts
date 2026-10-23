@@ -104,12 +104,49 @@ export function registerAdmin(
             ),
             (r) => auth.authenticate(sessionToken(r)),
           )
-          secure.get('/payments/recharge-options', async () => ({
-            data: await platform.recharge.configuration(),
+          secure.get('/billing/packages', async () => ({
+            data: await platform.billing.catalog.list(),
           }))
-          secure.patch('/payments/recharge-options', async (r) => {
+          secure.post('/billing/packages', async (r) => ({
+            data: await platform.billing.catalog.save(r.body),
+          }))
+          secure.patch<{ Params: { id: string } }>(
+            '/billing/packages/:id',
+            async (r) => {
+              const input = body(r.body, ['draft', 'revision'])
+              return {
+                data: await platform.billing.catalog.save(
+                  input.draft,
+                  parseId(r.params.id),
+                  Number(input.revision),
+                ),
+              }
+            },
+          )
+          secure.post<{ Params: { id: string } }>(
+            '/billing/packages/:id/publish',
+            async (r) => {
+              const input = body(r.body, ['revision'])
+              await platform.billing.catalog.publish(
+                parseId(r.params.id),
+                Number(input.revision),
+              )
+              return { data: await platform.billing.catalog.list() }
+            },
+          )
+          secure.get('/billing/tariff', async () => ({
+            data: await platform.billing.catalog.tariff(),
+          }))
+          secure.put('/billing/tariff', async (r) => {
             const actor = await auth.authenticate(sessionToken(r))
-            return { data: await platform.recharge.save(r.body, actor.id) }
+            const input = body(r.body, ['configuration', 'version'])
+            return {
+              data: await platform.billing.catalog.publishTariff(
+                input.configuration,
+                Number(input.version),
+                actor.id,
+              ),
+            }
           })
           secure.get('/support', async () => ({
             data: await platform.support.configuration(),
@@ -177,7 +214,7 @@ export function registerAdmin(
           secure.post<{ Params: { id: string } }>(
             '/billing/users/:id/grants',
             async (r) => {
-              const input = body(r.body, ['amount', 'reason'])
+              const input = body(r.body, ['amount', 'reason', 'validDays'])
               const actor = await auth.authenticate(sessionToken(r))
               await platform.billing.grant(
                 parseId(r.params.id),
@@ -185,6 +222,7 @@ export function registerAdmin(
                 requestKey(r.headers['idempotency-key']),
                 text(input.reason, '赠送原因', 200),
                 actor.id,
+                Number(input.validDays ?? 180),
               )
               return {
                 data: await platform.billing.wallet(parseId(r.params.id)),

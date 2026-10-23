@@ -81,4 +81,4 @@ MySQL 和密钥需要配套备份；远端业务文件与应用版本另行保�
 
 部署工具实现位于 `deploy/oss/`，由 workspace 锁文件固定 SDK 依赖；需要本地生成同样的独立工具包时运行 `node scripts/pack-oss-tools.mjs /tmp/tbox-deployment-tools`，产物为 `/tmp/tbox-deployment-tools.tar.gz`。归档不含凭据，替换工具包时保留服务器已有 `.env`、`oss.env` 和 `api/data/`。
 
-本次新增 AI 记忆表，已有 `2026-10-21.2` 等受支持基线应先备份并停止旧 API/worker，再用新产物的 `dist/db/upgrades/memory-cli.js --check` 检查，去掉 `--check` 执行升级，之后再走原发布流程。PM2 命令示例与兼容基线见 [数据库升级](database-initialization.md)。首次空库仍走原初始化；部署脚本保持严格预检，不自动修改已有库结构。
+当前额度体系采用新基线 `2026-10-22.2`，按未上线新应用处理，不提供旧余额或旧表结构转换。配置新数据库后执行 `node dist/init-db.js --check` / `node dist/init-db.js`，初始化管理员，再启动 API/worker；旧数据库保持原样。部署预检不会接管或清空旧库。上线前在后台确认并发布公开费率，配置资源包和支付商户。详见 [计费与支付](billing-and-payments.md) 和 [初始化说明](database-initialization.md)。

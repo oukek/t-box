@@ -205,7 +205,7 @@ export class WechatGateway implements PaymentGateway {
         notify_url: `${c.apiBaseUrl}/api/v1/payments/webhooks/wechat/refunds`,
         amount: {
           refund: input.amountCents,
-          total: input.amountCents,
+          total: input.totalCents,
           currency: 'CNY',
         },
       }),
@@ -215,7 +215,8 @@ export class WechatGateway implements PaymentGateway {
       result.id !== input.id ||
       result.orderId !== input.orderId ||
       result.transactionId !== input.transactionId ||
-      result.amountCents !== input.amountCents
+      result.amountCents !== input.amountCents ||
+      result.totalCents !== input.totalCents
     ) {
       throw fail('微信退款结果与原退款单不一致')
     }

@@ -4,6 +4,7 @@ import type { Resource } from '@t-box/shared'
 export type ImageOperation = ((
   value: unknown,
   edit?: boolean,
+  trace?: { messageId?: string, callId?: string },
 ) => Promise<{ resources: Resource[] }>) & {
   prepare(value: unknown, edit?: boolean): Promise<unknown>
 }

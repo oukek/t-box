@@ -25,7 +25,20 @@ export const purposeLabels: Record<string, string> = {
   title: '会话标题',
   image: '图片处理',
 }
-export const billingLabels: Record<string, string> = { reserved: '预留中', review: '用量待核对', settled: '已结算', released: '已释放' }
-export const time = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
-export const duration = (value: number | null) => value == null ? '—' : value < 1000 ? `${value} ms` : `${(value / 1000).toFixed(1)} 秒`
-export const pretty = (value: unknown) => value == null ? '暂无记录' : JSON.stringify(value, null, 2)
+export const billingLabels: Record<string, string> = {
+  reserved: '预留中',
+  review: '用量待核对',
+  settled: '已结算',
+  released: '已释放',
+  reversed: '失败已冲正',
+}
+export const time = (value: string | null) =>
+  value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
+export const duration = (value: number | null) =>
+  value == null
+    ? '—'
+    : value < 1000
+      ? `${value} ms`
+      : `${(value / 1000).toFixed(1)} 秒`
+export const pretty = (value: unknown) =>
+  value == null ? '暂无记录' : JSON.stringify(value, null, 2)

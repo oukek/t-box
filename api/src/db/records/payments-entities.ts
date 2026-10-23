@@ -94,7 +94,8 @@ export interface StoredPaymentOrder {
   configuration_id: string | null
   payment_mode: WechatPaymentMode | null
   next_query_at: string | null
-  bonus_cents: number
+  package_version_id: string
+  package_snapshot: import('@t-box/shared').ResourcePackage
 }
 
 export const PaymentOrderEntity = new EntitySchema<StoredPaymentOrder>({
@@ -152,7 +153,8 @@ export const PaymentOrderEntity = new EntitySchema<StoredPaymentOrder>({
       precision: 3,
       transformer: utcSqlDateTime,
     },
-    bonus_cents: { type: 'int', name: 'bonus_cents' },
+    package_version_id: { type: 'char', length: 36 },
+    package_snapshot: { type: 'json' },
   },
   indices: [
     { name: 'ix_orders_user', columns: ['user_id', 'created_at'] },
@@ -250,7 +252,7 @@ export interface StoredPaymentRefund {
   administrator_id: string
   reason: string
   amount_cents: number
-  credit_micro: string
+  quota_atoms: string
   status: RefundStatus
   refund_id: string | null
   submitted: number | boolean
@@ -273,7 +275,7 @@ export const PaymentRefundEntity = new EntitySchema<StoredPaymentRefund>({
     administrator_id: { type: 'char', name: 'administrator_id', length: 36 },
     reason: { type: 'varchar', length: 80 },
     amount_cents: { type: 'int', name: 'amount_cents' },
-    credit_micro: { type: 'bigint', name: 'credit_micro' },
+    quota_atoms: { type: 'bigint', name: 'quota_atoms' },
     status: { type: 'varchar', length: 24 },
     refund_id: {
       type: 'varchar',
