@@ -79,28 +79,6 @@ export function packageDraft(value: unknown): ResourcePackageDraft {
     enabled: row.enabled,
   }
 }
-export function validatePackagePrices(items: ResourcePackageDraft[]) {
-  const enabled = items
-    .filter((row) => row.enabled)
-    .sort((a, b) =>
-      quota(a.quota) + quota(a.bonusQuota) <
-        quota(b.quota) + quota(b.bonusQuota)
-        ? -1
-        : 1,
-    )
-  for (let index = 1; index < enabled.length; index++) {
-    const before = enabled[index - 1]!
-    const after = enabled[index]!
-    const a = quota(before.quota) + quota(before.bonusQuota)
-    const b = quota(after.quota) + quota(after.bonusQuota)
-    // Strictly decreasing unit price implies no combination of smaller packages can undercut this tier.
-    if (a === b || money(after.price) * a >= money(before.price) * b) {
-      throw ErrorCode.PACKAGE_PRICE_ORDER(
-        `${after.name}的单位额度价格须低于${before.name}（含赠送额度）`,
-      )
-    }
-  }
-}
 export function tariffInput(
   value: unknown,
 ): Omit<QuotaTariff, 'version' | 'publishedAt'> {
@@ -279,15 +257,12 @@ export class QuotaCatalog {
       if (!row || row.revision !== revision) {
         throw ErrorCode.PACKAGE_CONFLICT()
       }
-      const other = (await this.list(db))
-        .filter((item) => item.id !== id)
-        .flatMap((item) => (item.published ? [item.published] : []))
-      validatePackagePrices([...other, row.draft])
+      const draft = packageDraft(row.draft)
       await db.getRepository(QuotaProductVersionEntity).insert({
         id: randomUUID(),
         productId: id,
         version: row.currentVersion + 1,
-        configuration: row.draft,
+        configuration: draft,
         createdAt: sqlClock(new Date()),
       })
       await repo.update(

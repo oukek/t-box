@@ -141,7 +141,7 @@ onMounted(load)
   <section class="panel">
     <div class="panel-heading">
       <h2>资源包商品</h2>
-      <span class="muted">发布时校验优惠梯度</span>
+      <span class="muted">各资源包可独立定价</span>
     </div>
     <div v-if="loading" class="empty">正在读取配置…</div>
     <div v-else class="table-wrap">

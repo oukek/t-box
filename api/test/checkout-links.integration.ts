@@ -180,14 +180,13 @@ try {
   const productsBefore = await platform.billing.catalog.list()
   const product = productsBefore.find((row) => row.id === selection.packageId)!
   const otherSelling = productsBefore.filter((row) => row.id !== product.id && row.published?.enabled)
-  // Isolate the one-cent fixture from the independent selling-price ladder.
-  // This suite is guarded to use a disposable database only.
-  for (const row of otherSelling) {
-    await publishDraft(row.id, { ...row.draft, enabled: false })
-  }
   await platform.billing.catalog.save({ ...product.draft, price: '0.01' }, product.id, product.revision)
   const changed = (await platform.billing.catalog.list()).find((row) => row.id === product.id)!
   await platform.billing.catalog.publish(changed.id, changed.revision)
+  const afterPublish = await platform.billing.catalog.list()
+  for (const row of otherSelling) {
+    assert.deepEqual(afterPublish.find((item) => item.id === row.id)?.published, row.published, 'A cheaper test package must publish without changing or unlisting any other package')
+  }
   const oneCent = await platform.payments.create(a.user.id, { packageId: product.id, version: (product.published?.version ?? 0) + 1 }, randomUUID())
   assert.equal(oneCent.amount, '0.010000')
   assert.equal((await platform.payments.get(a.user.id, own.id)).amount, '10.000000', 'Publishing a cheaper version never changes the frozen price of an existing order')
@@ -200,10 +199,13 @@ try {
   await platform.payments.notify(Buffer.from('{}'), {})
   await platform.payments.notify(Buffer.from('{}'), {})
   assert.equal((await platform.billing.wallet(a.user.id)).balance, '20.0000', 'A one-cent order grants its frozen quota once, independently of the CNY price')
+  const promotion = { ...product.draft, code: `same-quota-${randomUUID().slice(0, 8)}`, name: '同额度活动包', price: '0.50', quota: '1', bonusQuota: '9' }
+  const promotionId = await platform.billing.catalog.save(promotion)
+  await publishDraft(promotionId, promotion)
+  const publishedPromotion = (await platform.billing.catalog.list()).find((row) => row.id === promotionId)!.published!
+  assert.equal(publishedPromotion.price, '0.50', 'A separately priced package with the same total quota, including gifts, can coexist')
+  await publishDraft(promotionId, { ...promotion, enabled: false })
   await publishDraft(product.id, product.draft)
-  for (const row of otherSelling) {
-    await publishDraft(row.id, row.draft)
-  }
   console.log('Checkout links integration passed: Socket scan/confirmation/payment/settlement states, reconnect snapshots, unauthorized subscriptions rejected, atomic same/different-account phone claims, safe cancellation,  owned order, opaque expiring links, same-account payment, mandatory explicit cross-account consent, fixed payer and beneficiary, duplicate settlement and link rotation.')
 } finally {
   sockets.forEach((socket) => socket.terminate())

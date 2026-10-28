@@ -45,10 +45,7 @@ const apiErrors = defineApiErrors({
     statusCode: 409,
     message: '资源包未上架或版本已变化，请刷新后重新选择',
   },
-  PACKAGE_PRICE_ORDER: {
-    statusCode: 400,
-    message: '套餐单位价格倒挂，请调整售价或额度后发布',
-  },
+
   PACKAGE_CONFLICT: { statusCode: 409, message: '资源包已更新，请刷新后重试' },
 
   MEMORY_INVALID: { statusCode: 400, message: '记忆内容或范围无效' },

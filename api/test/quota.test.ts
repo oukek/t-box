@@ -4,7 +4,6 @@ import { prices, supplierCost } from '../src/billing/money.js'
 import {
   packageDraft,
   tariffInput,
-  validatePackagePrices,
 } from '../src/billing/quota/catalog.js'
 import {
   initialPackages,
@@ -55,34 +54,6 @@ test('supplier discount affects cost only, not public fee', () => {
   )
   assert.throws(() => prices({ costMultiplier: '0' }))
   assert.throws(() => prices({ costMultiplier: '10.1' }))
-})
-test('published package ladder rejects price inversions, gifts and equal quota collisions', () => {
-  validatePackagePrices(initialPackages)
-  assert.throws(
-    () =>
-      validatePackagePrices(
-        initialPackages.map((row) =>
-          row.code === 'basic' ? { ...row, price: '18.90' } : row,
-        ),
-      ),
-    { code: 'PACKAGE_PRICE_ORDER' },
-  )
-  assert.throws(() =>
-    validatePackagePrices([
-      initialPackages[0]!,
-      { ...initialPackages[1]!, quota: '500' },
-    ]),
-  )
-  assert.throws(() =>
-    validatePackagePrices([
-      initialPackages[0]!,
-      { ...initialPackages[1]!, bonusQuota: '600' },
-      initialPackages[2]!,
-    ]),
-  )
-  validatePackagePrices(
-    initialPackages.map((row) => ({ ...row, enabled: false })),
-  )
 })
 test('package and tariff inputs reject unknown fields, fractional product credits and stale assumptions', () => {
   assert.deepEqual(packageDraft(initialPackages[0]), initialPackages[0])
