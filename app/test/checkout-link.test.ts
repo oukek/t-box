@@ -10,6 +10,9 @@ test('desktop opens a WeChat checkout link; only the WeChat browser calls JS-SDK
   assert.equal(usesWechatCheckoutLink(false, 'iPhone MicroMessenger', true), false)
   assert.equal(usesWechatCheckoutLink(true, 'Android', true), false)
   assert.equal(usesWechatCheckoutLink(false, 'Android Chrome', true), false)
+  assert.equal(usesWechatCheckoutLink(false, 'Android Chrome', true, 5, ['jsapi']), true)
+  assert.equal(usesWechatCheckoutLink(false, 'iPhone Safari', true, 5, ['jsapi']), true)
+  assert.equal(usesWechatCheckoutLink(false, 'Android Chrome', true, 5, ['jsapi', 'h5']), false)
 })
 test('checkout URLs provide only a ticket; clean URLs and duplicated or invalid tickets cannot repeat automatic payment', () => {
   const ticket = 'a'.repeat(64)

@@ -82,6 +82,7 @@ async function submit() {
 <template>
   <AdminDialog
     :open="open"
+    class="wechat-payment-dialog"
     title="微信支付配置"
     description="普通商户 · API v3。请先配置“微信登录”，支付服务号须使用同一 AppID。密钥加密保存，留空保留原值。"
     :busy="busy"
@@ -103,12 +104,13 @@ async function submit() {
     >
       <fieldset :disabled="busy">
         <div class="form-grid">
+          <h3 class="wide payment-config-heading">商户身份<small>与微信登录使用同一个公众号 AppID</small></h3>
           <label>服务号 AppID<AdminInput
             v-model="form.appId"
             autocomplete="off"
             placeholder="wx…"
           /></label>
-          <label>移动应用 AppID<AdminInput
+          <label v-if="form.app">移动应用 AppID<AdminInput
             v-model="form.mobileAppId"
             autocomplete="off"
             placeholder="wx…"
@@ -118,6 +120,7 @@ async function submit() {
             inputmode="numeric"
             autocomplete="off"
           /></label>
+          <h3 class="wide payment-config-heading">证书与密钥<small>已保存的私钥和密钥留空保留</small></h3>
           <label>商户 API 证书序列号<AdminInput
             v-model="form.merchantSerial"
             autocomplete="off"
@@ -164,6 +167,7 @@ async function submit() {
               form.hasAppSecret ? '已配置，留空保留' : '自动复用“微信登录”中同 AppID 的密钥'
             "
           /></label>
+          <h3 class="wide payment-config-heading">网站与通知<small>通知地址由 API 公网地址自动生成</small></h3>
           <label>API 公网地址<AdminInput
             v-model="form.apiBaseUrl"
             type="url"
@@ -178,17 +182,12 @@ async function submit() {
             v-model="form.description"
             maxlength="127"
           /></label>
-          <label class="check wide"><AdminCheckbox v-model="form.native" />Native 原生扫码接口</label>
-          <label class="check wide"><AdminCheckbox v-model="form.h5" />微信外移动浏览器 · H5
-            支付<small>需单独开通 H5 并配置支付域名</small></label>
-          <label class="check wide"><AdminCheckbox v-model="form.jsapi" />微信内网页与电脑扫码网页 · JSAPI
-            支付<small>电脑扫码后在微信网页核对账号并付款；需绑定服务号，配置授权域名和支付授权目录</small></label>
-          <label class="check wide"><AdminCheckbox v-model="form.app" />iOS / Android 原生 APP
-            支付<small>需开通 APP 支付并绑定移动 AppID；壳内 AppID 必须一致。iOS
-              Universal Link 和 Android 签名需在开放平台配置。</small></label>
-          <label class="check wide"><AdminCheckbox
-            v-model="form.enabled"
-          />开放新充值订单</label>
+          <h3 class="wide payment-config-heading">支付方式<small>仅启用已在微信商户平台开通的渠道</small></h3>
+          <label class="check payment-channel-option"><AdminCheckbox v-model="form.jsapi" />微信网页 · JSAPI<small>微信内付款；其他浏览器扫码或复制链接到微信。</small></label>
+          <label class="check payment-channel-option"><AdminCheckbox v-model="form.h5" />手机浏览器 · H5<small>微信外直接唤起微信，需单独开通 H5 支付。</small></label>
+          <label class="check payment-channel-option"><AdminCheckbox v-model="form.native" />Native 原生扫码<small>直接扫描微信渠道二维码的独立接口。</small></label>
+          <label class="check payment-channel-option"><AdminCheckbox v-model="form.app" />原生客户端 · APP<small>需开通 APP 支付并配置移动应用 AppID。</small></label>
+          <label class="check wide wechat-purchase-switch" :class="{ enabled: form.enabled }"><AdminCheckbox v-model="form.enabled" />开放新充值订单<small>在线购买总开关。选好支付渠道后，还需开启本项并保存。</small></label>
           <p class="wide muted">
             停用后继续接收旧订单通知。每笔订单绑定创建时的商户配置；修改密钥不覆盖旧订单。
           </p>

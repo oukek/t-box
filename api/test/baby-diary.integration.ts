@@ -62,7 +62,7 @@ const updateRelease = {
   releaseId: 'baby-diary-fixture-update',
   manifest: { ...babyDiaryRelease.manifest, version: '99.0.0' },
 }
-const identity = new IdentityService(source)
+const identity = new IdentityService(source, undefined, 'internal')
 const actors: Actor[] = []
 const babyIds: string[] = []
 async function actor(name: string) {

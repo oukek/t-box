@@ -29,6 +29,7 @@ export class IdentityService {
       db: EntityManager,
       userId: string,
     ) => Promise<unknown>,
+    private readonly authentication: 'wechat' | 'internal' = 'wechat',
   ) {}
 
   limit(key: string, max = 20, ttl = 15 * 60_000) {
@@ -187,7 +188,7 @@ export class IdentityService {
     sessionHash: string,
     db = this.source.manager,
   ): Promise<Principal> {
-    const [user] = await db
+    const query = db
       .createQueryBuilder()
       .select('u.id,u.username,u.nickname,u.created_at AS createdAt,w.avatar_url AS avatarUrl')
       .from('user_sessions', 's')
@@ -197,9 +198,17 @@ export class IdentityService {
         's.token_hash=:p0 AND s.expires_at>UTC_TIMESTAMP(3) AND u.enabled=TRUE',
       )
       .setParameters({ p0: sessionHash })
-      .getRawMany()
+    if (this.authentication === 'wechat') {
+      // A valid legacy password token is not a WeChat login. The runtime always
+      // supplies this policy, including HTTP, Socket and native action requests.
+      query
+        .innerJoin('wechat_identities', 'wx', 'wx.user_id=u.id')
+        .innerJoin('wechat_account_settings', 'wa', 'wa.id=1 AND wa.app_id=wx.app_id')
+        .andWhere('u.password_hash=:wechatOnly', { wechatOnly: '!wechat-only' })
+    }
+    const [user] = await query.getRawMany()
     if (!user) {
-      throw ErrorCode.UNAUTHENTICATED('登录已失效，请重新登录')
+      throw ErrorCode.UNAUTHENTICATED(this.authentication === 'wechat' ? '请使用微信重新登录' : '登录已失效，请重新登录')
     }
     const now = Date.now()
     if (now - (this.touched.get(sessionHash) || 0) > 300000) {

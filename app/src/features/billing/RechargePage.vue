@@ -3,6 +3,7 @@ import type {
   PaymentCapabilities,
   PaymentOrder,
   ResourcePackage,
+  WechatPaymentMode,
 } from '@t-box/shared'
 import { WechatPay } from '@t-box/capacitor-wechat-pay'
 import { AppIcon } from '@t-box/ui-kit'
@@ -28,11 +29,12 @@ const error = ref('')
 const enabled = ref(false)
 const reason = ref(unavailable || '当前支付方式暂未开放。')
 const pendingOrder = ref<PaymentOrder | null>(null)
+const availableModes = ref<WechatPaymentMode[]>()
 // Freeze selection on an unknown network outcome; retry the same idempotent order.
 const attempted = ref<{ packageId: string, version: number } | null>(null)
 const checkout = useWechatCheckout(async () => {
   pendingOrder.value = checkout.order.value
-})
+}, () => availableModes.value)
 watch(checkout.order, (order) => {
   if (order && pendingOrder.value?.id === order.id) {
     pendingOrder.value = order
@@ -59,6 +61,7 @@ async function load() {
   loading.value = true
   error.value = ''
   enabled.value = false
+  reason.value = unavailable || ''
   try {
     const [options, caps] = await Promise.all([
       request<{ data: ResourcePackage[] }>('/wallet/packages', { signal }),
@@ -70,14 +73,20 @@ async function load() {
       return
     }
     products.value = options.data
+    availableModes.value = caps.data.modes
     if (!products.value.some((p) => p.id === selected.value)) {
       selected.value = products.value[0]?.id ?? ''
     }
     enabled.value =
       !unavailable &&
       caps.data.enabled &&
-      (!caps.data.modes || caps.data.modes.includes(paymentMode()))
-    if (paymentMode() === 'app' && !unavailable) {
+      (!caps.data.modes || caps.data.modes.includes(paymentMode(availableModes.value)))
+    if (!unavailable && !caps.data.enabled) {
+      reason.value = '在线购买尚未开放，请稍后再试。'
+    } else if (!unavailable && !enabled.value) {
+      reason.value = paymentMode(availableModes.value) === 'h5' ? '当前浏览器的支付方式尚未开放，请在微信中打开后购买。' : '当前支付方式尚未开放，请稍后再试。'
+    }
+    if (paymentMode(availableModes.value) === 'app' && !unavailable) {
       const status = await WechatPay.getStatus()
       if (signal.aborted) {
         return
@@ -262,6 +271,12 @@ onBeforeUnmount(() => controller?.abort())
         role="status"
       >
         <AppIcon name="info" :size="16" />{{ reason }}
+        <button
+          v-if="!unavailable && !loading"
+          type="button"
+          class="billing-text-button"
+          @click="load"
+        >刷新购买状态</button>
       </p>
       <button
         class="button button-primary recharge-submit"
@@ -296,6 +311,7 @@ onBeforeUnmount(() => controller?.abort())
       :open="checkout.open.value"
       :order="checkout.order.value"
       :qr="checkout.qr.value"
+      :link="checkout.link.value"
       :stage="checkout.stage.value"
       :cancelling="checkout.cancelling.value"
       :notice="checkout.notice.value"

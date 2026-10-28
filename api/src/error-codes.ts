@@ -591,7 +591,7 @@ const apiErrors = defineApiErrors({
   },
   INVALID_RECHARGE: {
     statusCode: 400,
-    message: '充值金额须为 1–10000 元，最多 2 位小数',
+    message: '充值金额须为 0.01–10000 元，最多 2 位小数',
   },
   INVALID_RECHARGE_CONFIG: {
     statusCode: 400,

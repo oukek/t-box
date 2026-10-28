@@ -18,7 +18,7 @@ if (!/^t_box_(?:ci|test_[a-z0-9_]+)$/.test(process.env.MYSQL_DATABASE || '')) {
 }
 const source = await createDataSource().initialize()
 const other = await createDataSource().initialize()
-const identity = new IdentityService(source)
+const identity = new IdentityService(source, undefined, 'internal')
 const applications = new ApplicationPlatform(source, [])
 const monitor = new ApplicationCatalogMonitor(source)
 const server = Fastify()

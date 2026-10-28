@@ -1,0 +1,552 @@
+.wechat-management {
+  min-width: 0;
+}
+.payment-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.wechat-configuration-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  align-items: start;
+  gap: 22px;
+}
+.wechat-account-panel.panel {
+  margin: 0;
+}
+.wechat-section-title,
+.payment-channel-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.wechat-section-icon {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.wechat-section-title p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.wechat-account-form > fieldset {
+  padding: 26px 24px 22px;
+}
+.wechat-account-form .form-grid {
+  column-gap: 20px;
+}
+.wechat-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wechat-secret-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #28735f;
+  font-size: 10px;
+  font-weight: 400;
+}
+.wechat-account-form label.wechat-login-switch {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 18px;
+  margin: 10px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f9faff;
+}
+.wechat-login-switch strong {
+  display: block;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 550;
+}
+.wechat-login-switch small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+}
+.wechat-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 17px 24px;
+  border-top: 1px solid var(--line);
+  background: #fcfcfe;
+}
+.wechat-form-footer > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.wechat-setup-guide {
+  padding: 23px 21px;
+  border: 1px solid #e1e7f4;
+  border-radius: 12px;
+  background: #f0f3fb;
+}
+.wechat-guide-heading h2 {
+  font-size: 13px;
+}
+.wechat-guide-heading a,
+.wechat-guide-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 11px;
+}
+.wechat-guide-heading a {
+  margin-top: 12px;
+}
+.wechat-domain-list {
+  display: grid;
+  gap: 19px;
+  margin: 24px 0 17px;
+}
+.wechat-domain-list dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.wechat-domain-list dd {
+  margin: 7px 0 0;
+  color: #34466a;
+  font:
+    500 13px 'SFMono-Regular',
+    Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.wechat-domain-list dd.wechat-guide-note {
+  font: inherit;
+  font-size: 12px;
+}
+.wechat-setup-guide p {
+  margin: 12px 0;
+  color: #748099;
+  font-size: 11px;
+  line-height: 1.9;
+}
+.wechat-setup-guide h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 550;
+}
+.wechat-guide-divider {
+  height: 1px;
+  margin: 23px 0;
+  background: #dfe6f4;
+}
+.wechat-login-footnote,
+.wechat-save-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 11px;
+  line-height: 1.9;
+}
+.wechat-login-footnote {
+  margin-top: 22px;
+  color: var(--muted);
+}
+.wechat-login-footnote p {
+  margin: 0;
+}
+.wechat-login-footnote svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.wechat-save-notice {
+  padding: 12px 16px;
+  border: 1px solid #d4ebdf;
+  border-radius: 8px;
+  color: #28735f;
+  background: #f1faf5;
+}
+.wechat-save-notice svg {
+  margin-top: 3px;
+}
+.payment-channel-summary {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.payment-channel-summary > div {
+  flex: 1;
+  min-width: 0;
+}
+.payment-channel-heading {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.payment-channel-heading strong {
+  margin-right: 3px;
+  font-size: 13px;
+  font-weight: 550;
+}
+.payment-mode-pill {
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #edf7f1;
+  color: #348166;
+  font-size: 10px;
+}
+.payment-channel-summary p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.payment-channel-summary > a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 11px;
+}
+.payment-channel-summary.inactive {
+  border-color: #e9dfce;
+  background: #fffdf8;
+}
+.payment-channel-summary.inactive .wechat-section-icon {
+  color: #9d783e;
+  background: #f7efdf;
+}
+.payment-sections {
+  display: flex;
+  gap: 25px;
+  margin: 27px 0 19px;
+  border-bottom: 1px solid var(--line);
+}
+.payment-sections button {
+  position: relative;
+  min-height: 45px;
+  padding: 0 2px 13px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+.payment-sections button:hover {
+  background: transparent;
+  color: var(--accent);
+}
+.payment-sections button.active {
+  color: var(--accent);
+  font-weight: 550;
+}
+.payment-sections button.active::after {
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  content: '';
+  background: var(--accent);
+}
+.payment-sections button > span {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #e9edf7;
+  color: #65749c;
+  font-size: 10px;
+}
+.payment-orders-panel.panel,
+.payment-secondary-panel.panel {
+  margin: 0;
+}
+.payment-orders-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.payment-orders-toolbar p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.payment-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.payment-filters > .admin-select {
+  width: 125px;
+}
+.payment-order-search {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 240px;
+  color: #8b95a5;
+}
+.payment-order-search svg {
+  position: absolute;
+  left: 11px;
+  pointer-events: none;
+}
+.payment-order-search .admin-input {
+  padding-left: 34px;
+}
+.payment-orders-table {
+  min-width: 810px;
+}
+.payment-orders-table td {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+.payment-orders-table td > strong {
+  display: block;
+  font-weight: 550;
+  font-size: 12px;
+}
+.payment-orders-table small {
+  display: block;
+  margin-top: 5px;
+  color: #8b95a5;
+}
+.payment-version {
+  margin-left: 6px;
+  color: #99a3b2;
+  font-size: 10px;
+  font-weight: 400;
+}
+.payment-order-id {
+  display: block;
+  max-width: 205px;
+  margin-top: 7px;
+  overflow: hidden;
+  color: #8490a3;
+  font:
+    10px 'SFMono-Regular',
+    Consolas,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.payment-amount-column {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.payment-orders-table .payment-order-amount {
+  font-size: 15px;
+  color: #29374e;
+}
+.payment-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: #8390a2;
+  background: #f0f2f6;
+}
+.payment-status::before {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  content: '';
+  background: currentColor;
+}
+.payment-status.paid {
+  color: #278365;
+  background: #edf8f1;
+}
+.payment-status.pending {
+  color: #9c762e;
+  background: #fbf5e7;
+}
+.payment-time {
+  white-space: nowrap;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.payment-table-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  color: #8b95a5;
+  background: #fdfdff;
+  font-size: 10px;
+}
+.payment-empty {
+  display: grid;
+  justify-items: center;
+  padding: 62px 20px;
+  gap: 12px;
+  text-align: center;
+}
+.payment-empty .wechat-section-icon {
+  width: 52px;
+  height: 52px;
+}
+.payment-empty h3 {
+  margin: 7px 0 0;
+  font-size: 14px;
+  font-weight: 550;
+}
+.payment-empty p {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.payment-reconcile-summary {
+  display: grid;
+  gap: 8px;
+  padding: 18px 0 10px;
+}
+.payment-reconcile-summary > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.payments-management .payment-secondary-panel > .refund-panel,
+.payments-management .payment-secondary-panel > .reconciliation-panel {
+  margin-top: 0;
+}
+.payments-management .refund-heading {
+  padding: 20px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--line);
+}
+.payments-management .payment-secondary-panel .panel-heading {
+  margin-bottom: 0;
+}
+.admin-dialog.wechat-payment-dialog {
+  width: min(740px, calc(100vw - 32px));
+}
+.payment-config-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 13px;
+  margin: 8px 0 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+}
+.payment-config-heading:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.payment-config-heading small {
+  color: #8b95a5;
+  font-size: 10px;
+}
+.wechat-payment-dialog .payment-channel-option {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+  color: var(--ink);
+}
+.wechat-payment-dialog .payment-channel-option:has(input:checked) {
+  border-color: #acbdf5;
+  background: var(--accent-soft);
+}
+.wechat-payment-dialog .wechat-purchase-switch {
+  margin-top: 6px;
+  padding: 18px;
+  border: 1px solid #e6d8be;
+  border-radius: 9px;
+  background: #fffbf4;
+  color: #826433;
+}
+.wechat-payment-dialog .wechat-purchase-switch.enabled {
+  border-color: #cce5da;
+  background: #f0faf5;
+  color: #276c55;
+}
+@media (max-width: 1150px) {
+  .wechat-configuration-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wechat-domain-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .payments-management .page-heading {
+    flex-direction: column;
+  }
+  .payment-header-actions {
+    width: 100%;
+  }
+  .wechat-account-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wechat-account-form > fieldset {
+    padding: 20px 18px;
+  }
+  .wechat-account-panel .panel-heading {
+    flex-wrap: wrap;
+  }
+  .wechat-domain-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .payment-channel-summary {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 17px;
+  }
+  .payment-channel-summary > div {
+    flex-basis: calc(100% - 60px);
+  }
+  .payment-channel-summary > a {
+    margin-left: 55px;
+  }
+  .payment-orders-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 17px;
+  }
+  .payment-order-search {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+  }
+  .payment-filters {
+    min-width: 0;
+  }
+  .payment-sections {
+    gap: 22px;
+  }
+  .wechat-form-footer {
+    padding: 16px 18px;
+  }
+  .wechat-form-footer > span {
+    font-size: 10px;
+  }
+}

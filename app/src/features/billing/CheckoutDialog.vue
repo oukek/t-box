@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import type { PaymentOrder, WechatCheckoutStage } from '@t-box/shared'
 import { Modal, UserAvatar } from '@t-box/ui-kit'
+import { ref, watch } from 'vue'
 import { identity } from '../../core/session'
 import { displayMoney as fee } from './format'
 import './wallet.css'
 
-defineProps<{
+const props = defineProps<{
   open: boolean
   order: PaymentOrder | null
   qr: string
+  link: string
   stage: WechatCheckoutStage
   notice: string
   error: string
@@ -16,6 +18,21 @@ defineProps<{
   cancelling: boolean
 }>()
 defineEmits<{ close: [], cancelOrder: [] }>()
+const copied = ref(false)
+const copyError = ref(false)
+watch(() => props.link, () => {
+  copied.value = false
+  copyError.value = false
+})
+async function copyLink() {
+  try {
+    await navigator.clipboard.writeText(props.link)
+    copied.value = true
+    copyError.value = false
+  } catch {
+    copyError.value = true
+  }
+}
 </script>
 
 <template>
@@ -51,6 +68,20 @@ defineEmits<{ close: [], cancelOrder: [] }>()
       <p v-if="!qr || stage === 'waiting'" role="status">
         {{ notice }}
       </p>
+      <div v-if="link && stage === 'waiting'" class="checkout-link-actions">
+        <button
+          type="button"
+          class="button button-secondary"
+          @click="copyLink"
+        >{{ copied ? '支付链接已复制' : '复制支付链接' }}</button>
+        <small>在同一部手机付款？复制链接到微信聊天中打开。</small>
+        <label v-if="copyError" class="checkout-manual-link">请长按复制链接<input
+          :value="link"
+          readonly
+          aria-label="支付链接"
+          @focus="($event.target as HTMLInputElement).select()"
+        ></label>
+      </div>
       <p
         v-if="error"
         class="wallet-error"

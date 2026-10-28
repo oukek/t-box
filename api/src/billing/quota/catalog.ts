@@ -55,11 +55,12 @@ export function packageDraft(value: unknown): ResourcePackageDraft {
   ) {
     throw ErrorCode.QUOTA_INVALID()
   }
-  const cents = money(row.price) / 10000n
+  const amount = money(row.price)
+  const cents = amount / 10000n
+  if (amount % 10000n || cents < 1n || cents > 1000000n) {
+    throw ErrorCode.QUOTA_INVALID('资源包售价须为 0.01–10000 元，最多两位小数')
+  }
   if (
-    money(row.price) % 10000n ||
-    cents < 100n ||
-    cents > 1000000n ||
     quota(row.quota) <= 0n ||
     quota(row.quota) % 10000n ||
     quota(row.bonusQuota) % 10000n

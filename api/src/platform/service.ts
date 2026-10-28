@@ -134,8 +134,10 @@ export class PlatformService {
     this.tasks = new TaskStore(source)
     this.notifications = new NotificationService(source)
     this.operations = new OperationsService(source)
+    // Runtime composition always supplies the WeChat account. Internal service
+    // fixtures can construct the platform without an external identity provider.
     this.identity = new IdentityService(source, (db, userId) =>
-      createLedgerRows(db, userId, { name: '我的账本', template: 'daily' }))
+      createLedgerRows(db, userId, { name: '我的账本', template: 'daily' }), wechatAccount ? 'wechat' : 'internal')
     if (wechatAccount) {
       this.wechatLogin = new WechatLoginService(wechatAccount, this.identity)
     }

@@ -27,7 +27,7 @@ const objectStorage = { async write(id: string, bytes: Buffer) {
   objects.delete(id)
 } }
 try {
-  const identity = new IdentityService(source)
+  const identity = new IdentityService(source, undefined, 'internal')
   const login = await identity.register({ username: `storage_${randomUUID().replaceAll('-', '')}`, password: 'test123', nickname: '存储测试' }, 'storage-fixture')
   users.push(login.user.id)
   const actor = await identity.authenticate(login.token)

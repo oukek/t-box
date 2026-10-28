@@ -101,13 +101,18 @@ export class WechatGateway implements PaymentGateway {
 
   async capabilities(): Promise<PaymentCapabilities> {
     const c = await this.configuration.runtime()
+    const modes = c ? (['native', 'h5', 'jsapi', 'app'] as const).filter((x) => c[x]) : []
+    const enabled = !!c?.enabled && modes.length > 0
     return {
-      enabled: !!c?.enabled,
+      enabled,
       channel: 'wechat',
+      ...(!c
+        ? { disabledReason: '尚未保存微信支付配置，请先填写商户信息。' }
+        : !c.enabled
+            ? { disabledReason: '“开放新充值订单”总开关未开启。仅勾选 JSAPI 等支付渠道不会开放在线购买，请开启总开关并保存。' }
+            : !modes.length ? { disabledReason: '尚未启用支付渠道，请至少启用 JSAPI 等一种支付方式。' } : {}),
       ...(c?.enabled && c.app ? { mobileAppId: c.mobileAppId } : {}),
-      modes: c?.enabled
-        ? (['native', 'h5', 'jsapi', 'app'] as const).filter((x) => c[x])
-        : [],
+      modes: enabled ? modes : [],
     }
   }
 

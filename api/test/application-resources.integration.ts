@@ -14,7 +14,7 @@ if (!/^t_box_(?:ci|test_[a-z0-9_]+)$/.test(process.env.MYSQL_DATABASE || '')) {
   throw new Error('Select an explicitly disposable database')
 }
 const source = await createDataSource().initialize()
-const identity = new IdentityService(source)
+const identity = new IdentityService(source, undefined, 'internal')
 const appId = `resource_${randomUUID().replaceAll('-', '').slice(0, 20)}`
 const release = (version: string, permissions: string[] = []): AppRelease => ({ appId, releaseId: `${appId}-${version}`, protocol: 1, kind: 'user', platforms: ['web', 'android', 'ios'], defaultInstalled: false, clientTools: [], permissions, manifest: { id: appId, name: '资源测试', description: 'test', version, icon: 'apps', color: 'blue', skillIds: [] }, backend: { type: 'none', binding: '' }, runtime: { type: 'web', entryUrl: `https://apps.test/${appId}/${'a'.repeat(64)}/`, integrity: 'sha256-' + 'a'.repeat(64) } })
 const first = release('1.0.0')

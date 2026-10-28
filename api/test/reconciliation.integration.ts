@@ -71,7 +71,7 @@ try {
       randomUUID(),
     ],
   )
-  const session = await new IdentityService(source).register(
+  const session = await new IdentityService(source, undefined, 'internal').register(
     {
       username: `reconcile_${randomUUID().replaceAll('-', '')}`,
       password: 'test123',

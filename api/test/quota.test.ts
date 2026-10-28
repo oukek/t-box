@@ -90,7 +90,8 @@ test('package and tariff inputs reject unknown fields, fractional product credit
     { quota: '1.1' },
     { bonusQuota: '-1' },
     { validDays: 0 },
-    { price: '0.99' },
+    { price: '0' },
+    { price: '0.001' },
     { price: '9.999' },
     { enabled: 'true' },
   ]) {
@@ -108,4 +109,13 @@ test('package and tariff inputs reject unknown fields, fractional product credit
       images: { ...configuration.images, '4k': '1.5' },
     }),
   )
+})
+
+test('resource packages accept exact prices below one yuan down to one cent', () => {
+  for (const [input, expected] of [['0.01', '0.01'], ['0.1', '0.10'], ['0.99', '0.99'], ['1', '1.00']]) {
+    assert.equal(packageDraft({ ...initialPackages[0], price: input }).price, expected)
+  }
+  for (const invalid of ['0', '0.001', '0.009', '-0.01', '10000.01']) {
+    assert.throws(() => packageDraft({ ...initialPackages[0], price: invalid }))
+  }
 })

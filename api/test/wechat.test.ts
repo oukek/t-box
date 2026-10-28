@@ -20,13 +20,32 @@ const config = {
     .toString(),
 } as WechatRuntime
 
+test('payment capability distinguishes a disabled purchase switch from missing channel configuration', async () => {
+  let active: WechatRuntime | null = null
+  const configuration = { runtime: async () => active } as unknown as PaymentConfiguration
+  const gateway = new WechatGateway(configuration)
+  assert.match((await gateway.capabilities()).disabledReason!, /尚未保存/)
+  active = { ...config, enabled: false, jsapi: true } as WechatRuntime
+  assert.equal((await gateway.capabilities()).enabled, false)
+  assert.match((await gateway.capabilities()).disabledReason!, /开放新充值订单/)
+  active.enabled = true
+  const enabled = await gateway.capabilities()
+  assert.equal(enabled.enabled, true)
+  assert.deepEqual(enabled.modes, ['jsapi'])
+  assert.equal(enabled.disabledReason, undefined)
+  active.jsapi = false
+  assert.match((await gateway.capabilities()).disabledReason!, /尚未启用支付渠道/)
+})
+
 test('confirmed checkout links sign JSAPI with the scanning payer OpenID and never fall back to beneficiary OAuth', async () => {
   const c = { ...config, id: randomUUID(), enabled: true, jsapi: true, appId: 'wx_fixture_app', merchantId: '1234567890', merchantSerial: 'A'.repeat(40), privateKey: pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(), apiBaseUrl: 'https://api.tboxos.cn' } as WechatRuntime
   const configuration = { runtime: async () => c, credentials: async () => c } as unknown as PaymentConfiguration
   let requests = 0
+  let expectedAmount = 1000
   const gateway = new WechatGateway(configuration, async (_url, init) => {
     requests++
     assert.equal(JSON.parse(String(init?.body)).payer.openid, 'openid_scanning_phone')
+    assert.equal(JSON.parse(String(init?.body)).amount.total, expectedAmount)
     const raw = Buffer.from(JSON.stringify({ prepay_id: 'wx_fixture_prepay' }))
     return new Response(raw, { headers: { ...headers(raw), 'Content-Type': 'application/json' } })
   })
@@ -41,6 +60,10 @@ test('confirmed checkout links sign JSAPI with the scanning payer OpenID and nev
   available = false
   await assert.rejects(gateway.create(order, 1000, { configurationId: c.id, mode: 'jsapi', userId: 'desktop-recipient', payerUserId: 'phone-user' }), { code: 'OAUTH_UNAVAILABLE' })
   assert.equal(requests, 1)
+  available = true
+  expectedAmount = 1
+  await gateway.create({ ...order, id: randomUUID() }, 1, { configurationId: c.id, mode: 'jsapi', userId: 'desktop-recipient', payerUserId: 'phone-user' })
+  assert.equal(requests, 2, 'A ¥0.01 resource package reaches WeChat as exactly one integer cent')
 })
 function headers(raw: Buffer, timestamp = Math.floor(now / 1000).toString()) {
   const nonce = 'fixture_nonce'

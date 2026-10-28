@@ -2,7 +2,7 @@ import type { AppUser, UserSession } from '@t-box/shared'
 import { reactive, readonly } from 'vue'
 import { clearLocalAccount, readLocalProfile, saveLocalProfile } from './localAccount'
 
-const storageKey = 'tbox.identity.v1'
+const storageKey = 'tbox.identity.wechat.v1'
 const state = reactive({
   token: '',
   user: null as AppUser | null,
@@ -12,6 +12,13 @@ const state = reactive({
 })
 try {
   state.token = localStorage.getItem(storageKey) || ''
+  // Never migrate the old password-era token into the WeChat login store.
+  if (localStorage.getItem('tbox.identity.v1')) {
+    localStorage.removeItem('tbox.identity.v1')
+    if (!state.token) {
+      clearLocalAccount()
+    }
+  }
 } catch {
   /* memory fallback */
 }

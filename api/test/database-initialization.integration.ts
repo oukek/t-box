@@ -93,7 +93,7 @@ try {
 
   // Existing application code can register a user and create FK-linked book categories.
   const identity = new IdentityService(fresh, (db, userId) =>
-    createLedgerRows(db, userId, { name: '初始化回归账本', template: 'daily' }))
+    createLedgerRows(db, userId, { name: '初始化回归账本', template: 'daily' }), 'internal')
   await identity.register(
     { username: 'init_fixture', password: 'test123' },
     'init-fixture',

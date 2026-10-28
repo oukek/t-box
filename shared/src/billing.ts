@@ -73,6 +73,7 @@ export interface PaymentOrder {
 }
 export interface PaymentCapabilities {
   enabled: boolean
+  disabledReason?: string
   channel: 'wechat'
   mobileAppId?: string
   modes?: import('./payments.js').WechatPaymentMode[]

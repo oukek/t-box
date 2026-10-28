@@ -4,9 +4,10 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as pause } from 'node:timers/promises'
 import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
 import sharp from 'sharp'
-import { createVault } from '../src/admin/crypto.js'
+import { createVault, digest } from '../src/admin/crypto.js'
 import { createApp } from '../src/app.js'
 import { createDataSource } from '../src/db/data-source.js'
+import { NativeActionSessions } from '../src/identity/native-sessions.js'
 import { WechatAccountConfiguration } from '../src/identity/wechat-configuration.js'
 import { WechatAccountEntity, WechatFlowEntity } from '../src/identity/wechat-entities.js'
 import { WechatLoginService } from '../src/identity/wechat-login.js'
@@ -17,7 +18,7 @@ const source = await createDataSource().initialize()
 assertDisposableDatabase(source.options.database)
 const vault = createVault(randomBytes(32))
 const configuration = new WechatAccountConfiguration(source, vault)
-const platform = new PlatformService(source)
+const platform = new PlatformService(source, undefined, undefined, undefined, undefined, undefined, undefined, configuration)
 const users = new Set<string>()
 let exchanges = 0
 const transport: typeof fetch = async (input) => {
@@ -59,6 +60,11 @@ async function poll(flow: Awaited<ReturnType<typeof start>>) {
 try {
   await assert.rejects(start('login'), /尚未开放/)
   const saved = await configuration.save(account, randomUUID())
+  const legacy = await platform.identity.register({ username: `legacy_${randomUUID().replaceAll('-', '')}`, password: 'test123' }, randomUUID())
+  users.add(legacy.user.id)
+  const rejected = await app.inject({ url: '/api/v1/auth/me', headers: { authorization: `Bearer ${legacy.token}` } })
+  assert.equal(rejected.statusCode, 401, 'A previously valid password login must be rejected by the production WeChat policy')
+  await assert.rejects(platform.identity.authenticateHash(digest(legacy.token)), /微信重新登录/, 'Socket and native callers must enforce the same policy')
   await assert.rejects(service.start({ kind: { toString: 'login' }, secret: secret() }, randomUUID(), 'fixture'), /无效/)
   assert.equal(saved.hasAppSecret, true)
   assert.equal('appSecret' in saved, false)
@@ -78,6 +84,10 @@ try {
   assert.equal(direct.user!.nickname, '方舟')
   assert.equal(direct.user!.avatarUrl, '')
   const principal = await platform.identity.authenticate(direct.session!.token)
+  const nativeSessions = new NativeActionSessions(platform.identity)
+  const native = await nativeSessions.issue(direct.session!.token, {})
+  assert.equal((await nativeSessions.authenticate(native.token)).user.id, principal.user.id)
+  await nativeSessions.revoke(native.token)
   assert.ok(!principal.user.avatarUrl)
   await platform.identity.updateProfile(principal, { nickname: '我的昵称' })
   const png = await sharp({ create: { width: 20, height: 12, channels: 4, background: '#527f70' } }).png().toBuffer()

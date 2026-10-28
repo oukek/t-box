@@ -66,7 +66,7 @@ try {
   const selection = await paymentSelection(billing, '2')
   await enableTestTariff(billing)
   async function order() {
-    const login = await new IdentityService(source).register(
+    const login = await new IdentityService(source, undefined, 'internal').register(
       {
         username: `refund_${randomUUID().replaceAll('-', '')}`,
         password: 'test123',

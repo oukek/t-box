@@ -97,7 +97,7 @@ try {
   await service.saveModel(multiInput, multiId)
   assert.equal((await service.runtime('image', { imageTier: '4k' }))?.prices.imagePrice, '0.400000')
 
-  const identity = new IdentityService(source)
+  const identity = new IdentityService(source, undefined, 'internal')
   const login = await identity.register({ username: 'tier_fixture', password: 'test123' }, 'fixture')
   const actor = await identity.authenticate(login.token)
   const resources = new ResourceService(source, directory)

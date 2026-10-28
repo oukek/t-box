@@ -19,10 +19,11 @@ assertDisposableDatabase(source.options.database)
 const users: string[] = []
 const submissions: PaymentContext[] = []
 let verified: VerifiedPayment | null = null
+let expectedCents = 1000
 const gateway: PaymentGateway = {
   channel: 'wechat',
   async create(_order, cents, context) {
-    assert.equal(cents, 1000)
+    assert.equal(cents, expectedCents)
     submissions.push(context!)
     return { type: 'jsapi', parameters: { appId: 'wx_fixture', timeStamp: '123', nonceStr: 'nonce', package: 'prepay_id=fixture', signType: 'RSA', paySign: 'signature' } }
   },
@@ -82,6 +83,12 @@ async function call(path: string, token: string, body: unknown = {}, status = 20
   return reply.json().data
 }
 const ticket = (url: string) => new URLSearchParams(new URL(url).hash.split('?')[1]).get('ticket')!
+async function publishDraft(id: string, draft: unknown) {
+  const current = (await platform.billing.catalog.list()).find((row) => row.id === id)!
+  await platform.billing.catalog.save(draft, id, current.revision)
+  const updated = (await platform.billing.catalog.list()).find((row) => row.id === id)!
+  await platform.billing.catalog.publish(id, updated.revision)
+}
 try {
   const a = await platform.identity.register({ username: `buyer_${randomUUID().replaceAll('-', '')}`, password: 'test123', nickname: '下单用户' }, 'fixture')
   const b = await platform.identity.register({ username: `payer_${randomUUID().replaceAll('-', '')}`, password: 'test123', nickname: '扫码用户' }, 'fixture')
@@ -170,6 +177,33 @@ try {
   assert.notEqual(stored.token_hash, ticket(secondLink.url))
   await source.getRepository(CheckoutLinkEntity).update({ orderId: fresh.id }, { expiresAt: new Date(Date.now() - 1000) })
   await call('handoff/preview', a.token, { ticket: ticket(secondLink.url) }, 410)
+  const productsBefore = await platform.billing.catalog.list()
+  const product = productsBefore.find((row) => row.id === selection.packageId)!
+  const otherSelling = productsBefore.filter((row) => row.id !== product.id && row.published?.enabled)
+  // Isolate the one-cent fixture from the independent selling-price ladder.
+  // This suite is guarded to use a disposable database only.
+  for (const row of otherSelling) {
+    await publishDraft(row.id, { ...row.draft, enabled: false })
+  }
+  await platform.billing.catalog.save({ ...product.draft, price: '0.01' }, product.id, product.revision)
+  const changed = (await platform.billing.catalog.list()).find((row) => row.id === product.id)!
+  await platform.billing.catalog.publish(changed.id, changed.revision)
+  const oneCent = await platform.payments.create(a.user.id, { packageId: product.id, version: (product.published?.version ?? 0) + 1 }, randomUUID())
+  assert.equal(oneCent.amount, '0.010000')
+  assert.equal((await platform.payments.get(a.user.id, own.id)).amount, '10.000000', 'Publishing a cheaper version never changes the frozen price of an existing order')
+  const centLink = await call(`orders/${oneCent.id}/handoff`, a.token)
+  const centTicket = ticket(centLink.url)
+  const centPayer = await authorize(centTicket, 'a')
+  expectedCents = 1
+  await call('handoff/intent', centPayer, { ticket: centTicket })
+  verified = { orderId: oneCent.id, transactionId: '4200000000000000043', amountCents: 1, currency: 'CNY', paidAt: new Date() }
+  await platform.payments.notify(Buffer.from('{}'), {})
+  await platform.payments.notify(Buffer.from('{}'), {})
+  assert.equal((await platform.billing.wallet(a.user.id)).balance, '20.0000', 'A one-cent order grants its frozen quota once, independently of the CNY price')
+  await publishDraft(product.id, product.draft)
+  for (const row of otherSelling) {
+    await publishDraft(row.id, row.draft)
+  }
   console.log('Checkout links integration passed: Socket scan/confirmation/payment/settlement states, reconnect snapshots, unauthorized subscriptions rejected, atomic same/different-account phone claims, safe cancellation,  owned order, opaque expiring links, same-account payment, mandatory explicit cross-account consent, fixed payer and beneficiary, duplicate settlement and link rotation.')
 } finally {
   sockets.forEach((socket) => socket.terminate())

@@ -50,7 +50,7 @@ const prices = {
 }
 const tokens = new Map<string, string>()
 async function user() {
-  const session = await new IdentityService(source).register(
+  const session = await new IdentityService(source, undefined, 'internal').register(
     { username: `q_${randomUUID().replaceAll('-', '')}`, password: 'test123' },
     'quota-fixture',
   )

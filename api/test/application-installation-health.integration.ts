@@ -53,7 +53,7 @@ const bind = (platform: ApplicationPlatform) => {
 let unblock: (() => void) | undefined
 let slowDone: Promise<void> | undefined
 try {
-  const identity = new IdentityService(source)
+  const identity = new IdentityService(source, undefined, 'internal')
   const a = await identity.register({ username: 'health_a_' + marker, password: 'test123', nickname: '测试甲' }, 'health-fixture')
   const b = await identity.register({ username: 'health_b_' + marker, password: 'test123', nickname: '测试乙' }, 'health-fixture')
   users.push(a.user.id, b.user.id)

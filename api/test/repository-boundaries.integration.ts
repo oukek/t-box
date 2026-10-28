@@ -78,7 +78,7 @@ try {
     await source.getRepository(AppUserEntity).insert({ id: userId, username: `orm_${userId}`, nickname: '事务测试', passwordHash: 'not-a-real-password' })
     await source.getRepository(UserSessionEntity).insert({ tokenHash: 'b'.repeat(64), userId, expiresAt: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 1 DAY)' })
     await source.getRepository(LedgerEntity).insert(Array.from({ length: 99 }, () => ({ id: randomUUID(), name: 'quota fixture', template: 'daily' as const, ownerId: userId })))
-    const identity = new IdentityService(source)
+    const identity = new IdentityService(source, undefined, 'internal')
     const principal = await identity.authenticateHash('b'.repeat(64))
     const ledgers = new LedgerService(new LedgerAccess(source, identity))
     const created = await Promise.allSettled([ledgers.create(principal, { name: '并发一', template: 'daily' }), ledgers.create(principal, { name: '并发二', template: 'daily' })])

@@ -263,7 +263,7 @@ onMounted(load)
               required
               inputmode="decimal"
               pattern="[0-9]+([.][0-9]{1,2})?"
-            /></label><label>基础额度<AdminInput
+            /><small>最低 ¥0.01，最多两位小数。</small></label><label>基础额度<AdminInput
               v-model="productForm.quota"
               required
               inputmode="numeric"
