@@ -273,6 +273,31 @@ export class QuotaCatalog {
     })
   }
 
+  /** Change only the live availability; unpublished price/quota edits stay in the draft. */
+  async setAvailability(id: string, revision: number, enabled: boolean) {
+    if (typeof enabled !== 'boolean') {
+      throw ErrorCode.QUOTA_INVALID()
+    }
+    await this.source.transaction(async (db) => {
+      await this.guard(db)
+      const repo = db.getRepository(QuotaProductEntity)
+      const row = await repo.findOne({ select: { id: true, revision: true, currentVersion: true, draft: true }, where: { id }, lock: { mode: 'pessimistic_write' } })
+      if (!row || row.revision !== revision) {
+        throw ErrorCode.PACKAGE_CONFLICT()
+      }
+      const live = await db.getRepository(QuotaProductVersionEntity).findOneBy({ productId: id, version: row.currentVersion })
+      if (!live) {
+        throw ErrorCode.QUOTA_INVALID('请先发布资源包版本')
+      }
+      if (live.configuration.enabled === enabled) {
+        return
+      }
+      await db.getRepository(QuotaProductVersionEntity).insert({ id: randomUUID(), productId: id, version: row.currentVersion + 1, configuration: { ...live.configuration, enabled }, createdAt: sqlClock(new Date()) })
+      await repo.update({ id }, { currentVersion: row.currentVersion + 1, revision: row.revision + 1, draft: { ...row.draft, enabled } })
+      await this.changed(db)
+    })
+  }
+
   async purchaseVersion(db: EntityManager, productId: string, version: number) {
     const product = await db.getRepository(QuotaProductEntity).findOne({
       select: { id: true, currentVersion: true },

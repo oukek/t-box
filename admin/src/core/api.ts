@@ -10,7 +10,7 @@ export class RequestError extends Error {
     return new RequestError(value?.message ?? '请求失败', status)
   }
 }
-const apiBase = (
+export const apiBase = (
   import.meta.env.VITE_API_BASE_URL?.trim() || '/api/v1'
 ).replace(/\/+$/, '')
 export async function request<T>(

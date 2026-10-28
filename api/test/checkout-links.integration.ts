@@ -44,23 +44,26 @@ const platform = new PlatformService(source, undefined, gateway, config)
 const vault = createVault(randomBytes(32))
 const account = new WechatAccountConfiguration(source, vault)
 const appId = 'wx1234567890abcdef'
+let profileRequests = 0
 const login = new WechatLoginService(account, platform.identity, async (input) => {
   const url = new URL(String(input))
   const code = url.searchParams.get('code') ?? ''
+  if (url.pathname.endsWith('/userinfo')) {
+    profileRequests++
+  }
   return Response.json(url.pathname.endsWith('access_token')
     ? { openid: `openid_${code.replace(/^silent_/, '')}_123456789`, access_token: 'fixture', scope: code.startsWith('silent_') ? 'snsapi_base' : 'snsapi_userinfo' }
-    : { openid: url.searchParams.get('openid'), nickname: '微信资料', headimgurl: '' })
+    : { openid: url.searchParams.get('openid'), nickname: url.searchParams.get('openid')?.startsWith('openid_a_') ? '下单用户' : '扫码用户', headimgurl: '' })
 })
 async function authorize(checkoutTicket: string, code: string, started?: () => Promise<void>) {
   const secret = randomBytes(32).toString('hex')
   const flow = await login.start({ kind: 'login', secret, checkoutTicket, silent: true }, randomUUID(), '手机微信')
   await started?.()
   const identified = await login.exchange({ id: flow.id, secret, state: flow.state, code: `silent_${code}` })
-  assert.equal(identified.requiresProfileAuthorization, true)
-  assert.equal(identified.session, undefined, 'Silent identification cannot authorize a payment')
-  const consent = await login.authorizeProfile({ id: flow.id, secret })
-  const result = await login.exchange({ id: flow.id, secret, state: consent.state, code })
-  return result.session!.token
+  assert.equal(identified.requiresProfileAuthorization, undefined, 'A known WeChat payer must not repeat profile consent')
+  assert.ok(identified.session, 'The fresh silent identity check issues an order-bound session')
+  assert.equal(profileRequests, 0, 'Known-account payments never call the profile API')
+  return identified.session!.token
 }
 Object.assign(platform, { wechatLogin: login })
 const app = createApp({ platform, corsOrigins: ['https://tboxos.cn'], bills: {} as any, taskWorker: false, health: async () => ({ mysql: 'up', redis: 'disabled' }) })
@@ -209,6 +212,18 @@ try {
   await publishDraft(promotionId, promotion)
   const publishedPromotion = (await platform.billing.catalog.list()).find((row) => row.id === promotionId)!.published!
   assert.equal(publishedPromotion.price, '0.50', 'A separately priced package with the same total quota, including gifts, can coexist')
+  await platform.billing.catalog.save({ ...promotion, price: '0.99', quota: '19' }, promotionId, publishedPromotion.revision)
+  const availabilityDraft = (await platform.billing.catalog.list()).find((row) => row.id === promotionId)!
+  await platform.billing.catalog.setAvailability(promotionId, availabilityDraft.revision, false)
+  const unlisted = (await platform.billing.catalog.list()).find((row) => row.id === promotionId)!
+  assert.equal(unlisted.published!.enabled, false)
+  assert.equal(unlisted.published!.price, '0.50', 'Unlisting never publishes a pending draft price')
+  assert.equal(unlisted.published!.quota, '1', 'Unlisting never publishes a pending draft quota')
+  assert.equal(unlisted.draft.price, '0.99', 'Unpublished edits remain editable')
+  assert.equal((await platform.billing.catalog.products()).some((row) => row.id === promotionId), false)
+  await assert.rejects(platform.billing.catalog.setAvailability(promotionId, availabilityDraft.revision, true), /已更新|冲突/)
+  await platform.billing.catalog.setAvailability(promotionId, unlisted.revision, true)
+  assert.equal((await platform.billing.catalog.products()).find((row) => row.id === promotionId)!.price, '0.50')
   await publishDraft(promotionId, { ...promotion, enabled: false })
   await publishDraft(product.id, product.draft)
   console.log('Checkout links integration passed: Socket scan/confirmation/payment/settlement states, reconnect snapshots, unauthorized subscriptions rejected, atomic same/different-account phone claims, safe cancellation,  owned order, opaque expiring links, same-account payment, mandatory explicit cross-account consent, fixed payer and beneficiary, duplicate settlement and link rotation.')

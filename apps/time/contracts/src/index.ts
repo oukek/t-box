@@ -19,7 +19,7 @@ export const timeManifest = {
   iconAsset: applicationIcon,
   iconVariant: 'clock',
   color: 'blue',
-  version: '1.1.3',
+  version: '1.1.4',
   skillIds: ['timekeeping'],
 } as const satisfies ApplicationManifest
 export const commonTimezones = [

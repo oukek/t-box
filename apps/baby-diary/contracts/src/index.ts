@@ -12,7 +12,7 @@ export const babyDiaryManifest = {
   icon: 'heart',
   iconAsset: applicationIcon,
   color: 'green',
-  version: '1.2.2',
+  version: '1.2.3',
   skillIds: ['baby-journal', 'baby-care'],
 } as const satisfies ApplicationManifest
 export type BabyRole = 'owner' | 'admin' | 'editor' | 'viewer'

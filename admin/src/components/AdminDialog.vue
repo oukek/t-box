@@ -57,7 +57,7 @@ watch(
         const initial =
           dialog.value.querySelector<HTMLElement>(
             '.dialog-body input:not([aria-hidden]):not(:disabled), .dialog-body textarea:not(:disabled), .dialog-body [role="combobox"]:not(:disabled)',
-          ) || dialog.value.querySelector<HTMLElement>('.dialog-footer button')
+          ) || dialog.value.querySelector<HTMLElement>('.dialog-footer button') || dialog.value.querySelector<HTMLElement>('h2')
         initial?.focus({ preventScroll: true })
         if (initial instanceof HTMLTextAreaElement) {
           initial.setSelectionRange(0, 0)
@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
   >
     <header class="dialog-heading">
       <div>
-        <h2 :id="titleId">
+        <h2 :id="titleId" tabindex="-1">
           {{ title }}
         </h2>
         <p v-if="description" :id="descriptionId">

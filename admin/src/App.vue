@@ -15,6 +15,7 @@ import LedgerCategoriesPage from './features/LedgerCategoriesPage.vue'
 import ModelsPage from './features/ModelsPage.vue'
 import OperationsPage from './features/OperationsPage.vue'
 import PaymentsPage from './features/PaymentsPage.vue'
+import PromotionsPage from './features/PromotionsPage.vue'
 import ProvidersPage from './features/ProvidersPage.vue'
 import ResourcePackagesPage from './features/ResourcePackagesPage.vue'
 import SupportPage from './features/SupportPage.vue'
@@ -52,6 +53,7 @@ const pages = {
   },
   'models': { title: '模型', symbol: 'model', component: ModelsPage },
   'billing': { title: '用户与额度', symbol: 'users', component: BillingPage },
+  'promotions': { title: '推广渠道', symbol: 'connection', component: PromotionsPage },
   'packages': {
     title: '资源包与费率',
     symbol: 'model',

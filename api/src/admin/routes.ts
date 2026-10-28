@@ -9,6 +9,7 @@ import { registerApplicationPublishing } from '../application-platform/admin-rou
 import { ApplicationPublishing } from '../application-platform/publishing.js'
 import { ErrorCode } from '../error-codes.js'
 import { requestKey } from '../payments/service.js'
+import { emptyPromotionMetrics } from '../promotions/service.js'
 import { AdminAuth, cookie, sessionToken } from './auth.js'
 import { hashPassword } from './crypto.js'
 import { bad, body, enabled, password, text } from './validation.js'
@@ -62,6 +63,9 @@ export function registerAdmin(
           reply.header('Set-Cookie', cookie('', 0)).code(204).send()
         })
         if (platform) {
+          secure.get('/promotions/channels', async (r) => ({ data: await platform.promotions.channels(r.query) }))
+          secure.post('/promotions/channels', async (r) => ({ data: await platform.promotions.saveChannel(r.body) }))
+          secure.patch<{ Params: { id: string } }>('/promotions/channels/:id', async (r) => ({ data: await platform.promotions.saveChannel(r.body, parseId(r.params.id)) }))
           if (platform.wechatLogin) {
             secure.get('/auth/wechat', async () => ({ data: await platform.wechatLogin!.configuration.view() }))
             secure.patch('/auth/wechat', async (request) => {
@@ -145,6 +149,11 @@ export function registerAdmin(
               return { data: await platform.billing.catalog.list() }
             },
           )
+          secure.patch<{ Params: { id: string } }>('/billing/packages/:id/availability', async (r) => {
+            const input = body(r.body, ['enabled', 'revision'])
+            await platform.billing.catalog.setAvailability(parseId(r.params.id), Number(input.revision), input.enabled as boolean)
+            return { data: await platform.billing.catalog.list() }
+          })
           secure.get('/billing/tariff', async () => ({
             data: await platform.billing.catalog.tariff(),
           }))
@@ -189,7 +198,9 @@ export function registerAdmin(
               query.search === undefined || query.search === ''
                 ? ''
                 : text(query.search, '搜索内容', 64)
-            return { data: await platform.billing.users(search) }
+            const users = await platform.billing.users(search)
+            const metrics = await platform.promotions.forUsers(users.map((user) => user.id))
+            return { data: users.map((user) => ({ ...user, promotion: metrics.get(user.id) ?? emptyPromotionMetrics() })) }
           })
           secure.get<{ Params: { id: string } }>(
             '/billing/users/:id/usage',

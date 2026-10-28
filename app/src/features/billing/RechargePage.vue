@@ -13,6 +13,7 @@ import { openWallet } from '../../core/navigation'
 import { request, RequestError } from '../../core/network'
 import CheckoutDialog from './CheckoutDialog.vue'
 import { displayMoney as fee } from './format'
+import { usePaymentClock } from './paymentClock'
 import {
   paymentMode,
   purchaseBlockReason,
@@ -30,10 +31,14 @@ const enabled = ref(false)
 const reason = ref(unavailable || '当前支付方式暂未开放。')
 const pendingOrder = ref<PaymentOrder | null>(null)
 const availableModes = ref<WechatPaymentMode[]>()
+const now = usePaymentClock()
 // Freeze selection on an unknown network outcome; retry the same idempotent order.
 const attempted = ref<{ packageId: string, version: number } | null>(null)
+let key = crypto.randomUUID()
 const checkout = useWechatCheckout(async () => {
-  pendingOrder.value = checkout.order.value
+  pendingOrder.value = null
+  attempted.value = null
+  key = crypto.randomUUID()
 }, () => availableModes.value)
 watch(checkout.order, (order) => {
   if (order && pendingOrder.value?.id === order.id) {
@@ -44,15 +49,14 @@ const product = computed(() =>
   products.value.find((p) => p.id === selected.value),
 )
 const locked = computed(
-  () => busy.value || !!attempted.value || !!pendingOrder.value,
+  () => busy.value || !!attempted.value || (pendingOrder.value?.status === 'pending' && Date.parse(pendingOrder.value.expiresAt) > now.value),
 )
 const payable = computed(
   () =>
     !pendingOrder.value ||
     (pendingOrder.value.status === 'pending' &&
-      Date.parse(pendingOrder.value.expiresAt) > Date.now()),
+      Date.parse(pendingOrder.value.expiresAt) > now.value),
 )
-let key = crypto.randomUUID()
 let controller: AbortController | undefined
 async function load() {
   controller?.abort()
@@ -110,6 +114,13 @@ async function load() {
   }
 }
 async function submit() {
+  if (loading.value || busy.value) {
+    return
+  }
+  if (pendingOrder.value) {
+    checkout.view(pendingOrder.value)
+    return
+  }
   if (
     purchaseBlockReason() ||
     !enabled.value ||
@@ -136,6 +147,7 @@ async function submit() {
         })
       ).data
     }
+    busy.value = false
     await checkout.pay(pendingOrder.value)
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : '发起支付失败'
@@ -154,13 +166,12 @@ async function submit() {
   }
 }
 function newOrder() {
-  if (busy.value || pendingOrder.value?.status === 'pending') {
+  if (busy.value || (pendingOrder.value?.status === 'pending' && Date.parse(pendingOrder.value.expiresAt) > now.value)) {
     return
   }
   pendingOrder.value = null
   attempted.value = null
   key = crypto.randomUUID()
-  void load()
 }
 onMounted(async () => {
   await load()
@@ -170,155 +181,113 @@ onMounted(async () => {
   await checkout.resume()
   if (!controller?.signal.aborted && checkout.order.value) {
     pendingOrder.value = checkout.order.value
+    selected.value = checkout.order.value.packageId
   }
 })
 onBeforeUnmount(() => controller?.abort())
 </script>
 
 <template>
-  <section class="billing-detail-page">
+  <section class="billing-detail-page recharge-page">
     <ApplicationHeader
       title="购买资源包"
       back-label="额度"
       @back="openWallet"
-    >
-      <template #actions><button
-        class="wallet-refresh"
-        aria-label="刷新资源包"
-        :disabled="loading || locked"
-        @click="load"
-      >
-        <AppIcon name="refresh" :size="19" /></button></template>
-    </ApplicationHeader>
-    <p class="billing-page-intro">
-      会话与图片共用额度，每个资源包独立计算有效期。
-    </p>
+    ><template #actions><button
+      class="wallet-refresh"
+      aria-label="刷新资源包"
+      :disabled="loading || locked"
+      @click="load"
+    ><AppIcon name="refresh" :size="18" /></button></template></ApplicationHeader>
+    <div class="billing-page-heading"><p class="billing-eyebrow">给日常，多一点空间</p><h1>选一份适合自己的额度</h1><p>会话与图片共用，按实际用量结算。每份资源包独立计算有效期。</p></div>
     <p
       v-if="error"
       class="wallet-error"
       role="alert"
-    >
-      {{ error
-      }}<button
-        v-if="!locked"
-        class="billing-text-button"
-        @click="load"
-      >
-        重新加载
-      </button>
-    </p>
+    >{{ error }}<button
+      v-if="!locked"
+      class="billing-text-button"
+      @click="load"
+    >重新加载</button></p>
     <div v-if="loading" class="wallet-empty">正在读取资源包…</div>
     <form
       v-else
-      class="recharge-form"
+      class="recharge-form recharge-layout"
       @submit.prevent="submit"
     >
-      <fieldset :disabled="locked">
-        <legend>选择资源包</legend>
-        <div class="recharge-presets resource-pack-grid">
-          <button
-            v-for="p in products"
-            :key="p.id"
-            type="button"
-            :class="{ selected: selected === p.id }"
-            :aria-pressed="selected === p.id"
-            @click="selected = p.id"
-          >
-            <span>{{ p.name }}</span><strong>{{ p.quota }}<small> 额度</small></strong>
-            <span v-if="p.bonusQuota !== '0'">另赠 {{ p.bonusQuota }} 额度</span>
-            <span>{{ p.validDays }} 天有效 · ¥{{ p.price }}</span>
-            <AppIcon
-              v-if="selected === p.id"
-              name="check"
-              :size="13"
-            />
-          </button>
-        </div>
-      </fieldset>
-      <p v-if="!products.length" class="recharge-hint">
-        暂无上架资源包，请稍后再试。
-      </p>
-      <div v-if="pendingOrder || product" class="recharge-summary">
-        <div>
-          <span>{{ pendingOrder?.packageName ?? product?.name }}</span><strong>¥{{ fee(pendingOrder?.amount ?? product?.price ?? '0') }}</strong>
-        </div>
-        <div>
-          <span>额度 / 赠送</span><strong>{{ pendingOrder?.quota ?? product?.quota }} /
-            {{ pendingOrder?.bonusQuota ?? product?.bonusQuota }}</strong>
-        </div>
-        <p class="recharge-hint">
-          支付成功起
-          {{ pendingOrder?.validDays ?? product?.validDays }}
-          天有效，优先使用最早到期的额度。
-        </p>
-        <p v-if="!pendingOrder && product?.description" class="recharge-hint">
-          {{ product.description }}
-        </p>
+      <div class="recharge-products">
+        <fieldset :disabled="locked"><legend>选择资源包<span v-if="pendingOrder?.status === 'pending'">当前订单权益已固定</span></legend>
+          <div class="recharge-presets resource-pack-grid">
+            <button
+              v-for="p in products"
+              :key="p.id"
+              type="button"
+              :class="{ selected: selected === p.id }"
+              :aria-pressed="selected === p.id"
+              @click="selected = p.id"
+            >
+              <span class="pack-option-name">{{ p.name }}</span><span class="pack-option-price"><small>¥</small>{{ fee(p.price) }}</span>
+              <strong>{{ p.quota }}<small> 额度</small></strong><span class="pack-option-bonus">{{ Number(p.bonusQuota) ? `另赠 ${p.bonusQuota} 额度` : '按需使用，灵活安排' }}</span>
+              <span class="pack-option-validity"><AppIcon name="clock" :size="13" />{{ p.validDays }} 天有效</span><span class="pack-option-check"><AppIcon
+                v-if="selected === p.id"
+                name="check"
+                :size="12"
+              /></span>
+            </button>
+          </div>
+        </fieldset>
+        <div v-if="!products.length" class="wallet-empty"><AppIcon name="wallet" :size="28" /><p>暂无在售资源包</p><small>稍后再来看看。</small></div>
+        <div class="billing-purchase-notes"><h2>买之前，了解这些</h2><p><AppIcon name="check" :size="15" />会话、看图与图片生成共用额度。</p><p><AppIcon name="clock" :size="15" />付款成功开始计时，优先使用最早到期的额度。</p><p><AppIcon name="info" :size="15" />额度用于 AI 服务，不等同于人民币，不支持提现。</p></div>
       </div>
-      <p v-if="pendingOrder" class="recharge-hint">
-        订单权益已固定。{{
-          pendingOrder.status === 'paid'
-            ? '已到账。'
-            : !payable
-              ? '订单已关闭或过期。'
-              : '可继续支付原订单。'
-        }}
-      </p>
-      <p
-        v-if="unavailable || !enabled"
-        id="purchase-unavailable"
-        class="recharge-unavailable"
-        role="status"
-      >
-        <AppIcon name="info" :size="16" />{{ reason }}
-        <button
+      <aside class="recharge-receipt" aria-label="所选资源包">
+        <span class="billing-eyebrow">本次选择</span><h2>{{ pendingOrder?.packageName ?? product?.name ?? '请选择资源包' }}</h2>
+        <dl v-if="pendingOrder || product"><div><dt>基础额度</dt><dd>{{ pendingOrder?.quota ?? product?.quota }}</dd></div><div><dt>赠送额度</dt><dd class="recharge-gift">+ {{ pendingOrder?.bonusQuota ?? product?.bonusQuota }}</dd></div><div><dt>有效期</dt><dd>{{ pendingOrder?.validDays ?? product?.validDays }} 天</dd></div></dl>
+        <p v-if="product?.description && !pendingOrder" class="recharge-product-note">{{ product.description }}</p>
+        <p
+          v-if="unavailable || !enabled"
+          id="purchase-unavailable"
+          class="recharge-unavailable"
+          role="status"
+        ><AppIcon name="info" :size="16" />{{ reason }}<button
           v-if="!unavailable && !loading"
           type="button"
           class="billing-text-button"
           @click="load"
-        >刷新购买状态</button>
-      </p>
-      <button
-        class="button button-primary recharge-submit"
-        :disabled="busy || !enabled || !payable || (!product && !pendingOrder)"
-        :aria-describedby="!enabled ? 'purchase-unavailable' : undefined"
-      >
-        {{
-          busy
-            ? '正在发起…'
-            : pendingOrder?.status === 'paid'
-              ? '已到账'
-              : !payable
-                ? '订单不可支付'
-                : attempted || pendingOrder
-                  ? '继续支付原订单'
-                  : '微信支付'
-        }}
-      </button>
-      <button
-        v-if="pendingOrder && pendingOrder.status !== 'pending'"
-        type="button"
-        class="billing-text-button"
-        @click="newOrder"
-      >
-        购买其他资源包
-      </button>
-      <p class="recharge-hint">
-        支付结果由服务端确认。额度不等同于人民币，不支持提现。
-      </p>
+        >刷新状态</button></p>
+        <div class="recharge-payment-dock">
+          <div class="recharge-payment-total"><span>{{ pendingOrder ? '当前订单' : '实付金额' }}</span><strong>¥{{ fee(pendingOrder?.amount ?? product?.price ?? '0') }}</strong></div>
+          <button
+            class="button button-primary recharge-submit"
+            :disabled="busy || (!pendingOrder && !enabled) || (!product && !pendingOrder)"
+            :aria-describedby="!enabled ? 'purchase-unavailable' : undefined"
+          ><AppIcon name="chat" :size="18" />{{ busy ? '正在创建订单…' : pendingOrder ? '查看订单' : attempted ? '恢复原订单' : '微信支付' }}</button>
+        </div>
+        <button
+          v-if="pendingOrder && (!payable || pendingOrder.status !== 'pending')"
+          type="button"
+          class="billing-text-button recharge-new-order"
+          @click="newOrder"
+        >重新选择资源包</button>
+        <p class="recharge-receipt-note"><AppIcon name="lock" :size="12" />付款结果由服务端确认后到账</p>
+      </aside>
     </form>
     <CheckoutDialog
       :open="checkout.open.value"
       :order="checkout.order.value"
       :qr="checkout.qr.value"
       :link="checkout.link.value"
-      :stage="checkout.stage.value"
+      :phase="checkout.phase.value"
+      :expires-at="checkout.expiresAt.value"
+      :details="checkout.details.value"
       :cancelling="checkout.cancelling.value"
+      :checking="checkout.checking.value"
       :notice="checkout.notice.value"
       :error="checkout.error.value"
-      :unavailable="!!unavailable"
+      :unavailable="!!unavailable || !enabled"
       @close="checkout.close"
       @cancel-order="checkout.cancelOrder"
+      @refresh="checkout.refresh"
+      @continue="checkout.order.value && checkout.pay(checkout.order.value)"
     />
   </section>
 </template>

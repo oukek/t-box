@@ -4,6 +4,7 @@ import { registerLedger } from '@t-box/ledger-server'
 import { ErrorCode } from '../error-codes.js'
 import { bearer } from '../identity/service.js'
 import { registerWechatLogin } from '../identity/wechat-routes.js'
+import { registerPromotions } from '../promotions/routes.js'
 
 export function registerPlatform(app: FastifyInstance, p: PlatformService) {
   const principal = (req: FastifyRequest) =>
@@ -21,6 +22,7 @@ export function registerPlatform(app: FastifyInstance, p: PlatformService) {
     return reply.code(204).send()
   })
   registerWechatLogin(app, p)
+  registerPromotions(app, p)
   app.get('/api/v1/auth/me', async (req) => ({
     data: (await principal(req)).user,
   }))

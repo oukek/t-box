@@ -28,7 +28,7 @@ export class WechatJsSdk {
   private readonly pending = new Map<string, Promise<string>>()
   constructor(private readonly transport: typeof fetch = fetch) {}
 
-  private async ticket(c: WechatRuntime) {
+  private async ticket(c: Pick<WechatRuntime, 'appId' | 'appSecret'>) {
     const key = createHash('sha256').update(`${c.appId}:${c.appSecret}`).digest('hex')
     const cached = this.tickets.get(key)
     if (cached && cached.expiresAt > Date.now()) {
@@ -74,7 +74,7 @@ export class WechatJsSdk {
     }
   }
 
-  async configuration(c: WechatRuntime, value: unknown): Promise<WechatJsSdkConfiguration> {
+  async configuration(c: Pick<WechatRuntime, 'appId' | 'appSecret' | 'jsapi' | 'frontendUrl'>, value: unknown): Promise<WechatJsSdkConfiguration> {
     if (!c.jsapi || !c.appSecret) {
       throw ErrorCode.OAUTH_UNAVAILABLE()
     }

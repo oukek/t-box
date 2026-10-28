@@ -126,6 +126,6 @@ onMounted(load)
         <a class="wechat-guide-next" href="#/payments">前往微信支付配置<AdminIcon name="arrow" :size="15" /></a>
       </aside>
     </div>
-    <div class="wechat-login-footnote"><AdminIcon name="chat" :size="16" /><p>首次授权获取微信资料；站内默认昵称为“方舟”，用户可独立修改头像与昵称。普通用户使用微信登录，管理员账号保持独立。</p></div>
+    <div class="wechat-login-footnote"><AdminIcon name="chat" :size="16" /><p>资料授权成功后同步微信昵称和头像；用户仍可在账号设置中修改，再次授权时会重新同步。普通用户使用微信登录，管理员账号保持独立。</p></div>
   </div>
 </template>

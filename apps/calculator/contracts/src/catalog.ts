@@ -303,7 +303,7 @@ export const calculatorManifest = {
   icon: 'calculator',
   iconAsset: applicationIcon,
   color: 'blue',
-  version: '1.2.0',
+  version: '1.2.1',
   skillIds: ['calculation'],
 } as const satisfies ApplicationManifest
 export function getCalculatorDefinition(id: string): CalculatorDefinition {

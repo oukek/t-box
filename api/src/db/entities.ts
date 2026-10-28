@@ -26,6 +26,7 @@ import {
 import { UserProfileEntity } from '../identity/profile-entity.js'
 import { wechatIdentityEntities } from '../identity/wechat-entities.js'
 import { CheckoutLinkEntity } from '../payments/checkout-link-entity.js'
+import { promotionEntities } from '../promotions/entities.js'
 import { SupportSettingsEntity } from '../support/entity.js'
 import { platformEntities } from './platform-entities.js'
 import { platformRecordEntities } from './records/index.js'
@@ -249,6 +250,7 @@ export const SettingsEntity = new EntitySchema<{
   ],
 })
 export const entities = [
+  ...promotionEntities,
   CheckoutLinkEntity,
   UserProfileEntity,
   ...wechatIdentityEntities,

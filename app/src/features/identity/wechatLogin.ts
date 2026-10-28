@@ -6,6 +6,7 @@ import { watchQrState } from '../../core/qrSocket'
 import { setSession } from '../../core/session'
 import { captureCheckoutLink, checkoutTicket, markCheckoutAuthenticated } from '../billing/checkoutLink'
 import { isWechatPayBrowser } from '../billing/paymentEnvironment'
+import { clearPromotionVisit, promotionToken } from '../promotions/attribution'
 import { restoreSession } from './identityApi'
 
 const storageKey = 'tbox.wechat.authorization.v1'
@@ -19,6 +20,7 @@ const state = reactive({
   qrUrl: '',
   expiresAt: '',
   copied: false,
+  purpose: 'login' as 'login' | 'payment',
   result: null as WechatLoginResult | null,
 })
 export const wechatLogin = readonly(state)
@@ -78,7 +80,8 @@ function proof() {
 function accept(result: WechatLoginResult) {
   state.result = result
   state.busy = false
-  if (result.session && result.kind !== 'scan') {
+  if (result.session) {
+    clearPromotionVisit()
     stopWechatUpdates()
     const returnHash = current?.returnHash
     if (current?.checkoutTicket) {
@@ -86,6 +89,8 @@ function accept(result: WechatLoginResult) {
     }
     setSession(result.session)
     forget()
+    current = null
+    scanId = undefined
     state.active = false
     state.phase = 'done'
     if (returnHash?.startsWith('#/')) {
@@ -158,7 +163,7 @@ async function begin(kind: WechatLoginFlow['kind']) {
   try {
     const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((value) => value.toString(16).padStart(2, '0')).join('')
     const checkout = authorizationCheckoutTicket
-    const flow = await call<WechatLoginFlow>('start', { kind, secret, ...(kind !== 'qr' ? { silent: true } : {}), ...(kind === 'scan' ? { parentId: scanId } : {}), ...(checkout ? { checkoutTicket: checkout } : {}) })
+    const flow = await call<WechatLoginFlow>('start', { kind, secret, ...(promotionToken() ? { promotionToken: promotionToken() } : {}), ...(kind !== 'qr' ? { silent: true } : {}), ...(kind === 'scan' ? { parentId: scanId } : {}), ...(checkout ? { checkoutTicket: checkout } : {}) })
     if (active !== generation) {
       return
     }
@@ -224,6 +229,7 @@ export async function startWechatCheckoutLogin(ticket: string) {
     return
   }
   authorizationReturnHash = `#/pay/wechat?ticket=${ticket}`
+  state.purpose = 'payment'
   authorizationCheckoutTicket = ticket
   state.active = true
   await startWechatLogin()
@@ -293,11 +299,13 @@ export function closeWechatLogin() {
   state.busy = false
   state.error = ''
   state.result = null
+  state.purpose = 'login'
   current = null
   scanId = undefined
   forget()
 }
 export async function showWechatLogin() {
+  state.purpose = 'login'
   state.active = true
   if (state.initializing) {
     const active = generation
@@ -327,6 +335,7 @@ export function initializeWechatLogin() {
     await restoreSession()
     try {
       current = readFlow()
+      state.purpose = current?.checkoutTicket || checkoutReturnHash ? 'payment' : 'login'
       if (code || oauthState) {
         state.active = true
         if (!current || current.state !== oauthState || !code) {

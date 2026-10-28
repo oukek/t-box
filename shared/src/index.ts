@@ -20,6 +20,7 @@ export * from './memory.js'
 export * from './model-operations.js'
 export * from './operations.js'
 export * from './payments.js'
+export * from './promotions.js'
 
 export * from './quota.js'
 export * from './reconciliation.js'

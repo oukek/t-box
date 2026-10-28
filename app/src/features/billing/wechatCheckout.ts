@@ -1,12 +1,5 @@
 import type { PluginListenerHandle } from '@capacitor/core'
-import type {
-  PaymentIntent,
-  PaymentOrder,
-  WechatCheckoutLink,
-  WechatCheckoutStage,
-  WechatCheckoutState,
-  WechatPaymentMode,
-} from '@t-box/shared'
+import type { PaymentIntent, PaymentOrder, WechatCheckoutLink, WechatCheckoutStage, WechatCheckoutState, WechatPaymentMode } from '@t-box/shared'
 import { Capacitor } from '@capacitor/core'
 import { WechatPay } from '@t-box/capacitor-wechat-pay'
 import QRCode from 'qrcode'
@@ -15,31 +8,16 @@ import { request } from '../../core/network'
 import { watchQrState } from '../../core/qrSocket'
 import { identity } from '../../core/session'
 import { ErrorCode } from '../../error-codes.js'
-import {
-  billingPurchaseBlockReason,
-  selectPaymentMode,
-  usesWechatCheckoutLink,
-} from './paymentEnvironment'
-import {
-  forgetCheckout,
-  pendingCheckout,
-  rememberCheckout,
-} from './pendingCheckout'
+import { billingPurchaseBlockReason, selectPaymentMode, usesWechatCheckoutLink } from './paymentEnvironment'
+import { forgetCheckout, pendingCheckout, rememberCheckout } from './pendingCheckout'
 import { chooseWechatPay } from './wechatJsSdk'
 
+export type CheckoutPhase = WechatCheckoutStage | 'preparing' | 'verifying'
 export function paymentMode(availableModes?: readonly WechatPaymentMode[]): WechatPaymentMode {
-  return selectPaymentMode(
-    Capacitor.isNativePlatform(),
-    navigator.userAgent,
-    matchMedia('(pointer:coarse)').matches,
-    availableModes,
-  )
+  return selectPaymentMode(Capacitor.isNativePlatform(), navigator.userAgent, matchMedia('(pointer:coarse)').matches, availableModes)
 }
 export function purchaseBlockReason(): string | null {
-  return billingPurchaseBlockReason(
-    Capacitor.isNativePlatform(),
-    Capacitor.getPlatform(),
-  )
+  return billingPurchaseBlockReason(Capacitor.isNativePlatform(), Capacitor.getPlatform())
 }
 export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: () => readonly WechatPaymentMode[] | undefined) {
   const currentMode = () => paymentMode(availableModes?.())
@@ -47,74 +25,53 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
   const qr = ref('')
   const link = ref('')
   const stage = ref<WechatCheckoutStage>('waiting')
+  const phase = ref<CheckoutPhase>('waiting')
+  const expiresAt = ref('')
+  const details = ref(false)
   const notice = ref('')
   const error = ref('')
   const open = ref(false)
   const cancelling = ref(false)
+  const checking = ref(false)
   let stopUpdates: (() => void) | undefined
   let generation = 0
   let disposed = false
+  let preparing = false
+  let cashierActive = false
+  let paidHandled = false
+  let clientResult: 'ok' | 'cancel' | 'fail' | '' = ''
+  const isPaid = () => order.value?.status === 'paid'
   const listeners: PluginListenerHandle[] = []
   let nativeListeners: Promise<void> | undefined
-  let clientHint = ''
-  async function listenNative() {
-    nativeListeners ??= (async () => {
-      for (const event of ['paymentResult', 'foreground'] as const) {
-        const refresh = (result?: { code: number }) => {
-          if (result) {
-            clientHint =
-              result.code === -2
-                ? '已取消支付，可在原订单中继续'
-                : result.code === 0
-                  ? '正在核对到账结果…'
-                  : '支付未完成，请核对原订单后重试'
-            notice.value = clientHint
-          }
-          // SDK callbacks are hints; only the authenticated server can prove payment.
-          if (!disposed && open.value && order.value?.status === 'pending') {
-            void checkOrder(order.value.id, generation)
-          }
-        }
-        const handle =
-          event === 'paymentResult'
-            ? await WechatPay.addListener('paymentResult', refresh)
-            : await WechatPay.addListener('foreground', refresh)
-        if (disposed) {
-          await handle.remove()
-        } else {
-          listeners.push(handle)
-        }
-      }
-    })()
-    return nativeListeners
-  }
   function close() {
     generation++
     stopUpdates?.()
     stopUpdates = undefined
     open.value = false
+    checking.value = false
     qr.value = ''
     link.value = ''
   }
-  let paidHandled = false
   function acceptState(value: WechatCheckoutState, version: number) {
     if (version !== generation || disposed) {
       return
     }
     order.value = value.order
     stage.value = value.stage
+    expiresAt.value = value.expiresAt || expiresAt.value || value.order.expiresAt
     error.value = ''
-    const notices: Record<WechatCheckoutStage, string> = {
-      waiting: '请用微信扫一扫，核对充值账号后完成支付',
-      scanned: '已扫码，正在核对手机上的微信身份',
-      confirming: '已扫码，等待手机确认充值账号',
-      paying: '已扫码，等待手机完成微信支付',
-      cancelled: '手机已取消，请在原手机重试；更换手机前请先核对并取消订单',
-      expired: '二维码已过期，请核对订单后重新获取',
-      closed: '订单已关闭',
-      paid: '资源包已到账',
-    }
-    notice.value = notices[value.stage]
+    phase.value = value.order.status !== 'pending'
+      ? value.order.status
+      : value.stage === 'expired'
+        ? 'expired'
+        : preparing
+          ? 'preparing'
+          : clientResult === 'ok'
+            ? 'verifying'
+            : clientResult === 'cancel' || clientResult === 'fail'
+              ? 'cancelled'
+              : cashierActive ? 'paying' : value.stage
+    notice.value = phase.value === 'verifying' ? '正在等待服务端确认到账，结果会自动更新。' : ''
     if (value.order.status === 'paid') {
       forgetCheckout()
       stopUpdates?.()
@@ -122,9 +79,13 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
       if (!paidHandled) {
         paidHandled = true
         void onPaid().catch(() => {
-          error.value = '已付款，余额刷新失败，请重新打开账户查看'
+          if (version === generation && !disposed) {
+            error.value = '支付成功，额度暂未刷新，请重新打开我的额度。'
+          }
         })
       }
+    } else if (value.order.status === 'closed') {
+      forgetCheckout()
     }
   }
   function watchOrder(id: string, version: number) {
@@ -140,6 +101,10 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
     })
   }
   async function checkOrder(id: string, version: number) {
+    if (checking.value || version !== generation || disposed) {
+      return
+    }
+    checking.value = true
     try {
       const { data } = await request<{ data: PaymentOrder }>(`/payments/orders/${id}/refresh`, { method: 'POST' })
       acceptState({ order: data, stage: data.status === 'pending' ? stage.value : data.status }, version)
@@ -147,10 +112,42 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
       if (version === generation && !disposed) {
         error.value = cause instanceof Error ? cause.message : '核对订单失败'
       }
+    } finally {
+      if (version === generation) {
+        checking.value = false
+      }
     }
   }
+  async function refresh() {
+    if (order.value) {
+      await checkOrder(order.value.id, generation)
+    }
+  }
+  async function listenNative() {
+    nativeListeners ??= (async () => {
+      for (const event of ['paymentResult', 'foreground'] as const) {
+        const refreshNative = (result?: { code: number }) => {
+          if (result && order.value?.status === 'pending') {
+            cashierActive = false
+            clientResult = result.code === 0 ? 'ok' : result.code === -2 ? 'cancel' : 'fail'
+            phase.value = clientResult === 'ok' ? 'verifying' : 'cancelled'
+          }
+          if (!disposed && open.value && order.value?.status === 'pending') {
+            void refresh()
+          }
+        }
+        const handle = event === 'paymentResult' ? await WechatPay.addListener('paymentResult', refreshNative) : await WechatPay.addListener('foreground', refreshNative)
+        if (disposed) {
+          await handle.remove()
+        } else {
+          listeners.push(handle)
+        }
+      }
+    })()
+    return nativeListeners
+  }
   async function cancelOrder() {
-    if (!order.value || cancelling.value) {
+    if (!order.value || cancelling.value || checking.value) {
       return
     }
     cancelling.value = true
@@ -168,44 +165,57 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
       if (data) {
         acceptState({ order: data, stage: data.status === 'paid' ? 'paid' : 'closed' }, version)
       }
-      forgetCheckout()
     } catch (cause) {
       if (version === generation && !disposed) {
-        error.value = cause instanceof Error ? cause.message : '取消订单失败，请先核对支付结果'
+        error.value = cause instanceof Error ? cause.message : '关闭订单失败，请稍后核对支付结果'
       }
     } finally {
-      cancelling.value = false
+      if (version === generation) {
+        cancelling.value = false
+      }
     }
   }
-  async function startPayment(item: PaymentOrder) {
+  function begin(item: PaymentOrder, preparingPayment = false) {
+    close()
+    order.value = item
+    expiresAt.value = item.expiresAt
+    details.value = !preparingPayment
+    stage.value = item.status === 'pending' ? 'waiting' : item.status
+    phase.value = preparingPayment ? 'preparing' : stage.value
+    preparing = preparingPayment
+    cashierActive = false
+    cancelling.value = false
+    paidHandled = false
+    clientResult = ''
+    notice.value = ''
+    error.value = ''
+    open.value = true
+    watchOrder(item.id, generation)
+    return generation
+  }
+  function view(item: PaymentOrder) {
+    begin(item)
+  }
+  async function startPayment(item: PaymentOrder, version: number) {
     const blocked = purchaseBlockReason()
     if (blocked) {
       throw ErrorCode.INTERNAL_PAYMENT_PLATFORM_UNAVAILABLE(blocked)
     }
-    close()
-    const version = generation
-    error.value = ''
-    stage.value = 'waiting'
-    paidHandled = false
-    clientHint = ''
-    notice.value = '正在准备支付…'
-    order.value = item
+    rememberCheckout(item.id)
     if (usesWechatCheckoutLink(Capacitor.isNativePlatform(), navigator.userAgent, matchMedia('(pointer:coarse)').matches, navigator.maxTouchPoints, availableModes?.())) {
-      open.value = true
-      watchOrder(item.id, version)
       const { data: handoff } = await request<{ data: WechatCheckoutLink }>(`/payments/orders/${item.id}/handoff`, { method: 'POST', body: '{}' })
-      if (disposed || version !== generation) {
+      if (disposed || version !== generation || order.value?.status === 'paid') {
         return
       }
       link.value = handoff.url
-      qr.value = await QRCode.toDataURL(handoff.url, { width: 280, margin: 2, errorCorrectionLevel: 'M' })
+      expiresAt.value = handoff.expiresAt
+      const code = await QRCode.toDataURL(handoff.url, { width: 256, margin: 2, errorCorrectionLevel: 'M' })
       if (disposed || version !== generation) {
         return
       }
-      rememberCheckout(item.id)
-      open.value = true
-      clientHint = '请用微信扫码，核对充值账号后完成支付'
-      notice.value = clientHint
+      qr.value = code
+      preparing = false
+      phase.value = stage.value
       return
     }
     if (currentMode() === 'app') {
@@ -218,52 +228,43 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
       }
       await listenNative()
     }
-    const { data: intent } = await request<{ data: PaymentIntent }>(
-      `/payments/orders/${item.id}/intent`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ mode: currentMode() }),
-      },
-    )
-    if (disposed || version !== generation) {
+    if (disposed || version !== generation || isPaid()) {
       return
     }
-    rememberCheckout(item.id)
+    const { data: intent } = await request<{ data: PaymentIntent }>(`/payments/orders/${item.id}/intent`, { method: 'POST', body: JSON.stringify({ mode: currentMode() }) })
+    if (disposed || version !== generation || isPaid()) {
+      return
+    }
+    preparing = false
     if (intent.type === 'redirect') {
       const url = new URL(intent.url)
-      if (
-        url.protocol !== 'https:' ||
-        !['wx.tenpay.com', 'open.weixin.qq.com'].includes(url.hostname)
-      ) {
+      if (url.protocol !== 'https:' || !['wx.tenpay.com', 'open.weixin.qq.com'].includes(url.hostname)) {
         throw ErrorCode.INTERNAL_INVALID_WECHAT_PAYMENT_URL()
       }
       location.assign(url.href)
       return
     }
-    open.value = true
-    watchOrder(item.id, version)
     if (intent.type === 'qr') {
-      qr.value = await QRCode.toDataURL(intent.codeUrl, {
-        width: 280,
-        margin: 2,
-        errorCorrectionLevel: 'M',
-      })
+      const code = await QRCode.toDataURL(intent.codeUrl, { width: 256, margin: 2, errorCorrectionLevel: 'M' })
       if (disposed || version !== generation) {
-        qr.value = ''
         return
       }
+      qr.value = code
+      phase.value = 'waiting'
     } else if (intent.type === 'jsapi') {
+      cashierActive = true
+      phase.value = 'paying'
       const result = await chooseWechatPay(item.id, intent.parameters, { active: () => !disposed && version === generation })
-      if (version !== generation || disposed) {
+      if (version !== generation || disposed || isPaid()) {
         return
       }
-      notice.value = result === 'cancel'
-        ? '已取消支付，可在原订单中继续'
-        : result === 'ok'
-          ? '正在核对到账结果…'
-          : '支付未完成，可重新发起'
+      cashierActive = false
+      clientResult = result
+      phase.value = result === 'ok' ? 'verifying' : 'cancelled'
+      notice.value = result === 'ok' ? '正在等待服务端确认到账，结果会自动更新。' : result === 'cancel' ? '你已取消微信支付，订单仍可核对或关闭。' : '微信支付未完成，请核对结果后再试。'
     } else if (intent.type === 'app' && currentMode() === 'app') {
-      notice.value = '正在调起微信，完成后将核对到账结果…'
+      cashierActive = true
+      phase.value = 'paying'
       const result = await WechatPay.pay(intent.parameters)
       if (!result.launched) {
         throw ErrorCode.INTERNAL_WECHAT_LAUNCH_FAILED()
@@ -277,17 +278,17 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
     void checkOrder(item.id, version)
   }
   async function pay(item: PaymentOrder) {
+    const version = begin(item, true)
     try {
-      await startPayment(item)
-    } catch (e) {
-      if (!disposed) {
-        error.value = e instanceof Error ? e.message : '发起支付失败'
-        notice.value = purchaseBlockReason() || '可在购买订单中核对或继续支付'
+      await startPayment(item, version)
+    } catch (cause) {
+      if (!disposed && version === generation && open.value && order.value?.status !== 'paid') {
+        preparing = false
+        cashierActive = false
+        phase.value = 'waiting'
+        error.value = cause instanceof Error ? cause.message : '发起支付失败'
+        notice.value = '订单已保留，可以核对支付结果或关闭订单。'
       }
-      if (open.value && order.value?.status === 'pending') {
-        watchOrder(order.value.id, generation)
-      }
-      throw e
     }
   }
   async function resume() {
@@ -304,26 +305,17 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
       if (currentMode() === 'app' && !purchaseBlockReason()) {
         await listenNative()
       }
-      const { data: item } = await request<{ data: PaymentOrder }>(
-        `/payments/orders/${id}`,
-      )
+      const { data: item } = await request<{ data: PaymentOrder }>(`/payments/orders/${id}`)
       if (disposed) {
         return
       }
-      if (
-        authorized &&
-        !purchaseBlockReason() &&
-        item.status === 'pending' &&
-        Date.parse(item.expiresAt) > Date.now()
-      ) {
+      if (authorized && !purchaseBlockReason() && item.status === 'pending' && Date.parse(item.expiresAt) > Date.now()) {
         await pay(item)
       } else {
-        order.value = item
-        open.value = true
-        watchOrder(id, generation)
+        view(item)
       }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : '读取支付订单失败'
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : '读取支付订单失败'
     }
   }
   onBeforeUnmount(() => {
@@ -333,5 +325,5 @@ export function useWechatCheckout(onPaid: () => Promise<void>, availableModes?: 
       void listener.remove()
     }
   })
-  return { open, order, qr, link, stage, notice, error, cancelling, cancelOrder, pay, resume, close }
+  return { open, order, qr, link, stage, phase, expiresAt, details, notice, error, cancelling, checking, cancelOrder, refresh, pay, resume, view, close }
 }

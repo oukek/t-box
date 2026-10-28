@@ -20,7 +20,7 @@ const { dialog, closed } = useDialog(() => props.open, { opened: () => emit('ope
   >
     <div class="dialog-content">
       <header class="dialog-heading">
-        <h2>{{ title }}</h2>
+        <h2 tabindex="-1" data-dialog-initial-focus>{{ title }}</h2>
         <button
           type="button"
           class="icon-button"
@@ -66,6 +66,9 @@ const { dialog, closed } = useDialog(() => props.open, { opened: () => emit('ope
   font-size: 17px;
   margin: 0;
   font-weight: 620;
+}
+.dialog-heading h2:focus {
+  outline: none;
 }
 .dialog-heading .icon-button {
   align-self: flex-start;

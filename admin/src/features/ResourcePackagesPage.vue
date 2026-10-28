@@ -4,7 +4,7 @@ import type {
   QuotaTariff,
   ResourcePackageDraft,
 } from '@t-box/shared'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import AdminButton from '../components/AdminButton.vue'
 import AdminCheckbox from '../components/AdminCheckbox.vue'
 import AdminDialog from '../components/AdminDialog.vue'
@@ -18,7 +18,15 @@ const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
 const formError = ref('')
-const dialog = ref<'product' | 'tariff' | 'publish' | null>(null)
+const dialog = ref<'product' | 'tariff' | 'publish' | 'availability' | null>(null)
+const tab = ref<'listed' | 'unlisted' | 'drafts'>('listed')
+const listingState = (row: AdminResourcePackage) => !row.published ? 'drafts' : row.published.enabled ? 'listed' : 'unlisted'
+const visiblePackages = computed(() => packages.value.filter((row) => listingState(row) === tab.value))
+const tabs = computed(() => [
+  { id: 'listed' as const, name: '已上架', count: packages.value.filter((row) => listingState(row) === 'listed').length },
+  { id: 'unlisted' as const, name: '已下架', count: packages.value.filter((row) => listingState(row) === 'unlisted').length },
+  { id: 'drafts' as const, name: '未发布', count: packages.value.filter((row) => listingState(row) === 'drafts').length },
+])
 const selected = ref<AdminResourcePackage | null>(null)
 const empty = (): ResourcePackageDraft => ({
   code: '',
@@ -81,6 +89,11 @@ function publish(row: AdminResourcePackage) {
   formError.value = ''
   dialog.value = 'publish'
 }
+function availability(row: AdminResourcePackage) {
+  selected.value = row
+  formError.value = ''
+  dialog.value = 'availability'
+}
 async function submit() {
   if (busy.value) {
     return
@@ -104,6 +117,8 @@ async function submit() {
         { configuration: tariffForm.value, version: tariffVersion },
         'PUT',
       )
+    } else if (dialog.value === 'availability' && selected.value?.published) {
+      await save(`/billing/packages/${selected.value.id}/availability`, { revision: selected.value.revision, enabled: !selected.value.published.enabled }, 'PATCH')
     } else if (dialog.value === 'publish' && selected.value) {
       await save(`/billing/packages/${selected.value.id}/publish`, {
         revision: selected.value.revision,
@@ -143,7 +158,15 @@ onMounted(load)
       <h2>资源包商品</h2>
       <span class="muted">各资源包可独立定价</span>
     </div>
+    <nav class="package-status-tabs" aria-label="资源包状态"><AdminButton
+      v-for="item in tabs"
+      :key="item.id"
+      :class="{ active: tab === item.id }"
+      :aria-pressed="tab === item.id"
+      @click="tab = item.id"
+    >{{ item.name }}<span>{{ item.count }}</span></AdminButton></nav>
     <div v-if="loading" class="empty">正在读取配置…</div>
+    <div v-else-if="!visiblePackages.length" class="empty">{{ tab === 'listed' ? '暂无已上架资源包' : tab === 'unlisted' ? '暂无已下架资源包' : '暂无未发布草稿' }}</div>
     <div v-else class="table-wrap">
       <table>
         <thead>
@@ -157,13 +180,13 @@ onMounted(load)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in packages" :key="p.id">
+          <tr v-for="p in visiblePackages" :key="p.id">
             <td>
-              <strong>{{ p.draft.name }}</strong><span class="cell-secondary">{{ p.draft.code }}</span>
+              <strong>{{ (p.published ?? p.draft).name }}</strong><span class="cell-secondary">{{ p.draft.code }}</span>
             </td>
-            <td>¥{{ p.draft.price }}</td>
-            <td>{{ p.draft.quota }} / {{ p.draft.bonusQuota }}</td>
-            <td>{{ p.draft.validDays }}</td>
+            <td>¥{{ (p.published ?? p.draft).price }}</td>
+            <td>{{ (p.published ?? p.draft).quota }} / {{ (p.published ?? p.draft).bonusQuota }}</td>
+            <td>{{ (p.published ?? p.draft).validDays }}</td>
             <td>
               <span
                 class="badge"
@@ -177,8 +200,13 @@ onMounted(load)
                 class="cell-secondary"
               >有待发布修改</span>
             </td>
-            <td class="actions">
-              <AdminButton @click="edit(p)">编辑草稿</AdminButton><AdminButton @click="publish(p)">发布版本</AdminButton>
+            <td><div class="resource-package-actions">
+              <AdminButton @click="edit(p)">编辑草稿</AdminButton><AdminButton @click="publish(p)">发布版本</AdminButton><AdminButton
+                v-if="p.published"
+                :class="{ 'package-unlist': p.published.enabled }"
+                @click="availability(p)"
+              >{{ p.published.enabled ? '下架' : '上架' }}</AdminButton>
+            </div>
             </td>
           </tr>
         </tbody>
@@ -228,9 +256,11 @@ onMounted(load)
         ? selected
           ? '编辑资源包草稿'
           : '新增资源包'
-        : dialog === 'tariff'
-          ? '发布公开费率'
-          : '确认发布资源包'
+        : dialog === 'availability'
+          ? selected?.published?.enabled ? '确认下架资源包' : '确认上架资源包'
+          : dialog === 'tariff'
+            ? '发布公开费率'
+            : '确认发布资源包'
     "
     :busy="busy"
     @close="dialog = null"
@@ -346,6 +376,7 @@ onMounted(load)
             价格单位均为额度。发布将创建新版本；模型服务的采购报价在模型页面单独配置。
           </p>
         </template>
+        <template v-else-if="dialog === 'availability' && selected?.published"><p>确定{{ selected.published.enabled ? '下架' : '上架' }}「{{ selected.published.name }}」？</p><p>{{ selected.published.enabled ? '下架后不能创建新的购买订单。' : '上架后可按当前已发布价格购买。' }}已购资源包和已有订单保留原权益。</p><p v-if="hasDraftChanges(selected)" class="footnote">草稿中的价格、额度等修改不会随本次操作发布。</p></template>
         <template v-else-if="selected"><p>
                                          发布「{{ selected.draft.name }}」v{{
                                            (selected.published?.version ?? 0) + 1
@@ -367,13 +398,53 @@ onMounted(load)
       :disabled="busy"
     >
       {{
-        busy ? '正在保存…' : dialog === 'product' ? '保存草稿' : '确认发布'
+        busy ? '正在保存…' : dialog === 'product' ? '保存草稿' : dialog === 'availability' ? selected?.published?.enabled ? '确认下架' : '确认上架' : '确认发布'
       }}
     </AdminButton></template>
   </AdminDialog>
 </template>
 
 <style scoped>
+.package-status-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 20px 16px;
+  border-bottom: 1px solid #edf0f5;
+}
+.package-status-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 9px;
+  color: #8992a2;
+  background: transparent;
+  font-size: 12px;
+}
+.package-status-tabs button.active {
+  background: #edf2ff;
+  color: #3458d4;
+  font-weight: 550;
+}
+.package-status-tabs button span {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #f2f4f7;
+  font-variant-numeric: tabular-nums;
+}
+.package-status-tabs button.active span {
+  background: #dfe8ff;
+}
+.resource-package-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.resource-package-actions .package-unlist {
+  color: #b47c60;
+}
 .tariff-overview {
   margin-top: 22px;
 }

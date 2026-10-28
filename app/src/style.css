@@ -53,6 +53,10 @@
   color: #137b72;
   background: #edf5f2;
 }
+.bottom-navigation--share > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 330px;
+}
 .chat-page {
   display: flex;
   flex-direction: column;

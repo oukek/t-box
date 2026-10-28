@@ -5,6 +5,10 @@ import {
 } from '@t-box/errors'
 
 const apiErrors = defineApiErrors({
+  PROMOTION_INVALID: { statusCode: 400, message: '推广配置无效，请检查渠道名称和说明' },
+  PROMOTION_NOT_FOUND: { statusCode: 404, message: '推广链接不存在或已停用' },
+  PROMOTION_STALE: { statusCode: 409, message: '推广渠道已更新，请刷新后重新编辑' },
+  PROMOTION_CONFIGURATION_REQUIRED: { statusCode: 409, message: '请先在微信登录配置中填写网站地址' },
   CHECKOUT_LINK_BUSY: { statusCode: 409, message: '此二维码已由另一台手机扫描，请在原手机完成支付；如需更换手机，请先在原设备核对并取消订单后重新下单' },
   CHECKOUT_WECHAT_AUTH_REQUIRED: { statusCode: 409, message: '请重新核对当前微信身份后支付，旧的本站登录状态不能代替本次微信授权' },
   CHECKOUT_LINK_INVALID: { statusCode: 410, message: '支付链接已失效，请在原设备刷新二维码后重试' },

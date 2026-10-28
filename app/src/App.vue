@@ -51,6 +51,8 @@ import MemoryPage from './features/chat/MemoryPage.vue'
 import LoginGate from './features/identity/LoginGate.vue'
 import LoginPage from './features/identity/LoginPage.vue'
 import { initializeWechatLogin, showWechatLogin } from './features/identity/wechatLogin'
+import PromotionShareDialog from './features/promotions/PromotionShareDialog.vue'
+import { openPromotionShare } from './features/promotions/share'
 import ResourcesPage from './features/resources/ResourcesPage.vue'
 
 const currentApplication = computed(() =>
@@ -176,6 +178,11 @@ onBeforeUnmount(() => {
           :aria-current="(tab.id === 'home' ? navigation.screen === 'home' : navigation.screen === 'applications') ? 'page' : undefined"
           @click="navigateTab(tab.id)"
         ><AppIcon :name="tab.icon" :size="22" /><span>{{ tab.id === 'home' ? 'AI 对话' : '应用桌面' }}</span></button>
+        <button
+          v-if="isWebHost"
+          class="workspace-rail-tab"
+          @click="openPromotionShare"
+        ><AppIcon name="share" :size="22" /><span>分享方舟</span></button>
       </nav>
       <button
         class="workspace-rail-profile"
@@ -299,6 +306,7 @@ onBeforeUnmount(() => {
     <nav
       v-if="showPrimaryNavigation"
       class="bottom-navigation"
+      :class="{ 'bottom-navigation--share': isWebHost }"
       aria-label="主要导航"
     >
       <div>
@@ -319,10 +327,12 @@ onBeforeUnmount(() => {
         >
           <AppIcon :name="tab.icon" :size="21" /><span>{{ tab.label }}</span>
         </button>
+        <button v-if="isWebHost" @click="openPromotionShare"><AppIcon name="share" :size="21" /><span>分享</span></button>
       </div>
     </nav>
     <ReminderHost />
     <LoginPage />
+    <PromotionShareDialog v-if="isWebHost" />
     <template v-for="module in applicationModules" :key="module.manifest.id">
       <component
         :is="module.host"

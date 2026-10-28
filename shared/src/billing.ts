@@ -55,6 +55,7 @@ export interface BillingUser extends Wallet {
   username: string
   nickname: string
   avatarUrl?: string
+  promotion?: import('./promotions.js').PromotionMetrics
 }
 export interface PaymentOrder {
   id: string

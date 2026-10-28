@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import type { PaymentIntent, PaymentOrder, WechatCheckoutPreview, WechatJsSdkConfiguration } from '@t-box/shared'
+import type { CheckoutPhase } from './wechatCheckout'
 import { AppIcon, Modal, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { navigateTab } from '../../core/navigation'
 import { request, RequestError } from '../../core/network'
 import { watchQrState } from '../../core/qrSocket'
 import { identity } from '../../core/session'
 import { inWechat, startWechatCheckoutLogin } from '../identity/wechatLogin'
+import CheckoutDialog from './CheckoutDialog.vue'
 import { takeCheckoutAuthentication, takeCheckoutTicket } from './checkoutLink'
 import { displayMoney } from './format'
 import { isWechatPayBrowser } from './paymentEnvironment'
@@ -17,6 +19,10 @@ const phase = ref<'loading' | 'confirm' | 'paying' | 'pending' | 'paid' | 'cance
 const preview = ref<WechatCheckoutPreview | null>(null)
 const error = ref('')
 const cancelling = ref(false)
+const checking = ref(false)
+const expiresAt = ref('')
+const paymentModalOpen = ref(false)
+const checkoutPhase = computed<CheckoutPhase>(() => phase.value === 'pending' ? 'verifying' : phase.value === 'paying' ? 'paying' : phase.value === 'paid' ? 'paid' : phase.value === 'cancelled' ? 'cancelled' : 'waiting')
 let ticket: string | null = null
 let disposed = false
 let inspecting = false
@@ -25,9 +31,10 @@ async function call<T>(path: string, body: Record<string, unknown> = {}) {
   return (await request<{ data: T }>(`/payments/handoff/${path}`, { method: 'POST', body: JSON.stringify({ ticket, ...body }), timeoutMs: 25_000 })).data
 }
 async function refreshStatus() {
-  if (disposed) {
+  if (disposed || checking.value) {
     return
   }
+  checking.value = true
   try {
     const order = await call<PaymentOrder>('refresh')
     if (disposed) {
@@ -38,6 +45,7 @@ async function refreshStatus() {
     }
     if (order.status === 'paid') {
       phase.value = 'paid'
+      paymentModalOpen.value = true
       return
     }
     if (order.status === 'closed' || Date.parse(order.expiresAt) <= Date.now()) {
@@ -52,6 +60,8 @@ async function refreshStatus() {
       phase.value = 'login'
     }
     error.value = cause instanceof Error ? cause.message : '核对支付结果失败'
+  } finally {
+    checking.value = false
   }
 }
 function watchPayment() {
@@ -65,8 +75,10 @@ function watchPayment() {
     if (preview.value) {
       preview.value.order = event.data.order
     }
+    expiresAt.value = event.data.expiresAt || event.data.order.expiresAt
     if (event.data.order.status === 'paid') {
       phase.value = 'paid'
+      paymentModalOpen.value = true
       error.value = ''
       stopUpdates?.()
       stopUpdates = undefined
@@ -103,6 +115,7 @@ async function pay(confirmedForOther = false) {
     return
   }
   phase.value = 'paying'
+  paymentModalOpen.value = true
   error.value = ''
   try {
     const intent = await call<PaymentIntent>('intent', confirmedForOther ? { confirmedRecipientId: preview.value.recipient.id } : {})
@@ -214,14 +227,14 @@ onBeforeUnmount(() => {
         <strong class="payment-handoff-amount">¥{{ displayMoney(preview.order.amount) }}</strong>
         <p>{{ preview.order.quota }} 额度，另赠 {{ preview.order.bonusQuota }} 额度</p>
       </template>
-      <p v-if="phase === 'loading' || phase === 'paying'" role="status">{{ phase === 'paying' ? '正在打开微信支付…' : '正在核对登录账号与订单…' }}</p>
+      <p v-if="phase === 'loading'" role="status">正在核对登录账号与订单…</p>
       <p v-else-if="phase === 'paid'">服务端已确认付款，额度已发放给 {{ preview?.recipient.nickname }}。</p>
-      <p v-else-if="phase === 'pending'" role="status">正在核对付款结果，完成后本页和原设备会自动更新。</p>
+      <p v-else-if="phase === 'pending' && !paymentModalOpen" role="status">到账结果会自动更新，也可以手动核对。</p>
       <p v-else-if="phase === 'consumed'">为避免重复调起，刷新后不会自动支付。如需继续，请在原设备重新扫码。</p>
       <p v-else-if="phase === 'outside'">请使用微信扫一扫打开此支付链接，电脑端无法直接调起微信网页支付。</p>
       <p v-else-if="phase === 'cancelled'">本次不会再次自动发起支付，你可以在下方重新核对账号后继续。</p>
       <p
-        v-if="error"
+        v-if="error && !paymentModalOpen"
         class="form-error"
         role="alert"
       >{{ error }}</p>
@@ -229,7 +242,7 @@ onBeforeUnmount(() => {
         v-if="phase === 'login'"
         class="button button-primary"
         @click="login"
-      >微信登录并核对账号</button>
+      >核对微信身份并继续</button>
       <button
         v-if="phase === 'error' || phase === 'cancelled'"
         class="button button-primary"
@@ -247,6 +260,18 @@ onBeforeUnmount(() => {
         @click="navigateTab('home')"
       >返回 T方舟</button>
     </div>
+    <CheckoutDialog
+      :open="paymentModalOpen"
+      :order="preview?.order ?? null"
+      :phase="checkoutPhase"
+      :expires-at="expiresAt"
+      :recipient="preview?.recipient"
+      :error="error"
+      :checking="checking"
+      :can-close-order="false"
+      @close="paymentModalOpen = false"
+      @refresh="refreshStatus"
+    />
     <Modal
       :open="phase === 'confirm'"
       title="账号不一致"

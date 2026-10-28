@@ -181,6 +181,8 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
             <th>总额度</th>
             <th>可用额度</th>
             <th>扣费方式</th>
+            <th>推广注册</th>
+            <th>推广支付</th>
             <th class="actions-heading">操作</th>
           </tr>
         </thead>
@@ -203,6 +205,8 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
                 :class="{ disabled: u.mode === 'record_only' }"
               >{{ u.mode === 'charge' ? '实际扣额度' : '免费用户' }}</span>
             </td>
+            <td class="mono">{{ u.promotion?.registrations ?? 0 }}<span class="cell-secondary">{{ u.promotion?.payingUsers ?? 0 }} 人付费</span></td>
+            <td class="mono">¥{{ u.promotion?.paidAmount ?? '0.00' }}<span class="cell-secondary">退款 ¥{{ u.promotion?.refundedAmount ?? '0.00' }}</span><span class="cell-secondary">净支付 ¥{{ u.promotion?.netAmount ?? '0.00' }}</span></td>
             <td class="actions">
               <AdminButton @click="edit(u, 'usage')">使用记录</AdminButton><AdminButton @click="edit(u, 'mode')">扣费设置</AdminButton><AdminButton @click="edit(u, 'grant')">赠送额度</AdminButton>
             </td>
@@ -212,6 +216,7 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
     </div>
   </section>
   <p class="footnote">
+    推广统计仅包括通过该用户分享链接首次注册的账号，支付为这些新用户后续全部成功支付，退款单独列示。
     列表最多显示 100
     位匹配用户，可搜索任意已注册账号。免费用户不预占、不扣额度。设置从下一次调用生效，进行中的调用保留原模式。余额赠送会记录管理员、原因和流水，独立于付费资源包。
   </p>

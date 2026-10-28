@@ -40,6 +40,7 @@ export function useDialog(
       previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
       release ??= lockDocumentScroll()
       element.showModal()
+      element.querySelector<HTMLElement>('[data-dialog-initial-focus]')?.focus({ preventScroll: true })
       options.opened?.()
     } else if (element.open) {
       element.close()

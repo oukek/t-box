@@ -153,7 +153,8 @@ export class WechatCheckoutLinks {
       : Date.parse(order.expiresAt) <= Date.now() || (link && (link.expiresAt.getTime() <= Date.now() || (link.scanFlowId && !link.payerUserId && (link.scanExpiresAt?.getTime() ?? 0) <= Date.now())))
         ? 'expired'
         : link?.stage ?? 'waiting'
-    return { order, stage }
+    const expiresAt = new Date(Math.min(Date.parse(order.expiresAt), link?.expiresAt.getTime() ?? Infinity, link?.scanFlowId && !link.payerUserId ? (link.scanExpiresAt?.getTime() ?? Infinity) : Infinity)).toISOString()
+    return { order, stage, expiresAt }
   }
 
   async handoffState(actor: Actor, value: unknown, reconcile = false) {

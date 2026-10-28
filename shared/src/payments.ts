@@ -13,6 +13,7 @@ export type WechatCheckoutStage = 'waiting' | 'scanned' | 'confirming' | 'paying
 export interface WechatCheckoutState {
   order: import('./billing.js').PaymentOrder
   stage: WechatCheckoutStage
+  expiresAt?: string
 }
 export interface WechatCheckoutPreview {
   order: import('./billing.js').PaymentOrder

@@ -3,7 +3,7 @@ import { AppIcon, Modal, UserAvatar } from '@t-box/ui-kit'
 import { computed, onBeforeUnmount } from 'vue'
 import { authorizeWechatProfile, closeWechatLogin, confirmWechatLogin, copyWechatLink, inWechat, retryWechatLogin, startWechatLogin, stopWechatUpdates, wechatLogin } from './wechatLogin'
 
-const title = computed(() => wechatLogin.phase === 'profile' ? '确认微信登录' : wechatLogin.phase === 'confirm' ? '确认登录设备' : wechatLogin.phase === 'done' ? '登录已确认' : '微信登录')
+const title = computed(() => wechatLogin.phase === 'profile' ? '确认微信登录' : wechatLogin.phase === 'confirm' ? '确认登录设备' : wechatLogin.phase === 'done' ? '登录已确认' : wechatLogin.purpose === 'payment' ? '核对微信身份' : '微信登录')
 onBeforeUnmount(stopWechatUpdates)
 </script>
 
@@ -21,7 +21,7 @@ onBeforeUnmount(stopWechatUpdates)
           <span class="wechat-profile-icon"><AppIcon name="user" :size="23" /><i><AppIcon name="check" :size="11" /></i></span>
           <div><strong>微信身份已识别</strong><span>再确认一次，就可以进入自己的账号。</span></div>
         </div>
-        <p class="wechat-login-description">继续登录需要你授权微信昵称和头像。站内头像与昵称可在登录后自行修改。</p>
+        <p class="wechat-login-description">授权后，将使用微信昵称和头像更新你的账号资料。</p>
         <button
           class="wechat-login-primary"
           :disabled="wechatLogin.busy"
@@ -67,7 +67,7 @@ onBeforeUnmount(stopWechatUpdates)
         <p class="wechat-login-description">原设备已完成登录，可以关闭此页面。</p>
       </template>
       <template v-else-if="['loading', 'redirecting'].includes(wechatLogin.phase)">
-        <div class="wechat-login-connecting" role="status"><span class="wechat-login-spinner" /><strong>{{ wechatLogin.phase === 'redirecting' ? '正在前往微信…' : '正在连接微信…' }}</strong><span>请稍候，你仍可关闭窗口使用本地工具。</span></div>
+        <div class="wechat-login-connecting" role="status"><span class="wechat-login-spinner" /><strong>{{ wechatLogin.purpose === 'payment' ? '正在核对付款微信身份…' : wechatLogin.phase === 'redirecting' ? '正在前往微信…' : '正在连接微信…' }}</strong><span>{{ wechatLogin.purpose === 'payment' ? '核对完成后将继续支付。' : '请稍候，你仍可关闭窗口使用本地工具。' }}</span></div>
       </template>
       <template v-else-if="wechatLogin.phase === 'outside'">
         <p class="wechat-login-description">请复制链接到微信打开，再确认登录原设备。</p>

@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "private": true,
   "files": [
-    "dist"
+    "dist",
+    "assets"
   ],
   "scripts": {
     "dev": "node ../scripts/dev-api.mjs",
@@ -71,6 +72,7 @@
     "js-tiktoken": "1.0.21",
     "mysql2": "^3.15.3",
     "openai": "7.27.0",
+    "qrcode": "^1.5.4",
     "redis": "^5.8.3",
     "reflect-metadata": "^0.2.2",
     "sharp": "^0.34.5",
@@ -85,7 +87,9 @@
     "@t-box/time-contracts": "workspace:*",
     "@types/ali-oss": "^6.23.3",
     "@types/node": "^24.10.0",
+    "@types/qrcode": "^1.5.6",
     "@types/ws": "^8.18.2",
+    "jsqr": "1.4.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
