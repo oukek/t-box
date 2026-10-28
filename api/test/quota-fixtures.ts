@@ -1,13 +1,8 @@
 import type { BillingService } from '../src/billing/service.js'
+import { assertDisposableDatabase } from './fixtures.js'
 /** Test-only configuration helpers. Never seed selling prices into a developer/production database. */
 function disposable(billing: BillingService) {
-  if (
-    !/^t_box_(?:ci|test_[a-z0-9_]+)$/.test(
-      String(billing.source.options.database),
-    )
-  ) {
-    throw new Error('Quota fixtures require a disposable t_box_test_* database')
-  }
+  assertDisposableDatabase(billing.source.options.database)
 }
 export async function enableTestTariff(billing: BillingService) {
   disposable(billing)

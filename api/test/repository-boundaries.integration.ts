@@ -13,6 +13,7 @@ import { AppUserEntity, UserSessionEntity } from '@t-box/server-foundation/persi
 import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
 import { Raw } from 'typeorm'
 import { ApplicationPlatform } from '../src/application-platform/service.js'
+import { BillingService } from '../src/billing/service.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { ApplicationInstallationEntity, ApplicationLifecycleOperationEntity } from '../src/db/records/applications-entities.js'
 import { PlatformConfigurationEntity, PlatformConfigurationHistoryEntity } from '../src/db/records/configuration-entities.js'
@@ -21,6 +22,7 @@ import { IdentityService } from '../src/identity/service.js'
 import { WechatAuthorization } from '../src/payments/wechat-authorization.js'
 import { cleanupUsers } from './fixtures.js'
 import { fixtureOss } from './oss-fixture.js'
+import { paymentSelection } from './quota-fixtures.js'
 
 if (!/^t_box_(?:ci|test_[a-z0-9_]+)$/.test(process.env.MYSQL_DATABASE || '')) {
   throw new Error('Disposable test database required')
@@ -124,7 +126,10 @@ try {
     assert.equal((await source.getRepository(ApplicationLifecycleOperationEntity).findOneByOrFail({ id: operation })).status, 'pending')
     assert.notEqual((await source.getRepository(ApplicationInstallationEntity).findOneByOrFail({ user_id: userId, app_id: appId })).error, 'unchanged')
     const order = randomUUID()
-    await source.getRepository(PaymentOrderEntity).insert({ id: order, user_id: userId, request_key: randomUUID(), amount_cents: 100, expires_at: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 MINUTE)' })
+    const billing = new BillingService(source)
+    const selection = await paymentSelection(billing)
+    const product = await billing.catalog.purchaseVersion(source.manager, selection.packageId, selection.version)
+    await source.getRepository(PaymentOrderEntity).insert({ id: order, user_id: userId, request_key: randomUUID(), amount_cents: 1000, package_version_id: product.id, package_snapshot: { ...product.configuration, id: selection.packageId, version: selection.version, revision: 0, publishedAt: null }, expires_at: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 MINUTE)' })
     const oauth = new WechatAuthorization({ source } as PaymentConfiguration)
     const configuration = { id: randomUUID(), appId: 'fixture', frontendUrl: 'https://example.test', apiBaseUrl: 'https://api.example.test' } as WechatRuntime
     const started = await Promise.allSettled(Array.from({ length: 25 }, () => oauth.start(userId, order, configuration)))

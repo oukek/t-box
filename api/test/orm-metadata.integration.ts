@@ -10,7 +10,9 @@ try {
     CHARACTER_MAXIMUM_LENGTH AS max_length,NUMERIC_PRECISION AS number_precision,NUMERIC_SCALE AS number_scale,
     DATETIME_PRECISION AS datetime_precision FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()`)
   assert.deepEqual(source.entityMetadatas.map((e) => e.tableName).sort(), [...schemaTables(databaseSchemas).keys()].sort(), 'every business table must have typed entity metadata')
-  const normalizeDefault = (value: unknown) => String(value).toLowerCase().replace(/[()'\s]/g, '')
+  // MySQL serializes JSON expression literals with escaped quotes and an
+  // explicit utf8mb4 introducer, e.g. json_array(_utf8mb4\'1k\').
+  const normalizeDefault = (value: unknown) => String(value).toLowerCase().replace(/\\'/g, '\'').replace(/\b_utf8mb4(?=')/g, '').replace(/[()'\s]/g, '')
   for (const entity of source.entityMetadatas) {
     const actual = columns.filter((column: any) => column.table_name === entity.tableName)
     assert.equal(entity.columns.length, actual.length, `${entity.tableName}: every database column needs an entity mapping`)
@@ -43,7 +45,7 @@ try {
         }
         const numeric = found.default_value !== null && found.default_value !== '' &&
           Number.isFinite(Number(found.default_value)) && Number(found.default_value) === Number(value)
-        assert.ok(numeric || normalizeDefault(value) === normalizeDefault(found.default_value), `${label}: ORM default must match database`)
+        assert.ok(numeric || normalizeDefault(value) === normalizeDefault(found.default_value), `${label}: ORM default must match database (${String(value)} !== ${String(found.default_value)})`)
       }
     }
   }

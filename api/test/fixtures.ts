@@ -2,6 +2,14 @@ import type { DataSource } from 'typeorm'
 import { unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ResourceService } from '../src/resources/service.js'
+
+/** Shared guard for suites that mutate an explicitly selected disposable schema. */
+export function assertDisposableDatabase(database: unknown): asserts database is string {
+  if (typeof database !== 'string' || database !== database.trim() || !/^t_box_(?:ci|test_[a-z0-9_]+)$/.test(database)) {
+    throw new Error('Use a disposable MYSQL_DATABASE=t_box_ci or t_box_test_<name>')
+  }
+}
+
 /** Delete only ledgers owned by explicitly supplied disposable test identities. */
 export async function cleanupUsers(source: DataSource, userIds: string[]) {
   if (!userIds.length) {

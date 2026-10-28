@@ -13,6 +13,7 @@ import { MemorySessionRepository } from '../src/chat/session.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { PlatformService } from '../src/platform/service.js'
 import { cleanupUsers } from './fixtures.js'
+import { enableTestTariff } from './quota-fixtures.js'
 
 const source = await createDataSource().initialize()
 const platform = new PlatformService(source)
@@ -41,6 +42,7 @@ const call = (name: string, args: unknown): ProviderTurn => {
   }
 }
 try {
+  await enableTestTariff(platform.billing)
   const login = await platform.identity.register(
     {
       username: `context_${randomUUID().replaceAll('-', '')}`,
@@ -50,6 +52,7 @@ try {
     'context-test',
   )
   userId = login.user.id
+  await platform.billing.setMode(userId, 'record_only', randomUUID(), 'context integration fixture')
   await source.query(
     'INSERT INTO ai_providers(id,name,base_url,key_cipher,enabled) VALUES(?,?,?,?,1)',
     [providerId, 'context-fixture', 'http://localhost:1/v1', 'fixture'],
@@ -213,7 +216,7 @@ try {
   >
   assert.equal(final.status, 'failed')
   assert.equal(final.snapshot.task?.status, 'paused')
-  assert.equal(executed, 5)
+  assert.equal(executed, 5, JSON.stringify(final.snapshot.messages.at(-1)?.error))
   assert.ok(reviewSeen)
   assert.ok(summaries >= 1)
   const actor = await platform.identity.authenticate(login.token)

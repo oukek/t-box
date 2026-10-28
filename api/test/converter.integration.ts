@@ -4,6 +4,7 @@ import type { DesktopSnapshot, UserSession } from '@t-box/shared'
 import type { ToolContext } from '../src/agent/contracts.js'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { converterManifest } from '@t-box/converter-contracts'
 import { createBillRepository } from '@t-box/ledger-server/repository'
 import { createApp } from '../src/app.js'
 import { createCapabilities } from '../src/bootstrap/chat.js'
@@ -33,7 +34,7 @@ try {
   assert.equal(entry.installation.kind, 'system')
   assert.equal(entry.installation.uninstallable, false)
   assert.equal(entry.aiAvailable, true)
-  assert.equal(entry.manifest.version, '1.0.0')
+  assert.equal(entry.manifest.version, converterManifest.version)
   assert.ok(entry.manifest.iconAsset)
 
   for (const clientPlatform of ['web', 'android', 'ios']) {

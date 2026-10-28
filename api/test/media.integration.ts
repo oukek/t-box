@@ -10,20 +10,19 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { createBillRepository } from '@t-box/ledger-server/repository'
+import sharp from 'sharp'
 import { createApp } from '../src/app.js'
 import { ApplicationChatService as ChatService } from '../src/bootstrap/chat.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { PlatformService } from '../src/platform/service.js'
 import { cleanupUsers } from './fixtures.js'
 import { fixtureOss } from './oss-fixture.js'
+import { enableTestTariff } from './quota-fixtures.js'
 
 const source = await createDataSource().initialize()
 const users: string[] = []
 const services: ChatService[] = []
-const png = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
-  'base64',
-)
+const png = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: '#ccddee' } }).png().toBuffer()
 let invalidOutput = false
 const imageRequests: { path: string, body: string }[] = []
 const remote = createServer(async (req, res) => {
@@ -108,6 +107,7 @@ function setup(provider: ChatProvider) {
   return { service, connection, events }
 }
 try {
+  await enableTestTariff(p.billing)
   const first = await p.identity.register(
     {
       username: `media_${randomUUID().replaceAll('-', '')}`,
@@ -117,6 +117,7 @@ try {
     'media-fixture',
   )
   users.push(first.user.id)
+  await p.billing.setMode(first.user.id, 'record_only', randomUUID(), 'media integration fixture')
   const second = await p.identity.register(
     {
       username: `media_${randomUUID().replaceAll('-', '')}`,

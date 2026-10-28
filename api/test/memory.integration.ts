@@ -13,6 +13,7 @@ import { MemorySessionRepository } from '../src/chat/session.js'
 import { getConfig } from '../src/config.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { initializeDatabase } from '../src/db/initialize.js'
+import { BillingUsageEntity } from '../src/db/records/billing-entities.js'
 import { ConversationEntity } from '../src/db/records/conversations-entities.js'
 import {
   MemoryEntity,
@@ -164,12 +165,18 @@ try {
   const fee = (await platform.billing.records(a.actor.user.id)).find(
     (row) => row.id === freeOperation,
   )!
-  assert.equal(fee.fee, '0.300000')
-  assert.equal(fee.charged, '0.000000')
+  assert.equal(fee.fee, '0.0000')
+  assert.equal(fee.charged, '0.0000')
   assert.equal(fee.purpose, 'memory_extraction')
+  const supplier = await source.getRepository(BillingUsageEntity).findOneOrFail({
+    select: { upstream_original_micro: true, platform_free: true },
+    where: { id: freeOperation, user_id: a.actor.user.id },
+  })
+  assert.equal(BigInt(supplier.upstream_original_micro), 300000n)
+  assert.equal(supplier.platform_free, true)
   assert.equal(
     (await platform.billing.wallet(a.actor.user.id)).balance,
-    '0.000000',
+    '0.0000',
   )
   const settings = (await memory.list(a.actor)).settings
   await memory.settings(a.actor, { ...settings, autoExtract: true })

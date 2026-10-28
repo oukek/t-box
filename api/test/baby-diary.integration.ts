@@ -31,11 +31,9 @@ import {
   LocalResourceStorage,
   ResourceStorageRegistry,
 } from '../src/resources/storage.js'
-import { cleanupUsers } from './fixtures.js'
+import { assertDisposableDatabase, cleanupUsers } from './fixtures.js'
 
-if (!/^t_box_test_[a-z0-9_]+$/.test(getConfig().mysql.database)) {
-  throw new Error('Use a disposable MYSQL_DATABASE=t_box_test_baby_diary')
-}
+assertDisposableDatabase(getConfig().mysql.database)
 const source = await createDataSource().initialize()
 const directory = await mkdtemp(join(tmpdir(), 'tbox-baby-private-'))
 const applications = new ApplicationPlatform(source, [babyDiaryRelease], {

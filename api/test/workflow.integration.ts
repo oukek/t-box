@@ -14,6 +14,7 @@ import { ApplicationChatService } from '../src/bootstrap/chat.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { PlatformService } from '../src/platform/service.js'
 import { cleanupUsers } from './fixtures.js'
+import { enableTestTariff } from './quota-fixtures.js'
 
 const source = await createDataSource().initialize()
 const configuration = new ConfigurationService(
@@ -58,6 +59,7 @@ const wait = async (check: () => boolean) => {
   }
 }
 try {
+  await enableTestTariff(platform.billing)
   await source.query(
     'INSERT INTO admin_users(id,username,password_hash,enabled) VALUES(?,?,?,1)',
     [adminId, `workflow_${adminId.slice(0, 8)}`, await hashPassword('test123')],
@@ -107,6 +109,7 @@ try {
     'workflow-test',
   )
   userId = loginUser.user.id
+  await platform.billing.setMode(userId, 'record_only', randomUUID(), 'workflow integration fixture')
   await source.query(
     'INSERT INTO ai_providers(id,name,base_url,key_cipher,enabled) VALUES(?,?,?,?,1)',
     [providerId, 'workflow-fixture', 'http://localhost:1/v1', 'fixture'],
