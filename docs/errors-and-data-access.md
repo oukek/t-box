@@ -39,7 +39,7 @@ throw ErrorCode.VALIDATION_ERROR(undefined, { nickname: '昵称不能为空' })
 
 `pnpm check:business` 扫描全部运行时源码，检查散落的错误构造、重复 API / 内部错误码、非法 HTTP 状态、没有解释的原生 SQL，通配符查询，以及容易改变返回字段名的 QueryBuilder 选择。普通 CRUD 即使加 `native-sql:` 注释也不能绕过检查。
 
-检查已加入 `pnpm check`，原有手动 GitHub Actions 质量工作流会执行它。新增错误或数据访问逻辑应同时通过类型检查及对应业务回归。
+检查保留在本地 `pnpm check` 中，按需运行；GitHub Actions“代码规范检查”仅运行 `pnpm lint`。新增错误或数据访问逻辑可单独运行类型检查及对应业务回归。
 
 ## 事务与外部 I/O
 

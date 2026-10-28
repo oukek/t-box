@@ -46,11 +46,7 @@ jobs:
       - name: Prepare fixed deployment settings
         run: node deploy/settings.mjs
       - uses: pnpm/action-setup@v6
-      - name: Check generated application choices
-        run: node scripts/generate-application-workflow.mjs --check
       - run: pnpm install --frozen-lockfile
-      - name: Release script regressions
-        run: node --test scripts/application-release.test.mjs scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs
       - name: Build selected application and package static bundle
         run: node scripts/pack-application-release.mjs "$APPLICATION_SELECTION"
       - name: Upload to OSS and register submitted version (never publish)

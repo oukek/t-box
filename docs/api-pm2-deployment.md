@@ -2,7 +2,7 @@
 
 当前采用 OSS 主前端、后台和子应用静态站点，首次操作以 [OSS + PM2 部署手册](first-deployment.md) 为准。Actions 自动选择 OSS 模式，仅运行 API 和恢复 worker；下面提到的第三个本地产物服务适用于兼容的 `local` 模式。
 
-所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。新增 后端部署（PM2），现有 代码检查与测试 和 后端镜像发布（Docker / OSS） 保留为独立的手动工作流。
+所有工作流只支持 workflow_dispatch，不再因代码推送、tag、PR 或定时任务自动运行。后端部署（PM2）、代码规范检查和后端镜像发布（Docker / OSS）均为独立的手动工作流。代码规范检查仅运行 `pnpm lint`；发布不依赖该检查，也不执行回归测试。
 
 本流程：在 GitHub 手动点击 Run workflow → Linux 构建 → 校验独立生产目录 → 打包 → SSH/SCP 上传 → 服务器校验并解压到新的版本目录 → 准备持久路径 → 只读数据库兼容性预检 → 停止旧 API 与 worker → 数据库初始化 → 确保管理员存在 → 自动同步应用提交凭证 → 启动 API 和 worker → 健康检查 → 保存 PM2 和更新 current。`start_services` 默认勾选；取消勾选时只上传，不改变正在运行的服务。初始化会保留已有管理员，无需在工作流中另选初始化开关。
 

@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { assertDisposableDatabase } from './fixtures.js'
 
-test('integration database guard accepts the quality workflow schemas and named disposable schemas', () => {
-  const workflow = readFileSync(new URL('../../.github/workflows/quality.yml', import.meta.url), 'utf8')
-  const schemas = [...workflow.matchAll(/^\s+MYSQL_DATABASE:\s*([a-z0-9_]+)\s*$/gm)].map((match) => match[1])
-  assert.ok(schemas.length > 0, 'quality workflow must explicitly select a test database')
-  for (const schema of [...schemas, 't_box_ci', 't_box_test_baby_diary', 't_box_test_other_123']) {
+test('integration database guard accepts CI and named disposable schemas', () => {
+  for (const schema of ['t_box_ci', 't_box_test_baby_diary', 't_box_test_other_123']) {
     assert.doesNotThrow(() => assertDisposableDatabase(schema))
   }
 })

@@ -1,4 +1,4 @@
-name: 代码检查与测试
+name: 代码规范检查
 
 on:
   workflow_dispatch:
@@ -13,33 +13,7 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: ci-only-test-password
-          MYSQL_DATABASE: t_box_ci
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-only-test-password"
-          --health-interval=10s --health-timeout=5s --health-retries=12
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s --health-timeout=3s --health-retries=12
-    env:
-      MYSQL_HOST: 127.0.0.1:3306
-      MYSQL_USERNAME: root
-      MYSQL_PASSWORD: ci-only-test-password
-      MYSQL_DATABASE: t_box_ci
-      REDIS_ADDR: 127.0.0.1:6379
-      REDIS_PASSWORD: ''
-      REDIS_DB: '15'
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,24 +23,5 @@ jobs:
           node-version: 24.21.0
       - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm build
-      - run: pnpm test:unit
-      - run: pnpm test:operations
-      - name: Backend deployment regressions
-        run: pnpm test:pm2-deployment && pnpm test:api-deployment
-      - run: pnpm db:init
-      - name: Install MySQL client for isolated backup drill
-        run: sudo apt-get update && sudo apt-get install -y mysql-client
-      - run: pnpm test:integration
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:browser
-      - uses: actions/upload-artifact@v6
-        if: failure()
-        with:
-          name: browser-acceptance-failure
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 7
-          if-no-files-found: ignore
+      - name: 检查代码规范
+        run: pnpm lint

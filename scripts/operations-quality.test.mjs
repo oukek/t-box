@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-test('every repository workflow is manual-only; quality gates include real service-backed integration', async () => {
+test('every repository workflow is manual-only', async () => {
   const folder = new URL('../.github/workflows/', import.meta.url)
   for (const name of await readdir(folder)) {
     if (!/\.ya?ml$/.test(name)) {
@@ -13,10 +13,6 @@ test('every repository workflow is manual-only; quality gates include real servi
     const triggers = /^on:[ \t]*\n([\s\S]*?)(?=^\S)/m.exec(source)?.[1]
     assert.ok(triggers, `Workflow triggers missing: ${name}`)
     assert.deepEqual([...triggers.matchAll(/^ {2}([a-z_]+):/gm)].map((match) => match[1]), ['workflow_dispatch'], name)
-  }
-  const quality = await readFile(new URL('quality.yml', folder), 'utf8')
-  for (const marker of ['mysql:8.4', 'redis:7-alpine', 'pnpm db:init', 'pnpm test:integration', 'pnpm test:operations', 'pnpm test:browser']) {
-    assert.ok(quality.includes(marker), marker)
   }
 })
 

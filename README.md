@@ -118,7 +118,7 @@ AI 中心提供可管理的跨会话记忆，自动整理默认关闭；候选�
 
 在根目录运行 `pnpm lint` 检查整个项目，`pnpm lint:fix` 自动修复，`pnpm check` 同时检查应用边界和类型，`pnpm test:unit` 运行 API、前端、SDK 和原生脚本测试。可以用 `pnpm exec eslint apps/ledger --fix` 仅整理某个子应用。测试继续使用 `node:test`，ESLint 不修改 pnpm 安装策略。VS Code 的项目设置提供 ESLint 保存修复，CSS / HTML 的 Prettier 格式化由 ESLint 统一调用。
 
-质量检查由 `.github/workflows/quality.yml` 手动执行。需要本地 MySQL 的集成测试按下列已有命令单独运行。
+Actions 的“代码规范检查”（`.github/workflows/quality.yml`）仅运行 `pnpm lint`，不构建项目、不启动数据库、不运行业务或浏览器测试。发布工作流独立运行，不要求先通过该检查，也不运行回归测试。类型检查、单元测试和需要本地 MySQL 的集成测试仍可按下列命令按需运行。
 
 ```bash
 pnpm run pack        # 前端 → app/dist
