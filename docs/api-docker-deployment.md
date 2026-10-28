@@ -41,7 +41,7 @@ chmod 700 data/secrets
 
 oss.env 用于 SDK 下载镜像包：OSS_BUCKET=tboxos-admin，OSS_PREFIX=docker，并填写实际地域和仅有读取权限的 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET；也可由部署进程环境提供。允许同地域 HTTPS 内网 endpoint，Actions 仅允许公网 endpoint。Compose 不会把 oss.env 加载到 API，运行时业务文件上传密钥仍需在 .env 中单独提供。
 
-Compose 使用宿主机网络，API 监听 127.0.0.1:3000，MySQL / Redis 使用服务器实际地址；不对外发布 API 端口。后台与 API 继续使用同一主域下的 HTTPS 子域名。只为 API 配置 Nginx，保留 /api/、WebSocket、微信通知原始请求体及请求头。主站、后台和子应用域名直接绑定 OSS。
+Compose 使用宿主机网络，API 监听 127.0.0.1:6868，MySQL / Redis 使用服务器实际地址；不对外发布 API 端口。后台与 API 继续使用同一主域下的 HTTPS 子域名。只为 API 配置 Nginx，保留 /api/、WebSocket、微信通知原始请求体及请求头。主站、后台和子应用域名直接绑定 OSS。
 
 后端程序、配置、密钥与必要日志是运行文件。业务附件、图片、应用静态文件和备份归档长期保存到 OSS，不挂载 data/storage、data/app-artifacts 或 data/app-deployments。
 
@@ -59,7 +59,7 @@ bash deploy-release.sh RELEASE_ID --init
 
 ```sh
 docker compose ps
-curl -fsS http://127.0.0.1:3000/api/v1/health
+curl -fsS http://127.0.0.1:6868/api/v1/health
 docker compose logs --tail 100 api
 ```
 

@@ -18,14 +18,14 @@ FROM scratch AS application-artifacts
 COPY --from=build /bootstrap-artifacts/ /
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
-ENV NODE_ENV=production HOST=127.0.0.1 PORT=3000
+ENV NODE_ENV=production HOST=127.0.0.1 PORT=6868
 WORKDIR /opt/t-box/api
 COPY --from=build --chown=node:node /runtime/ ./
 COPY --chown=node:node deploy/api/healthcheck.mjs /opt/t-box/scripts/
 COPY --chown=node:node deploy/api/check-image.mjs ./check-image.mjs
 RUN mkdir -p .secrets && chown -R node:node .secrets
 USER node
-EXPOSE 3000
+EXPOSE 6868
 HEALTHCHECK --interval=30s --timeout=6s --start-period=30s --retries=3 \
     CMD ["node", "/opt/t-box/scripts/healthcheck.mjs"]
 CMD ["node", "dist/server.js"]

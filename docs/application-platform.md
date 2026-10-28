@@ -83,7 +83,7 @@ AI 模型列表按安装授权过滤；执行前、缓存回执重放前和确�
 
 ## 开发与正式部署
 
-首次运行：`pnpm install && pnpm db:init`。随后 `pnpm dev` 同时运行 API 3000、宿主 5173、后台 5175、计算器 5176、产物服务 6176 和公共包 watch。分别运行时先 `pnpm build:contracts`，再 `pnpm dev:api`、`pnpm dev:app`、`pnpm dev:apps`。移动端 live reload 把本机应用开发地址换成宿主 LAN 地址，设备需要同时能访问 3000/5173/5176 对应服务。
+首次运行：`pnpm install && pnpm db:init`。随后 `pnpm dev` 同时运行 API 6868、宿主 5173、后台 5175、计算器 5176、产物服务 6176 和公共包 watch。分别运行时先 `pnpm build:contracts`，再 `pnpm dev:api`、`pnpm dev:app`、`pnpm dev:apps`。移动端 live reload 把本机应用开发地址换成宿主 LAN 地址，设备需要同时能访问 6868/5173/5176 对应服务。
 
 `pnpm build` 或 `pnpm run pack` 构建宿主与独立计算器。数学代码不再打进宿主；计算器产物生成到 `output/app-artifacts/calculator/<sha256>/`，附带逐文件摘要。`pnpm serve:apps` 在 loopback 6176 提供按摘要分版本的产物，检查路径与文件摘要，设置 CSP，并保留旧版本。正式环境用独立 HTTPS 来源反向代理这个服务，例如 `apps.example.com`；不能与主站同源。
 

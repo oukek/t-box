@@ -112,7 +112,7 @@ REDIS_ADDR=
 
 Redis 可选：不使用就保持 `REDIS_ADDR=`；使用时安装 Redis，填 `REDIS_ADDR=127.0.0.1:6379`、实际 `REDIS_PASSWORD` 和选用的 `REDIS_DB`（模板为 `5`）。配置模板见 [api.env.example](../deploy/pm2/api.env.example)，高级覆盖项见 [API 环境配置](api-environment.md)。
 
-4. 为 `api.tboxos.cn` 创建 Nginx HTTPS 站点，确认 `server_name api.tboxos.cn`，安装覆盖该域名的受信任证书。不能使用只覆盖服务器 IP 的宝塔面板证书。将 [Nginx 示例](../deploy/api/nginx-api.conf.example) 的 `/api/` 配置放进 `server {}`，代理到 `127.0.0.1:3000`，保留 `/api/` 路径和 WebSocket。API 和登录响应不设置公共缓存；不要将部署目录或 `shared` 目录设为网站公开根目录。
+4. 为 `api.tboxos.cn` 创建 Nginx HTTPS 站点，确认 `server_name api.tboxos.cn`，安装覆盖该域名的受信任证书。不能使用只覆盖服务器 IP 的宝塔面板证书。将 [Nginx 示例](../deploy/api/nginx-api.conf.example) 的 `/api/` 配置放进 `server {}`，代理到 `127.0.0.1:6868`，保留 `/api/` 路径和 WebSocket。API 和登录响应不设置公共缓存；不要将部署目录或 `shared` 目录设为网站公开根目录。
 5. 安全组和防火墙放行 `22`、`80`、`443`。MySQL、Redis、API 仅在本机监听。
 
 PM2 Actions 方案不需要手填 `CORS_ORIGINS`、`ADMIN_ORIGINS`、`TRUSTED_PROXIES`、`TASK_WORKER_MODE` 或 `APP_ARTIFACT_DELIVERY`：后台默认只允许发布包内的 `https://admin.tboxos.cn` 来源，普通 API 跨域、本机代理、独立 worker 和 OSS 交付由程序处理。生产环境拒绝 `ADMIN_ORIGINS=*`；旧配置若保留此项，应删除或改为准确的后台 HTTPS 来源。

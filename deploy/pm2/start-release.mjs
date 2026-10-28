@@ -59,7 +59,7 @@ export async function startRelease({
     throw new Error('Effective artifact settings differ from the OSS deployment verified by Actions')
   }
   const activeNames = delivery === 'oss' ? names.slice(0, 2) : names
-  const port = settings.PORT || '3000'
+  const port = settings.PORT || '6868'
   if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
     throw new Error('Invalid API PORT')
   }
@@ -137,31 +137,55 @@ export async function startRelease({
     const scripts = [join(api, 'dist/server.js'), join(api, 'dist/worker.js'), join(release, 'scripts/serve-application-artifacts.mjs')]
     let stable = 0
     let previousGeneration = ''
+    let lastHealthCheck = 'PM2 status has not been checked'
     for (let attempt = 0; attempt < attempts; attempt++) {
       try {
+        lastHealthCheck = 'Could not read PM2 process status'
         const list = processes()
         const current = activeNames.map((name) => list.find((entry) => entry.name === name))
         if (!current.every((entry, index) => entry?.pm2_env?.status === 'online' && entry.pid > 0 && entry.pm2_env.pm_exec_path === scripts[index])) {
-          throw new Error('Managed PM2 processes are not online at the new release paths')
+          lastHealthCheck = activeNames.map((name, index) => {
+            const entry = current[index]
+            if (!entry) {
+              return `${name}: missing`
+            }
+            const status = ['online', 'stopped', 'stopping', 'launching', 'errored', 'waiting restart'].includes(entry.pm2_env?.status) ? entry.pm2_env.status : 'unknown'
+            const pid = Number.isInteger(entry.pid) ? entry.pid : 0
+            return `${name}: status=${status}, pid=${pid}, release path=${entry.pm2_env?.pm_exec_path === scripts[index] ? 'correct' : 'different'}`
+          }).join('; ')
+          throw new Error('Managed PM2 processes are not ready')
         }
+        lastHealthCheck = `Could not reach ${healthUrl.href}`
         const response = await request(healthUrl, { signal: AbortSignal.timeout(3000), redirect: 'error' })
+        lastHealthCheck = `${healthUrl.href} returned invalid JSON (HTTP ${response.status})`
         const health = (await response.json()).data
-        if (!response.ok || health?.status !== 'ok' || health.dependencies?.mysql !== 'up' ||
-          health.dependencies?.redis !== (settings.REDIS_ADDR ? 'up' : 'disabled')) {
+        const status = ['ok', 'degraded', 'unavailable'].includes(health?.status) ? health.status : 'invalid'
+        const mysql = ['up', 'down'].includes(health?.dependencies?.mysql) ? health.dependencies.mysql : 'invalid'
+        const redis = ['up', 'down', 'disabled'].includes(health?.dependencies?.redis) ? health.dependencies.redis : 'invalid'
+        lastHealthCheck = `${healthUrl.href}: HTTP ${response.status}, status=${status}, mysql=${mysql}, redis=${redis} (optional cache)`
+        if (!response.ok || !['ok', 'degraded'].includes(health?.status) || health.dependencies?.mysql !== 'up') {
           throw new Error('API dependencies are not healthy')
         }
         const generation = JSON.stringify(current.map((entry) => [entry.pid, entry.pm2_env.pm_uptime]))
         stable = generation === previousGeneration ? stable + 1 : 1
         previousGeneration = generation
         if (stable >= 3) {
+          if (redis === 'down') {
+            process.stderr.write('Warning: optional Redis cache is unavailable; API is ready with MySQL fallback. Check Redis configuration and connectivity.\n')
+          }
           break
         }
-      } catch {
+        lastHealthCheck = `PM2 processes have not stayed healthy with unchanged PIDs for three checks (${stable}/3)`
+      } catch (error) {
+        const code = error?.cause?.code ?? error?.code
+        if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)) {
+          lastHealthCheck += ` (${code})`
+        }
         stable = 0
         previousGeneration = ''
       }
       if (attempt === attempts - 1) {
-        throw new Error('New release failed API/PM2 health checks; inspect shared/logs and pm2 status')
+        throw new Error(`New release failed API/PM2 health checks: ${lastHealthCheck}. Inspect ${shared}/logs/api-error.log, api-out.log and worker-error.log`)
       }
       await pause(1000)
     }

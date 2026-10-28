@@ -14,7 +14,7 @@ export async function verifyApiDeployment(apiBase, adminOrigin, { request = fetc
       const options = { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(10_000) }
       const response = await request(new URL(base.href + '/health'), options)
       const health = (await response.json()).data
-      if (!response.ok || health?.status !== 'ok' || health.dependencies?.mysql !== 'up' || !['up', 'disabled'].includes(health.dependencies?.redis)) {
+      if (!response.ok || !['ok', 'degraded'].includes(health?.status) || health.dependencies?.mysql !== 'up') {
         throw new Error('Public API health is not ready')
       }
       const preflight = async (origin) => request(new URL(base.href + '/admin/session'), {
@@ -30,6 +30,9 @@ export async function verifyApiDeployment(apiBase, adminOrigin, { request = fetc
       const rejected = await preflight('https://untrusted.invalid')
       if (rejected.headers.get('access-control-allow-origin')) {
         throw new Error('Administration CORS accepts an untrusted origin')
+      }
+      if (health.dependencies?.redis === 'down') {
+        console.warn('Optional Redis cache is unavailable; public API is ready with MySQL fallback.')
       }
       return
     } catch {

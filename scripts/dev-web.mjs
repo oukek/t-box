@@ -12,7 +12,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 try {
   await waitForApi({ signal: controller.signal })
-  console.info('API 就绪：http://127.0.0.1:3000/api/v1/health')
+  console.info('API 就绪：http://127.0.0.1:6868/api/v1/health')
   console.info('前端：http://127.0.0.1:5173  |  后台：http://127.0.0.1:5175')
   child = spawn(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
     'exec',

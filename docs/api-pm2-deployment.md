@@ -122,11 +122,11 @@ pm2 logs t-box-api --lines 100
 
 Actions 还会从 runner 检查公开 HTTPS 健康端点、后台来源预检和拒绝其他来源。公网校验失败时工作流失败，但不会回滚已经健康运行的 PM2；先检查 DNS、证书、Nginx 和来源配置。
 
-启动成功要求 API 健康端点的 MySQL 正常、已配置 Redis 时 Redis 也正常，并且 API / worker 两个进程连续三次检查均 online、PID 稳定、运行路径属于新版本。仅 HTTP 200 或 PM2 显示短暂 online 不算成功。默认最多检查 60 次，每次 HTTP 请求最多 3 秒、检查间隔 1 秒。通过后更新 `current`，保留原链接为 `previous`，并运行 `pm2 save`。使用 root `.pm2-deploy.lock` 防止并发发布；异常中断留下锁时，先核对其中 owner.json 的进程与部署状态，再清理确认失效的锁。
+启动成功要求 API 健康端点的 MySQL 正常、状态为 `ok` 或 `degraded`，并且 API / worker 两个进程连续三次检查均 online、PID 稳定、运行路径属于新版本。Redis 不可用时告警后继续。仅 HTTP 200 或 PM2 显示短暂 online 不算成功。默认最多检查 60 次，每次 HTTP 请求最多 3 秒、检查间隔 1 秒。通过后更新 `current`，保留原链接为 `previous`，并运行 `pm2 save`。使用 root `.pm2-deploy.lock` 防止并发发布；异常中断留下锁时，先核对其中 owner.json 的进程与部署状态，再清理确认失效的锁。
 
 ecosystem 使用绝对版本路径、fork 模式、单实例、关闭 watch，退出等待为 90 秒。不要直接开启 cluster 多实例：当前会话订阅、账本通知和部分限流仍需处理跨实例状态。
 
-不再启动本地应用产物服务，也不需要 ARTIFACT_PORT。API 的 HOST/PORT 可在 shared/api.env 覆盖。`prepare-release.mjs` 仍可单独执行，它只准备运行配置与必要目录，不启动服务或初始化数据库。
+不再启动本地应用产物服务，也不需要 ARTIFACT_PORT。API 默认监听 `127.0.0.1:6868`，HOST/PORT 可在 shared/api.env 覆盖。已有部署切换端口时，将 `shared/api.env` 的 `PORT` 设置为 `6868`，同时将 Nginx 的 `proxy_pass` 改为 `http://127.0.0.1:6868`，重启 API / worker 并重新加载 Nginx。外网继续通过 API 域名的 HTTPS 入口访问。`prepare-release.mjs` 仍可单独执行，它只准备运行配置与必要目录，不启动服务或初始化数据库。
 
 配置开机恢复时，以实际运行账户执行 pm2 startup，再按照其提示执行 systemd 安装命令，之后 pm2 save。升级 Node 后需重新检查 startup 的 Node 路径。
 
@@ -141,7 +141,7 @@ release="/www/wwwroot/tbox/releases/NEW_RELEASE_ID"
 node "$release/control/start-release.mjs"
 ```
 
-初始化失败就停止后续步骤，检查实际进程和数据库状态；不能随意回退数据库。升级会有短暂停服，健康检查应同时确认 Redis 状态。代码回滚仅在数据库结构兼容旧代码时执行：选择旧 release，手动准备路径，再删除/启动对应 PM2 进程；不要自动反向修改数据库结构。
+初始化失败就停止后续步骤，检查实际进程和数据库状态；不能随意回退数据库。升级会有短暂停服，Redis 缓存故障会单独告警，不使部署失败。代码回滚仅在数据库结构兼容旧代码时执行：选择旧 release，手动准备路径，再删除/启动对应 PM2 进程；不要自动反向修改数据库结构。
 
 API 日志自身对敏感字段脱敏，PM2 日志保存在 shared/logs。运行账户需要自行配置日志轮转和发布目录保留策略；保留当前版本、可回滚版本和必要备份，不删除共享数据。前端、后台静态产物及微信支付域名/回调仍需分别配置。
 
@@ -177,6 +177,18 @@ node deploy/pm2/deploy-source.mjs
 不会直接在源码目录运行 PM2，也不会 reset/clean Git 文件。tracked 文件有未提交修改时会拒绝部署；拉取与合并由操作员明确执行，脚本不隐式切换分支。发布根目录可通过 `PM2_DEPLOY_ROOT` 调整，默认 `/www/wwwroot/tbox`。源码构建使用 `.pm2-build.lock`，启动阶段与 Actions 共用 `.pm2-deploy.lock`。
 
 ## 检查
+
+若启动后出现 `New release failed API/PM2 health checks`，启动脚本会停止本项目的 API 与 worker，且不更新 `current`。PM2 刚显示 `online` 只说明进程已拉起，仍需通过本机健康接口与连续稳定检查。失败信息会显示最后一次检查的地址、连接错误码、HTTP / MySQL / Redis 状态，或 PM2 进程状态与版本路径是否匹配。
+
+MySQL 是必需依赖；连接失败会使部署失败。Redis 是可选缓存，连接失败时健康接口返回 HTTP 200、`status: degraded`、`mysql: up`、`redis: down`，本机和公网就绪检查均告警后继续，不停止服务。不使用 Redis 时将 `shared/api.env` 中的 `REDIS_ADDR` 留空；使用时检查实际地址、端口、密码和 Redis 运行状态。
+
+查看服务器日志定位原因；不要将 `shared/api.env` 或密钥贴到日志中：
+
+```sh
+tail -n 60 /www/wwwroot/tbox/shared/logs/api-error.log
+tail -n 40 /www/wwwroot/tbox/shared/logs/api-out.log
+tail -n 40 /www/wwwroot/tbox/shared/logs/worker-error.log
+```
 
 脚本回归：node --test scripts/pm2-deployment.test.mjs。SSH/SCP 为测试替身，文件传输、SHA-256、解压和手动路径初始化使用真实本地临时文件；不会连接你的服务器。打包脚本还会对单独拷贝的产物导入所有生产模块，确认 workspace 依赖不指向源码仓库。
 

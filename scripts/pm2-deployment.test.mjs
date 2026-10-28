@@ -170,7 +170,7 @@ function startupFixture(t, { initializationFails = false, preflightFails = false
   const request = async (url) => {
     healthRequests++
     assert.equal(url.pathname, '/api/v1/health')
-    return new Response(JSON.stringify({ data: { status: healthy && !redisDown ? 'ok' : 'degraded', dependencies: { mysql: 'up', redis: redisDown ? 'down' : f.env.REDIS_ADDR ? 'up' : 'disabled' } } }))
+    return Response.json({ data: { status: !healthy ? 'unavailable' : redisDown ? 'degraded' : 'ok', dependencies: { mysql: healthy ? 'up' : 'down', redis: redisDown ? 'down' : f.env.REDIS_ADDR ? 'up' : 'disabled' } } }, { status: healthy ? 200 : 503 })
   }
   const start = (extra = {}) => startRelease({ release: f.uploaded, run, request, pause: async () => {}, attempts: 4, processEnvironment: f.env, ...extra })
   return { ...f, commands, start, processes: () => list, healthRequests: () => healthRequests, importInput: () => importInput }
@@ -502,12 +502,54 @@ test('initialization failure leaves writers stopped without starting, saving or 
 })
 
 test('unhealthy dependencies, stale script paths and restart loops cannot publish a successful deployment', async (t) => {
-  for (const options of [{ healthy: false }, { redisDown: true }, { wrongScript: true }, { restarts: true }]) {
+  for (const [options, diagnostic] of [
+    [{ healthy: false }, /HTTP 503, status=unavailable, mysql=down/],
+    [{ wrongScript: true }, /release path=different/],
+    [{ restarts: true }, /unchanged PIDs/],
+  ]) {
     const f = startupFixture(t, options)
-    await assert.rejects(f.start(), /health checks/)
+    await assert.rejects(f.start(), (error) => {
+      assert.match(error.message, /health checks/)
+      assert.match(error.message, diagnostic)
+      return true
+    })
     assert.equal(f.commands.some((command) => command[1] === 'save'), false)
     assert.ok(f.processes().filter((entry) => entry.name.startsWith('t-box-')).every((entry) => entry.pm2_env.status === 'stopped'))
     assert.equal(existsSync(join(f.server, '.pm2-deploy.lock')), false)
+  }
+})
+
+test('optional Redis outage keeps a MySQL-ready OSS release running and saves its PM2 state', async (t) => {
+  const f = startupFixture(t, { redisDown: true, oss: true })
+  await f.start({ processEnvironment: { ...f.env, REDIS_ADDR: '127.0.0.1:6379' } })
+  assert.equal(f.healthRequests(), 3)
+  assert.deepEqual(f.commands.at(-1), ['pm2', 'save'])
+  assert.equal(realpathSync(join(f.server, 'current')), realpathSync(f.uploaded))
+  assert.ok(f.processes().every((entry) => entry.pm2_env.status === 'online'))
+  assert.equal(f.processes().some((entry) => entry.name === 't-box-artifacts'), false)
+})
+
+test('health check failures identify connection and HTTP errors without exposing raw errors or response bodies', async (t) => {
+  const secret = 'private-fixture-value'
+  const cases = [
+    {
+      request: async () => {
+        throw new TypeError(secret, { cause: Object.assign(new Error(secret), { code: 'ECONNREFUSED' }) })
+      },
+      diagnostic: /Could not reach http:\/\/127\.0\.0\.1:6868\/api\/v1\/health \(ECONNREFUSED\)/,
+    },
+    { request: async () => new Response(secret, { status: 404 }), diagnostic: /invalid JSON \(HTTP 404\)/ },
+    { request: async () => Response.json({ data: { status: secret } }), diagnostic: /status=invalid, mysql=invalid, redis=invalid/ },
+  ]
+  for (const { request, diagnostic } of cases) {
+    const f = startupFixture(t)
+    await assert.rejects(f.start({ request }), (error) => {
+      assert.match(error.message, diagnostic)
+      assert.ok(!error.message.includes(secret))
+      return true
+    })
+    assert.equal(f.commands.some((command) => command[1] === 'save'), false)
+    assert.equal(f.processes().find((entry) => entry.name === 'other-service').pm2_env.status, 'online')
   }
 })
 

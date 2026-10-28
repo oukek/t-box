@@ -146,7 +146,7 @@ test('a missing directory index fails before activating the worker or registerin
   }
 })
 
-test('public API verification rejects broken TLS, proxy responses and open admin origins', async () => {
+test('public API verification accepts optional Redis outages and rejects MySQL, TLS, proxy and admin origin failures', async () => {
   const verify = async (failure) => {
     let requests = 0
     await verifyApiDeployment('https://api.example.com/api/v1', 'https://admin.example.com', {
@@ -158,7 +158,10 @@ test('public API verification rejects broken TLS, proxy responses and open admin
           throw new TypeError('certificate verification failed')
         }
         if (url.pathname.endsWith('/health')) {
-          return failure === 'proxy' ? new Response('<html>nginx</html>') : Response.json({ data: { status: 'ok', dependencies: { mysql: 'up', redis: 'disabled' } } })
+          if (failure === 'proxy') {
+            return new Response('<html>nginx</html>')
+          }
+          return Response.json({ data: { status: failure === 'mysql' ? 'unavailable' : failure === 'status' ? 'invalid' : failure === 'redis' ? 'degraded' : 'ok', dependencies: { mysql: failure === 'mysql' ? 'down' : 'up', redis: failure === 'redis' ? 'down' : 'disabled' } } }, { status: failure === 'mysql' ? 503 : 200 })
         }
         const origin = options.headers.Origin
         const allowed = origin === 'https://admin.example.com'
@@ -168,7 +171,8 @@ test('public API verification rejects broken TLS, proxy responses and open admin
     assert.equal(requests, 3)
   }
   await verify()
-  for (const failure of ['tls', 'proxy', 'cors']) {
+  await verify('redis')
+  for (const failure of ['mysql', 'status', 'tls', 'proxy', 'cors']) {
     await assert.rejects(verify(failure), /Public API verification failed/)
   }
 })

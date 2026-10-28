@@ -5,7 +5,7 @@ import { setTimeout } from 'node:timers/promises'
  * are ready. Redis may be degraded because it is an optional cache.
  */
 export async function waitForApi({
-  url = 'http://127.0.0.1:3000/api/v1/health',
+  url = 'http://127.0.0.1:6868/api/v1/health',
   timeout = 90_000,
   interval = 300,
   signal,

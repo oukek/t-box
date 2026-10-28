@@ -1,5 +1,5 @@
 try {
-  const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/v1/health`, {
+  const response = await fetch(`http://127.0.0.1:${process.env.PORT || 6868}/api/v1/health`, {
     signal: AbortSignal.timeout(4000),
   })
   const body = await response.json()

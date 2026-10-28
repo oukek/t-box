@@ -179,7 +179,7 @@ export function getConfig() {
       .map((v) => v.trim())
       .filter(Boolean),
     host: process.env.HOST ?? '127.0.0.1',
-    port: integer(process.env.PORT, 3000, 'PORT'),
+    port: integer(process.env.PORT, 6868, 'PORT'),
     mysql: {
       ...mysqlAddress,
       user: process.env.MYSQL_USERNAME ?? 'root',

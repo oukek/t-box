@@ -2,7 +2,7 @@
 /**
  * Real WebSocket + REST integration checks against an isolated API with a test provider.
  * Run: node scripts/test-chat.mjs
- * Optional: TBOX_TEST_API_URL=http://127.0.0.1:3000/api/v1
+ * Optional: TBOX_TEST_API_URL=http://127.0.0.1:6868/api/v1
  *           TBOX_TEST_WS_URL=ws://127.0.0.1:5173/api/v1/chat/ws
  *           TBOX_TEST_ORIGIN=http://127.0.0.1:5173
  * Creates uniquely marked bills and deletes only those records in finally.
@@ -31,7 +31,7 @@ try {
 }
 
 const apiBase = new URL(
-  process.env.TBOX_TEST_API_URL ?? 'http://127.0.0.1:3000/api/v1',
+  process.env.TBOX_TEST_API_URL ?? 'http://127.0.0.1:6868/api/v1',
 )
 assert.ok(
   ['http:', 'https:'].includes(apiBase.protocol),
