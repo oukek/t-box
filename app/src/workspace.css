@@ -183,10 +183,6 @@
     top: 42px;
     right: 32px;
   }
-  .login-required .identity-page {
-    min-height: calc(100dvh - 70px);
-    padding: 32px 0;
-  }
   .guest-mode-notice {
     left: 28px;
     right: 28px;

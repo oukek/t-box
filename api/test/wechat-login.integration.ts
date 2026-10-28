@@ -21,6 +21,7 @@ const configuration = new WechatAccountConfiguration(source, vault)
 const platform = new PlatformService(source, undefined, undefined, undefined, undefined, undefined, undefined, configuration)
 const users = new Set<string>()
 let exchanges = 0
+let profileRequests = 0
 const transport: typeof fetch = async (input) => {
   const url = new URL(String(input))
   if (url.pathname === '/sns/oauth2/access_token') {
@@ -30,9 +31,10 @@ const transport: typeof fetch = async (input) => {
     if (code === 'denied') {
       return Response.json({ errcode: 40029 })
     }
-    return Response.json({ openid: `openid_${code === 'other' ? 'other' : 'fixture'}_123456789`, access_token: `access_${code}`, scope: 'snsapi_userinfo' })
+    return Response.json({ openid: `openid_${code?.includes('other') ? 'other' : 'fixture'}_123456789`, access_token: `access_${code}`, scope: code?.startsWith('silent') ? 'snsapi_base' : 'snsapi_userinfo' })
   }
   assert.equal(url.pathname, '/sns/userinfo')
+  profileRequests++
   return Response.json({ openid: url.searchParams.get('openid'), nickname: '微信昵称 🍀', headimgurl: 'http://wx.qlogo.cn/fixture/avatar/132' })
 }
 const service = new WechatLoginService(configuration, platform.identity, transport)
@@ -41,9 +43,9 @@ const app = createApp({ platform, bills: {} as any, health: async () => ({ mysql
 const sockets: Awaited<ReturnType<typeof app.injectWS>>[] = []
 const account = { enabled: true, appId: 'wx1234567890abcdef', appSecret: 'fixtureSecret1234567890', frontendUrl: 'https://tboxos.cn', revision: 0 }
 const secret = () => randomBytes(32).toString('hex')
-async function start(kind: WechatLoginFlow['kind'], parentId?: string) {
+async function start(kind: WechatLoginFlow['kind'], parentId?: string, silent = false) {
   const proof = secret()
-  const flow = await service.start({ kind, secret: proof, ...(parentId ? { parentId } : {}) }, randomUUID(), kind === 'qr' ? 'Mac · Chrome' : 'iPhone · 微信')
+  const flow = await service.start({ kind, secret: proof, ...(parentId ? { parentId } : {}), ...(silent ? { silent: true } : {}) }, randomUUID(), kind === 'qr' ? 'Mac · Chrome' : 'iPhone · 微信')
   return { ...flow, secret: proof }
 }
 async function exchange(flow: Awaited<ReturnType<typeof start>>, code = 'fixture') {
@@ -180,13 +182,63 @@ try {
   const wrongPoll = await app.inject({ method: 'POST', url: '/api/v1/auth/wechat/poll', payload: { id: qr.id, secret: secret() } })
   assert.equal(wrongPoll.statusCode, 410)
   assert.equal(wrongPoll.headers['cache-control'], 'no-store')
+
+  const silent = await start('login', undefined, true)
+  assert.equal(new URL(silent.authorizationUrl!).searchParams.get('scope'), 'snsapi_base')
+  const silentProof = { id: silent.id, secret: silent.secret }
+  await assert.rejects(service.authorizeProfile(silentProof), /无效/, 'Profile authorization cannot skip the silent identity check')
+  const usersBeforeSilent = await source.getRepository(AppUserEntity).count()
+  const profilesBeforeSilent = profileRequests
+  const identified = await exchange(silent, 'silent')
+  assert.equal(identified.requiresProfileAuthorization, true)
+  assert.equal(identified.session, undefined)
+  assert.equal(identified.user, undefined)
+  assert.equal(JSON.stringify(identified).includes('openid'), false, 'The silent identity stays on the server')
+  assert.equal(profileRequests, profilesBeforeSilent, 'Silent identification never calls userinfo')
+  assert.equal(await source.getRepository(AppUserEntity).count(), usersBeforeSilent, 'Silent identification alone never creates an account')
+  assert.equal((await poll(silent)).requiresProfileAuthorization, true, 'Reloading can recover the consent prompt')
+  await assert.rejects(service.authorizeProfile({ id: silent.id, secret: secret() }), /失效/)
+  const consentReply = await app.inject({ method: 'POST', url: '/api/v1/auth/wechat/authorize-profile', payload: silentProof })
+  assert.equal(consentReply.statusCode, 200, consentReply.body)
+  const consent = { ...silent, ...consentReply.json().data }
+  assert.notEqual(consent.state, silent.state)
+  assert.equal(new URL(consent.authorizationUrl!).searchParams.get('scope'), 'snsapi_userinfo')
+  assert.equal(new URL(consent.authorizationUrl!).searchParams.get('redirect_uri'), 'https://tboxos.cn/')
+  await assert.rejects(exchange(silent, 'fixture'), /无效/, 'The silent callback state cannot authorize the profile stage')
+  const authorized = await exchange(consent)
+  assert.ok(authorized.session)
+  assert.equal(authorized.user!.id, direct.user!.id)
+  assert.equal(authorized.user!.nickname, '我的昵称', 'Two-stage authorization preserves the customized profile')
+  assert.equal((await exchange(consent)).session!.token, authorized.session!.token)
+
+  const mismatch = await start('login', undefined, true)
+  await exchange(mismatch, 'silent')
+  const mismatchConsent = { ...mismatch, ...await service.authorizeProfile({ id: mismatch.id, secret: mismatch.secret }) }
+  await assert.rejects(exchange(mismatchConsent, 'other'), /账号不一致/)
+  assert.equal((await poll(mismatch)).status, 'failed')
+  assert.equal((await poll(mismatch)).session, undefined)
+
+  const silentQr = await start('qr')
+  const silentScan = await start('scan', silentQr.id, true)
+  assert.equal((await exchange(silentScan, 'silent')).requiresProfileAuthorization, true)
+  assert.equal((await poll(silentQr)).session, undefined)
+  const scanConsent = { ...silentScan, ...await service.authorizeProfile({ id: silentScan.id, secret: silentScan.secret }) }
+  assert.equal((await exchange(scanConsent)).status, 'scanned')
+  assert.equal((await poll(silentQr)).session, undefined, 'Profile consent still requires explicit desktop login confirmation')
+  await service.confirm({ id: silentScan.id, secret: silentScan.secret, approve: true })
+  assert.ok((await poll(silentQr)).session)
+
+  const silentExpired = await start('login', undefined, true)
+  await exchange(silentExpired, 'silent')
+  await source.getRepository(WechatFlowEntity).update({ id: silentExpired.id }, { expiresAt: new Date(Date.now() - 1) })
+  await assert.rejects(service.authorizeProfile({ id: silentExpired.id, secret: silentExpired.secret }), /失效/)
   await source.getRepository(AppUserEntity).update({ id: direct.user!.id }, { enabled: false })
   await assert.rejects(poll(qr), /停用/)
-  console.log('Wechat login integration passed: authorized profiles, browser proof/state, QR confirmation, concurrent claims, idempotent delivery, expiry/revocation, initial ledger and payment OpenID reuse; Redis is not required.')
+  console.log('Wechat login integration passed: silent identification, explicit profile consent, same-account verification, browser proof/state, QR confirmation, concurrent claims, idempotent delivery, expiry/revocation and payment OpenID reuse.')
 } finally {
   sockets.forEach((socket) => socket.terminate())
   await app.close()
-  await source.getRepository(WechatFlowEntity).clear()
+  await source.query('DELETE FROM wechat_login_flows')
   await cleanupUsers(source, [...users])
   await source.getRepository(WechatAccountEntity).clear()
   await source.destroy()

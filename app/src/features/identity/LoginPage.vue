@@ -1,91 +1,101 @@
 <script setup lang="ts">
-import { UserAvatar } from '@t-box/ui-kit'
-import { onBeforeUnmount, onMounted } from 'vue'
-import { closeWechatLogin, confirmWechatLogin, copyWechatLink, inWechat, retryWechatLogin, showWechatLogin, startWechatLogin, stopWechatUpdates, wechatLogin } from './wechatLogin'
+import { AppIcon, Modal, UserAvatar } from '@t-box/ui-kit'
+import { computed, onBeforeUnmount } from 'vue'
+import { authorizeWechatProfile, closeWechatLogin, confirmWechatLogin, copyWechatLink, inWechat, retryWechatLogin, startWechatLogin, stopWechatUpdates, wechatLogin } from './wechatLogin'
 
-onMounted(showWechatLogin)
+const title = computed(() => wechatLogin.phase === 'profile' ? '确认微信登录' : wechatLogin.phase === 'confirm' ? '确认登录设备' : wechatLogin.phase === 'done' ? '登录已确认' : '微信登录')
 onBeforeUnmount(stopWechatUpdates)
 </script>
 
 <template>
-  <main class="identity-page">
-    <section class="identity-card wechat-login-card" aria-labelledby="wechat-login-title">
-      <span class="identity-eyebrow">T方舟 / 日常，一处安放</span>
-      <h1 id="wechat-login-title">{{ wechatLogin.phase === 'confirm' ? '确认登录这台设备' : wechatLogin.phase === 'done' ? '已确认登录' : inWechat ? '使用微信登录' : '微信扫码登录' }}</h1>
-      <p v-if="wechatLogin.phase === 'confirm'">仅在你正在登录自己的设备时确认。</p>
-      <p v-else-if="wechatLogin.phase === 'done'">原设备将自动完成登录，你可以关闭此页面。</p>
-      <p v-else>用微信进入自己的空间。默认昵称为“方舟”，登录后可在账号设置中修改头像和昵称。</p>
-      <div v-if="wechatLogin.phase === 'qr'" class="wechat-login-qr">
-        <div class="qr-image-frame">
-          <img
-            :src="wechatLogin.qr"
-            width="256"
-            height="256"
-            alt="微信登录二维码，请用微信扫一扫"
-          >
-          <div
-            v-if="wechatLogin.result?.status === 'scanned'"
-            class="qr-status-cover"
-            role="status"
-          ><strong>已扫码</strong><span>请在手机上确认登录</span></div>
+  <Modal
+    class="wechat-login-dialog"
+    :open="wechatLogin.active"
+    :title="title"
+    @close="closeWechatLogin"
+  >
+    <div class="wechat-login-content">
+      <div class="wechat-login-brand"><span class="identity-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>T方舟<small>日常，一处安放</small></span></div>
+      <template v-if="wechatLogin.phase === 'profile'">
+        <div class="wechat-profile-request">
+          <span class="wechat-profile-icon"><AppIcon name="user" :size="23" /><i><AppIcon name="check" :size="11" /></i></span>
+          <div><strong>微信身份已识别</strong><span>再确认一次，就可以进入自己的账号。</span></div>
         </div>
-        <p role="status">{{ wechatLogin.result?.status === 'scanned' ? '扫码成功，请在手机上确认登录' : '打开微信扫一扫，在手机上确认登录' }}</p>
-        <small>二维码 5 分钟内有效</small>
-      </div>
-      <div v-if="wechatLogin.phase === 'confirm' && wechatLogin.result?.user" class="wechat-login-profile">
-        <UserAvatar :src="wechatLogin.result.user.avatarUrl" :size="56" />
-        <strong>{{ wechatLogin.result.user.nickname }}</strong>
-        <span>登录设备：{{ wechatLogin.result.device || '浏览器' }}</span>
-      </div>
-      <p v-if="['loading', 'redirecting'].includes(wechatLogin.phase)" role="status">{{ wechatLogin.phase === 'redirecting' ? '正在前往微信授权…' : '正在连接微信…' }}</p>
-      <p v-if="wechatLogin.phase === 'outside'">请将此链接发送到微信，在微信中打开并确认登录。</p>
-      <p
-        v-if="wechatLogin.error"
-        class="form-error"
-        role="alert"
-      >{{ wechatLogin.error }}</p>
-      <template v-if="wechatLogin.phase === 'confirm'">
+        <p class="wechat-login-description">继续登录需要你授权微信昵称和头像。站内头像与昵称可在登录后自行修改。</p>
         <button
-          class="button button-primary"
+          class="wechat-login-primary"
+          :disabled="wechatLogin.busy"
+          @click="authorizeWechatProfile"
+        >{{ wechatLogin.busy ? '正在前往微信…' : '授权昵称和头像，继续登录' }}<AppIcon name="right" :size="16" /></button>
+      </template>
+      <template v-else-if="wechatLogin.phase === 'qr'">
+        <div class="wechat-login-qr">
+          <div class="qr-image-frame">
+            <img
+              :src="wechatLogin.qr"
+              width="224"
+              height="224"
+              alt="微信登录二维码，请用微信扫一扫"
+            >
+            <div
+              v-if="wechatLogin.result?.status === 'scanned'"
+              class="qr-status-cover"
+              role="status"
+            ><AppIcon name="check" :size="32" /><strong>已扫码</strong><span>请在手机上确认登录</span></div>
+          </div>
+          <p role="status">{{ wechatLogin.result?.status === 'scanned' ? '等待手机确认' : '打开微信，扫一扫登录' }}</p>
+          <span class="wechat-qr-caption">二维码 5 分钟内有效<button @click="startWechatLogin"><AppIcon name="refresh" :size="12" />刷新</button></span>
+        </div>
+        <button class="wechat-login-secondary" @click="copyWechatLink"><AppIcon name="link" :size="15" />{{ wechatLogin.copied ? '登录链接已复制' : '在本机微信登录？复制链接' }}</button>
+      </template>
+      <template v-else-if="wechatLogin.phase === 'confirm' && wechatLogin.result?.user">
+        <div class="wechat-login-profile"><UserAvatar :src="wechatLogin.result.user.avatarUrl" :size="60" /><strong>{{ wechatLogin.result.user.nickname }}</strong><span>正在登录 {{ wechatLogin.result.device || '浏览器' }}</span></div>
+        <p class="wechat-login-description">请确认这是你正在使用的设备。</p>
+        <button
+          class="wechat-login-primary"
           :disabled="wechatLogin.busy"
           @click="confirmWechatLogin(true)"
-        >{{ wechatLogin.busy ? '正在确认…' : '确认登录' }}</button>
+        >{{ wechatLogin.busy ? '正在确认…' : '确认登录这台设备' }}<AppIcon name="right" :size="16" /></button>
         <button
-          class="text-button"
+          class="wechat-login-secondary"
           :disabled="wechatLogin.busy"
           @click="confirmWechatLogin(false)"
-        >取消登录</button>
+        >取消这次登录</button>
       </template>
-      <button
-        v-else-if="wechatLogin.phase === 'error'"
-        class="button button-primary"
-        :disabled="wechatLogin.busy"
-        @click="retryWechatLogin"
-      >重新尝试</button>
+      <template v-else-if="wechatLogin.phase === 'done'">
+        <span class="wechat-login-success"><AppIcon name="check" :size="30" /></span>
+        <p class="wechat-login-description">原设备已完成登录，可以关闭此页面。</p>
+      </template>
+      <template v-else-if="['loading', 'redirecting'].includes(wechatLogin.phase)">
+        <div class="wechat-login-connecting" role="status"><span class="wechat-login-spinner" /><strong>{{ wechatLogin.phase === 'redirecting' ? '正在前往微信…' : '正在连接微信…' }}</strong><span>请稍候，你仍可关闭窗口使用本地工具。</span></div>
+      </template>
+      <template v-else-if="wechatLogin.phase === 'outside'">
+        <p class="wechat-login-description">请复制链接到微信打开，再确认登录原设备。</p>
+        <button class="wechat-login-primary" @click="copyWechatLink"><AppIcon name="copy" :size="17" />{{ wechatLogin.copied ? '登录链接已复制' : '复制登录链接' }}</button>
+      </template>
       <button
         v-else-if="wechatLogin.phase === 'idle'"
-        class="button button-primary"
+        class="wechat-login-primary"
         :disabled="wechatLogin.busy"
         @click="startWechatLogin"
-      >微信登录</button>
+      >{{ inWechat ? '继续微信登录' : '显示登录二维码' }}<AppIcon name="right" :size="16" /></button>
+      <p
+        v-if="wechatLogin.error"
+        class="wechat-login-error"
+        role="alert"
+      ><AppIcon name="info" :size="16" />{{ wechatLogin.error }}</p>
       <button
-        v-if="wechatLogin.phase === 'qr'"
-        class="text-button"
-        @click="startWechatLogin"
-      >刷新二维码</button>
-      <template v-if="['qr', 'outside'].includes(wechatLogin.phase)">
-        <button class="text-button" @click="copyWechatLink">{{ wechatLogin.copied ? '链接已复制' : '在本机微信中登录？复制登录链接' }}</button>
-        <a
-          v-if="wechatLogin.qrUrl && (wechatLogin.error || wechatLogin.phase === 'outside')"
-          class="wechat-login-link"
-          :href="wechatLogin.qrUrl"
-        >{{ wechatLogin.qrUrl }}</a>
-      </template>
-      <button
-        v-if="wechatLogin.active && !wechatLogin.busy"
-        class="text-button"
-        @click="closeWechatLogin"
-      >{{ wechatLogin.phase === 'done' ? '返回 T方舟' : '暂不登录' }}</button>
-    </section>
-  </main>
+        v-if="wechatLogin.phase === 'error'"
+        class="wechat-login-primary"
+        :disabled="wechatLogin.busy"
+        @click="retryWechatLogin"
+      >重新尝试<AppIcon name="refresh" :size="16" /></button>
+      <a
+        v-if="wechatLogin.qrUrl && (wechatLogin.error || wechatLogin.phase === 'outside')"
+        class="wechat-login-link"
+        :href="wechatLogin.qrUrl"
+      >{{ wechatLogin.qrUrl }}</a>
+      <div class="wechat-login-footer"><button @click="closeWechatLogin">{{ wechatLogin.phase === 'done' ? '返回 T方舟' : '暂不登录' }}</button></div>
+    </div>
+  </Modal>
 </template>

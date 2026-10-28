@@ -86,4 +86,18 @@ export const WechatFlowEntity = new EntitySchema<WechatFlowRow>({
     createdAt: { ...date, name: 'created_at' },
   },
 })
-export const wechatIdentityEntities = [WechatAccountEntity, WechatIdentityEntity, WechatFlowEntity]
+export interface WechatAuthorizationRow {
+  flowId: string
+  scope: 'snsapi_base' | 'snsapi_userinfo'
+  openidHash: string | null
+}
+export const WechatAuthorizationEntity = new EntitySchema<WechatAuthorizationRow>({
+  name: 'WechatLoginAuthorization',
+  tableName: 'wechat_login_authorizations',
+  columns: {
+    flowId: { type: 'char', length: 36, name: 'flow_id', primary: true },
+    scope: { type: 'enum', enum: ['snsapi_base', 'snsapi_userinfo'] },
+    openidHash: { type: 'char', length: 64, name: 'openid_hash', nullable: true },
+  },
+})
+export const wechatIdentityEntities = [WechatAccountEntity, WechatIdentityEntity, WechatFlowEntity, WechatAuthorizationEntity]

@@ -29,6 +29,7 @@ export interface WechatLoginResult {
   user?: AppUser
   session?: UserSession
   device?: string
+  requiresProfileAuthorization?: boolean
 }
 export interface UserSession {
   token: string

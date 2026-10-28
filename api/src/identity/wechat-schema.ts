@@ -46,3 +46,13 @@ export const wechatIdentityExtension = {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   ],
 }
+
+export const wechatAuthorizationExtension = {
+  id: '2026-10-28-wechat-staged-authorization',
+  tables: [`CREATE TABLE wechat_login_authorizations (
+    flow_id char(36) NOT NULL PRIMARY KEY,
+    scope enum('snsapi_base','snsapi_userinfo') NOT NULL,
+    openid_hash char(64) DEFAULT NULL,
+    CONSTRAINT wechat_authorization_flow_fk FOREIGN KEY(flow_id) REFERENCES wechat_login_flows(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`],
+}

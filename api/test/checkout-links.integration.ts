@@ -46,15 +46,20 @@ const account = new WechatAccountConfiguration(source, vault)
 const appId = 'wx1234567890abcdef'
 const login = new WechatLoginService(account, platform.identity, async (input) => {
   const url = new URL(String(input))
+  const code = url.searchParams.get('code') ?? ''
   return Response.json(url.pathname.endsWith('access_token')
-    ? { openid: `openid_${url.searchParams.get('code')}_123456789`, access_token: 'fixture', scope: 'snsapi_userinfo' }
+    ? { openid: `openid_${code.replace(/^silent_/, '')}_123456789`, access_token: 'fixture', scope: code.startsWith('silent_') ? 'snsapi_base' : 'snsapi_userinfo' }
     : { openid: url.searchParams.get('openid'), nickname: '微信资料', headimgurl: '' })
 })
 async function authorize(checkoutTicket: string, code: string, started?: () => Promise<void>) {
   const secret = randomBytes(32).toString('hex')
-  const flow = await login.start({ kind: 'login', secret, checkoutTicket }, randomUUID(), '手机微信')
+  const flow = await login.start({ kind: 'login', secret, checkoutTicket, silent: true }, randomUUID(), '手机微信')
   await started?.()
-  const result = await login.exchange({ id: flow.id, secret, state: flow.state, code })
+  const identified = await login.exchange({ id: flow.id, secret, state: flow.state, code: `silent_${code}` })
+  assert.equal(identified.requiresProfileAuthorization, true)
+  assert.equal(identified.session, undefined, 'Silent identification cannot authorize a payment')
+  const consent = await login.authorizeProfile({ id: flow.id, secret })
+  const result = await login.exchange({ id: flow.id, secret, state: consent.state, code })
   return result.session!.token
 }
 Object.assign(platform, { wechatLogin: login })

@@ -48,9 +48,9 @@ import ChatPage from './features/chat/ChatPage.vue'
 import { startChat, stopChat } from './features/chat/chatStore'
 import MemoryConfirmationDialog from './features/chat/MemoryConfirmationDialog.vue'
 import MemoryPage from './features/chat/MemoryPage.vue'
-import { restoreSession } from './features/identity/identityApi'
+import LoginGate from './features/identity/LoginGate.vue'
 import LoginPage from './features/identity/LoginPage.vue'
-import { initializeWechatLogin, wechatLogin } from './features/identity/wechatLogin'
+import { initializeWechatLogin, showWechatLogin } from './features/identity/wechatLogin'
 import ResourcesPage from './features/resources/ResourcesPage.vue'
 
 const currentApplication = computed(() =>
@@ -70,6 +70,18 @@ const currentView = computed(() =>
 )
 const currentInstallation = computed(() => appCatalog.entries.find((e) => e.release.appId === navigation.application?.appId)?.installation)
 const loginRequired = computed(() => !identity.user && !['devicePermissions', 'shortcuts', 'paymentHandoff'].includes(navigation.screen) && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
+const loginPrompt = computed(() => {
+  const pages: Record<string, [string, string]> = {
+    home: ['和方舟，聊聊日常', '聊想法、排日程、整理记录。登录后，对话可以在不同设备间接着聊。'],
+    wallet: ['服务余额', '登录后查看余额与使用记录，管理自己的资源包。'],
+    recharge: ['购买资源包', '登录后选择资源包，为自己的账号充值。'],
+    resources: ['我的文件', '登录后查看和管理自己的文件，在不同设备间同步。'],
+    memory: ['记忆管理', '登录后查看和管理方舟记住的个人信息。'],
+    account: ['个人资料', '登录后修改头像、昵称，管理自己的账号。'],
+  }
+  const [title, description] = pages[navigation.screen] ?? [currentApplication.value?.name || '个人空间', '此功能需要登录账号。日历、时间等本地工具可以继续使用。']
+  return { title, description }
+})
 const installationError = computed(() => appCatalog.error || currentInstallation.value?.error || '')
 async function retryCurrentApplication() {
   const id = navigation.application?.appId
@@ -146,22 +158,6 @@ onBeforeUnmount(() => {
     role="status"
   >当前离线，本地计算可继续使用。云端数据、AI 和支付需要联网。</aside>
   <div
-    v-if="wechatLogin.initializing || (!identity.ready && !localApplications.releases.length)"
-    class="identity-page"
-    role="status"
-  >
-    <p>{{ identity.error || "正在恢复账号…" }}</p>
-    <button
-      v-if="identity.error"
-      class="button button-secondary"
-      @click="restoreSession"
-    >
-      重新连接
-    </button>
-  </div>
-  <LoginPage v-else-if="wechatLogin.active" />
-  <div
-    v-else
     class="super-app"
     :class="{ 'super-app--detail': !showPrimaryNavigation }"
   >
@@ -184,7 +180,7 @@ onBeforeUnmount(() => {
       <button
         class="workspace-rail-profile"
         :aria-label="identity.user ? '打开账号设置' : '微信登录'"
-        @click="identity.user ? openProfile() : navigateTab('home')"
+        @click="identity.user ? openProfile() : showWechatLogin()"
       ><UserAvatar :src="identity.user?.avatarUrl" :size="36" /><span>{{ identity.user?.nickname || '登录' }}</span></button>
     </aside>
     <a
@@ -215,13 +211,12 @@ onBeforeUnmount(() => {
           back-label="OS"
           @back="navigateTab('applications')"
         />
-        <p class="login-required-hint">{{ online ? '此功能需要登录，本地工具仍可直接使用。' : '此功能需要联网并登录，本地工具仍可离线使用。' }}</p>
-        <LoginPage />
+        <LoginGate :title="loginPrompt.title" :description="loginPrompt.description" />
       </section>
       <div v-if="!identity.user && navigation.screen === 'applications'" class="guest-mode-notice">
-        <span>本地模式 · 系统工具无需登录</span>
+        <span>本地工具，直接使用</span>
         <button class="button button-secondary" @click="openDevicePermissions">设备权限</button>
-        <button class="button button-secondary" @click="navigateTab('home')">登录</button>
+        <button class="button button-secondary" @click="showWechatLogin">微信登录</button>
       </div>
       <ShortcutsPage v-if="navigation.screen === 'shortcuts'" />
       <PaymentHandoffPage v-if="navigation.screen === 'paymentHandoff'" :key="navigation.revision" />
@@ -327,6 +322,7 @@ onBeforeUnmount(() => {
       </div>
     </nav>
     <ReminderHost />
+    <LoginPage />
     <template v-for="module in applicationModules" :key="module.manifest.id">
       <component
         :is="module.host"
@@ -356,24 +352,11 @@ onBeforeUnmount(() => {
   padding: 5px 12px;
   min-height: 30px;
 }
-.workspace-plane > .identity-page {
-  min-height: 0;
-  flex: 1;
-}
 .login-required {
   width: 100%;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-}
-.login-required .identity-page {
-  min-height: 0;
-}
-.login-required-hint {
-  margin: 16px 20px 0;
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted);
 }
 @media (max-width: 600px) {
   .guest-mode-notice > span {

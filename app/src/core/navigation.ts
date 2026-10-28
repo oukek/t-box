@@ -3,8 +3,10 @@ import { nextTick, reactive, readonly } from 'vue'
 import { applicationModules } from '../applications/registry'
 import { ErrorCode } from '../error-codes.js'
 import { clearCheckoutTicket } from '../features/billing/checkoutLink'
+import { showWechatLogin } from '../features/identity/wechatLogin'
 import { parseOpenAppArguments } from './applications'
 import { promptNativeDownload } from './native-runtime/downloads'
+import { identity } from './session'
 
 export const primaryTabs = [
   { id: 'home', label: 'AI', icon: 'sparkle', hash: '#/' },
@@ -170,6 +172,11 @@ export function navigateTab(screen: Tab) {
 
 export async function openApplication(value: unknown) {
   const args = parseOpenAppArguments(value)
+  // Local tools use the profile entry to request a cloud account; keep their place underneath.
+  if (args.appId === 'profile' && !identity.user) {
+    await showWechatLogin()
+    return args
+  }
   if (state.screen !== 'application') {
     state.backTo =
       state.screen === 'capabilities'

@@ -794,10 +794,18 @@ export function createHostTransport(options: HostOptions): AppTransport {
         }
         cancelledSubscriptions.add(id)
       } else if (method === 'navigation.open') {
-        value = await openApplication({
-          appId: options.appId,
-          params: a.params,
-        })
+        const params = object(a.params)
+        // Existing local calendar/time bundles use this exact profile link for login.
+        // Handle the login intent without granting general cross-application navigation.
+        const requestsLogin = !identity.user && ['calendar', 'time'].includes(options.appId) && Object.keys(params).length === 1 && params.appId === 'profile'
+        if (requestsLogin) {
+          if (navigation.screen !== 'application' || navigation.application?.appId !== options.appId) {
+            throw SdkErrorCode.NAVIGATION_DENIED('只有当前应用可以打开登录窗口')
+          }
+          value = await openApplication({ appId: 'profile' })
+        } else {
+          value = await openApplication({ appId: options.appId, params })
+        }
       } else if (method === 'navigation.back') {
         if (navigation.application?.appId !== options.appId) {
           throw SdkErrorCode.NAVIGATION_DENIED('只有当前应用可以返回')

@@ -17,6 +17,7 @@ export function registerWechatLogin(app: FastifyInstance, platform: PlatformServ
     scope.get('/configuration', async () => ({ data: { enabled: (await service().configuration.view()).enabled } }))
     scope.post('/start', async (request) => ({ data: await service().start(request.body, request.ip, deviceLabel(request.headers['user-agent'])) }))
     scope.post('/exchange', async (request) => ({ data: await service().exchange(request.body) }))
+    scope.post('/authorize-profile', async (request) => ({ data: await service().authorizeProfile(request.body) }))
     scope.post('/poll', async (request) => ({ data: await service().poll(request.body) }))
     scope.post('/confirm', async (request) => ({ data: await service().confirm(request.body) }))
     scope.post('/cancel', async (request, reply) => {

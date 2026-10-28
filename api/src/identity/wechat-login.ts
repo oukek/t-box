@@ -15,8 +15,8 @@ import { ErrorCode } from '../error-codes.js'
 import { CheckoutLinkEntity } from '../payments/checkout-link-entity.js'
 import { qrChanged } from '../realtime/qr-signals.js'
 import { UserProfileEntity } from './profile-entity.js'
-import { WechatAccountEntity, WechatFlowEntity, WechatIdentityEntity } from './wechat-entities.js'
-import { fetchWechatProfile } from './wechat-profile.js'
+import { WechatAccountEntity, WechatAuthorizationEntity, WechatFlowEntity, WechatIdentityEntity } from './wechat-entities.js'
+import { fetchWechatOpenid, fetchWechatProfile } from './wechat-profile.js'
 
 const ttl = 5 * 60_000
 const selected = { id: true, kind: true, appId: true, parentId: true, device: true, status: true, userId: true, sessionCipher: true, expiresAt: true } as const
@@ -41,9 +41,12 @@ export class WechatLoginService {
 
   async start(value: unknown, ip: string, device: string): Promise<WechatLoginFlow> {
     this.identity.limit(`wechat-start:${ip}`, 40)
-    const input = object(value, ['kind', 'secret', 'parentId', 'checkoutTicket'])
+    const input = object(value, ['kind', 'secret', 'parentId', 'checkoutTicket', 'silent'])
     const kind = input.kind
     if (typeof kind !== 'string' || !['login', 'qr', 'scan'].includes(kind) || typeof input.secret !== 'string' || !/^[a-f0-9]{64}$/.test(input.secret)) {
+      throw ErrorCode.WECHAT_LOGIN_INVALID()
+    }
+    if (input.silent !== undefined && (typeof input.silent !== 'boolean' || kind === 'qr')) {
       throw ErrorCode.WECHAT_LOGIN_INVALID()
     }
     const secret = input.secret
@@ -101,6 +104,9 @@ export class WechatLoginService {
         expiresAt,
         checkoutTokenHash,
       })
+      if (input.silent) {
+        await db.getRepository(WechatAuthorizationEntity).insert({ flowId: id, scope: 'snsapi_base', openidHash: null })
+      }
     })
     if (checkoutOrderId) {
       qrChanged(this.configuration.source, `order:${checkoutOrderId}`)
@@ -109,13 +115,34 @@ export class WechatLoginService {
     if (kind === 'qr') {
       result.qrUrl = `${account.frontendUrl}/?wechatScan=${id}`
     } else {
-      const url = new URL('https://open.weixin.qq.com/connect/oauth2/authorize')
-      url.search = new URLSearchParams({ appid: account.appId, redirect_uri: `${account.frontendUrl}/`, response_type: 'code', scope: 'snsapi_userinfo', state: state! }).toString()
-      url.hash = 'wechat_redirect'
       result.state = state
-      result.authorizationUrl = url.href
+      result.authorizationUrl = this.authorizationUrl(account, state!, input.silent ? 'snsapi_base' : 'snsapi_userinfo')
     }
     return result
+  }
+
+  private authorizationUrl(account: { appId: string, frontendUrl: string }, state: string, scope: 'snsapi_base' | 'snsapi_userinfo') {
+    const url = new URL('https://open.weixin.qq.com/connect/oauth2/authorize')
+    url.search = new URLSearchParams({ appid: account.appId, redirect_uri: `${account.frontendUrl}/`, response_type: 'code', scope, state }).toString()
+    url.hash = 'wechat_redirect'
+    return url.href
+  }
+
+  /** User gesture after silent identification; retain the flow, checkout claim and browser proof. */
+  async authorizeProfile(value: unknown): Promise<WechatLoginFlow> {
+    const input = object(value, ['id', 'secret'])
+    return this.configuration.source.transaction(async (db) => {
+      const row = await this.flow(db, input, true)
+      const account = await this.account(row.appId)
+      const authorization = await db.getRepository(WechatAuthorizationEntity).findOneBy({ flowId: row.id })
+      if (row.kind === 'qr' || row.status !== 'pending' || !authorization?.openidHash) {
+        throw ErrorCode.WECHAT_LOGIN_INVALID()
+      }
+      const state = randomBytes(24).toString('hex')
+      await db.getRepository(WechatAuthorizationEntity).update({ flowId: row.id }, { scope: 'snsapi_userinfo' })
+      await db.getRepository(WechatFlowEntity).update({ id: row.id }, { stateHash: digest(state) })
+      return { id: row.id, kind: row.kind, expiresAt: row.expiresAt.toISOString(), state, authorizationUrl: this.authorizationUrl(account, state, 'snsapi_userinfo') }
+    })
   }
 
   private async changed(row: Pick<WechatFlowRow, 'id' | 'parentId'>, checkoutStage?: 'confirming' | 'cancelled') {
@@ -174,27 +201,44 @@ export class WechatLoginService {
     if (typeof input.state !== 'string' || !/^[a-f0-9]{48}$/.test(input.state) || typeof input.code !== 'string' || !/^[\w-]{1,256}$/.test(input.code)) {
       throw ErrorCode.WECHAT_LOGIN_INVALID()
     }
-    const row = await this.configuration.source.transaction(async (db) => {
+    const { row, authorization } = await this.configuration.source.transaction(async (db) => {
       const row = await this.flow(db, input, true)
       const stateMatches = await db.getRepository(WechatFlowEntity).existsBy({ id: row.id, stateHash: digest(input.state as string) })
       if (!stateMatches || row.kind === 'qr') {
         throw ErrorCode.WECHAT_LOGIN_INVALID()
       }
       if (['complete', 'scanned'].includes(row.status)) {
-        return row
+        return { row }
       }
       if (row.status !== 'pending') {
         throw ErrorCode.WECHAT_LOGIN_EXPIRED()
       }
       await db.getRepository(WechatFlowEntity).update({ id: row.id }, { status: 'exchanging' })
-      return row
+      const authorization = await db.getRepository(WechatAuthorizationEntity).findOneBy({ flowId: row.id })
+      return { row, authorization }
     })
     if (row.status !== 'pending') {
       return this.poll(input)
     }
     try {
       const account = await this.account(row.appId)
+      if (authorization?.scope === 'snsapi_base') {
+        const openid = await fetchWechatOpenid(account.appId, account.appSecret, input.code, this.transport)
+        await this.configuration.source.transaction(async (db) => {
+          const current = await this.flow(db, input, true)
+          if (current.status !== 'exchanging') {
+            throw ErrorCode.WECHAT_LOGIN_EXPIRED()
+          }
+          await db.getRepository(WechatAuthorizationEntity).update({ flowId: row.id }, { openidHash: digest(openid) })
+          await db.getRepository(WechatFlowEntity).update({ id: row.id }, { status: 'pending', stateHash: null })
+        })
+        await this.changed(row)
+        return this.poll(input)
+      }
       const profile = await fetchWechatProfile(account.appId, account.appSecret, input.code, this.transport)
+      if (authorization && authorization.openidHash !== digest(profile.openid)) {
+        throw ErrorCode.WECHAT_LOGIN_FAILED('两次微信授权的账号不一致，请使用同一个微信重新登录')
+      }
       await this.configuration.source.transaction(async (db) => {
         const parent = row.parentId ? await db.getRepository(WechatFlowEntity).findOne({ where: { id: row.parentId }, select: selected, lock: { mode: 'pessimistic_write' } }) : null
         const current = await this.flow(db, input, true)
@@ -231,6 +275,12 @@ export class WechatLoginService {
     const row = await this.flow(db, input)
     await this.account(row.appId)
     const result: WechatLoginResult = { status: row.status, kind: row.kind }
+    if (row.status === 'pending' && row.kind !== 'qr') {
+      const authorization = await db.getRepository(WechatAuthorizationEntity).findOneBy({ flowId: row.id })
+      if (authorization?.openidHash) {
+        result.requiresProfileAuthorization = true
+      }
+    }
     if (row.userId && ['scanned', 'complete'].includes(row.status)) {
       result.user = await this.user(db, row.userId, row.appId)
     }

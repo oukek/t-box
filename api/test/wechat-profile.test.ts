@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { fetchWechatProfile, wechatAvatar } from '../src/identity/wechat-profile.js'
+import { fetchWechatOpenid, fetchWechatProfile, wechatAvatar } from '../src/identity/wechat-profile.js'
+
+test('Wechat silent authorization validates the OpenID without fetching profile data', async () => {
+  let requests = 0
+  const transport: typeof fetch = async (input) => {
+    requests++
+    assert.equal(new URL(String(input)).pathname, '/sns/oauth2/access_token')
+    return Response.json({ openid: 'openid_silent_12345', access_token: 'secret_token', scope: 'snsapi_base' })
+  }
+  assert.equal(await fetchWechatOpenid('wx_fixture', 'secret_app_secret', 'code', transport), 'openid_silent_12345')
+  assert.equal(requests, 1)
+  for (const token of [{ errcode: 40029 }, { openid: 'short', access_token: 'token', scope: 'snsapi_base' }, { openid: 'openid_fixture_12345', access_token: 'token', scope: 'invalid' }]) {
+    await assert.rejects(fetchWechatOpenid('wx_fixture', 'secret_app_secret', 'code', async () => Response.json(token)), /微信授权未完成/)
+  }
+})
 
 test('Wechat userinfo requires the authorized OpenID and hides upstream credentials on failure', async () => {
   const calls: URL[] = []
