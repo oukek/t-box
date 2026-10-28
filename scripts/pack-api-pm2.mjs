@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { verifyDeploymentLinks } from '../deploy/pm2/dependencies.mjs'
-import { applicationBootstrap } from './application-bootstrap.mjs'
+import { buildBootstrapApplications } from './build-bootstrap-applications.mjs'
 
 const workspace = fileURLToPath(new URL('../', import.meta.url))
 const [releaseId, outputArgument] = process.argv.slice(2)
@@ -41,7 +41,8 @@ const run = (command, args, options = {}) => execFileSync(command, args, { cwd: 
 try {
   await mkdir(payload)
   run('pnpm', ['build:api'])
-  run('pnpm', ['-r', '--filter', '@t-box/calculator-web...', '--filter', '@t-box/calendar-web...', '--filter', '@t-box/time-web...', '--filter', '@t-box/ledger-web...', '--filter', '@t-box/converter-web...', '--if-present', 'build'])
+  await mkdir(join(payload, 'bootstrap'))
+  const bootstrap = await buildBootstrapApplications(workspace, join(payload, 'bootstrap/app-artifacts'))
   try {
     run('pnpm', ['--filter', '@t-box/api', 'deploy', '--legacy', '--prod', join(payload, 'api')])
   } finally {
@@ -50,15 +51,7 @@ try {
     run('pnpm', ['install', '--frozen-lockfile', '--prod=false', '--offline'])
   }
   await verifyDeploymentLinks(join(payload, 'api'))
-  for (const appId of ['calculator', 'ledger', 'calendar', 'time', 'converter']) {
-    const metadataOutput = run('node', ['scripts/build-application-artifact.mjs', appId], { stdio: 'pipe', encoding: 'utf8' })
-    const digest = new RegExp(appId + '/([a-f0-9]{64})').exec(metadataOutput)?.[1]
-    if (!digest) {
-      throw new Error('Application artifact metadata missing: ' + appId)
-    }
-    await cp(join(workspace, 'output/app-artifacts', appId, digest), join(payload, 'bootstrap/app-artifacts', appId, digest), { recursive: true })
-  }
-  await writeFile(join(payload, 'api/bootstrap-applications.json'), JSON.stringify(await applicationBootstrap(join(payload, 'bootstrap/app-artifacts')), null, 2) + '\n')
+  await writeFile(join(payload, 'api/bootstrap-applications.json'), JSON.stringify(bootstrap, null, 2) + '\n')
   await mkdir(join(payload, 'scripts'))
   await mkdir(join(payload, 'control'))
   await cp(join(workspace, 'scripts/serve-application-artifacts.mjs'), join(payload, 'scripts/serve-application-artifacts.mjs'))
@@ -75,6 +68,7 @@ try {
     architecture: process.arch,
     nodeVersion: process.versions.node,
     sourceCommit: process.env.GITHUB_SHA || releaseId.slice(4, 44),
+    adminOrigin: process.env.ADMIN_ORIGIN || undefined,
     artifactOrigin: process.env.APP_ARTIFACT_ORIGIN || undefined,
     artifactDelivery: delivery,
     artifactImportOrigin: importRegion ? `https://${importBucket}.oss-${importRegion}.aliyuncs.com` : undefined,

@@ -32,6 +32,34 @@ export function contentType(path) {
   return path.endsWith('/apple-app-site-association') ? 'application/json' : types[extname(path)] || 'application/octet-stream'
 }
 
+async function verifyPublicFile(url, bytes, request) {
+  const response = await request(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) })
+  if (!response.ok || !response.body) {
+    throw new Error('Published static entry/file is not publicly reachable; check OSS website index, subdirectory index, domain and HTTPS settings')
+  }
+  const reader = response.body.getReader()
+  const chunks = []
+  let length = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        break
+      }
+      length += value.length
+      if (length > bytes.length) {
+        throw new Error('Published static file exceeds its expected size')
+      }
+      chunks.push(Buffer.from(value))
+    }
+  } finally {
+    await reader.cancel().catch(() => {})
+  }
+  if (sha256(Buffer.concat(chunks)) !== sha256(bytes)) {
+    throw new Error('Published static file checksum mismatch; check CDN caches or content rewriting')
+  }
+}
+
 export async function publishFiles(files, settings, {
   prefix = '',
   immutable = false,
@@ -70,30 +98,10 @@ export async function publishFiles(files, settings, {
     await putOssObject(storage, prefix + path, bytes, { mime: contentType(path), headers: { 'x-oss-object-acl': 'public-read', 'Cache-Control': cache } })
     const url = new URL(`${settings.origin}/${prefix}${path}`)
     url.searchParams.set('tbox_sha256', sha256(bytes))
-    const response = await request(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) })
-    if (!response.ok || !response.body) {
-      throw new Error('Published static file is not publicly reachable; check OSS website, domain and HTTPS settings')
-    }
-    const reader = response.body.getReader()
-    const chunks = []
-    let length = 0
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) {
-          break
-        }
-        length += value.length
-        if (length > bytes.length) {
-          throw new Error('Published static file exceeds its expected size')
-        }
-        chunks.push(Buffer.from(value))
-      }
-    } finally {
-      await reader.cancel().catch(() => {})
-    }
-    if (sha256(Buffer.concat(chunks)) !== sha256(bytes)) {
-      throw new Error('Published static file checksum mismatch; check CDN caches or content rewriting')
+    await verifyPublicFile(url, bytes, request)
+    if (path === 'index.html') {
+      // Verify the exact URL users open, without a query that bypasses a broken CDN cache.
+      await verifyPublicFile(new URL(`${settings.origin}/${prefix}`), bytes, request)
     }
   }
   return entries.size

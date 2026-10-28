@@ -18,9 +18,10 @@
 | --- | --- | --- |
 | Secret | PM2_SSH_PASSWORD | 服务器 root 登录密码；使用密码方式填写此项，无需私钥 |
 | Secret（可选） | PM2_SSH_PRIVATE_KEY | 仅使用私钥方式时填写；密码和私钥至少配置一个 |
+| Secret | PM2_SSH_KNOWN_HOSTS | 经实例控制台确认的服务器公钥记录，密码和私钥登录均需配置 |
 | Secret | APP_IMPORT_TOKEN | 你设置的 32–128 位长期随机英文字母 / 数字 / `_` / `-`，推荐 64 位；与应用提交工作流共用 |
 
-密码认证填写 `PM2_SSH_PASSWORD`，并配置应用提交凭证 `APP_IMPORT_TOKEN`、OSS 上传账号的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`，共 4 个必填 Secrets；普通 Variables 只填 `DEPLOY_DOMAIN`、`OSS_REGION`。`deploy/settings.mjs` 统一生成四个站点地址、三个固定 Bucket 和发布目录，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
+密码认证填写 `PM2_SSH_PASSWORD`、`PM2_SSH_KNOWN_HOSTS`，并配置应用提交凭证 `APP_IMPORT_TOKEN`、OSS 上传账号的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`，共 5 个必填 Secrets；普通 Variables 只填 `DEPLOY_DOMAIN`、`OSS_REGION`。`deploy/settings.mjs` 统一生成四个站点地址、三个固定 Bucket 和发布目录，详见首次部署手册。密码放在 Secrets，不要放在普通 Variables。工作流未绑定命名 Environment，应配置仓库级 Secrets，而不是只填在某个 Environment 中。GitHub 规则见 [使用 Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
 
 不要把 MySQL 密码、服务商密钥、生产 .env 放入构建 Secrets。SSH 信息只用于校验设置及最后的上传步骤；不会进入发布包。
 
@@ -28,7 +29,7 @@
 
 支持账号密码登录。配置 PM2_SSH_PASSWORD 后优先使用密码，不需要 PM2_SSH_PRIVATE_KEY；密码通过 sshpass 的文件描述符传递，不放在命令行参数、日志或发布包中。GitHub runner 会安装 sshpass，服务器不需要安装它。密码不支持换行；服务器必须已经允许该账户的密码/PAM 登录，这套流程不会修改 SSH 服务配置，也不处理需要另行输入动态验证码的登录。
 
-当前按部署要求暂时关闭 SSH 主机公钥校验，SSH / SCP 使用 `StrictHostKeyChecking=no`，不读取或保存用户及全局 known_hosts 文件，不再要求 `PM2_SSH_KNOWN_HOSTS`。SSH 仍加密传输并使用密码或私钥登录，但不会核验目标服务器身份。发布包的本地 / 远端 SHA-256、架构检查与启动健康检查继续执行。
+SSH / SCP 使用 `StrictHostKeyChecking=yes`，只信任 `PM2_SSH_KNOWN_HOSTS` 中预先核实的服务器公钥。获取方式见 [首次部署](first-deployment.md#2-再配置-github)。主机记录必须匹配目标主机和端口；公钥变化时先核实，不会自动跳过校验。
 
 服务器需已允许 `root` 密码登录，阿里云安全组及系统/宝塔防火墙需允许 GitHub runner 访问 TCP 22。仓库的 Settings → Actions → General 中需启用 GitHub Actions，并允许工作流使用的 GitHub 官方 Actions 与 `pnpm/action-setup`；现有 `contents: read` 权限足以完成此上传流程，无需额外 PAT 或仓库写权限。
 
@@ -54,7 +55,7 @@ sha-<40位SHA>-run-<编号>-attempt-<次数>
 
 构建 runner 为 Linux x64，Node 24.21.0、pnpm 11.18.0。API 及 workspace 包先编译，再通过 pnpm deploy --legacy --prod 打包；node_modules 已包含第三方生产依赖及编译后的 workspace 包。服务器不需要 pnpm、源码或 TypeScript 编译器。
 
-计算器、记账、日历和时间的独立 Web 产物作为初始化种子额外构建，输出 bootstrap-artifacts 并在 SSH 上传前通过官方 ali-oss SDK 发布至 OSS。发布包记录此来源和分发模式，服务器配置不一致时会在停止旧服务前拒绝启动。已有应用绑定和已发布版本不会被种子覆盖。主前端和后台使用 前端与后台部署（OSS） 独立部署。
+所有 `apps/*/build.config.json` 声明的独立 Web 应用作为初始化种子额外构建，当前包括宝宝日记、计算器、日历、单位换算、记账和时间，输出 bootstrap-artifacts 并在 SSH 上传前通过官方 ali-oss SDK 发布至 OSS。发布包记录此来源和分发模式，服务器配置不一致时会在停止旧服务前拒绝启动。已有应用绑定和已发布版本不会被种子覆盖。主前端和后台使用 前端与后台部署（OSS） 独立部署。
 
 业务文件使用 `tboxos/uploads/resources/`，运行中的 API / worker 需要服务器 `shared/api.env` 内的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`；`OSS_REGION` 和业务 Bucket 从 Actions 发布包读取。GitHub 上传凭据不会自动进入服务器。账号授权及 Bucket 跨域设置按 [首次部署](first-deployment.md) 操作。PM2 在停止旧服务前校验业务文件配置完整性。
 
@@ -103,7 +104,7 @@ cp "$release/control/api.env.example" shared/api.env
 chmod 600 shared/api.env
 ```
 
-编辑 shared/api.env，填写服务器 MySQL、业务文件 OSS AccessKey 和可选 Redis。Actions 包自动携带应用域名、OSS 模式、构建包桶地址与目录；跨域默认开放，默认信任本机 Nginx，PM2 自动设置独立恢复 worker。高级覆盖项见 [API 环境配置](api-environment.md)。源码部署没有 Actions 元信息时仍需提供独立应用域名。建议宝塔预建数据库和专用用户。不要在升级时重复 cp 覆盖已有 api.env。
+编辑 shared/api.env，填写服务器 MySQL、业务文件 OSS AccessKey 和可选 Redis。Actions 包自动携带应用域名、OSS 模式、构建包桶地址与目录；普通 API 跨域默认开放，后台来源自动读取发布包的 admin 域名，默认信任本机 Nginx，PM2 自动设置独立恢复 worker。高级覆盖项见 [API 环境配置](api-environment.md)。源码部署没有 Actions 元信息时仍需提供独立应用域名。建议宝塔预建数据库和专用用户。不要在升级时重复 cp 覆盖已有 api.env。
 
 **迁移已有环境时**，先恢复数据库与原 provider.key 到 shared/secrets，保持密钥与数据库配套。旧本地资源按 [迁移说明](api-environment.md) 上传并校验 OSS 后删除。不要继续挂载本地静态产物目录；确认历史版本在 OSS 齐全后再清理旧副本。
 
@@ -118,6 +119,8 @@ pm2 logs t-box-api --lines 100
 `--init-admin` 只在首次安装时使用。脚本先检查运行配置、OSS 和初始应用摘要，建立 api/.env、api/.secrets 链接及必要日志目录，不创建本地业务文件或静态产物目录。之后停止旧 worker 和 API，运行 `api/dist/init-db.js`（停服前已先运行 `--check` 只读预检），按选项运行管理员初始化，再用新版本的绝对路径启动 API / worker，并移除旧本地产物服务。
 
 初始管理员凭据保存在 shared/secrets/bootstrap-admin.txt；已有管理员不会重置。首次登录修改密码后删除该文件。
+
+Actions 还会从 runner 检查公开 HTTPS 健康端点、后台来源预检和拒绝其他来源。公网校验失败时工作流失败，但不会回滚已经健康运行的 PM2；先检查 DNS、证书、Nginx 和来源配置。
 
 启动成功要求 API 健康端点的 MySQL 正常、已配置 Redis 时 Redis 也正常，并且 API / worker 两个进程连续三次检查均 online、PID 稳定、运行路径属于新版本。仅 HTTP 200 或 PM2 显示短暂 online 不算成功。默认最多检查 60 次，每次 HTTP 请求最多 3 秒、检查间隔 1 秒。通过后更新 `current`，保留原链接为 `previous`，并运行 `pm2 save`。使用 root `.pm2-deploy.lock` 防止并发发布；异常中断留下锁时，先核对其中 owner.json 的进程与部署状态，再清理确认失效的锁。
 
@@ -169,7 +172,7 @@ node deploy/pm2/deploy-source.mjs
 # 首次需要创建管理员时追加 --init-admin
 ```
 
-该入口自动执行锁定依赖安装（包括构建工具）、构建 API/workspace/五个应用种子、校验独立生产包、解压新版本，最后调用同一个 `start-release.mjs`。即使服务器 NODE_ENV=production，也显式保留编译器；安装步骤使用非交互模式。首次推荐直接运行 Node 入口，避免 pnpm 在进入脚本前按旧的生产依赖状态自动安装。依赖已准备好的源码目录也提供 `pnpm deploy:pm2` 别名。
+该入口自动执行锁定依赖安装（包括构建工具）、构建 API/workspace/全部声明的应用种子、校验独立生产包、解压新版本，最后调用同一个 `start-release.mjs`。即使服务器 NODE_ENV=production，也显式保留编译器；安装步骤使用非交互模式。首次推荐直接运行 Node 入口，避免 pnpm 在进入脚本前按旧的生产依赖状态自动安装。依赖已准备好的源码目录也提供 `pnpm deploy:pm2` 别名。
 
 不会直接在源码目录运行 PM2，也不会 reset/clean Git 文件。tracked 文件有未提交修改时会拒绝部署；拉取与合并由操作员明确执行，脚本不隐式切换分支。发布根目录可通过 `PM2_DEPLOY_ROOT` 调整，默认 `/www/wwwroot/tbox`。源码构建使用 `.pm2-build.lock`，启动阶段与 Actions 共用 `.pm2-deploy.lock`。
 

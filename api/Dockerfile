@@ -7,15 +7,15 @@ COPY . .
 RUN --mount=type=cache,id=tbox-pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store
 RUN pnpm build:api
-# This independently hosted system application is required by the production catalog.
-RUN pnpm -r --filter "@t-box/calculator-web..." --filter "@t-box/calendar-web..." --filter "@t-box/time-web..." --filter "@t-box/ledger-web..." --filter "@t-box/converter-web..." --if-present build
+# Discover applications from the same declarations used by the release workflow.
+RUN node scripts/build-bootstrap-applications.mjs /bootstrap-artifacts
 # Keep the pnpm 11 legacy implementation pinned; workspace files[] includes compiled dist.
 RUN --mount=type=cache,id=tbox-pnpm,target=/pnpm/store \
     pnpm --filter @t-box/api deploy --legacy --prod /runtime --store-dir=/pnpm/store
-RUN node scripts/application-bootstrap.mjs output/app-artifacts /runtime/bootstrap-applications.json
+RUN node scripts/application-bootstrap.mjs /bootstrap-artifacts /runtime/bootstrap-applications.json
 
 FROM scratch AS application-artifacts
-COPY --from=build /workspace/output/app-artifacts/ /
+COPY --from=build /bootstrap-artifacts/ /
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ENV NODE_ENV=production HOST=127.0.0.1 PORT=3000

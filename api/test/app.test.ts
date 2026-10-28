@@ -56,6 +56,17 @@ test('default HTTP and chat connections accept arbitrary origins without enablin
   socket.terminate()
 })
 
+test('administration CORS allows its exact site and rejects sibling application origins', async (t) => {
+  const app = createApp({ bills: {} as BillRepository, health: async () => ({ mysql: 'up', redis: 'disabled' }), adminOrigins: ['https://admin.tboxos.cn'] })
+  t.after(() => app.close())
+  for (const origin of ['https://admin.tboxos.cn', 'https://tboxos.cn', 'https://apps.tboxos.cn', 'https://untrusted.example']) {
+    const response = await app.inject({ method: 'OPTIONS', url: '/api/v1/admin/session', headers: { 'origin': origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-admin-request' } })
+    const allowed = origin === 'https://admin.tboxos.cn'
+    assert.equal(response.headers['access-control-allow-origin'], allowed ? origin : undefined)
+    assert.equal(response.headers['access-control-allow-credentials'], allowed ? 'true' : undefined)
+  }
+})
+
 test('REST lifecycle creates, reads, updates, deletes, and reports absent bills', async (t) => {
   const { app } = setup()
   t.after(() => app.close())

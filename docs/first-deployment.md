@@ -9,7 +9,7 @@
 | 配置位置 | 要填写的内容 |
 | --- | --- |
 | GitHub Repository Variables | `DEPLOY_DOMAIN`、`OSS_REGION` |
-| GitHub Repository Secrets | `PM2_SSH_PASSWORD`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`APP_IMPORT_TOKEN` |
+| GitHub Repository Secrets | `PM2_SSH_PASSWORD`（或 `PM2_SSH_PRIVATE_KEY`）、`PM2_SSH_KNOWN_HOSTS`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`APP_IMPORT_TOKEN` |
 | 服务器 `/www/wwwroot/tbox/shared/api.env` | `MYSQL_HOST`、`MYSQL_USERNAME`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`、服务器上传账号的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`；`REDIS_ADDR=` 保持空即可不用 Redis |
 | OSS / DNS / Nginx | 三个公开读 Bucket、四个 HTTPS 域名、网站托管、跨域及 API 反向代理，见第 1、3 步 |
 | 项目后台 AI 配置 | 服务商 API 地址、API Key、实际可用模型 |
@@ -38,7 +38,13 @@ GitHub 配置现在就全部填好。`APP_IMPORT_TOKEN` 由你设置一个 32–
 3. 分别绑定上述三个网站域名，按 OSS 提示配置 CNAME，并配置有效的 HTTPS 证书。主站在 `tboxos` Bucket 绑定 `tboxos.cn`；DNS 的主机记录填 `@`，类型选 `CNAME`，记录值复制 OSS 控制台提供的目标域名，证书须覆盖 `tboxos.cn`。[域名绑定与解析](https://help.aliyun.com/zh/oss/user-guide/access-buckets-via-custom-domain-names)、[HTTPS 配置](https://help.aliyun.com/zh/oss/user-guide/access-oss-by-https-protocol)
 4. 三个 Bucket 的跨域规则统一设为：来源 `*`；方法 `GET`、`HEAD`；允许 Headers `*`；暴露 Headers `Content-Type`、`Content-Length`、`Content-Disposition`、`ETag`；不携带凭据。[跨域配置](https://help.aliyun.com/zh/oss/user-guide/configure-cross-origin-resource-sharing)
 
-文件地址公开可读，上传和删除仍由后端校验登录权限。业务文件数据库只存相对路径，前端自动拼接标准 OSS 公网域名；不用配置 CDN、下载签名或私有 Bucket。不要清空整桶发布网站，也不要给 `uploads/resources/` 设置自动过期删除。
+文件地址公开可读，上传和删除仍由后端校验登录权限。业务文件数据库只存相对路径，前端自动拼接标准 OSS 公网域名；上述公共资源不用配置 CDN、下载签名或私有 Bucket。不要清空整桶发布网站，也不要给 `uploads/resources/` 设置自动过期删除。
+
+**宝宝日记附件共用 `tboxos`。** 不需要额外 Bucket 或环境变量。普通资源存入 `uploads/resources/<64位随机十六进制名>`，宝宝日记原文件和预览存入 `uploads/resources/application-files/<64位随机十六进制名>`；每个对象独立生成 256 位密码学随机名称，与文件名、资源 ID、用户 ID 无关。宝宝日记对象自动设置 `private` ACL，由现有应用鉴权接口读取，不返回永久 OSS 链接。Object ACL 可覆盖 Bucket ACL，无需改变网站桶的公共读设置。[阿里云对象权限说明](https://help.aliyun.com/zh/oss/user-guide/object-acl)
+
+随机名称不是文件加密，也不替代访问控制。普通资源保持公开读，完整链接持有者仍可访问；应用附件同时保留对象级权限和业务权限。服务器 RAM 对现有 `tboxos/uploads/resources/*` 的权限已涵盖这两类对象。
+
+运行 Actions 前先让四个域名能够解析，并配置覆盖各自域名、受浏览器信任的 HTTPS 证书。尚未上传网站时返回缺少首页的 404 可以预期。若使用 CDN，还要确认回源 Host、默认首页和子目录首页规则与 OSS 网站配置一致；发布校验会实际访问网站根目录和应用目录首页。
 
 在阿里云 RAM 创建两个 AccessKey 账号，授权如下，下一步分别填到 GitHub 和服务器：
 
@@ -51,24 +57,31 @@ GitHub 配置现在就全部填好。`APP_IMPORT_TOKEN` 由你设置一个 32–
 
 进入仓库 **Settings → Secrets and variables → Actions**，添加 **Repository** 配置。当前 Actions 没有绑定命名 Environment，不能只填在 Environment Secrets 里。
 
-**全部 4 个 Secrets 一次填好：**
+**全部 5 个 Secrets 一次填好：**
 
 | 名称 | 填什么 |
 | --- | --- |
 | `PM2_SSH_PASSWORD` | `8.163.69.101` 的 root SSH 密码 |
+| `PM2_SSH_KNOWN_HOSTS` | 经服务器控制台核实的 SSH 主机公钥记录，获取方法见下文 |
 | `OSS_ACCESS_KEY_ID` | GitHub 发布 RAM 账号的 AccessKey ID |
 | `OSS_ACCESS_KEY_SECRET` | 该账号对应的 Secret |
 | `APP_IMPORT_TOKEN` | 你设置的长期应用提交凭证：32–128 位随机字母 / 数字 / `_` / `-`；推荐 64 位，后端与应用发布共用此 Secret |
 
 后端 Actions 会在 runner 计算 SHA-256，只通过 SSH 上传哈希，自动在数据库登记当前应用范围及启用的管理员身份，不设置自动到期。原始 Token 不上传 OSS、不进入可下载的后端包，也不写入服务器 `.env`。以后若需要更换，修改这个 GitHub Secret 并重新部署后端，旧的托管凭证自动撤销；子应用发布直接使用同一 Secret。
 
-当前按部署要求暂时关闭 SSH 主机公钥校验，无需配置 `PM2_SSH_KNOWN_HOSTS`，已配置的旧 Secret 可以删除。SSH 登录仍使用密码或私钥认证。
+可以用 `PM2_SSH_PRIVATE_KEY` 替代密码；两者只需配置一种。无论选择哪种认证，都必须配置 `PM2_SSH_KNOWN_HOSTS`。在阿里云可信的实例控制台进入这台服务器后执行以下命令，将输出的整行保存为该 Secret：
+
+```sh
+awk '{print "8.163.69.101 " $1 " " $2}' /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+这是服务器的**公钥**，不是登录私钥。必须从已确认身份的控制台获取，不要直接信任未经核实的 `ssh-keyscan` 结果。当前 SSH 端口为 22；改用其他端口时，记录中的主机应为 `[8.163.69.101]:实际端口`。服务器重装或主机公钥轮换后，核实新公钥并更新 Secret；工作流不会自动接受变化的公钥。
 
 **只需填写 2 个 Variables：**
 
 ```dotenv
 DEPLOY_DOMAIN=tboxos.cn
-OSS_REGION=cn-hangzhou
+OSS_REGION=cn-guangzhou
 ```
 
 `DEPLOY_DOMAIN` 只填小写主域名，不带协议、端口、路径或结尾 `/`；`OSS_REGION` 填三个 Bucket 的实际地域，不带 `oss-`。地域未知时不能随意写死，必须与实际 Bucket 一致。
@@ -95,24 +108,26 @@ OSS_ACCESS_KEY_SECRET=替换为该账号的Secret
 REDIS_ADDR=
 ```
 
-这是此方案完整的必填服务器配置。`MYSQL_HOST` 同时包含地址和端口。**服务器必须单独填写 OSS 密钥，GitHub Secrets 不会自动传给 API。** 地域、Bucket 和应用地址由 Actions 发布包自动提供。
+这是包含宝宝日记附件的首次服务器配置，无需额外存储变量。`MYSQL_HOST` 同时包含地址和端口。**服务器必须单独填写 OSS 密钥，GitHub Secrets 不会自动传给 API。** 地域、公共 Bucket、后台来源和应用地址由 Actions 发布包自动提供。
 
 Redis 可选：不使用就保持 `REDIS_ADDR=`；使用时安装 Redis，填 `REDIS_ADDR=127.0.0.1:6379`、实际 `REDIS_PASSWORD` 和选用的 `REDIS_DB`（模板为 `5`）。配置模板见 [api.env.example](../deploy/pm2/api.env.example)，高级覆盖项见 [API 环境配置](api-environment.md)。
 
-4. 为 `api.tboxos.cn` 创建 Nginx HTTPS 站点，将 [Nginx 示例](../deploy/api/nginx-api.conf.example) 的 `/api/` 配置放进 `server {}`，代理到 `127.0.0.1:3000`，保留 `/api/` 路径和 WebSocket。API 和登录响应不设置公共缓存；不要将部署目录或 `shared` 目录设为网站公开根目录。
+4. 为 `api.tboxos.cn` 创建 Nginx HTTPS 站点，确认 `server_name api.tboxos.cn`，安装覆盖该域名的受信任证书。不能使用只覆盖服务器 IP 的宝塔面板证书。将 [Nginx 示例](../deploy/api/nginx-api.conf.example) 的 `/api/` 配置放进 `server {}`，代理到 `127.0.0.1:3000`，保留 `/api/` 路径和 WebSocket。API 和登录响应不设置公共缓存；不要将部署目录或 `shared` 目录设为网站公开根目录。
 5. 安全组和防火墙放行 `22`、`80`、`443`。MySQL、Redis、API 仅在本机监听。
 
-不需要手填 `CORS_ORIGINS`、`ADMIN_ORIGINS`、`TRUSTED_PROXIES`、`TASK_WORKER_MODE` 或 `APP_ARTIFACT_DELIVERY`：当前方案自动处理跨域、本机代理、独立 worker 和 OSS 交付。
+PM2 Actions 方案不需要手填 `CORS_ORIGINS`、`ADMIN_ORIGINS`、`TRUSTED_PROXIES`、`TASK_WORKER_MODE` 或 `APP_ARTIFACT_DELIVERY`：后台默认只允许发布包内的 `https://admin.tboxos.cn` 来源，普通 API 跨域、本机代理、独立 worker 和 OSS 交付由程序处理。生产环境拒绝 `ADMIN_ORIGINS=*`；旧配置若保留此项，应删除或改为准确的后台 HTTPS 来源。
 
 ## 4. 运行 Actions
 
-先将当前代码提交、推送到 GitHub 默认分支，再在 **Actions → 对应工作流 → Run workflow** 操作。项目尚未上线时，建议三个工作流选择同一分支 / 提交并按下列顺序验收：
+先将当前代码提交、推送到 GitHub 默认分支，再在 **Actions → 对应工作流 → Run workflow** 操作。项目尚未上线时，三个工作流选择同一分支 / 提交，等待上一步成功后再继续：
 
 1. **代码检查与测试**：等待检查和测试通过。发布工作流目前不会自动等待 代码检查与测试。
-2. **后端部署（PM2）**：保持 `start_services` 勾选。它会先上传五个子应用初始版本到 OSS，再上传后端包、执行数据库初始化、自动确保管理员存在、同步应用提交凭证、启动 PM2 并检查健康状态。已有管理员不会被重置，服务器不需要拉 Git 仓库或重新构建。
+2. **后端部署（PM2）**：保持 `start_services` 勾选。它自动发现并上传六个子应用初始版本（宝宝日记、计算器、日历、单位换算、记账、时间）到 OSS，再上传后端包、执行数据库初始化、自动确保管理员存在、同步全部已打包应用的提交凭证、启动 PM2，最后检查本机健康、公网 HTTPS API 和后台跨域配置。已有管理员不会被重置，服务器不需要拉 Git 仓库或重新构建。
 3. **前端与后台部署（OSS）**：`target` 选 `all`，发布主前端和后台。
 
-五个初始应用随流程准备好；每次后端发布都自动同步 GitHub 中配置的同一个 `APP_IMPORT_TOKEN`，无需增加配置或手工生成凭证。取消 `start_services` 仅上传时，哈希作为运行配置保存，手动启动该版本时再自动登记到数据库。
+**数据库建表和管理员创建不用再手动跑。** 你只需事先创建空库和专用 MySQL 用户并填好 `shared/api.env`。第 2 步自动执行 `init-db --check → init-db → admin/bootstrap → 同步应用凭证 → 启动`；建表、默认配置和初始数据自动完成。重复部署不会清库或重置管理员。首次不要运行“后端镜像发布（Docker / OSS）”，它是替代 PM2 的另一套方案。
+
+六个初始应用随后端流程准备好，首次不必逐个运行“子应用发布（OSS）”。它用于后续独立更新；宝宝日记、记账属于用户应用，需要在市场安装。每次后端发布都同步同一个 `APP_IMPORT_TOKEN`。取消 `start_services` 仅上传时，数据库和管理员不会初始化，也不会启动；首次推荐保持勾选。
 
 日常更新可单独运行对应工作流：主前端运行“前端与后台部署（OSS）”选 `app`，后台选 `admin`，两者选 `all`；后端只运行“后端部署（PM2）”，已有子应用直接运行“子应用发布（OSS）”。首次接入、修改 Token、新增应用授权，或应用依赖新接口 / 数据库结构时，才需要先部署后端；代码检查与测试 独立运行，没有强制串行依赖。
 
@@ -126,13 +141,16 @@ cat /www/wwwroot/tbox/shared/secrets/bootstrap-admin.txt
 
 打开 `https://admin.tboxos.cn`，用文件中的账号密码登录，立即修改密码，再删除这个初始凭据文件。在后台配置 AI 服务商的 API 地址、API Key 和实际可用模型；启用 AI 功能需要这些配置，服务器不用另外填写 AI 环境变量。
 
+初始账号是 **`admin`**，密码由程序首次创建账号时随机生成，没有固定默认密码，也不会出现在 GitHub Actions 日志中。后续运行不会重新生成已有账号的密码；文件删除后不能靠重跑部署找回旧密码。
+
 随后执行 `pm2 startup`，按输出完成开机启动设置，再执行 `pm2 save`。首次启动自动生成的 `/www/wwwroot/tbox/shared/secrets/provider.key` 必须保留并与数据库一起备份，它用于解密 AI 和微信密钥，不是临时文件。
 
 最后检查：
 
 - `https://api.tboxos.cn/api/v1/health` 返回健康状态，`pm2 status` 中 `t-box-api`、`t-box-worker` 均为 online。
-- 主站正常登录，后台登录成功，五个初始子应用可以打开。
+- 主站正常登录，后台登录成功，六个初始子应用可按系统应用 / 市场安装流程打开。
 - 上传一张图片、添加一笔带附件的记账，刷新后还能查看；OSS 的 `tboxos/uploads/resources/` 出现对应文件。
+- 宝宝日记添加图片附件，确认文件进入同一桶的 `uploads/resources/application-files/`，直接公开访问对象被拒绝，通过已登录应用仍可读取。
 
 ## 6. 微信配置
 

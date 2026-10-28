@@ -1,8 +1,10 @@
 # 数据库首次初始化
 
-项目尚未正式部署，已将历史 TypeORM migrations 合并为一份当前完整的初始化基线 `2026-10-22.1`。不再逐条执行旧的建表、改表和数据回填，也不再使用 `schema_migrations`。TypeORM 的 DataSource、EntitySchema、Repository、事务照常使用，`synchronize` 保持关闭。
+项目尚未正式部署，已将历史 TypeORM migrations 合并为一份当前完整的初始化基线 `2026-10-23.2`。不再逐条执行旧的建表、改表和数据回填，也不再使用 `schema_migrations`。TypeORM 的 DataSource、EntitySchema、Repository、事务照常使用，`synchronize` 保持关闭。
 
 ## 使用方法
+
+**首次按 PM2 Actions 部署时不需要手动执行下面的命令。** 先创建空数据库和专用 MySQL 用户、填好 `shared/api.env`，再运行「后端部署（PM2）」并保持 `start_services` 勾选，工作流自动建表、写入默认数据并初始化管理员。只有本地开发或手动部署才使用下面的命令。管理员账号为 `admin`，随机密码见服务器 `shared/secrets/bootstrap-admin.txt`；已有账号不会重置。
 
 在 `api/.env` 配置 MySQL 后执行：
 

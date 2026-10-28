@@ -37,7 +37,7 @@ chown -R 1000:1000 data
 chmod 700 data/secrets
 ```
 
-.env 填写 MySQL、可选 Redis、业务文件 OSS_REGION / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET，以及独立的 APP_ARTIFACT_ORIGIN HTTPS 域名。业务 Bucket 默认 tboxos。API_IMAGE 首次保留占位值，部署成功后脚本会更新为实际标签。
+.env 填写 MySQL、可选 Redis、业务文件 OSS_REGION / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET，以及独立的 APP_ARTIFACT_ORIGIN HTTPS 域名和准确的 ADMIN_ORIGINS 后台来源（例如 https://admin.tboxos.cn）。业务 Bucket 默认 tboxos；宝宝日记附件共用该桶与现有凭据，使用独立随机对象名和对象级 private ACL，无需增加桶或配置项。API_IMAGE 首次保留占位值，部署成功后脚本会更新为实际标签。
 
 oss.env 用于 SDK 下载镜像包：OSS_BUCKET=tboxos-admin，OSS_PREFIX=docker，并填写实际地域和仅有读取权限的 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET；也可由部署进程环境提供。允许同地域 HTTPS 内网 endpoint，Actions 仅允许公网 endpoint。Compose 不会把 oss.env 加载到 API，运行时业务文件上传密钥仍需在 .env 中单独提供。
 

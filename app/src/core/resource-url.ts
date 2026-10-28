@@ -3,7 +3,7 @@ import { ErrorCode } from '../error-codes.js'
 export function resourceUrl(origin: string, path: string) {
   if (
     !/^https:\/\/[a-z0-9-]+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(origin) ||
-    !/^uploads\/resources\/[a-f0-9-]{36}$/i.test(path)
+    !/^uploads\/resources\/(?:[a-f0-9]{64}|[a-f0-9-]{36})$/i.test(path)
   ) {
     throw ErrorCode.INTERNAL_APPLICATION_EXECUTION_FAILED()
   }

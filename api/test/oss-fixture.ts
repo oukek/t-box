@@ -14,7 +14,7 @@ export function fixtureOss(beforeWrite?: () => void) {
   const client = {
     async put(path: string, bytes: Buffer, config: { mime: string, headers: Record<string, string> }) {
       beforeWrite?.()
-      assert.match(path, /^uploads\/resources\/[a-f0-9-]{36}$/)
+      assert.match(path, /^uploads\/resources\/[a-f0-9]{64}$/)
       assert.equal(config.headers?.['x-oss-object-acl'], 'public-read')
       assert.equal(config.headers?.['x-oss-forbid-overwrite'], 'true')
       assert.equal(config.headers?.['Content-MD5'], createHash('md5').update(bytes).digest('base64'))

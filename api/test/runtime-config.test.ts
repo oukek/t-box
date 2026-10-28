@@ -56,9 +56,9 @@ test('business storage requires server credentials in production and inherits on
 })
 
 test('production reads public applications settings from the packaged Actions metadata', (t) => {
-  const read = fixture(t, { format: 'tbox-pm2-v1', artifactOrigin: 'https://apps.example.com', artifactDelivery: 'oss', artifactImportOrigin: 'https://tboxos-app.oss-cn-hangzhou.aliyuncs.com', artifactImportPrefix: 'builds' })
+  const read = fixture(t, { format: 'tbox-pm2-v1', adminOrigin: 'https://admin.example.com', artifactOrigin: 'https://apps.example.com', artifactDelivery: 'oss', artifactImportOrigin: 'https://tboxos-app.oss-cn-hangzhou.aliyuncs.com', artifactImportPrefix: 'builds' })
   const { config, applications } = read({ NODE_ENV: 'production' })
-  assert.deepEqual(config.adminOrigins, ['*'])
+  assert.deepEqual(config.adminOrigins, ['https://admin.example.com'])
   assert.deepEqual(applications, { origin: 'https://apps.example.com', delivery: 'oss', importOrigin: 'https://tboxos-app.oss-cn-hangzhou.aliyuncs.com', importPrefix: 'builds' })
   const overridden = read({ APP_ARTIFACT_ORIGIN: 'https://other.example.com', APP_IMPORT_OSS_ORIGIN: '', TRUSTED_PROXIES: '', MYSQL_PASSWORD: 'process-password', ADMIN_ORIGINS: 'https://admin.example.com' })
   assert.equal(overridden.applications.origin, 'https://other.example.com')
@@ -66,4 +66,11 @@ test('production reads public applications settings from the packaged Actions me
   assert.deepEqual(overridden.config.trustedProxies, [])
   assert.deepEqual(overridden.config.adminOrigins, ['https://admin.example.com'])
   assert.equal(overridden.config.mysql.password, 'process-password')
+})
+
+test('production without deployment metadata denies cross-origin administration and rejects wildcard overrides', (t) => {
+  const read = fixture(t)
+  assert.deepEqual(read({ NODE_ENV: 'production' }).config.adminOrigins, [])
+  assert.throws(() => read({ NODE_ENV: 'production', ADMIN_ORIGINS: '*' }), /ADMIN_ORIGINS/)
+  assert.deepEqual(read({ NODE_ENV: 'production', ADMIN_ORIGINS: 'https://admin.example.com' }).config.adminOrigins, ['https://admin.example.com'])
 })

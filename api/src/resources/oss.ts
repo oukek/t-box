@@ -1,5 +1,5 @@
 import type { ResourceFileMetadata, ResourceStorage } from './storage.js'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { parseId } from '@t-box/server-foundation/validation'
 import OSS from 'ali-oss'
 import { ErrorCode } from '../error-codes.js'
@@ -27,7 +27,7 @@ export class OssResourceStorage implements ResourceStorage {
     client?: OssResourceStorage['client'],
   ) {
     this.origin = options.private ? undefined : `https://${options.bucket}.oss-${options.region}.aliyuncs.com`
-    this.prefix = options.private ? 'private/application-files' : RESOURCE_OSS_PREFIX
+    this.prefix = options.private ? `${RESOURCE_OSS_PREFIX}/application-files` : RESOURCE_OSS_PREFIX
     const configuration = {
       ...options,
       region: `oss-${options.region}`,
@@ -40,12 +40,15 @@ export class OssResourceStorage implements ResourceStorage {
   }
 
   path(id: string) {
-    return `${this.prefix}/${parseId(id)}`
+    parseId(id)
+    // Independent random object names reveal neither the resource ID nor the original filename.
+    return `${this.prefix}/${randomBytes(32).toString('hex')}`
   }
 
   private key(path: string) {
     const id = path.slice(this.prefix.length + 1)
-    if (path !== this.path(id)) {
+    if (!path.startsWith(this.prefix + '/') ||
+      (!/^[a-f0-9]{64}$/.test(id) && path !== `${this.prefix}/${parseId(id)}`)) {
       throw ErrorCode.RESOURCE_STORAGE_UNAVAILABLE()
     }
     return path

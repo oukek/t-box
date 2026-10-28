@@ -6,8 +6,11 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { deploymentEnvironment } from '../deploy/settings.mjs'
+import { applicationBootstrap } from './application-bootstrap.mjs'
 import { sha256 } from './application-builds.mjs'
+import { buildBootstrapApplications } from './build-bootstrap-applications.mjs'
 import { contentType, ossSettings, publishArtifact, publishBootstrap, publishFiles, publishSite } from './oss-static.mjs'
+import { verifyApiDeployment } from './verify-api-deployment.mjs'
 import { verifiedOffline } from './vite-offline.mjs'
 import { prepareWebVerification } from './web-verification.mjs'
 
@@ -94,7 +97,7 @@ test('website preflight accepts generated settings for different OSS regions and
     }
   }
 })
-function storage({ corrupt = false, missing = false } = {}) {
+function storage({ corrupt = false, missing = false, missingIndex = false } = {}) {
   const objects = new Map()
   const calls = []
   return {
@@ -109,7 +112,8 @@ function storage({ corrupt = false, missing = false } = {}) {
       request: async (url, options) => {
         assert.equal(options.redirect, 'error')
         assert.equal(options.cache, 'no-store')
-        const bytes = objects.get(url.pathname)
+        const directory = url.pathname.endsWith('/')
+        const bytes = missingIndex && directory ? undefined : objects.get(url.pathname + (directory ? 'index.html' : ''))
         return new Response(corrupt ? 'corrupted' : bytes, { status: missing || !bytes ? 404 : 200 })
       },
     },
@@ -129,6 +133,67 @@ test('OSS configuration rejects unsafe destinations and removes unrelated creden
   assert.throws(() => ossSettings('test-bucket', 'https://apps.example.com', { ...environment, OSS_ENDPOINT: 'https://evil.example' }))
   assert.throws(() => ossSettings('test-bucket', 'https://apps.example.com', { OSS_REGION: 'cn-hangzhou' }))
   assert.equal(contentType('.well-known/apple-app-site-association'), 'application/json')
+})
+
+test('a missing directory index fails before activating the worker or registering an artifact', async () => {
+  for (const application of [false, true]) {
+    const remote = storage({ missingIndex: true })
+    const files = [file('index.html', 'html'), file('tbox-offline-sw.js', 'worker')]
+    const hashes = Object.fromEntries(files.map((entry) => [entry.path, sha256(Buffer.from(entry.content, 'base64'))]))
+    const digest = sha256(JSON.stringify(hashes))
+    await assert.rejects(application ? publishArtifact('calendar', digest, files, settings(), remote.options) : publishFiles(files, settings(), remote.options), /website index/)
+    assert.equal(remote.calls.some(({ key }) => key.endsWith('tbox-offline-sw.js') || key.endsWith('artifact.json')), false)
+  }
+})
+
+test('public API verification rejects broken TLS, proxy responses and open admin origins', async () => {
+  const verify = async (failure) => {
+    let requests = 0
+    await verifyApiDeployment('https://api.example.com/api/v1', 'https://admin.example.com', {
+      attempts: 1,
+      request: async (url, options) => {
+        requests++
+        assert.equal(options.redirect, 'error')
+        if (failure === 'tls') {
+          throw new TypeError('certificate verification failed')
+        }
+        if (url.pathname.endsWith('/health')) {
+          return failure === 'proxy' ? new Response('<html>nginx</html>') : Response.json({ data: { status: 'ok', dependencies: { mysql: 'up', redis: 'disabled' } } })
+        }
+        const origin = options.headers.Origin
+        const allowed = origin === 'https://admin.example.com'
+        return new Response(null, { status: 204, headers: allowed || failure === 'cors' ? { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true' } : {} })
+      },
+    })
+    assert.equal(requests, 3)
+  }
+  await verify()
+  for (const failure of ['tls', 'proxy', 'cors']) {
+    await assert.rejects(verify(failure), /Public API verification failed/)
+  }
+})
+
+test('bootstrap discovery includes new user applications and excludes stale historical artifacts', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'tbox-bootstrap-discovery-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  for (const appId of ['baby-diary', 'future-app']) {
+    const base = join(root, 'apps', appId)
+    await mkdir(join(base, 'web/dist'), { recursive: true })
+    await mkdir(join(base, 'server'), { recursive: true })
+    await writeFile(join(base, 'build.config.json'), JSON.stringify({ appId, package: `@t-box/${appId}-web`, releasePackage: `@t-box/${appId}-server`, releaseModule: 'server/dist/release.js', releaseExport: 'release' }))
+    await writeFile(join(base, 'web/package.json'), JSON.stringify({ name: `@t-box/${appId}-web`, scripts: { build: 'build' } }))
+    await writeFile(join(base, 'server/package.json'), JSON.stringify({ name: `@t-box/${appId}-server`, scripts: { build: 'build' } }))
+    await writeFile(join(base, 'web/index.html'), '<title>Application</title>')
+    await writeFile(join(base, 'web/dist/index.html'), appId)
+    await mkdir(join(root, 'output/app-artifacts', appId, 'f'.repeat(64)), { recursive: true })
+  }
+  const output = join(root, 'bootstrap')
+  const bootstrap = await buildBootstrapApplications(root, output, () => {})
+  assert.deepEqual(Object.keys(bootstrap), ['baby-diary', 'future-app'])
+  assert.deepEqual(await applicationBootstrap(output), bootstrap)
+  for (const [appId, digest] of Object.entries(bootstrap)) {
+    assert.equal(await readFile(join(output, appId, digest, 'index.html'), 'utf8'), appId)
+  }
 })
 
 test('website dependencies precede HTML and the service worker; metadata controls cache and MIME', async () => {
@@ -208,12 +273,18 @@ test('WeChat AASA publication preserves other applications and requires the fron
   await mkdir(join(root, 'capacitor/ios/App/App.xcodeproj'), { recursive: true })
   await mkdir(join(dist, '.well-known'), { recursive: true })
   await writeFile(join(root, 'capacitor/wechat.config.json'), JSON.stringify({ enabled: true, appId: 'wx1234567890abcdef', iosTeamId: 'ABCDEFGHIJ', universalLink: webOrigin + '/wechat/' }))
+  await writeFile(join(root, 'capacitor/navigation.config.json'), JSON.stringify({ universalLinkOrigin: webOrigin, iosTeamId: 'ABCDEFGHIJ' }))
   await writeFile(join(root, 'capacitor/ios/App/App.xcodeproj/project.pbxproj'), 'PRODUCT_BUNDLE_IDENTIFIER = com.tbox.app;')
-  await writeFile(join(dist, '.well-known/apple-app-site-association'), JSON.stringify({ applinks: { details: [{ appID: 'OTHER.app', paths: ['/other/*'] }] } }))
+  await writeFile(join(dist, '.well-known/apple-app-site-association'), JSON.stringify({ applinks: { details: [{ appID: 'OTHER.app', paths: ['/other/*'] }, { appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/existing/*', '/open/*'] }] } }))
   await prepareWebVerification(root, dist, webOrigin)
   await prepareWebVerification(root, dist, webOrigin)
   const result = JSON.parse(await readFile(join(dist, '.well-known/apple-app-site-association'), 'utf8'))
-  assert.deepEqual(result.applinks.details, [{ appID: 'OTHER.app', paths: ['/other/*'] }, { appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/wechat/*'] }])
+  assert.deepEqual(result.applinks.details, [{ appID: 'OTHER.app', paths: ['/other/*'] }, { appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/existing/*', '/open/*', '/wechat/*'] }])
   await assert.rejects(prepareWebVerification(root, dist, 'https://box.tboxos.cn'), /WEB_ORIGIN/)
   await assert.rejects(prepareWebVerification(root, dist, 'https://other.example.com'), /WEB_ORIGIN/)
+  await writeFile(join(root, 'capacitor/wechat.config.json'), JSON.stringify({ enabled: false, appId: '', iosTeamId: '', universalLink: '' }))
+  await rm(join(dist, '.well-known/apple-app-site-association'))
+  await prepareWebVerification(root, dist, webOrigin)
+  const navigationOnly = JSON.parse(await readFile(join(dist, '.well-known/apple-app-site-association'), 'utf8'))
+  assert.deepEqual(navigationOnly.applinks.details, [{ appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/open/*'] }])
 })

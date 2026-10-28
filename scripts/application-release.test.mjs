@@ -186,7 +186,10 @@ globalThis.setTimeout = (callback, delay, ...args) => {
   return schedule(callback, 0, ...args)
 }
 globalThis.fetch = async (url, options) => {
-  if (options.method !== 'POST') return new Response(readFileSync(join(process.env.FAKE_OSS_DIR, new URL(url).pathname)))
+  if (options.method !== 'POST') {
+    const path = new URL(url).pathname
+    return new Response(readFileSync(join(process.env.FAKE_OSS_DIR, path, path.endsWith('/') ? 'index.html' : '')))
+  }
   if (options.headers.authorization !== 'Bearer ' + 'a'.repeat(64)) throw new Error('Missing scoped import authorization')
   if (!existsSync(join(process.env.FAKE_OSS_DIR, 'calculator', process.env.ARTIFACT, 'artifact.json'))) throw new Error('Submission before static publication')
   const body = JSON.parse(options.body)

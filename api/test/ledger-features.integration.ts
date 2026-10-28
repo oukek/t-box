@@ -893,7 +893,8 @@ try {
   )
   const [storedIcon] = await source.query('SELECT object_path,storage_backend,content FROM ledger_category_icons WHERE id=?', [uploadedIcon.id])
   assert.equal(storedIcon.content, null)
-  assert.equal(storedIcon.object_path, `uploads/resources/${uploadedIcon.id}`)
+  assert.match(storedIcon.object_path, /^uploads\/resources\/[a-f0-9]{64}$/)
+  assert.ok(!storedIcon.object_path.includes(uploadedIcon.id))
   assert.equal(storedIcon.storage_backend, oss.registry.activeId)
   assert.equal(oss.objects.get(storedIcon.object_path)?.toString('base64'), png)
   assert.equal(

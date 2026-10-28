@@ -10,6 +10,7 @@ export interface ResourceFileMetadata {
 /** Object keys are persisted independently of the public origin; deletion must be idempotent. */
 export interface ResourceStorage {
   readonly origin?: string
+  /** Allocate once and persist the returned key; remote storage names are independently random. */
   path?(id: string): string
   write(id: string, bytes: Buffer, file?: ResourceFileMetadata): Promise<void>
   read(id: string): Promise<Buffer>

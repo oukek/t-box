@@ -59,7 +59,7 @@ pnpm dev
 
 **当前额度体系使用新基线 `2026-10-23.2`，旧开发库不能直接使用。请配置新的 `MYSQL_DATABASE` 后初始化，原库保留。** 不实现旧余额兼容，见 [资源包实施规格](docs/ai-resource-pack-implementation.md) 与 [数据库初始化](docs/database-initialization.md)。
 
-本地配置 MySQL 和可选 Redis，使用 [api/.env.example](api/.env.example)；生产还需在 PM2 服务器填写业务文件 OSS AccessKey，地域和 Bucket 由 Actions 自动写入发布包。用户文件、AI 图片、记账附件及分类图标统一存 `tboxos/uploads/resources/`，数据库只保存相对路径。网站发布凭据和应用导入 Token 在 GitHub 配置，微信支付与 AI 密钥在后台填写。跨域默认开放；全部配置见 [API 环境配置](docs/api-environment.md)，生产按 [首次部署步骤](docs/first-deployment.md) 操作。
+本地配置 MySQL 和可选 Redis，使用 [api/.env.example](api/.env.example)；生产还需在 PM2 服务器填写业务文件 OSS AccessKey，地域和 Bucket 由 Actions 自动写入发布包。用户文件、AI 图片、记账附件及分类图标统一存 `tboxos/uploads/resources/`，数据库只保存相对路径。上传对象使用独立的 256 位随机名称；宝宝日记附件共用该桶的 `uploads/resources/application-files/`，保留对象级私有权限，无需新增桶。网站发布凭据和应用导入 Token 在 GitHub 配置，微信支付与 AI 密钥在后台填写。普通 API 跨域默认开放，生产后台限定管理来源；全部配置见 [API 环境配置](docs/api-environment.md)，生产按 [首次部署步骤](docs/first-deployment.md) 操作。
 
 OSS 文件均公开读，前端拼接 OSS 域名和相对路径直接访问，不申请下载签名；资源列表、上传、删除和账本接口仍需登录。拿到公开链接即可读取对应图片或附件。生产不保存业务文件或应用静态副本，临时下载 / 解压 / 备份用完清理；服务器仅保留后端程序、运行配置、密钥和必要日志。
 
@@ -138,7 +138,7 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；跨域默认开放，后台通过回显来源、跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包的五个子应用静态种子上传 OSS，再上传、初始化数据库并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
+生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；普通 API 跨域默认开放，后台限定管理域名并通过跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包内全部独立子应用静态种子（含宝宝日记）上传 OSS，再上传、初始化数据库并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
 
 ## iOS / Android 开发热更新
 

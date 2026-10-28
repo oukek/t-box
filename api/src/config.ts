@@ -15,6 +15,7 @@ const release: {
   artifactImportPrefix?: string
   resourceRegion?: string
   resourceBucket?: string
+  adminOrigin?: string
 } = existsSync(releaseFile) ? JSON.parse(readFileSync(releaseFile, 'utf8')) : {}
 if (existsSync(releaseFile) && release.format !== 'tbox-pm2-v1') {
   throw ErrorCode.INTERNAL_INVALID_PM2_RELEASE_CONFIGURATION()
@@ -152,12 +153,15 @@ export function getConfig() {
     ? address(process.env.REDIS_ADDR, 6379, 'REDIS_ADDR')
     : undefined
   return {
-    adminOrigins: (process.env.ADMIN_ORIGINS ?? '*')
+    adminOrigins: (process.env.ADMIN_ORIGINS ?? release.adminOrigin ?? (process.env.NODE_ENV === 'production' ? '' : '*'))
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean)
       .map((origin) => {
         if (origin === '*') {
+          if (process.env.NODE_ENV === 'production') {
+            throw ErrorCode.INTERNAL_INVALID_ADMIN_ORIGINS()
+          }
           return origin
         }
         const url = new URL(origin)

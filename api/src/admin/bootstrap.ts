@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { getConfig } from '../config.js'
 import { createDataSource } from '../db/data-source.js'
 import { ErrorCode } from '../error-codes.js'
 import { hashPassword } from './crypto.js'
@@ -21,12 +22,13 @@ try {
     console.info('Administrator already exists; no credentials were changed.')
   } else {
     const password = randomBytes(24).toString('base64url')
+    const adminOrigin = getConfig().adminOrigins.find((origin) => origin !== '*')
     const directory = new URL('../../.secrets/', import.meta.url)
     mkdirSync(directory, { recursive: true, mode: 0o700 })
     // Write recoverable local credentials before creating the account. Never print passwords.
     writeFileSync(
       new URL('bootstrap-admin.txt', directory),
-      `后台地址：http://localhost:5175\n账号：admin\n密码：${password}\n\n首次登录后请在管理员页面修改密码，并删除此文件。\n`,
+      `后台地址：${adminOrigin || (process.env.NODE_ENV === 'production' ? '请使用已配置的管理后台域名' : 'http://localhost:5175')}\n账号：admin\n密码：${password}\n\n首次登录后请在管理员页面修改密码，并删除此文件。\n`,
       { mode: 0o600, flag: 'wx' },
     )
     await store.createUser('admin', await hashPassword(password))

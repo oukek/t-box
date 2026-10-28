@@ -15,7 +15,7 @@ pnpm apps:workflow
 pnpm check:apps
 ```
 
-脚本扫描 `apps/*/build.config.json`，验证应用 ID、独立 Web 的 `index.html` / build 命令、workspace 包和发布声明模块。选项显示名称取自该应用 `web/index.html` 的 `<title>`，后面保留应用 ID；名称无需在工作流中重复维护，构建仍使用内部 ID。没有独立构建声明的应用不会进入下拉列表。目前支持计算器、日历、记账与时间；设置、市场仍是宿主内置页面。图片是工具能力模块，没有可发布的应用页面。
+脚本扫描 `apps/*/build.config.json`，验证应用 ID、独立 Web 的 `index.html` / build 命令、workspace 包和发布声明模块。选项显示名称取自该应用 `web/index.html` 的 `<title>`，后面保留应用 ID；名称无需在工作流中重复维护，构建仍使用内部 ID。没有独立构建声明的应用不会进入下拉列表。目前支持宝宝日记、计算器、日历、单位换算、记账与时间；设置、市场仍是宿主内置页面。图片是工具能力模块，没有可发布的应用页面。
 
 声明示例（见 `apps/calculator/build.config.json`）：
 

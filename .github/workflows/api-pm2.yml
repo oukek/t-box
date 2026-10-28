@@ -37,8 +37,10 @@ jobs:
         env:
           PM2_SSH_PRIVATE_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
           PM2_SSH_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
+          PM2_SSH_KNOWN_HOSTS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
         run: |
           test -n "$PM2_SSH_PASSWORD" || test -n "$PM2_SSH_PRIVATE_KEY" || { echo "Configure repository Secret PM2_SSH_PASSWORD (or PM2_SSH_PRIVATE_KEY for key authentication)"; exit 1; }
+          test -n "$PM2_SSH_KNOWN_HOSTS" || { echo "Configure repository Secret PM2_SSH_KNOWN_HOSTS with the verified server public key"; exit 1; }
           test "$PM2_INIT_ADMIN" != true || test "$PM2_START_SERVICES" = true || { echo "Administrator initialization requires start_services"; exit 1; }
           printf 'id=sha-%s-run-%s-attempt-%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7
@@ -82,11 +84,14 @@ jobs:
           RELEASE_ID: ${{ steps.release.outputs.id }}
           PM2_SSH_PRIVATE_KEY: ${{ secrets.PM2_SSH_PRIVATE_KEY }}
           PM2_SSH_PASSWORD: ${{ secrets.PM2_SSH_PASSWORD }}
+          PM2_SSH_KNOWN_HOSTS: ${{ secrets.PM2_SSH_KNOWN_HOSTS }}
           APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
         run: |
           umask 077
           ssh_dir="$(mktemp -d "$RUNNER_TEMP/tbox-ssh.XXXXXX")"
           trap 'rm -rf -- "$ssh_dir"' EXIT
+          printf '%s\n' "$PM2_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          export PM2_SSH_KNOWN_HOSTS_FILE="$ssh_dir/known_hosts"
           node deploy/pm2/import-token.mjs "$ssh_dir/import-token.sha256"
           unset APP_IMPORT_TOKEN
           export PM2_IMPORT_TOKEN_HASH_FILE="$ssh_dir/import-token.sha256"
@@ -98,6 +103,9 @@ jobs:
             export PM2_SSH_KEY_FILE="$ssh_dir/key"
           fi
           bash deploy/pm2/upload-runtime.sh "$RELEASE_ID" "$RUNNER_TEMP/pm2-package"
+      - name: Verify public HTTPS API and administration origin
+        if: inputs.start_services
+        run: node scripts/verify-api-deployment.mjs
       - name: Deployment result
         env:
           RELEASE_ID: ${{ steps.release.outputs.id }}

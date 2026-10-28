@@ -140,7 +140,8 @@ try {
   assert.equal(upload.statusCode, 201, upload.body)
   const image = upload.json().data
   assert.equal(image.mimeType, 'image/png')
-  assert.equal(image.path, `uploads/resources/${image.id}`)
+  assert.match(image.path!, /^uploads\/resources\/[a-f0-9]{64}$/)
+  assert.ok(!image.path!.includes(image.id))
   assert.deepEqual(oss.objects.get(image.path), png)
   const [stored] = await source.query('SELECT object_path,storage_backend FROM resources WHERE id=?', [image.id])
   assert.equal(stored.object_path, image.path)

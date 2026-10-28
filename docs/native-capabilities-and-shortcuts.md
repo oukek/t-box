@@ -92,7 +92,7 @@ pnpm native:dev:ios -- --url http://电脑局域网IP:5173
 
 发行前在 `app/.env.production.local` 配置 `VITE_API_BASE_URL=https://你的域名/api/v1`。Release 的原生云端动作只接受 HTTPS，Debug 可连接局域网开发服务。`native:ios` 会构建网页、打入本地系统应用资源并同步 CocoaPods；Xcode 中选择开发团队和签名后 Archive/分发。模拟器构建不等于已验证真实拨号或所有系统权限交互，仍需真机验收。
 
-自定义链接：`tbox://open/calculator?expression=1%2B1`。Universal Links 在 `capacitor/navigation.config.json` 配置 HTTPS origin 和 Apple Team ID，执行 native sync 后把 `capacitor/generated/navigation/apple-app-site-association` 部署到域名的 `/.well-known/apple-app-site-association`；生成文件会合并微信所需路径。HTTPS 链接格式为 `https://你的域名/open/calculator?expression=1%2B1`，未安装原生程序时由网页转换为对应应用路由。链接仅导航，不接受密码和令牌，也不直接执行写入。
+自定义链接：`tbox://open/calculator?expression=1%2B1`。Universal Links 在 `capacitor/navigation.config.json` 配置 HTTPS origin 和 Apple Team ID，使用主站域名时，「前端与后台部署（OSS）」会从导航和微信公开配置自动合并、发布 `/.well-known/apple-app-site-association`，保留同一 appID 已有路径；原生工程仍需执行 native sync。使用其他域名时，由该域名另行托管 `capacitor/generated/navigation/apple-app-site-association`。HTTPS 链接格式为 `https://你的域名/open/calculator?expression=1%2B1`，未安装原生程序时由网页转换为对应应用路由。链接仅导航，不接受密码和令牌，也不直接执行写入。
 
 验收命令：`pnpm test:native-platform`、`pnpm test:ui-components`、`pnpm test:app-sdk`、`pnpm test:native`。数据库集成测试创建随机测试数据库，结束后清理，不修改本地业务库。
 

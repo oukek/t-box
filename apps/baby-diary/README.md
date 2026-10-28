@@ -39,13 +39,9 @@
 
 ## 私有文件
 
-本地开发不配置 OSS 时使用 `api/.storage/private`，不映射到静态目录。生产需设置服务器环境变量：
+本地开发不配置 OSS 时使用 `api/.storage/private`，不映射到静态目录。生产共用现有业务 Bucket（默认 `tboxos`）与服务端 OSS_REGION / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET（可选 OSS_SESSION_TOKEN），无需独立桶或新增环境变量。
 
-```dotenv
-OSS_PRIVATE_RESOURCE_BUCKET=your-private-bucket
-```
-
-使用已有服务端 OSS_REGION / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET（可选 OSS_SESSION_TOKEN），地域需一致。必须使用**独立、私有读写**的 Bucket，不能填公共图片/应用资源桶，也不能绑定公开访问策略或公共 CDN。该桶内对象 ACL 写为 private。服务端读取后经已认证 SDK 返回文件内容，应用拿不到 OSS 对象路径或永久链接。生产未配置时明确拒绝上传，不会退回公共桶。
+原文件与预览各使用独立的 256 位随机对象名，路径为 `uploads/resources/application-files/<64位十六进制名>`，不包含原文件名、资源 ID 或业务 ID。对象 ACL 写为 private，覆盖桶的公共读默认值。服务端读取后经已认证 SDK 返回文件内容，应用拿不到 OSS 对象路径或永久链接。随机命名不是文件内容加密，业务授权、导出权限和对象级权限继续生效。
 
 原文件私有保留；照片另生成去除 EXIF/GPS 的 JPEG 预览。当前运行时不能解码的 HEIC 会明确提示，改用 JPEG/PNG/WebP；不把无法解码内容当成成功图片。未知文件按下载附件处理，HTML/SVG 不在应用中执行。
 

@@ -22,8 +22,13 @@ if [[ -n "${PM2_IMPORT_TOKEN_HASH_FILE:-}" ]]; then
   [[ "$(wc -c < "$PM2_IMPORT_TOKEN_HASH_FILE")" -le 65 ]] || fail 'Invalid import credential hash file'
   [[ "$(cat "$PM2_IMPORT_TOKEN_HASH_FILE")" =~ ^[a-f0-9]{64}$ ]] || fail 'Invalid import credential SHA-256'
 fi
-# Temporarily skip server host-key verification for automated deployments.
-options=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=15)
+# Pin the operator-verified server key for both SSH and SCP; never learn it from this connection.
+known_hosts="${PM2_SSH_KNOWN_HOSTS_FILE:-}"
+[[ -s "$known_hosts" && ! -L "$known_hosts" ]] || fail 'Provide PM2_SSH_KNOWN_HOSTS_FILE with the verified server public key'
+known_host="$PM2_SSH_HOST"
+if [[ "$port" != 22 ]]; then known_host="[$PM2_SSH_HOST]:$port"; fi
+ssh-keygen -F "$known_host" -f "$known_hosts" >/dev/null || fail 'Verified known_hosts does not contain this SSH host and port'
+options=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known_hosts" -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=15)
 if [[ -n "${PM2_SSH_PASSWORD:-}" ]]; then
   command -v sshpass >/dev/null || fail 'Password login requires sshpass on the upload runner'
   [[ "$PM2_SSH_PASSWORD" != *$'\n'* && "$PM2_SSH_PASSWORD" != *$'\r'* ]] || fail 'SSH password must not contain line breaks'

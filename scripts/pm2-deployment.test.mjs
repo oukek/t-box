@@ -77,6 +77,7 @@ process.exit(result.status===null ? 1 : result.status);
 `, { mode: 0o755 })
   writeFileSync(join(bin, 'uname'), '#!/bin/sh\nif [ "$1" = "-s" ]; then echo Linux; else echo x86_64; fi\n', { mode: 0o755 })
   writeFileSync(join(root, 'key'), 'fixture key', { mode: 0o600 })
+  writeFileSync(join(root, 'known_hosts'), '[fixture.test]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n', { mode: 0o600 })
   mkdirSync(join(server, 'shared'), { recursive: true })
   writeFileSync(join(server, 'shared/api.env'), 'APP_ARTIFACT_ORIGIN=https://apps.example.invalid\nMYSQL_PASSWORD=\'fixture-secret\'\n', { mode: 0o600 })
   symlinkSync('releases/old', join(server, 'current'))
@@ -96,6 +97,7 @@ process.exit(result.status===null ? 1 : result.status);
     PM2_START_SERVICES: 'false',
     PM2_INIT_ADMIN: 'false',
     PM2_SSH_KEY_FILE: join(root, 'key'),
+    PM2_SSH_KNOWN_HOSTS_FILE: join(root, 'known_hosts'),
     UPLOAD_LOG: join(root, 'upload.jsonl'),
   }
   delete env.PM2_SSH_PASSWORD
@@ -206,8 +208,8 @@ test('managed credential synchronization runs after initialization and admin boo
 test('the actual Actions upload step removes the raw token before SSH and stages only its hash', (t) => {
   const f = fixture(t)
   const workflow = readFileSync(join(workspace, '.github/workflows/api-pm2.yml'), 'utf8')
-  assert.equal(workflow.includes('PM2_SSH_KNOWN_HOSTS'), false)
-  const step = workflow.split('      - name: Upload, verify and optionally start PM2\n')[1].split('      - name: Deployment result\n')[0]
+  assert.ok(workflow.includes('secrets.PM2_SSH_KNOWN_HOSTS'))
+  const step = workflow.split('      - name: Upload, verify and optionally start PM2\n')[1].split('      - name: Verify public HTTPS API and administration origin\n')[0]
   const script = step.split('        run: |\n')[1].split('\n').map((line) => line.replace(/^ {10}/, '')).join('\n')
   const secret = 'actions_fixture_' + 'B'.repeat(48)
   symlinkSync(f.packageDir, join(f.root, 'pm2-package'))
@@ -219,7 +221,7 @@ test('the actual Actions upload step removes the raw token before SSH and stages
   const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], {
     cwd: workspace,
     encoding: 'utf8',
-    env: { ...f.env, RUNNER_TEMP: f.root, RELEASE_ID: releaseId, PM2_SSH_PRIVATE_KEY: 'fixture-key', APP_IMPORT_TOKEN: secret },
+    env: { ...f.env, RUNNER_TEMP: f.root, RELEASE_ID: releaseId, PM2_SSH_PRIVATE_KEY: 'fixture-key', PM2_SSH_KNOWN_HOSTS: readFileSync(f.env.PM2_SSH_KNOWN_HOSTS_FILE, 'utf8'), APP_IMPORT_TOKEN: secret },
   })
   assert.equal(result.status, 0, result.stderr + result.stdout)
   assert.equal(readFileSync(join(f.uploaded, 'control/app-import.sha256'), 'utf8'), importTokenHash(secret) + '\n')
@@ -337,8 +339,8 @@ test('upload verifies/extracts a new directory without modifying shared data or 
   assert.match(readFileSync(join(f.server, 'shared/api.env'), 'utf8'), /fixture-secret/)
   const calls = readFileSync(f.env.UPLOAD_LOG, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
   for (const call of calls.filter((call) => call.tool === 'ssh' || call.tool === 'scp')) {
-    assert.ok(call.args.includes('StrictHostKeyChecking=no'))
-    assert.ok(call.args.includes('UserKnownHostsFile=/dev/null'))
+    assert.ok(call.args.includes('StrictHostKeyChecking=yes'))
+    assert.ok(call.args.includes('UserKnownHostsFile=' + f.env.PM2_SSH_KNOWN_HOSTS_FILE))
     assert.ok(call.args.includes('GlobalKnownHostsFile=/dev/null'))
   }
   assert.equal(calls.some((call) => call.args.some((arg) => arg === 'pm2' || arg === 'dist/init-db.js')), false)
@@ -351,7 +353,7 @@ test('local checksum failure prevents any SSH connection', (t) => {
   assert.equal(existsSync(f.env.UPLOAD_LOG), false)
 })
 
-test('password authentication needs no key or known_hosts and does not expose the password', (t) => {
+test('password authentication pins the host without a login key and does not expose the password', (t) => {
   const f = fixture(t)
   const result = f.upload({ PM2_SSH_PASSWORD: 'fixture password $!#', PM2_SSH_KEY_FILE: '' })
   assert.equal(result.status, 0, result.stderr + result.stdout)
@@ -361,12 +363,20 @@ test('password authentication needs no key or known_hosts and does not expose th
   for (const call of calls.filter((call) => call.tool === 'ssh' || call.tool === 'scp')) {
     assert.ok(call.args.includes('BatchMode=no'))
     assert.ok(call.args.includes('PubkeyAuthentication=no'))
-    assert.ok(call.args.includes('StrictHostKeyChecking=no'))
-    assert.ok(call.args.includes('UserKnownHostsFile=/dev/null'))
+    assert.ok(call.args.includes('StrictHostKeyChecking=yes'))
+    assert.ok(call.args.includes('UserKnownHostsFile=' + f.env.PM2_SSH_KNOWN_HOSTS_FILE))
     assert.ok(call.args.includes('GlobalKnownHostsFile=/dev/null'))
     assert.equal(call.args.includes('-i'), false)
   }
   assert.equal((text + result.stdout + result.stderr).includes('fixture password $!#'), false)
+})
+
+test('missing or mismatched server public keys fail before sending login credentials', (t) => {
+  const f = fixture(t)
+  assert.notEqual(f.upload({ PM2_SSH_KNOWN_HOSTS_FILE: '' }).status, 0)
+  writeFileSync(f.env.PM2_SSH_KNOWN_HOSTS_FILE, 'other.test ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n')
+  assert.notEqual(f.upload({ PM2_SSH_PASSWORD: 'fixture password $!#' }).status, 0)
+  assert.equal(existsSync(f.env.UPLOAD_LOG), false)
 })
 
 test('missing login credentials and password line breaks fail before connecting', (t) => {
