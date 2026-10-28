@@ -32,3 +32,19 @@ export const promotionExtension = {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   ],
 }
+
+export const promotionCreativeExtension = {
+  id: '2026-10-29-promotion-creatives',
+  tables: [`CREATE TABLE promotion_assets (
+    id char(36) NOT NULL PRIMARY KEY,
+    kind enum('thumbnail','poster') NOT NULL,
+    backend varchar(64) NOT NULL,
+    path varchar(600) NOT NULL,
+    width int NOT NULL,
+    height int NOT NULL,
+    size int NOT NULL,
+    uploaded_by char(36) DEFAULT NULL,
+    created_at datetime(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)),
+    CONSTRAINT promotion_asset_administrator_fk FOREIGN KEY(uploaded_by) REFERENCES admin_users(id) ON DELETE SET NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`],
+}

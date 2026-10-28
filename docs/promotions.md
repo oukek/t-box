@@ -4,6 +4,10 @@
 
 网页桌面侧栏与移动端底部导航提供「分享」入口。登录后弹出个人专属海报，可以长按保存、复制链接或下载。二维码仅包含随机推广标识，不包含用户 ID、OpenID、昵称或登录凭据，由服务器关联分享人。
 
+后台「推广渠道 → 分享素材与文案」可统一修改分享标题、描述、微信分享图和邀请海报。分享图上传后自动居中裁剪为 300 × 300 JPEG；邀请海报保留比例，至少 600 × 600，最长边超过 2560 时缩小。支持 8 MB 内的 JPG、PNG、WebP 静态图片，限制 1600 万解码像素与 3:1 以内长宽比。图片复用现有对象存储，生产保存到 OSS，数据库仅记录路径与尺寸。
+
+邀请海报上传不带二维码的底图，二维码的左侧、顶部位置与边长可按百分比调整，支持生成实际合成预览。预览二维码打开普通首页，不携带推广来源；正式推广请下载渠道或用户专属海报。恢复默认图片和编辑文案均需点击「保存分享配置」才生效。保存使用版本校验，记录管理员与配置历史；图片和海报地址携带素材版本号，更新后刷新微信缩略图与服务端合成缓存。
+
 ## 统计口径
 
 - 每个新账号最多一个直接推广来源，可以是渠道或用户；不做多级归因。
@@ -26,6 +30,8 @@
 
 增量扩展 `2026-10-28-promotion-attribution` 新增 `promotion_sources`、`promotion_registrations`、`promotion_login_flows`。注册归因表以用户 ID 为主键，登录流程清理时级联清理临时来源记录。
 
+素材配置扩展 `2026-10-29-promotion-creatives` 新增 `promotion_assets`。配置复用平台配置与历史表的 `host.promotion-creatives`，升级后默认沿用现有图片和文案，既有推广标识与归因不变。
+
 发布 API 前执行 `pnpm db:init`，仅添加扩展，不清空数据，不补写历史归因；API、网页和后台需一同发布。`api/assets/` 已加入生产包 files，PM2 / Docker 打包时会包含海报模板与缩略图。
 
 海报使用内置 imagegen 编辑已确认的第二版，预留底部二维码位；程序用 qrcode 生成真实二维码后通过 sharp 合成。模板 1080 × 1920，二维码位置 `(760, 1625)`，尺寸 232 × 232，包含四模块白边。
@@ -34,6 +40,9 @@
 
 - 管理员：`GET/POST /api/v1/admin/promotions/channels`，`PATCH /api/v1/admin/promotions/channels/:id`。分页每页 50 条，支持搜索，修改须携带 revision，沿用管理员鉴权与 CSRF 检查。
 - 管理员用户列表：`GET /api/v1/admin/billing/users`，增加 promotion 统计。
+- 素材配置：`GET/PUT /api/v1/admin/promotions/creatives`，修改需要当前 revision。
+- 图片上传：`POST /api/v1/admin/promotions/images/thumbnail` 或 `/poster`，二进制 body，沿用管理员鉴权与 CSRF 校验。
+- 合成预览：`POST /api/v1/admin/promotions/creatives/preview`，只预览、不保存配置。
 - 登录用户：`POST /api/v1/promotions/me`，创建或读取当前账号固定推广链接。
 - 登录用户：`POST /api/v1/promotions/js-sdk`，只允许签名已配置前端网站下不含 hash 的 URL。
 - 公开海报：`GET /api/v1/promotions/:token/poster.png`，附加 `?download=1` 下载。

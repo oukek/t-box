@@ -16,7 +16,13 @@ export const promotionShare = reactive({
 const inWechat = /MicroMessenger/i.test(navigator.userAgent)
 let pendingOpen = false
 let pending: { userId: string, promise: Promise<void> } | undefined
-export const promotionAssetUrl = (path: string) => new URL(apiBase + path, location.href).href
+export const promotionAssetUrl = (path: string, parameters: Record<string, string> = {}) => {
+  const url = new URL(apiBase + path, location.href)
+  for (const [key, value] of Object.entries(parameters)) {
+    url.searchParams.set(key, value)
+  }
+  return url.href
+}
 
 export function openPromotionShare() {
   if (!identity.user) {

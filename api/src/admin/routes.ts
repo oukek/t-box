@@ -9,6 +9,8 @@ import { registerApplicationPublishing } from '../application-platform/admin-rou
 import { ApplicationPublishing } from '../application-platform/publishing.js'
 import { ErrorCode } from '../error-codes.js'
 import { requestKey } from '../payments/service.js'
+import { MAX_PROMOTION_IMAGE_SIZE } from '../promotions/creatives.js'
+import { PromotionPoster } from '../promotions/poster.js'
 import { emptyPromotionMetrics } from '../promotions/service.js'
 import { AdminAuth, cookie, sessionToken } from './auth.js'
 import { hashPassword } from './crypto.js'
@@ -63,6 +65,27 @@ export function registerAdmin(
           reply.header('Set-Cookie', cookie('', 0)).code(204).send()
         })
         if (platform) {
+          const promotionPosters = new PromotionPoster(platform.promotions.creatives)
+          secure.get('/promotions/creatives', async () => ({ data: await platform.promotions.creatives.read() }))
+          secure.put('/promotions/creatives', async (r) => ({ data: await platform.promotions.creatives.save(r.body, (await auth.authenticate(sessionToken(r))).id) }))
+          secure.post('/promotions/creatives/preview', async (r, reply) => {
+            const settings = await platform.promotions.creatives.resolve(r.body)
+            const account = await platform.wechatLogin?.configuration.view()
+            const url = new URL('/', account?.frontendUrl || 'https://tboxos.cn')
+            return reply.type('image/png').send(await promotionPosters.render(url.href, settings))
+          })
+          secure.register(async (uploads) => {
+            uploads.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: MAX_PROMOTION_IMAGE_SIZE }, (_r, bytes, done) => done(null, bytes))
+            uploads.post<{ Params: { kind: string } }>('/promotions/images/:kind', { bodyLimit: MAX_PROMOTION_IMAGE_SIZE, onRequest: async (r) => {
+              await auth.authenticate(sessionToken(r))
+            } }, async (r) => {
+              if (!Buffer.isBuffer(r.body) || !['thumbnail', 'poster'].includes(r.params.kind)) {
+                throw ErrorCode.PROMOTION_IMAGE_INVALID()
+              }
+              const actor = await auth.authenticate(sessionToken(r))
+              return { data: await platform.promotions.creatives.upload(r.body, r.params.kind as 'thumbnail' | 'poster', actor.id) }
+            })
+          })
           secure.get('/promotions/channels', async (r) => ({ data: await platform.promotions.channels(r.query) }))
           secure.post('/promotions/channels', async (r) => ({ data: await platform.promotions.saveChannel(r.body) }))
           secure.patch<{ Params: { id: string } }>('/promotions/channels/:id', async (r) => ({ data: await platform.promotions.saveChannel(r.body, parseId(r.params.id)) }))

@@ -1,6 +1,8 @@
 import type { PaymentGateway, VerifiedPayment } from '../src/payments/gateway.js'
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
+import jsQR from 'jsqr'
+import sharp from 'sharp'
 import { In } from 'typeorm'
 import { createVault, hashPassword } from '../src/admin/crypto.js'
 import { ConfigurationService } from '../src/admin/service.js'
@@ -8,13 +10,16 @@ import { AdminStore } from '../src/admin/store.js'
 import { createApp } from '../src/app.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { AdminUserEntity } from '../src/db/entities.js'
+import { PlatformConfigurationEntity, PlatformConfigurationHistoryEntity } from '../src/db/records/configuration-entities.js'
 import { PaymentOrderEntity, PaymentRefundEntity } from '../src/db/records/payments-entities.js'
 import { WechatAccountConfiguration } from '../src/identity/wechat-configuration.js'
 import { WechatAccountEntity, WechatFlowEntity } from '../src/identity/wechat-entities.js'
 import { WechatLoginService } from '../src/identity/wechat-login.js'
 import { PlatformService } from '../src/platform/service.js'
-import { PromotionRegistrationEntity, PromotionSourceEntity } from '../src/promotions/entities.js'
+import { PROMOTION_CREATIVE_KEY } from '../src/promotions/creatives.js'
+import { PromotionAssetEntity, PromotionRegistrationEntity, PromotionSourceEntity } from '../src/promotions/entities.js'
 import { assertDisposableDatabase, cleanupUsers } from './fixtures.js'
+import { fixtureOss } from './oss-fixture.js'
 import { paymentSelection } from './quota-fixtures.js'
 
 const source = await createDataSource().initialize()
@@ -31,7 +36,8 @@ const gateway: PaymentGateway = {
   query: async (id) => events.get(id) ?? null,
   verify: async (body) => events.get(body.toString())!,
 }
-const platform = new PlatformService(source, administration, gateway, undefined, undefined, undefined, undefined, account)
+const oss = fixtureOss()
+const platform = new PlatformService(source, administration, gateway, undefined, undefined, oss.resources(source), undefined, account)
 const transport: typeof fetch = async (input) => {
   const url = new URL(String(input))
   if (url.pathname.endsWith('/access_token')) {
@@ -46,6 +52,8 @@ const app = createApp({ platform, administration, bills: {} as never, taskWorker
 const userIds = new Set<string>()
 const flowIds: string[] = []
 const channelIds: string[] = []
+const assetIds: string[] = []
+const previousCreative = await source.getRepository(PlatformConfigurationEntity).findOneBy({ config_key: PROMOTION_CREATIVE_KEY })
 const marker = randomBytes(6).toString('hex')
 const adminName = 'promo_' + marker
 const adminPassword = 'fixture-password-' + marker
@@ -85,6 +93,38 @@ try {
   assert.equal(signed.statusCode, 200, signed.body)
   const cookie = String(signed.headers['set-cookie']).split(';')[0]!
   const headers = { cookie, 'x-admin-request': '1' }
+  const creative = (await app.inject({ url: '/api/v1/admin/promotions/creatives', headers })).json().data
+  const uploadHeaders = { ...headers, 'content-type': 'application/octet-stream' }
+  const badImage = await app.inject({ method: 'POST', url: '/api/v1/admin/promotions/images/poster', headers: uploadHeaders, payload: Buffer.from('<svg onload="alert(1)"/>') })
+  assert.equal(badImage.statusCode, 400)
+  const thumbnailBytes = await sharp({ create: { width: 640, height: 320, channels: 3, background: '#ca334b' } }).png().toBuffer()
+  const uploadedThumbnail = await app.inject({ method: 'POST', url: '/api/v1/admin/promotions/images/thumbnail', headers: uploadHeaders, payload: thumbnailBytes })
+  assert.equal(uploadedThumbnail.statusCode, 200, uploadedThumbnail.body)
+  const thumbnail = uploadedThumbnail.json().data
+  assetIds.push(thumbnail.id)
+  assert.equal(thumbnail.width, 300)
+  assert.equal(thumbnail.height, 300)
+  const posterBytes = await sharp({ create: { width: 900, height: 1200, channels: 3, background: '#f1e9df' } }).png().toBuffer()
+  const uploadedPoster = await app.inject({ method: 'POST', url: '/api/v1/admin/promotions/images/poster', headers: uploadHeaders, payload: posterBytes })
+  assert.equal(uploadedPoster.statusCode, 200, uploadedPoster.body)
+  const poster = uploadedPoster.json().data
+  assetIds.push(poster.id)
+  const { thumbnail: _thumbnail, poster: _poster, ...currentDraft } = creative
+  const updatedDraft = { ...currentDraft, title: '后台自定义分享标题', description: '后台自定义的邀请分享描述。', thumbnailId: thumbnail.id, posterId: poster.id, qr: { x: 64, y: 70, size: 28 } }
+  const previewImage = await app.inject({ method: 'POST', url: '/api/v1/admin/promotions/creatives/preview', headers, payload: updatedDraft })
+  assert.equal(previewImage.statusCode, 200, previewImage.body.slice(0, 100))
+  assert.equal((await platform.promotions.creatives.read()).revision, creative.revision, 'Preview never saves the draft')
+  const settingsReply = await app.inject({ method: 'PUT', url: '/api/v1/admin/promotions/creatives', headers, payload: updatedDraft })
+  assert.equal(settingsReply.statusCode, 200, settingsReply.body)
+  const settings = settingsReply.json().data
+  assert.equal(settings.revision, creative.revision + 1)
+  assert.equal((await app.inject({ method: 'PUT', url: '/api/v1/admin/promotions/creatives', headers, payload: updatedDraft })).statusCode, 409)
+  assert.equal((await app.inject({ method: 'PUT', url: '/api/v1/admin/promotions/creatives', headers, payload: { ...updatedDraft, revision: settings.revision, qr: { x: 64, y: 99, size: 28 } } })).statusCode, 400)
+  const actualThumbnail = await app.inject({ url: '/api/v1/promotions/thumbnail.jpg?v=' + settings.revision })
+  assert.equal((await sharp(actualThumbnail.rawPayload).metadata()).width, 300)
+  const assetReply = await app.inject({ url: '/api/v1' + poster.url })
+  assert.equal(assetReply.statusCode, 200)
+  assert.equal((await sharp(assetReply.rawPayload).metadata()).height, 1200)
   const created = await app.inject({ method: 'POST', url: '/api/v1/admin/promotions/channels', headers, payload: { name: '社群推广', descriptionNote: marker, enabled: true } })
   assert.equal(created.statusCode, 200, created.body)
   const channel = created.json().data
@@ -103,6 +143,9 @@ try {
 
   const organic = await register('organic')
   const personal = await platform.promotions.personal(organic.user!.id)
+  assert.equal(personal.title, updatedDraft.title)
+  assert.equal(personal.description, updatedDraft.description)
+  assert.ok(personal.thumbnailPath.endsWith('v=' + settings.revision))
   assert.equal(personal.shareUrl.includes(organic.user!.id), false)
   const stable = await Promise.all(Array.from({ length: 4 }, () => platform.promotions.personal(organic.user!.id)))
   assert.ok(stable.every((link) => link.token === personal.token))
@@ -149,9 +192,14 @@ try {
   const users = await app.inject({ url: '/api/v1/admin/billing/users', headers })
   assert.equal(users.statusCode, 200, users.body)
   assert.equal(users.json().data.find((user: { id: string }) => user.id === organic.user!.id).promotion.paidAmount, '10.00')
-  const image = await app.inject({ url: '/api/v1' + personal.posterPath + '?download=1' })
+  const image = await app.inject({ url: '/api/v1' + personal.posterPath + '&download=1' })
   assert.equal(image.statusCode, 200)
   assert.match(String(image.headers['content-disposition']), /attachment/)
+  const composed = await sharp(image.rawPayload).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  assert.equal(composed.info.width, 900)
+  assert.equal(composed.info.height, 1200)
+  const decode = jsQR as unknown as (bytes: Uint8ClampedArray, width: number, height: number) => { data: string } | null
+  assert.equal(decode(new Uint8ClampedArray(composed.data), composed.info.width, composed.info.height)?.data, personal.shareUrl)
   const mine = await app.inject({ method: 'POST', url: '/api/v1/promotions/me', headers: { authorization: 'Bearer ' + organic.session!.token } })
   assert.equal(mine.statusCode, 200, mine.body)
   assert.equal(mine.json().data.token, personal.token)
@@ -164,9 +212,28 @@ try {
   const disabled = await register('disabled', channel.token)
   assert.equal(await source.getRepository(PromotionRegistrationEntity).existsBy({ userId: disabled.user!.id }), false)
   await register('invalid', 'f'.repeat(32))
+  const resetReply = await app.inject({ method: 'PUT', url: '/api/v1/admin/promotions/creatives', headers, payload: { ...currentDraft, revision: settings.revision, thumbnailId: null, posterId: null } })
+  assert.equal(resetReply.statusCode, 200, resetReply.body)
+  const resetPersonal = await platform.promotions.personal(organic.user!.id)
+  assert.notEqual(resetPersonal.posterPath, personal.posterPath, 'Saved creative revision invalidates stale poster and thumbnail URLs')
+  const resetImage = await app.inject({ url: '/api/v1' + resetPersonal.posterPath })
+  assert.equal((await sharp(resetImage.rawPayload).metadata()).width, 1080, 'Restoring defaults bypasses cached custom images')
   console.info('Promotion integration passed: first-registration attribution, OAuth/desktop handoff, concurrent registration, channels, personal referrals, payments/refunds and access controls.')
 } finally {
   await app.close()
+  if (previousCreative) {
+    await source.getRepository(PlatformConfigurationEntity).save(previousCreative)
+  } else {
+    await source.getRepository(PlatformConfigurationEntity).delete({ config_key: PROMOTION_CREATIVE_KEY })
+  }
+  await source.getRepository(PlatformConfigurationHistoryEntity).delete({ config_key: PROMOTION_CREATIVE_KEY, administrator_id: adminId })
+  for (const id of assetIds) {
+    const row = await source.getRepository(PromotionAssetEntity).findOneBy({ id })
+    if (row) {
+      await oss.registry.get(row.backend).remove(row.path)
+      await source.getRepository(PromotionAssetEntity).delete({ id })
+    }
+  }
   if (flowIds.length) {
     await source.getRepository(WechatFlowEntity).delete({ id: In(flowIds) })
   }

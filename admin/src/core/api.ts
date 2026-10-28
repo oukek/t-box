@@ -51,3 +51,20 @@ export const errorMessage = (error: unknown) =>
       ? '请求超时，请检查操作结果后重试。'
       : error.message
     : '操作失败'
+
+export async function requestBlob(path: string, options: RequestInit = {}) {
+  const response = await fetch(`${apiBase}/admin${path}`, {
+    ...options,
+    credentials: 'include',
+    signal: options.signal ?? AbortSignal.timeout(30_000),
+    headers: { 'X-Admin-Request': '1', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
+  })
+  if (!response.ok) {
+    if (response.status === 401) {
+      window.dispatchEvent(new Event('admin-session-expired'))
+    }
+    const value = await response.json().catch(() => ({}))
+    throw RequestError.fromResponse(response.status, value.error)
+  }
+  return response.blob()
+}

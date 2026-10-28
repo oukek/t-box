@@ -6,6 +6,17 @@ export const validAppId = (v) => typeof v === 'string' && /^[a-z][a-z0-9_-]{0,63
 export const validVersion = (v) => typeof v === 'string' && v.length <= 48 && /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?$/i.test(v)
 export const sha256 = (v) => createHash('sha256').update(v).digest('hex')
 export const applicationChoice = (app) => `${app.title} (${app.appId})`
+export const allApplicationsChoice = '全部应用 (all)'
+
+export function selectApplications(applications, selection) {
+  if (selection === 'all' || selection === allApplicationsChoice) {
+    if (!applications.length) {
+      throw new Error('No independently buildable applications found')
+    }
+    return applications
+  }
+  return [selectApplication(applications, selection)]
+}
 
 export function selectApplication(applications, selection) {
   const app = applications.find((app) => app.appId === selection || applicationChoice(app) === selection)
@@ -101,5 +112,5 @@ export function workflowOptions(contents, applications) {
   if (!pattern.test(contents)) {
     throw new Error('Workflow application markers are missing')
   }
-  return contents.replace(pattern, (_, begin, end) => begin + applications.map((a) => `          - '${applicationChoice(a).replaceAll('\'', '\'\'')}'\n`).join('') + end)
+  return contents.replace(pattern, (_, begin, end) => begin + [allApplicationsChoice, ...applications.map(applicationChoice)].map((choice) => `          - '${choice.replaceAll('\'', '\'\'')}'\n`).join('') + end)
 }

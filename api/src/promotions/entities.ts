@@ -58,4 +58,32 @@ export const PromotionFlowEntity = new EntitySchema<PromotionFlowRow>({
   },
 })
 
-export const promotionEntities = [PromotionSourceEntity, PromotionRegistrationEntity, PromotionFlowEntity]
+export interface PromotionAssetRow {
+  id: string
+  kind: 'thumbnail' | 'poster'
+  backend: string
+  path: string
+  width: number
+  height: number
+  size: number
+  uploadedBy: string | null
+  createdAt: Date
+}
+
+export const PromotionAssetEntity = new EntitySchema<PromotionAssetRow>({
+  name: 'PromotionAsset',
+  tableName: 'promotion_assets',
+  columns: {
+    id: { type: 'char', length: 36, primary: true },
+    kind: { type: 'enum', enum: ['thumbnail', 'poster'] },
+    backend: { type: 'varchar', length: 64 },
+    path: { type: 'varchar', length: 600 },
+    width: { type: Number },
+    height: { type: Number },
+    size: { type: Number },
+    uploadedBy: { type: 'char', length: 36, name: 'uploaded_by', nullable: true },
+    createdAt: { type: 'datetime', precision: 3, name: 'created_at', createDate: true },
+  },
+})
+
+export const promotionEntities = [PromotionSourceEntity, PromotionRegistrationEntity, PromotionFlowEntity, PromotionAssetEntity]

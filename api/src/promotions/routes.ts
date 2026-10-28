@@ -5,7 +5,7 @@ import { bearer } from '../identity/service.js'
 import { PromotionPoster } from './poster.js'
 
 export function registerPromotions(app: FastifyInstance, platform: PlatformService) {
-  const posters = new PromotionPoster()
+  const posters = new PromotionPoster(platform.promotions.creatives)
   app.register(async (scope) => {
     scope.addHook('onRequest', async (_request, reply) => {
       reply.header('Cache-Control', 'no-store').header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'no-referrer')
@@ -20,6 +20,9 @@ export function registerPromotions(app: FastifyInstance, platform: PlatformServi
       return { data: await platform.promotions.jsSdk(req.body) }
     })
     scope.get('/thumbnail.jpg', async (_req, reply) => reply.header('Cache-Control', 'public, max-age=3600').type('image/jpeg').send(await posters.thumbnail()))
+    scope.get('/defaults/poster.jpg', async (_req, reply) => reply.header('Cache-Control', 'public, max-age=3600').type('image/jpeg').send(await posters.defaultTemplate()))
+    scope.get('/defaults/thumbnail.jpg', async (_req, reply) => reply.header('Cache-Control', 'public, max-age=3600').type('image/jpeg').send(await posters.defaultThumbnail()))
+    scope.get<{ Params: { id: string } }>('/assets/:id.jpg', async (req, reply) => reply.header('Cache-Control', 'public, max-age=31536000, immutable').type('image/jpeg').send(await platform.promotions.creatives.bytes(req.params.id)))
     scope.get<{ Params: { token: string } }>('/:token/poster.png', async (req, reply) => {
       platform.identity.limit('promotion-poster:' + req.ip, 60, 60_000)
       const source = await platform.promotions.findToken(req.params.token)

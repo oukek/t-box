@@ -42,6 +42,7 @@ import { WechatCheckoutLinks } from '../payments/checkout-links.js'
 import { PaymentReconciliationService } from '../payments/reconciliation.js'
 import { PaymentRefundService } from '../payments/refunds.js'
 import { PaymentService } from '../payments/service.js'
+import { PromotionCreativeService } from '../promotions/creatives.js'
 import { PromotionService } from '../promotions/service.js'
 import { ImageTools } from '../resources/images.js'
 import { PrivateApplicationFiles } from '../resources/private-files.js'
@@ -140,7 +141,8 @@ export class PlatformService {
     // fixtures can construct the platform without an external identity provider.
     this.identity = new IdentityService(source, (db, userId) =>
       createLedgerRows(db, userId, { name: '我的账本', template: 'daily' }), wechatAccount ? 'wechat' : 'internal')
-    this.promotions = new PromotionService(source, wechatAccount)
+    this.resources = resources ?? new ResourceService(source)
+    this.promotions = new PromotionService(source, wechatAccount, new PromotionCreativeService(source, this.resources.storage))
     if (wechatAccount) {
       this.wechatLogin = new WechatLoginService(wechatAccount, this.identity, undefined, this.promotions)
     }
@@ -149,7 +151,6 @@ export class PlatformService {
     this.ledgers = new LedgerService(this.access)
     this.statistics = new StatisticsService(this.access)
     this.finance = new FinanceService(this.access, this.statistics)
-    this.resources = resources ?? new ResourceService(source)
     this.avatars = new AvatarService(this.identity, this.resources)
     this.conversations = new ConversationArchive(
       source,

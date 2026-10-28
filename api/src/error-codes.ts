@@ -5,6 +5,10 @@ import {
 } from '@t-box/errors'
 
 const apiErrors = defineApiErrors({
+  PROMOTION_CREATIVE_INVALID: { statusCode: 400, message: '分享配置无效，请检查文案、图片和二维码位置' },
+  PROMOTION_CREATIVE_STALE: { statusCode: 409, message: '分享素材已由其他管理员更新，请重新加载后编辑' },
+  PROMOTION_IMAGE_INVALID: { statusCode: 400, message: '请选择不超过 8 MB 的 JPG、PNG 或 WebP 静态图片；邀请海报至少 600 × 600 像素' },
+  PROMOTION_IMAGE_NOT_FOUND: { statusCode: 404, message: '宣传图片不存在，请重新上传' },
   PROMOTION_INVALID: { statusCode: 400, message: '推广配置无效，请检查渠道名称和说明' },
   PROMOTION_NOT_FOUND: { statusCode: 404, message: '推广链接不存在或已停用' },
   PROMOTION_STALE: { statusCode: 409, message: '推广渠道已更新，请刷新后重新编辑' },

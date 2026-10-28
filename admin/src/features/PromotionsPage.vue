@@ -7,6 +7,7 @@ import AdminDialog from '../components/AdminDialog.vue'
 import AdminIcon from '../components/AdminIcon.vue'
 import AdminInput from '../components/AdminInput.vue'
 import { apiBase, errorMessage, request, save } from '../core/api'
+import PromotionCreativeEditor from './PromotionCreativeEditor.vue'
 
 const channels = ref<PromotionChannel[]>([])
 const search = ref('')
@@ -21,9 +22,16 @@ const editing = ref(false)
 const selected = ref<PromotionChannel | null>(null)
 const preview = ref<PromotionChannel | null>(null)
 const imageError = ref(false)
+const creativeOpen = ref(false)
 const draft = reactive<PromotionChannelDraft>({ name: '', descriptionNote: '', enabled: true })
 let revision = 0
-const posterUrl = (channel: PromotionChannel) => apiBase + channel.posterPath
+const posterUrl = (channel: PromotionChannel, download = false) => {
+  const url = new URL(apiBase + channel.posterPath, location.href)
+  if (download) {
+    url.searchParams.set('download', '1')
+  }
+  return url.href
+}
 
 async function load() {
   const active = ++revision
@@ -106,7 +114,7 @@ onBeforeUnmount(() => revision++)
       <h1>推广渠道</h1>
       <p>为不同宣传途径生成专属链接和海报，追踪带来的新用户与支付。</p>
     </div>
-    <AdminButton class="primary" @click="edit()"><AdminIcon name="plus" :size="16" />创建渠道</AdminButton>
+    <div class="promotion-search"><AdminButton @click="creativeOpen = true">分享素材与文案</AdminButton><AdminButton class="primary" @click="edit()"><AdminIcon name="plus" :size="16" />创建渠道</AdminButton></div>
   </header>
   <p
     v-if="error"
@@ -232,11 +240,16 @@ onBeforeUnmount(() => revision++)
       <a
         v-if="preview && !imageError"
         class="admin-button primary"
-        :href="posterUrl(preview) + '?download=1'"
+        :href="posterUrl(preview, true)"
         download="t-ark-poster.png"
       >下载宣传图</a>
     </template>
   </AdminDialog>
+  <PromotionCreativeEditor
+    :open="creativeOpen"
+    @close="creativeOpen = false"
+    @saved="notice = '分享素材与文案已更新'; load()"
+  />
 </template>
 
 <style scoped>

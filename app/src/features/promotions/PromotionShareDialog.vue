@@ -8,7 +8,7 @@ const imageError = ref(false)
 const imageLoaded = ref(false)
 const attempt = ref(0)
 watch(() => identity.user?.id, accountChanged, { immediate: true })
-watch(() => promotionShare.info?.token, () => {
+watch(() => promotionShare.info?.posterPath, () => {
   imageError.value = false
   imageLoaded.value = false
 })
@@ -59,7 +59,7 @@ function retryImage() {
         >正在加载海报…</span>
         <img
           :key="attempt"
-          :src="promotionAssetUrl(promotionShare.info.posterPath) + '?v=' + attempt"
+          :src="promotionAssetUrl(promotionShare.info.posterPath, { attempt: String(attempt) })"
           alt="带个人专属二维码的 T方舟分享海报"
           width="1080"
           height="1920"
@@ -94,7 +94,7 @@ function retryImage() {
       <a
         v-if="promotionShare.info && imageLoaded"
         class="button button-primary"
-        :href="promotionAssetUrl(promotionShare.info.posterPath) + '?download=1'"
+        :href="promotionAssetUrl(promotionShare.info.posterPath, { download: '1' })"
         download="t-ark-poster.png"
       >下载海报</a>
     </template>

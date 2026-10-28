@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       application:
-        description: 选择需要更新的子应用（版本号自动读取 manifest.version）
+        description: 选择单个或全部子应用（各应用版本号自动读取 manifest.version）
         type: choice
         required: true
         options:
           # eslint-disable yaml/plain-scalar
           # BEGIN GENERATED APPLICATIONS
+          - '全部应用 (all)'
           - '宝宝日记 (baby-diary)'
           - '数学计算器 (calculator)'
           - '日历 (calendar)'
@@ -22,18 +23,41 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: application-release-${{ inputs.application }}
-  cancel-in-progress: false
-
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      applications: ${{ steps.selection.outputs.applications }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - name: Resolve selected applications
+        id: selection
+        env:
+          APPLICATION_SELECTION: ${{ inputs.application }}
+        run: node scripts/plan-application-release.mjs "$APPLICATION_SELECTION"
   application:
+    needs: plan
+    name: 发布 ${{ matrix.application }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        application: ${{ fromJSON(needs.plan.outputs.applications) }}
+    concurrency:
+      group: application-release-${{ matrix.application }}
+      cancel-in-progress: false
     env:
       DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
       OSS_REGION: ${{ vars.OSS_REGION }}
-      APPLICATION_SELECTION: ${{ inputs.application }}
+      APPLICATION_SELECTION: ${{ matrix.application }}
     steps:
       - uses: actions/checkout@v7
         with:

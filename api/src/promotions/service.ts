@@ -1,4 +1,4 @@
-import type { PromotionChannel, PromotionLink, PromotionMetrics } from '@t-box/shared'
+import type { PromotionChannel, PromotionCreativeSettings, PromotionLink, PromotionMetrics } from '@t-box/shared'
 import type { DataSource, EntityManager } from 'typeorm'
 import type { WechatAccountConfiguration } from '../identity/wechat-configuration.js'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -10,12 +10,9 @@ import { PaymentOrderEntity, PaymentRefundEntity } from '../db/records/payments-
 import { ErrorCode } from '../error-codes.js'
 import { WechatAccountEntity } from '../identity/wechat-entities.js'
 import { WechatJsSdk } from '../payments/wechat-js-sdk.js'
+import { PromotionCreativeService } from './creatives.js'
 import { PromotionFlowEntity, PromotionRegistrationEntity, PromotionSourceEntity } from './entities.js'
 
-export const promotionCopy = {
-  title: 'T方舟｜AI 助手 × 应用平台',
-  description: '随时与 AI 对话，按需安装应用。从一句话开始，探索持续扩展的更多可能。',
-}
 export const emptyPromotionMetrics = (): PromotionMetrics => ({
   registrations: 0,
   payingUsers: 0,
@@ -31,7 +28,7 @@ function currency(cents: bigint) {
 
 export class PromotionService {
   private readonly sdk = new WechatJsSdk()
-  constructor(readonly source: DataSource, private readonly account?: WechatAccountConfiguration) {}
+  constructor(readonly source: DataSource, private readonly account?: WechatAccountConfiguration, readonly creatives = new PromotionCreativeService(source)) {}
 
   private async frontendUrl() {
     const row = await this.source.getRepository(WechatAccountEntity).findOneBy({ id: 1 })
@@ -41,7 +38,8 @@ export class PromotionService {
     return row.frontendUrl
   }
 
-  async link(row: { id: string, token: string, name: string }): Promise<PromotionLink> {
+  async link(row: { id: string, token: string, name: string }, settings?: PromotionCreativeSettings): Promise<PromotionLink> {
+    const creative = settings ?? await this.creatives.read()
     const url = new URL('/', await this.frontendUrl())
     url.searchParams.set('ref', row.token)
     return {
@@ -49,9 +47,10 @@ export class PromotionService {
       token: row.token,
       name: row.name,
       shareUrl: url.href,
-      posterPath: '/promotions/' + row.token + '/poster.png',
-      thumbnailPath: '/promotions/thumbnail.jpg',
-      ...promotionCopy,
+      posterPath: '/promotions/' + row.token + '/poster.png?v=' + creative.revision,
+      thumbnailPath: '/promotions/thumbnail.jpg?v=' + creative.revision,
+      title: creative.title,
+      description: creative.description,
     }
   }
 
@@ -155,8 +154,9 @@ export class PromotionService {
       take: 50,
     })
     const metrics = await this.metrics(rows.map((row) => row.id))
+    const creative = await this.creatives.read()
     const items = await Promise.all(rows.map(async (row) => ({
-      ...await this.link(row),
+      ...await this.link(row, creative),
       ...metrics.get(row.id)!,
       descriptionNote: row.descriptionNote,
       enabled: row.enabled,

@@ -7,8 +7,9 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { deploymentEnvironment } from '../deploy/settings.mjs'
-import { applicationChoice, collectBuildFiles, discoverApplications, selectApplication, sha256, validVersion, workflowOptions } from './application-builds.mjs'
+import { allApplicationsChoice, applicationChoice, collectBuildFiles, discoverApplications, selectApplication, selectApplications, sha256, validVersion, workflowOptions } from './application-builds.mjs'
 import { packApplicationRelease } from './pack-application-release.mjs'
+import { planApplicationRelease } from './plan-application-release.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const ossModule = pathToFileURL(createRequire(new URL('../deploy/oss/package.json', import.meta.url)).resolve('ali-oss')).href
@@ -24,6 +25,14 @@ test('only apps with validated independent Web builds appear in the generated ch
   assert.equal(applicationChoice(ledger), '记账 (ledger)')
   assert.equal(selectApplication(applications, '记账 (ledger)'), ledger)
   assert.equal(selectApplication(applications, 'ledger'), ledger)
+  assert.deepEqual(selectApplications(applications, allApplicationsChoice), applications)
+  assert.deepEqual(selectApplications(applications, 'all'), applications)
+  assert.deepEqual(selectApplications(applications, 'ledger'), [ledger])
+  assert.throws(() => selectApplications([], 'all'))
+  assert.throws(() => selectApplications(applications, 'all; echo unsafe'))
+  assert.ok(workflow.includes('          - \'全部应用 (all)\''))
+  assert.ok(workflow.includes('fail-fast: false'))
+  assert.ok(workflow.includes(['application-release-', '$', '{{ matrix.application }}'].join('')))
   assert.throws(() => selectApplication(applications, '计算器 (ledger)'))
   assert.ok(!workflow.includes('inputs.version'))
   assert.ok(!workflow.includes('inputs.release_notes'))
@@ -31,6 +40,19 @@ test('only apps with validated independent Web builds appear in the generated ch
   assert.throws(() => workflowOptions(workflow, []))
   assert.ok(!/^\s+(?:push|pull_request|schedule):/m.test(workflow))
   assert.ok(workflow.includes('workflow_dispatch:'))
+})
+
+test('release planning emits a matrix of validated IDs for all or one application', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tbox-release-plan-'))
+  try {
+    const output = join(directory, 'output')
+    const expected = (await discoverApplications(root)).map((app) => app.appId)
+    assert.deepEqual(await planApplicationRelease(root, allApplicationsChoice, { GITHUB_OUTPUT: output }), expected)
+    assert.equal(await readFile(output, 'utf8'), 'applications=' + JSON.stringify(expected) + '\n')
+    assert.deepEqual(await planApplicationRelease(root, '记账 (ledger)', {}), ['ledger'])
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test('bundle digest is deterministic and symlinks/missing entrypoints are rejected', async () => {
