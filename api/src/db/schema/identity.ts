@@ -1,7 +1,10 @@
 import type { DatabaseSchema } from '@t-box/server-foundation/persistence/schema'
+import { userProfileExtension } from '../../identity/profile-entity.js'
+import { wechatIdentityExtension } from '../../identity/wechat-schema.js'
 
 export const identitySchema: DatabaseSchema = {
   id: 'identity',
+  extensions: [wechatIdentityExtension, userProfileExtension],
   tables: [
     `CREATE TABLE admin_sessions (
       token_hash char(64) NOT NULL,

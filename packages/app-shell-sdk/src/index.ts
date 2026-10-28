@@ -52,6 +52,7 @@ export interface ShellServices {
   releaseWallpaperPreviews(): void
   logout(): Promise<void>
   updateNickname(value: string): Promise<void>
+  updateAvatar(file: File | null): Promise<void>
   changePassword(currentPassword: string, newPassword: string): Promise<void>
   invalidateSession(): void
   refreshCatalog(): Promise<void>
@@ -142,6 +143,7 @@ export const uploadDesktopWallpaper = (file: File) =>
 export const releaseWallpaperPreviews = () => host().releaseWallpaperPreviews()
 export const logout = () => host().logout()
 export const updateNickname = (value: string) => host().updateNickname(value)
+export const updateAvatar = (file: File | null) => host().updateAvatar(file)
 export const changePassword = (currentPassword: string, newPassword: string) =>
   host().changePassword(currentPassword, newPassword)
 export const invalidateSession = () => host().invalidateSession()

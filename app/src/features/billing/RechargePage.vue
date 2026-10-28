@@ -7,7 +7,7 @@ import type {
 import { WechatPay } from '@t-box/capacitor-wechat-pay'
 import { AppIcon } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { openWallet } from '../../core/navigation'
 import { request, RequestError } from '../../core/network'
 import CheckoutDialog from './CheckoutDialog.vue'
@@ -32,6 +32,11 @@ const pendingOrder = ref<PaymentOrder | null>(null)
 const attempted = ref<{ packageId: string, version: number } | null>(null)
 const checkout = useWechatCheckout(async () => {
   pendingOrder.value = checkout.order.value
+})
+watch(checkout.order, (order) => {
+  if (order && pendingOrder.value?.id === order.id) {
+    pendingOrder.value = order
+  }
 })
 const product = computed(() =>
   products.value.find((p) => p.id === selected.value),
@@ -291,10 +296,13 @@ onBeforeUnmount(() => controller?.abort())
       :open="checkout.open.value"
       :order="checkout.order.value"
       :qr="checkout.qr.value"
+      :stage="checkout.stage.value"
+      :cancelling="checkout.cancelling.value"
       :notice="checkout.notice.value"
       :error="checkout.error.value"
       :unavailable="!!unavailable"
       @close="checkout.close"
+      @cancel-order="checkout.cancelOrder"
     />
   </section>
 </template>

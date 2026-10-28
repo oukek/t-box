@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { identity, logout, openProfile, updateNickname } from '@t-box/app-shell-sdk'
-import { AppIcon, Modal } from '@t-box/ui-kit'
+import { identity, logout, openProfile, updateAvatar, updateNickname } from '@t-box/app-shell-sdk'
+import { AppIcon, Modal, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, ref } from 'vue'
-import AccountDialog from './AccountDialog.vue'
 import AccountSecurityPanel from './AccountSecurityPanel.vue'
 
-const passwordOpen = ref(false)
 const logoutOpen = ref(false)
 const signingOut = ref(false)
 const nicknameOpen = ref(false)
@@ -14,6 +12,37 @@ const nickname = ref('')
 const nicknameError = ref('')
 const nicknameBusy = ref(false)
 const nicknameInput = ref<HTMLInputElement>()
+const avatarInput = ref<HTMLInputElement>()
+const avatarBusy = ref(false)
+const avatarError = ref('')
+async function changeAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || avatarBusy.value) {
+    return
+  }
+  avatarBusy.value = true
+  avatarError.value = ''
+  try {
+    await updateAvatar(file)
+  } catch (cause) {
+    avatarError.value = cause instanceof Error ? cause.message : '头像上传失败'
+  } finally {
+    input.value = ''
+    avatarBusy.value = false
+  }
+}
+async function resetAvatar() {
+  avatarBusy.value = true
+  avatarError.value = ''
+  try {
+    await updateAvatar(null)
+  } catch (cause) {
+    avatarError.value = cause instanceof Error ? cause.message : '头像恢复失败'
+  } finally {
+    avatarBusy.value = false
+  }
+}
 const registeredAt = computed(() => {
   const value = identity.user?.createdAt
   if (!value) {
@@ -79,6 +108,28 @@ async function signOut() {
       <h2>账号信息</h2>
       <dl class="account-details">
         <div>
+          <dt>头像</dt>
+          <dd class="account-avatar-actions"><button
+            class="account-avatar-edit"
+            :disabled="avatarBusy"
+            aria-label="修改头像"
+            @click="avatarInput?.click()"
+          ><UserAvatar :src="identity.user?.avatarUrl" :size="48" /><span>{{ avatarBusy ? '正在上传…' : '修改头像' }}</span></button><button
+            v-if="identity.user?.avatarUrl"
+            class="text-button"
+            :disabled="avatarBusy"
+            @click="resetAvatar"
+          >恢复默认</button><input
+            ref="avatarInput"
+            class="sr-only"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            :disabled="avatarBusy"
+            aria-label="选择头像图片"
+            @change="changeAvatar"
+          ></dd>
+        </div>
+        <div>
           <dt>昵称</dt>
           <dd>
             <button
@@ -91,21 +142,23 @@ async function signOut() {
           </dd>
         </div>
         <div>
-          <dt>账号</dt>
-          <dd>{{ identity.user?.username }}</dd>
+          <dt>登录方式</dt>
+          <dd>微信授权登录</dd>
         </div>
         <div>
           <dt>注册时间</dt>
           <dd>{{ registeredAt }}</dd>
         </div>
       </dl>
+      <p
+        v-if="avatarError"
+        class="form-error"
+        role="alert"
+      >{{ avatarError }}</p>
     </div>
     <div class="settings-group">
       <h2>安全</h2>
       <div class="profile-menu">
-        <button class="profile-action" @click="passwordOpen = true">
-          <span class="profile-action-icon"><AppIcon name="lock" :size="19" /></span><span>修改登录密码</span><AppIcon name="right" :size="17" />
-        </button>
         <AccountSecurityPanel />
       </div>
     </div>
@@ -155,7 +208,7 @@ async function signOut() {
         </button>
       </footer>
     </Modal>
-    <AccountDialog :open="passwordOpen" @close="passwordOpen = false" /><Modal
+    <Modal
       :open="logoutOpen"
       title="退出登录？"
       :busy="signingOut"

@@ -44,21 +44,16 @@ async function call(
 try {
   const users = []
   for (let i = 0; i < 2; i++) {
-    const u = await call(
-      'POST',
-      '/api/v1/auth/register',
-      '',
-      {
-        username: `test_temporal_${randomUUID().replaceAll('-', '')}`,
-        password: 'test123',
-        nickname: '临时验证',
-      },
-      201,
-    )
+    const u = await p.identity.register({
+      username: `test_temporal_${randomUUID().replaceAll('-', '')}`,
+      password: 'test123',
+      nickname: '临时验证',
+    }, 'fixture')
     ids.push(u.user.id)
     users.push(u)
   }
   const [a, b] = users
+  assert.ok(a && b)
   const key = randomUUID()
   const input = {
     title: '每周复盘',

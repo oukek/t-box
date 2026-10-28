@@ -62,6 +62,13 @@ export function registerAdmin(
           reply.header('Set-Cookie', cookie('', 0)).code(204).send()
         })
         if (platform) {
+          if (platform.wechatLogin) {
+            secure.get('/auth/wechat', async () => ({ data: await platform.wechatLogin!.configuration.view() }))
+            secure.patch('/auth/wechat', async (request) => {
+              const actor = await auth.authenticate(sessionToken(request))
+              return { data: await platform.wechatLogin!.configuration.save(request.body, actor.id) }
+            })
+          }
           secure.get('/operations', async () => ({
             data: await platform.operations.overview(),
           }))

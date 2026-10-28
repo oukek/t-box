@@ -1,12 +1,14 @@
-import type { WechatRuntime } from '../src/payments/configuration.js'
+import type { PaymentOrder } from '@t-box/shared'
+import type { PaymentConfiguration, WechatRuntime } from '../src/payments/configuration.js'
 import assert from 'node:assert/strict'
-import { createCipheriv, generateKeyPairSync, sign } from 'node:crypto'
+import { createCipheriv, generateKeyPairSync, randomUUID, sign } from 'node:crypto'
 import { test } from 'node:test'
 import {
   decryptWechat,
   localOrder,
   merchantOrder,
   verifyWechat,
+  WechatGateway,
 } from '../src/payments/wechat.js'
 
 const pair = generateKeyPairSync('rsa', { modulusLength: 2048 })
@@ -17,6 +19,29 @@ const config = {
     .export({ type: 'spki', format: 'pem' })
     .toString(),
 } as WechatRuntime
+
+test('confirmed checkout links sign JSAPI with the scanning payer OpenID and never fall back to beneficiary OAuth', async () => {
+  const c = { ...config, id: randomUUID(), enabled: true, jsapi: true, appId: 'wx_fixture_app', merchantId: '1234567890', merchantSerial: 'A'.repeat(40), privateKey: pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(), apiBaseUrl: 'https://api.tboxos.cn' } as WechatRuntime
+  const configuration = { runtime: async () => c, credentials: async () => c } as unknown as PaymentConfiguration
+  let requests = 0
+  const gateway = new WechatGateway(configuration, async (_url, init) => {
+    requests++
+    assert.equal(JSON.parse(String(init?.body)).payer.openid, 'openid_scanning_phone')
+    const raw = Buffer.from(JSON.stringify({ prepay_id: 'wx_fixture_prepay' }))
+    return new Response(raw, { headers: { ...headers(raw), 'Content-Type': 'application/json' } })
+  })
+  let available = true
+  Object.assign(gateway.authorization, { openid: async (userId: string) => {
+    assert.equal(userId, 'phone-user')
+    return available ? 'openid_scanning_phone' : null
+  } })
+  const order = { id: randomUUID(), packageName: '资源包', expiresAt: new Date(Date.now() + 600_000).toISOString() } as PaymentOrder
+  const intent = await gateway.create(order, 1000, { configurationId: c.id, mode: 'jsapi', userId: 'desktop-recipient', payerUserId: 'phone-user' })
+  assert.equal(intent.type, 'jsapi')
+  available = false
+  await assert.rejects(gateway.create(order, 1000, { configurationId: c.id, mode: 'jsapi', userId: 'desktop-recipient', payerUserId: 'phone-user' }), { code: 'OAUTH_UNAVAILABLE' })
+  assert.equal(requests, 1)
+})
 function headers(raw: Buffer, timestamp = Math.floor(now / 1000).toString()) {
   const nonce = 'fixture_nonce'
   return {

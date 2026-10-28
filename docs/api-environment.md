@@ -21,7 +21,7 @@ API 先读取进程环境，再读取 `api/.env`；进程环境优先。PM2 的 
 | `HOST` | `127.0.0.1` | 修改 API 监听地址时 |
 | `PORT` | `6868` | 修改 API 端口时，同时调整 Nginx |
 | `NODE_ENV` | 本地未设置；PM2 / Compose 注入 `production` | 手动启动生产 API 时必须设为 `production` |
-| `CORS_ORIGINS` | `*`，普通 HTTP 与三个 WebSocket 入口来源均放开 | 如需限制来源，填写完整来源并用逗号分隔 |
+| `CORS_ORIGINS` | `*`，普通 HTTP 与 WebSocket 入口来源均放开 | 如需限制来源，填写完整来源并用逗号分隔；微信二维码连接需包含 `https://tboxos.cn` |
 | `ADMIN_ORIGINS` | PM2 发布包的 `adminOrigin`；无元信息的生产环境默认空列表；本地开发默认 `*` | Docker / 源码部署填写完整后台 HTTPS 来源；生产不允许 `*` |
 | `TRUSTED_PROXIES` | `127.0.0.1,::1` | Nginx 未从回环地址连接时，填写实际 IP / CIDR；留空禁用代理头信任 |
 | `TASK_WORKER_MODE` | 本地 `embedded`；PM2 自动注入 `external` 并运行独立 worker | 手动拆分 worker 或恢复演练时 |

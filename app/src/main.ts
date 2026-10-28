@@ -9,6 +9,7 @@ import './features/chat/history.css'
 import './features/chat/composer.css'
 import './features/applications/applications.css'
 import './features/resources/resources.css'
+import './workspace.css'
 
 // Universal Link fallback when the native app is not installed.
 const openPath = /^\/open\/([a-z][a-z0-9_-]{0,63})\/?$/.exec(location.pathname)

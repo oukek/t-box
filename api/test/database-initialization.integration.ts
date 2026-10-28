@@ -55,9 +55,12 @@ try {
   assert.equal(result.baseline, DATABASE_BASELINE)
   const expected = [
     ...schemaTables(databaseSchemas).keys(),
+    ...databaseSchemas.flatMap((schema) => (schema.extensions ?? []).flatMap((extension) => extension.tables.map((sql) => /^CREATE TABLE ([a-z_]+) \(/.exec(sql)![1]!))),
+    'schema_extensions',
     'schema_initialization',
   ].sort()
-  assert.equal(result.tables, expected.length - 1)
+  assert.equal(result.tables, schemaTables(databaseSchemas).size)
+  assert.equal(result.upgraded, databaseSchemas.flatMap((schema) => schema.extensions ?? []).length)
   assert.deepEqual(
     (await fresh.query('SHOW TABLES'))
       .map((row: Record<string, string>) => Object.values(row)[0])
@@ -110,6 +113,7 @@ try {
   )
   const repeated = await initializeDatabase(fresh, databaseSchemas)
   assert.equal(repeated.initialized, false)
+  assert.equal(repeated.upgraded, 0)
   assert.equal(
     await scalar(
       fresh,

@@ -69,17 +69,11 @@ async function call(
 try {
   const actors: any[] = []
   for (let i = 0; i < 3; i++) {
-    const a = await call(
-      'POST',
-      '/api/v1/auth/register',
-      '',
-      {
-        username: `test_${randomUUID().replaceAll('-', '')}`,
-        password: 'test123',
-        nickname: `功能测试${i}`,
-      },
-      201,
-    )
+    const a = await p.identity.register({
+      username: `test_${randomUUID().replaceAll('-', '')}`,
+      password: 'test123',
+      nickname: `功能测试${i}`,
+    }, 'fixture')
     actors.push(a)
     users.push(a.user.id)
     books.push(

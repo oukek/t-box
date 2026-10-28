@@ -153,17 +153,19 @@ cat /www/wwwroot/tbox/shared/secrets/bootstrap-admin.txt
 
 ## 6. 微信配置
 
-网站可以先上线；需要充值支付时，继续完成下面配置。**微信凭据在项目后台填写，不是服务器环境变量，也不是 GitHub Secrets。**
+普通用户现只使用微信登录，上线后需先完成公众号登录配置；只做登录可以暂不开通支付。详见 [微信登录与网页支付配置](wechat-login.md)。**微信凭据在项目后台填写，不是服务器环境变量，也不是 GitHub Secrets。**
 
 ### 先在微信平台准备
 
-1. 微信公众平台：准备具备对应网页授权 / 支付权限的服务号，取得 **AppID、AppSecret**。
-2. 微信支付商户平台：将商户号关联到该 AppID，按需开通 Native（PC 扫码）、H5（手机浏览器）、JSAPI（微信内）支付，准备下表中的证书和密钥。
+1. 微信公众平台：准备具备网页授权权限的已认证服务号，取得 **AppID、AppSecret**。在项目后台「微信登录」填写同一 AppID、AppSecret、网站根地址 `https://tboxos.cn` 并启用。
+2. 微信支付商户平台：将商户号关联到该 AppID，开通 JSAPI（微信内及电脑扫码网页）支付，按需开通 H5（微信外手机浏览器）；这套电脑扫码流程不需要 Native，准备下表中的证书和密钥。
 3. 配置域名：
 
 | 配置位置 | 填写示例 |
 | --- | --- |
-| 公众平台：网页授权域名，启用 JSAPI 时配置 | `api.tboxos.cn`，回调在 API 域名 |
+| 公众平台：网页授权域名 | `tboxos.cn`，登录回调在主前端 |
+| 公众平台：JS 接口安全域名 | `tboxos.cn` |
+| 公众平台：接口 IP 白名单 | API 服务器实际公网出口 IP |
 | 商户平台：H5 支付域名，启用 H5 时配置 | `tboxos.cn`，不带协议 |
 | 商户平台：JSAPI 支付授权目录，启用 JSAPI 时配置 | `https://tboxos.cn/`，带末尾 `/` |
 
@@ -178,7 +180,7 @@ H5 域名可能需要审核，先完成对应产品开通和域名配置，再�
 | 后台字段 | 填什么 |
 | --- | --- |
 | 服务号 AppID | 微信公众平台的 AppID，网页支付必填 |
-| 服务号 AppSecret | 同一服务号的 AppSecret，JSAPI 必填 |
+| 服务号 AppSecret | 自动复用「微信登录」中同 AppID 的 AppSecret，无需重复填写 |
 | 商户号 | 微信支付商户号 |
 | 商户 API 证书序列号 | 商户 API 证书对应序列号 |
 | 商户 API 私钥 PEM | 与该商户 API 证书配套的私钥 |
@@ -195,14 +197,14 @@ H5 域名可能需要审核，先完成对应产品开通和域名配置，再�
 ```text
 支付通知：https://api.tboxos.cn/api/v1/payments/webhooks/wechat
 退款通知：https://api.tboxos.cn/api/v1/payments/webhooks/wechat/refunds
-网页授权回调：https://api.tboxos.cn/api/v1/payments/wechat/oauth/callback
+登录授权回调：https://tboxos.cn/
 ```
 
 私钥、API v3 密钥和 AppSecret 加密入库，不上传到 OSS；已有密钥留空会保留。最后用真实设备和一笔小额订单核对付款、到账及订单状态，详见 [计费与支付](billing-and-payments.md)。
 
 **仅发布网页可以跳过原生配置。** 发布 Android / iOS 时，另在微信开放平台创建移动应用，绑定真实包名 / Bundle ID、Android 发布签名和 iOS Universal Link。填写 `capacitor/wechat.config.json`：`enabled=true`、移动应用 `appId`、`universalLink=https://tboxos.cn/wechat/` 和 Apple Team ID `iosTeamId`；当前启用校验要求四项齐全，Universal Link 必须使用生成的主站域名。在后台填写移动应用 AppID 并启用已开通的 APP 支付，然后重新发布主站生成 AASA 文件，执行 `pnpm native:sync` 并重新签名打包。移动应用 AppID 与服务号 AppID 分开使用；当前 iOS 原生 AI 余额充值禁用，详见 [原生微信配置](wechat-native-payments.md)。
 
-**服务号消息发送尚未接入。** 当前 AppSecret 仅用于支付网页授权；消息 Token、EncodingAESKey、模板 ID、消息接收 URL 没有可用配置入口。不要添加虚构的 `WECHAT_*` 环境变量，也不要把支付通知地址填成公众号“服务器配置”。要发服务号消息，需要另外实现消息通道。
+**服务号消息发送尚未接入。** 当前 AppSecret 用于微信登录、资料授权及支付 JS-SDK；消息 Token、EncodingAESKey、模板 ID、消息接收 URL 没有可用配置入口。不要添加虚构的 `WECHAT_*` 环境变量，也不要把支付通知地址填成公众号“服务器配置”。要发服务号消息，需要另外实现消息通道。
 
 ## 发布子应用
 

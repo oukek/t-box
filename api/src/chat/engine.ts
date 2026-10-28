@@ -111,7 +111,84 @@ export class ChatService {
     let closed = false
     let ready = false
     let opening = false
+    let refreshing: Promise<void> | undefined
     let principal: Actor | undefined
+    let unsubscribe: (() => void) | undefined
+    let subscribedId = ''
+    let syncTimer: ReturnType<typeof setTimeout> | undefined
+    const refreshSession = async () => {
+      if (closed || !ready || !principal || !session?.conversationId || session.active || session.finishing || !this.options.host?.conversations) {
+        return refreshing
+      }
+      const current = session
+      const actor = principal
+      const conversationId = current.conversationId!
+      current.finishing = true
+      const refresh = (async () => {
+        try {
+          await this.options.host!.identity.authenticateHash(actor.sessionHash)
+          current.task = await this.options.host!.tasks?.current(actor, conversationId) ?? null
+          try {
+            await this.options.host!.conversations!.restore(actor, conversationId, current, false, current.task?.status === 'running')
+          } catch (error) {
+            if (!(error instanceof ApiError) || error.code !== 'CONVERSATION_NOT_FOUND') {
+              throw error
+            }
+            // Deletion on another device clears the subscriber, never resurrects an archive.
+            current.messages = []
+            current.history = []
+            current.requests.clear()
+            current.calls.clear()
+            current.conversationId = undefined
+            current.archiveRevision = undefined
+            current.archived = false
+            current.title = undefined
+            current.branch = undefined
+            current.scopeBindings = []
+            current.contextState = {}
+            current.messageCommands = {}
+            current.answerRetryEvidence = {}
+            current.task = null
+            unsubscribe?.()
+            unsubscribe = undefined
+            subscribedId = ''
+          }
+          if (!closed && current.owner === owner) {
+            send({ type: 'session.snapshot', snapshot: await authorizedSnapshot(this.options, current, this.options.provider.mode, actor) })
+          }
+        } finally {
+          current.finishing = false
+        }
+      })()
+      refreshing = refresh
+      try {
+        await refresh
+      } finally {
+        if (refreshing === refresh) {
+          refreshing = undefined
+        }
+      }
+    }
+    const subscribeToConversation = () => {
+      if (!ready || !principal || !session?.conversationId || subscribedId === session.conversationId) {
+        return
+      }
+      unsubscribe?.()
+      subscribedId = session.conversationId
+      unsubscribe = this.options.host?.conversations?.subscribe?.(principal.user.id, session.conversationId, () => {
+        if (syncTimer || closed) {
+          return
+        }
+        syncTimer = setTimeout(() => {
+          syncTimer = undefined
+          void refreshSession().catch((error) => {
+            if (!closed) {
+              send({ type: 'error', code: error instanceof ApiError ? error.code : 'SESSION_REFRESH_FAILED', message: error instanceof ApiError ? error.message : '会话同步暂时不可用，请重新连接' })
+            }
+          })
+        }, 100)
+      })
+    }
     const receive = async (input: unknown) => {
       if (closed) {
         return
@@ -129,36 +206,8 @@ export class ChatService {
           if (session) {
             this.sessions.touch(session)
           }
-          if (
-            principal &&
-            session?.conversationId &&
-            session.task &&
-            !session.active &&
-            this.options.host?.tasks
-          ) {
-            // Another process may own this task. Refresh its durable timeline,
-            // never overwrite it with the subscriber's stale in-memory messages.
-            session.task = await this.options.host.tasks.current(
-              principal,
-              session.conversationId,
-            )
-            await this.options.host.conversations?.restore(
-              principal,
-              session.conversationId,
-              session,
-              false,
-              session.task?.status === 'running',
-            )
-            send({
-              type: 'session.snapshot',
-              snapshot: await authorizedSnapshot(
-                this.options,
-                session,
-                this.options.provider.mode,
-                principal,
-              ),
-            })
-          }
+          subscribeToConversation()
+          await refreshSession()
           send({ type: 'pong' })
           return
         }
@@ -215,7 +264,8 @@ export class ChatService {
                 ? [...this.sessions.all()].find(
                     (s) =>
                       s.conversationId === conversationId &&
-                      s.userId === principal!.user.id,
+                      s.userId === principal!.user.id &&
+                      !s.owner,
                   )
                 : undefined
             let candidate: ChatSession
@@ -242,7 +292,8 @@ export class ChatService {
                 restored = Boolean(conversationId)
               }
             } else {
-              candidate = live ?? this.sessions.create()
+              // An open socket on another device must not own this device's history view.
+              candidate = this.sessions.create()
             }
             if (candidate.owner) {
               throw ErrorCode.SESSION_IN_USE()
@@ -366,6 +417,7 @@ export class ChatService {
             session.owner = owner
             session.clientCapabilities = capabilities as string[] | undefined
             session.send = (event) => {
+              subscribeToConversation()
               if (!closed && ready && session?.owner === owner) {
                 send(event)
               }
@@ -398,6 +450,7 @@ export class ChatService {
               return
             }
             ready = true
+            subscribeToConversation()
             send({
               type: 'session.ready',
               token: session.token,
@@ -419,7 +472,11 @@ export class ChatService {
             opening = false
           }
         }
-        if (!ready || !session || session.owner !== owner) {
+        // A heartbeat must not race a user command or produce a transient busy error.
+        if (refreshing) {
+          await refreshing
+        }
+        if (closed || !ready || !session || session.owner !== owner) {
           throw ErrorCode.SESSION_REQUIRED()
         }
         let current = session!
@@ -839,6 +896,8 @@ export class ChatService {
       receive,
       close() {
         closed = true
+        clearTimeout(syncTimer)
+        unsubscribe?.()
         if (session?.owner === owner) {
           session.owner = undefined
           session.send = undefined

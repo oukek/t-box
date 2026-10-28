@@ -20,11 +20,13 @@ async function call(method: any, url: string, token = '', payload?: unknown, exp
 try {
   const sessions = []
   for (let index = 0; index < 2; index++) {
-    const session = await call('POST', '/api/v1/auth/register', '', { username: `test_wallpaper_${randomUUID().replaceAll('-', '')}`, password: 'test123', nickname: '壁纸测试' }, 201)
+    const session = await platform.identity.register({ username: `test_wallpaper_${randomUUID().replaceAll('-', '')}`, password: 'test123', nickname: '壁纸测试' }, 'fixture')
     users.push(session.user.id)
     sessions.push(session)
   }
   const [a, b] = sessions
+  assert.ok(a && b)
+  const token = a.token
   const endpoint = '/api/v1/desktop/appearance'
   await call('GET', endpoint, '', undefined, 401)
   await call('PUT', endpoint, '', { revision: 0, wallpapers: defaultDesktopWallpapers() }, 401)
@@ -42,7 +44,7 @@ try {
   }
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF7sAAAAASUVORK5CYII=', 'base64')
   async function upload(name: string, bytes: Buffer) {
-    const reply = await app.inject({ method: 'POST', url: '/api/v1/resources', headers: { 'authorization': `Bearer ${a.token}`, 'content-type': 'application/octet-stream', 'x-file-name': name }, payload: bytes })
+    const reply = await app.inject({ method: 'POST', url: '/api/v1/resources', headers: { 'authorization': `Bearer ${token}`, 'content-type': 'application/octet-stream', 'x-file-name': name }, payload: bytes })
     assert.equal(reply.statusCode, 201, reply.body)
     return reply.json().data
   }

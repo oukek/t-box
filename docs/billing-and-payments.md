@@ -36,7 +36,7 @@ iOS 原生端仍可查看额度、资源包和记录，购买按钮保持禁用�
 
 ## 微信支付与退款
 
-支付页面保留 PC Native 扫码、微信外移动浏览器 H5、微信内 JSAPI 和 Android 原生 APP 模式。API v3 独立适配器负责请求签名、响应/回调验签和 AES-256-GCM 解密。公众号 OAuth state 绑定用户、订单、商户配置，十分钟有效且单次使用；openid 加密保存，不交给 AI。
+电脑端扫码打开本站微信网页，通过登录身份核对账号后使用 JSAPI；异号代付必须先确认受益用户。微信外移动浏览器 H5、微信内 JSAPI 和 Android 原生 APP 模式保留；Native 原生扫码接口仍由独立开关控制。电脑端不调用 `chooseWXPay`。API v3 独立适配器负责请求签名、响应/回调验签和 AES-256-GCM 解密。微信登录取得的同 AppID OpenID 加密保存并直接复用为 JSAPI 付款人，不交给 AI。微信内使用官方 JS-SDK `wx.config` / `chooseWXPay`，页面签名由服务端生成。
 
 下单只提交 `packageId`、`version` 和 Idempotency-Key。服务端核对当前上架版本并冻结商品快照，金额由服务端计算；同一幂等键不得更换商品或版本。订单三十分钟有效，同一账户最多十个有效待支付订单，首次下单锁定支付模式。
 
@@ -46,11 +46,11 @@ iOS 原生端仍可查看额度、资源包和记录，购买按钮保持禁用�
 
 ## 配置与部署
 
-在「支付订单 → 微信支付配置」填写服务号 AppID、商户号、API 证书序列号、商户私钥 PEM、32 字节 API v3 密钥、支付公钥 ID/PEM 或平台证书、公众号授权信息、网站与回调 URL。密钥加密入库，主密钥 `api/.secrets/provider.key` 必须与数据库一起备份，部署不能重新生成。
+先在「微信登录」配置服务号 AppID、AppSecret 和前端根地址；支付复用同服务号的 AppSecret。详细步骤见 [微信登录与网页支付](wechat-login.md)。再在「支付订单 → 微信支付配置」填写服务号 AppID、商户号、API 证书序列号、商户私钥 PEM、32 字节 API v3 密钥、支付公钥 ID/PEM 或平台证书、公众号授权信息、网站与回调 URL。密钥加密入库，主密钥 `api/.secrets/provider.key` 必须与数据库一起备份，部署不能重新生成。
 
 微信支付通知为 `/api/v1/payments/webhooks/wechat`，退款通知为 `/api/v1/payments/webhooks/wechat/refunds`。服务器需可公网 HTTPS 访问，配置公众号授权域名、JSAPI 支付目录、H5 域名、APP 应用身份及相应产品权限。代理应正确传递客户端 IP；只信任已配置的代理地址。宝塔/Nginx 应放行 REST 与 WebSocket 转发，支付通知保持原始请求体，不得由网关改写后再验签。
 
-使用数据库基线 `2026-10-23.2`。PM2/Docker 仍通过 `node dist/init-db.js --check` 预检，空库执行 `node dist/init-db.js` 初始化。旧开发库不会自动转换、覆盖或删除，请配置新数据库后初始化。发布工作流保持手动触发，不需要增加新密钥或构建依赖。
+使用数据库基线 `2026-10-23.2`。PM2/Docker 仍通过 `node dist/init-db.js --check` 预检，执行 `node dist/init-db.js` 初始化空库或应用已识别基线的新增扩展。旧开发库不会自动转换、覆盖或删除，请配置新数据库后初始化。发布工作流保持手动触发，不需要增加新密钥或构建依赖。
 
 ## 主要接口
 

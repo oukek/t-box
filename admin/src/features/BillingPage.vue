@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { BillingMode, BillingUser, UsageRecord } from '@t-box/shared'
+import { UserAvatar } from '@t-box/ui-kit'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
@@ -186,7 +187,7 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
         <tbody>
           <tr v-for="u in filtered" :key="u.id">
             <td>
-              <strong>{{ u.nickname }}</strong><span class="cell-secondary">@{{ u.username }}</span>
+              <div class="billing-user-identity"><UserAvatar :src="u.avatarUrl" :size="38" /><div><strong>{{ u.nickname || '方舟' }}</strong><span class="cell-secondary">@{{ u.username }}</span></div></div>
             </td>
             <td>
               {{ u.balance
@@ -365,3 +366,15 @@ function startReview(record: UsageRecord, action: 'release' | 'settle') {
     </template>
   </AdminDialog>
 </template>
+
+<style scoped>
+.billing-user-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 190px;
+}
+.billing-user-identity strong {
+  display: block;
+}
+</style>

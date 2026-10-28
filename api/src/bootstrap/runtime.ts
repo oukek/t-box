@@ -8,6 +8,7 @@ import { createApp } from '../app.js'
 import { getConfig } from '../config.js'
 import { ConfigurationCache } from '../configuration/cache.js'
 import { createDatabase } from '../database.js'
+import { WechatAccountConfiguration } from '../identity/wechat-configuration.js'
 import { MemoryCache } from '../memory/cache.js'
 import { PaymentConfiguration } from '../payments/configuration.js'
 import { WechatGateway } from '../payments/wechat.js'
@@ -17,6 +18,7 @@ export async function createRuntime(worker: boolean) {
   const config = getConfig()
   const database = await createDatabase(config)
   const vault = createVault(loadEncryptionKey())
+  const wechatAccount = new WechatAccountConfiguration(database.source, vault)
   const configurationCache = new ConfigurationCache(
     database.redis,
     `t-box:${config.mysql.database}`,
@@ -25,6 +27,7 @@ export async function createRuntime(worker: boolean) {
     database.source,
     vault,
     configurationCache,
+    wechatAccount,
   )
   const gateway = new WechatGateway(paymentConfiguration)
   const administration = new ConfigurationService(
@@ -40,6 +43,7 @@ export async function createRuntime(worker: boolean) {
     gateway.authorization,
     undefined,
     new MemoryCache(database.redis, `t-box:${config.mysql.database}`),
+    wechatAccount,
   )
   const app = createApp({
     taskWorker: worker,

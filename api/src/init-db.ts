@@ -42,7 +42,7 @@ async function main() {
         ? `Database initialization preflight passed: baseline ${result.baseline}. No data changed.`
         : result.initialized
           ? `Database initialized: ${result.tables} tables, baseline ${result.baseline}.`
-          : `Database already initialized: baseline ${result.baseline}. No data or configuration changed.`,
+          : `Database ready: baseline ${result.baseline}, ${result.upgraded ?? 0} extensions applied.`,
     )
   } finally {
     await source.destroy()

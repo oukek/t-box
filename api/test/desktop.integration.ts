@@ -35,21 +35,16 @@ async function call(
 try {
   const sessions = []
   for (let index = 0; index < 2; index++) {
-    const session = await call(
-      'POST',
-      '/api/v1/auth/register',
-      '',
-      {
-        username: `test_desktop_${randomUUID().replaceAll('-', '')}`,
-        password: 'test123',
-        nickname: '桌面测试',
-      },
-      201,
-    )
+    const session = await platform.identity.register({
+      username: `test_desktop_${randomUUID().replaceAll('-', '')}`,
+      password: 'test123',
+      nickname: '桌面测试',
+    }, 'fixture')
     ids.push(session.user.id)
     sessions.push(session)
   }
   const [a, b] = sessions
+  assert.ok(a && b)
   await call('GET', '/api/v1/desktop/mobile', '', undefined, 401)
   await call('GET', '/api/v1/desktop/invalid', a.token, undefined, 400)
   const initial: DesktopSnapshot = await call(

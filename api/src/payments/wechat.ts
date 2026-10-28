@@ -21,6 +21,7 @@ import {
 import { ErrorCode } from '../error-codes.js'
 import { parseStatementCSV } from './statement.js'
 import { WechatAuthorization } from './wechat-authorization.js'
+import { WechatJsSdk } from './wechat-js-sdk.js'
 import {
   decryptWechat,
   wechatFailure as fail,
@@ -81,11 +82,21 @@ function payment(
 export class WechatGateway implements PaymentGateway {
   readonly channel = 'wechat'
   readonly authorization: WechatAuthorization
+  private readonly jsSdk: WechatJsSdk
   constructor(
     readonly configuration: PaymentConfiguration,
     private transport: typeof fetch = fetch,
   ) {
     this.authorization = new WechatAuthorization(configuration, transport)
+    this.jsSdk = new WechatJsSdk(transport)
+  }
+
+  async jsapiConfiguration(url: unknown, context: PaymentContext) {
+    const bound = await this.configuration.runtime(context.configurationId)
+    if (!bound) {
+      throw ErrorCode.OAUTH_UNAVAILABLE()
+    }
+    return this.jsSdk.configuration(await this.configuration.credentials(bound), url)
   }
 
   async capabilities(): Promise<PaymentCapabilities> {
@@ -333,8 +344,11 @@ export class WechatGateway implements PaymentGateway {
       if (!context?.userId) {
         throw fail()
       }
-      const openid = await this.authorization.openid(context.userId, c.appId)
+      const openid = await this.authorization.openid(context.payerUserId || context.userId, c.appId)
       if (!openid) {
+        if (context.payerUserId) {
+          throw ErrorCode.OAUTH_UNAVAILABLE('请使用本站微信登录账号完成支付授权')
+        }
         return {
           type: 'redirect',
           url: await this.authorization.start(context.userId, order.id, c),

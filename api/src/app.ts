@@ -44,6 +44,7 @@ import { MemoryWorker } from './memory/worker.js'
 import { registerApplicationCatalog } from './platform/application-catalog.js'
 import { registerPlatform } from './platform/routes.js'
 import { registerLedgerSocket } from './platform/socket.js'
+import { registerQrSocket } from './realtime/qr-socket.js'
 import { registerApplicationFiles } from './resources/application-file-routes.js'
 import { registerPrivateApplicationFiles } from './resources/private-file-routes.js'
 import { registerResources } from './resources/routes.js'
@@ -263,6 +264,7 @@ export function createApp(deps: AppDependencies) {
   })
   registerChatSocket(app, chat, deps.corsOrigins, (scope, allowed) => {
     if (deps.platform) {
+      registerQrSocket(scope, deps.platform, allowed)
       registerLedgerSocket(scope, deps.platform, allowed)
       if (deps.platform.applicationCatalogUpdates) {
         registerApplicationCatalogSocket(scope, deps.platform, allowed)

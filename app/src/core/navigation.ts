@@ -2,6 +2,7 @@ import type { OpenAppArguments } from '@t-box/shared'
 import { nextTick, reactive, readonly } from 'vue'
 import { applicationModules } from '../applications/registry'
 import { ErrorCode } from '../error-codes.js'
+import { clearCheckoutTicket } from '../features/billing/checkoutLink'
 import { parseOpenAppArguments } from './applications'
 import { promptNativeDownload } from './native-runtime/downloads'
 
@@ -18,7 +19,7 @@ type Screen =
   'account' |
   'wallet' |
   'recharge' |
-  'pricing' | 'memory' | 'devicePermissions' | 'shortcuts'
+  'pricing' | 'memory' | 'devicePermissions' | 'shortcuts' | 'paymentHandoff'
 type BackTarget = Tab | 'profile' | 'wallet'
 export const tabLabel = (id: BackTarget) =>
   id === 'profile'
@@ -44,6 +45,9 @@ let started = false
 
 function readHash() {
   const [path, query] = window.location.hash.replace(/^#/, '').split('?')
+  if (path !== '/pay/wechat') {
+    clearCheckoutTicket()
+  }
   const tab = primaryTabs.find((tab) => tab.hash === `#${path || '/'}`)
   for (const module of applicationModules) {
     const params = module.resolveLink?.(path || '', new URLSearchParams(query))
@@ -106,6 +110,12 @@ function readHash() {
   if (path === '/profile/settings') {
     state.screen = 'account'
     state.backTo = 'profile'
+    return
+  }
+  if (path === '/pay/wechat') {
+    state.screen = 'paymentHandoff'
+    state.revision++
+    state.backTo = 'home'
     return
   }
   if (path?.startsWith('/applications/')) {

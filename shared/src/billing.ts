@@ -54,6 +54,7 @@ export interface BillingUser extends Wallet {
   id: string
   username: string
   nickname: string
+  avatarUrl?: string
 }
 export interface PaymentOrder {
   id: string

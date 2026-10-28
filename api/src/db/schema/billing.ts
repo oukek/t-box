@@ -1,7 +1,9 @@
 import type { DatabaseSchema } from '@t-box/server-foundation/persistence/schema'
+import { checkoutLinkExtension } from '../../payments/checkout-link-entity.js'
 
 export const billingSchema: DatabaseSchema = {
   id: 'billing',
+  extensions: [checkoutLinkExtension],
   async seed(db) {
     await db.query('INSERT INTO payment_settings(id) VALUES(1)')
   },

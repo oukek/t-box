@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ReminderHost from '@t-box/device-reminders/ReminderHost.vue'
 import AccountSettingsPage from '@t-box/settings-web/pages/AccountSettingsPage.vue'
-import { AppIcon } from '@t-box/ui-kit'
+import { AppIcon, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { applicationModules } from './applications/registry'
@@ -30,6 +30,7 @@ import {
   navigation,
   openApplication,
   openDevicePermissions,
+  openProfile,
   primaryTabs,
   startNavigation,
   tabLabel,
@@ -38,6 +39,7 @@ import { identity } from './core/session'
 import { observeViewport } from './core/viewport'
 import ApplicationCapabilitiesPage from './features/applications/ApplicationCapabilitiesPage.vue'
 import ApplicationsPage from './features/applications/ApplicationsPage.vue'
+import PaymentHandoffPage from './features/billing/PaymentHandoffPage.vue'
 import { recoverNativeCheckout } from './features/billing/pendingCheckout'
 import PricingPage from './features/billing/PricingPage.vue'
 import RechargePage from './features/billing/RechargePage.vue'
@@ -48,6 +50,7 @@ import MemoryConfirmationDialog from './features/chat/MemoryConfirmationDialog.v
 import MemoryPage from './features/chat/MemoryPage.vue'
 import { restoreSession } from './features/identity/identityApi'
 import LoginPage from './features/identity/LoginPage.vue'
+import { initializeWechatLogin, wechatLogin } from './features/identity/wechatLogin'
 import ResourcesPage from './features/resources/ResourcesPage.vue'
 
 const currentApplication = computed(() =>
@@ -66,7 +69,7 @@ const currentView = computed(() =>
     : null,
 )
 const currentInstallation = computed(() => appCatalog.entries.find((e) => e.release.appId === navigation.application?.appId)?.installation)
-const loginRequired = computed(() => !identity.user && !['devicePermissions', 'shortcuts'].includes(navigation.screen) && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
+const loginRequired = computed(() => !identity.user && !['devicePermissions', 'shortcuts', 'paymentHandoff'].includes(navigation.screen) && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
 const installationError = computed(() => appCatalog.error || currentInstallation.value?.error || '')
 async function retryCurrentApplication() {
   const id = navigation.application?.appId
@@ -117,7 +120,7 @@ onMounted(() => {
   if (!identity.token && localApplications.releases.length && (!location.hash || location.hash === '#')) {
     navigateTab('applications')
   }
-  void restoreSession()
+  void initializeWechatLogin()
   stopViewport = observeViewport()
 })
 onBeforeUnmount(() => {
@@ -143,7 +146,7 @@ onBeforeUnmount(() => {
     role="status"
   >当前离线，本地计算可继续使用。云端数据、AI 和支付需要联网。</aside>
   <div
-    v-if="!identity.ready && !localApplications.releases.length"
+    v-if="wechatLogin.initializing || (!identity.ready && !localApplications.releases.length)"
     class="identity-page"
     role="status"
   >
@@ -156,11 +159,34 @@ onBeforeUnmount(() => {
       重新连接
     </button>
   </div>
+  <LoginPage v-else-if="wechatLogin.active" />
   <div
     v-else
     class="super-app"
     :class="{ 'super-app--detail': !showPrimaryNavigation }"
   >
+    <aside class="workspace-rail" aria-label="工作区导航">
+      <a
+        class="workspace-brand"
+        href="#/"
+        aria-label="T方舟首页"
+      ><span class="workspace-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>T方舟</span></a>
+      <nav aria-label="桌面主要导航">
+        <button
+          v-for="tab in primaryTabs"
+          :key="tab.id"
+          class="workspace-rail-tab"
+          :class="{ active: tab.id === 'home' ? navigation.screen === 'home' : navigation.screen === 'applications' }"
+          :aria-current="(tab.id === 'home' ? navigation.screen === 'home' : navigation.screen === 'applications') ? 'page' : undefined"
+          @click="navigateTab(tab.id)"
+        ><AppIcon :name="tab.icon" :size="22" /><span>{{ tab.id === 'home' ? 'AI 对话' : '应用桌面' }}</span></button>
+      </nav>
+      <button
+        class="workspace-rail-profile"
+        :aria-label="identity.user ? '打开账号设置' : '微信登录'"
+        @click="identity.user ? openProfile() : navigateTab('home')"
+      ><UserAvatar :src="identity.user?.avatarUrl" :size="36" /><span>{{ identity.user?.nickname || '登录' }}</span></button>
+    </aside>
     <a
       class="skip-link"
       href="#workspace"
@@ -198,6 +224,7 @@ onBeforeUnmount(() => {
         <button class="button button-secondary" @click="navigateTab('home')">登录</button>
       </div>
       <ShortcutsPage v-if="navigation.screen === 'shortcuts'" />
+      <PaymentHandoffPage v-if="navigation.screen === 'paymentHandoff'" :key="navigation.revision" />
       <DevicePermissionsPage v-if="navigation.screen === 'devicePermissions'" />
       <ApplicationsPage v-show="navigation.screen === 'applications'" />
       <ApplicationCapabilitiesPage

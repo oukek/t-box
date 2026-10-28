@@ -123,6 +123,7 @@ export type ApplicationModule = Omit<
   contractVersion?: SdkApplicationModule<ToolContext>['contractVersion']
 }
 export interface ConversationPort {
+  subscribe?(userId: string, conversationId: string, listener: () => void): () => void
   getTitle?(actor: Actor, id: string): Promise<string>
   needsTitle?(actor: Actor, id: string): Promise<boolean>
   setGeneratedTitle?(actor: Actor, id: string, title: string): Promise<string>

@@ -12,12 +12,13 @@ import type { StoredBillingUsage } from '../db/records/billing-entities.js'
 import { randomUUID } from 'node:crypto'
 import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
 import { isoTime } from '@t-box/server-foundation/time'
-import { LessThan, Like } from 'typeorm'
+import { In, LessThan, Like } from 'typeorm'
 import {
   BillingAuditEntity,
   BillingUsageEntity,
 } from '../db/records/billing-entities.js'
 import { ErrorCode } from '../error-codes.js'
+import { UserProfileEntity } from '../identity/profile-entity.js'
 import { admitCost } from './budget.js'
 import { count, money, tokenFee } from './money.js'
 import { QuotaCatalog } from './quota/catalog.js'
@@ -574,8 +575,10 @@ export class BillingService {
       take: 100,
     })
     const result: BillingUser[] = []
+    const profiles = rows.length ? await this.source.getRepository(UserProfileEntity).findBy({ userId: In(rows.map((row) => row.id)) }) : []
+    const avatars = new Map(profiles.map((row) => [row.userId, row.avatarUrl]))
     for (const row of rows) {
-      result.push({ ...row, ...(await this.wallet(row.id)) })
+      result.push({ ...row, avatarUrl: avatars.get(row.id) || '', ...(await this.wallet(row.id)) })
     }
     return result
   }

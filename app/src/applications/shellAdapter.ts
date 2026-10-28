@@ -28,7 +28,7 @@ import {
 import { request } from '../core/network'
 import { preferences, setPreference } from '../core/preferences'
 import { identity, setSession } from '../core/session'
-import { logout, updateNickname } from '../features/identity/identityApi'
+import { logout, updateAvatar, updateNickname } from '../features/identity/identityApi'
 
 export function initializeApplicationShell() {
   configureShellServices({
@@ -54,6 +54,7 @@ export function initializeApplicationShell() {
     releaseWallpaperPreviews,
     logout,
     updateNickname,
+    updateAvatar,
     refreshCatalog,
     changeInstallation,
     presentApplication,

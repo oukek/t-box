@@ -25,6 +25,6 @@ test('Capacitor WebViews always select APP payment, browser modes remain distinc
     'jsapi',
   )
   assert.equal(selectPaymentMode(false, 'Android', false), 'h5')
-  assert.equal(selectPaymentMode(false, 'Macintosh', false), 'native')
+  assert.equal(selectPaymentMode(false, 'Macintosh', false), 'jsapi')
   assert.equal(selectPaymentMode(false, 'Macintosh', true), 'h5')
 })

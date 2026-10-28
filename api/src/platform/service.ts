@@ -1,5 +1,6 @@
 import type { DataSource } from 'typeorm'
 import type { ConfigurationService } from '../admin/service.js'
+import type { WechatAccountConfiguration } from '../identity/wechat-configuration.js'
 import type { MemoryCache } from '../memory/cache.js'
 import type { PaymentConfiguration } from '../payments/configuration.js'
 import type { PaymentGateway } from '../payments/gateway.js'
@@ -30,11 +31,14 @@ import { BillingPricingService } from '../billing/pricing.js'
 import { BillingService } from '../billing/service.js'
 import { ConversationArchive } from '../chat/archive.js'
 import { DesktopService } from '../desktop/service.js'
+import { AvatarService } from '../identity/avatars.js'
 import { AccountSecurityService } from '../identity/security.js'
 import { IdentityService } from '../identity/service.js'
+import { WechatLoginService } from '../identity/wechat-login.js'
 import { MemoryService } from '../memory/store.js'
 import { NotificationService } from '../notifications/service.js'
 import { OperationsService } from '../operations/service.js'
+import { WechatCheckoutLinks } from '../payments/checkout-links.js'
 import { PaymentReconciliationService } from '../payments/reconciliation.js'
 import { PaymentRefundService } from '../payments/refunds.js'
 import { PaymentService } from '../payments/service.js'
@@ -64,6 +68,9 @@ export class PlatformService {
   readonly notifications: NotificationService
   readonly operations: OperationsService
   readonly identity: IdentityService
+  readonly wechatLogin?: WechatLoginService
+  readonly avatars: AvatarService
+  readonly checkoutLinks?: WechatCheckoutLinks
   readonly accountSecurity: AccountSecurityService
   readonly access: LedgerAccess
   readonly ledgers: LedgerService
@@ -80,6 +87,7 @@ export class PlatformService {
     readonly wechatAuthorization?: WechatAuthorization,
     resources?: ResourceService,
     memoryCache?: MemoryCache,
+    wechatAccount?: WechatAccountConfiguration,
   ) {
     this.memory = new MemoryService(
       source,
@@ -114,6 +122,9 @@ export class PlatformService {
     this.pricing = new BillingPricingService(this.billing.catalog)
     this.providerConcurrency = new ProviderConcurrency(source)
     this.payments = new PaymentService(source, this.billing, gateway)
+    if (paymentConfiguration) {
+      this.checkoutLinks = new WechatCheckoutLinks(source, this.payments, paymentConfiguration)
+    }
     this.refunds = new PaymentRefundService(source, this.billing, gateway)
     this.paymentReconciliation = new PaymentReconciliationService(
       source,
@@ -125,12 +136,16 @@ export class PlatformService {
     this.operations = new OperationsService(source)
     this.identity = new IdentityService(source, (db, userId) =>
       createLedgerRows(db, userId, { name: '我的账本', template: 'daily' }))
+    if (wechatAccount) {
+      this.wechatLogin = new WechatLoginService(wechatAccount, this.identity)
+    }
     this.accountSecurity = new AccountSecurityService(this.identity)
     this.access = new LedgerAccess(source, this.identity)
     this.ledgers = new LedgerService(this.access)
     this.statistics = new StatisticsService(this.access)
     this.finance = new FinanceService(this.access, this.statistics)
     this.resources = resources ?? new ResourceService(source)
+    this.avatars = new AvatarService(this.identity, this.resources)
     this.conversations = new ConversationArchive(
       source,
       new ResourceAccessRegistry(createApplicationResourceAdapters(this)),

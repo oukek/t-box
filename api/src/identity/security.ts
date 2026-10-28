@@ -34,15 +34,17 @@ export function deviceLabel(agent: unknown) {
             : /Linux/i.test(value)
               ? 'Linux'
               : '浏览器'
-  const browser = /Edg\//i.test(value)
-    ? 'Edge'
-    : /Firefox\//i.test(value)
-      ? 'Firefox'
-      : /Chrome\/|CriOS\//i.test(value)
-        ? 'Chrome'
-        : /Safari\//i.test(value)
-          ? 'Safari'
-          : '应用'
+  const browser = /MicroMessenger/i.test(value)
+    ? '微信'
+    : /Edg\//i.test(value)
+      ? 'Edge'
+      : /Firefox\//i.test(value)
+        ? 'Firefox'
+        : /Chrome\/|CriOS\//i.test(value)
+          ? 'Chrome'
+          : /Safari\//i.test(value)
+            ? 'Safari'
+            : '应用'
   return `${os} · ${browser}`
 }
 export class AccountSecurityService {

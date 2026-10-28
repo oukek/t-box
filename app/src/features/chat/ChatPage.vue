@@ -109,10 +109,6 @@ function followRendered() {
 const tasksOpen = ref(false)
 const centerOpen = ref(false)
 const titleOpen = ref(false)
-const memoryEnabled = ref(true)
-watch(() => chatState.conversationId, () => {
-  memoryEnabled.value = [...chatState.messages].reverse().find((message) => message.role === 'user')?.memoryEnabled !== false
-})
 async function showTasks() {
   centerOpen.value = false
   await nextTick()
@@ -179,7 +175,6 @@ function beginEdit(message: (typeof chatState.messages)[number]) {
     conversationId: chatState.conversationId,
   }
   text.value = message.content
-  memoryEnabled.value = message.memoryEnabled !== false
   attachments.value = (message.attachments || []).map((resource) => ({
     ...resource,
   }))
@@ -206,7 +201,6 @@ function submit() {
             expectedRevision: editingMessage.value.revision,
           }
         : undefined,
-      memoryEnabled.value,
     )
   ) {
     text.value = ''
@@ -269,6 +263,10 @@ function startNew() {
     nextTick(() => composer.value?.focus())
   }
 }
+function useWelcomePrompt(value: string) {
+  text.value = value
+  void nextTick(() => composer.value?.focus())
+}
 watch(
   () => [
     chatState.messages
@@ -313,14 +311,6 @@ watch(
         class="conversation-label"
       ><span class="conversation-dot" />{{ hasMessages ? "当前对话" : "新对话" }}</span>
       <div class="chat-toolbar-actions">
-        <button
-          class="new-conversation memory-mode"
-          type="button"
-          :aria-pressed="memoryEnabled"
-          :disabled="chatBusy"
-          :title="memoryEnabled ? '当前会话使用记忆；点击关闭' : '当前会话不读取和提取长期记忆；点击开启'"
-          @click="memoryEnabled = !memoryEnabled"
-        ><AppIcon :name="memoryEnabled ? 'history' : 'lock'" :size="16" /><span class="toolbar-text">{{ memoryEnabled ? '记忆开' : '记忆关' }}</span></button>
         <CustomerSupportEntry :active="props.active" />
         <button
           class="new-conversation"
@@ -377,6 +367,11 @@ watch(
         <p class="welcome-description">
           聊聊想法，安排事情。<br>从一句话开始。
         </p>
+        <div class="welcome-prompts" aria-label="对话灵感">
+          <button type="button" @click="useWelcomePrompt('帮我整理一下今天要做的事情')">整理今天的安排</button>
+          <button type="button" @click="useWelcomePrompt('我想记录一笔日常开销')">记录日常开销</button>
+          <button type="button" @click="useWelcomePrompt('我有一个想法，帮我一起梳理一下')">一起梳理想法</button>
+        </div>
       </div>
       <div v-else class="conversation-messages">
         <article

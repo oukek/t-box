@@ -1,5 +1,6 @@
 import type { BillRepository } from '@t-box/ledger-server/repository'
-import type { ChatServerEvent } from '@t-box/shared'
+import type { ChatMessage, ChatServerEvent } from '@t-box/shared'
+import type { ChatSession } from '../src/chat/session.js'
 import type { PlatformService } from '../src/platform/service.js'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
@@ -26,6 +27,77 @@ function fixture() {
   return { platform, userId }
 }
 const bills = {} as BillRepository // Session handshakes must not touch finance.
+
+test('desktop and phone independently open and synchronize the same completed conversation', async (t) => {
+  const { platform, userId } = fixture()
+  const conversationId = randomUUID()
+  let revision = 1
+  let messages: ChatMessage[] = []
+  let authorize = true
+  let refresh: Promise<void> | undefined
+  Object.assign(platform, {
+    tasks: { current: async () => null },
+    conversations: {
+      async restore(actor: { user: { id: string } }, id: string, session: ChatSession) {
+        assert.equal(actor.user.id, userId)
+        assert.equal(id, conversationId)
+        if (!authorize) {
+          throw new ApiError(423, 'LEDGER_LOCKED', '请重新授权')
+        }
+        await refresh
+        Object.assign(session, { conversationId, userId, archived: true, archiveRevision: revision, messages: structuredClone(messages) })
+      },
+    },
+  })
+  const service = new ChatService({ bills, platform, provider: new FixtureChatProvider() })
+  const desktop: ChatServerEvent[] = []
+  const phone: ChatServerEvent[] = []
+  const a = service.connect((event) => desktop.push(event))
+  const b = service.connect((event) => phone.push(event))
+  t.after(async () => {
+    a.close()
+    b.close()
+    await service.close()
+  })
+  await Promise.all([a.receive({ type: 'session.open', authToken: 'test-login', conversationId }), b.receive({ type: 'session.open', authToken: 'test-login', conversationId })])
+  assert.equal(desktop[0]?.type, 'session.ready')
+  assert.equal(phone[0]?.type, 'session.ready')
+  const sessions = [...service.sessions.all()]
+  assert.equal(sessions.length, 2)
+  assert.notEqual(sessions[0]!.id, sessions[1]!.id)
+  assert.notEqual(sessions[0]!.owner, sessions[1]!.owner)
+  assert.notEqual(sessions[0]!.token, sessions[1]!.token)
+
+  messages = [{ id: randomUUID(), role: 'assistant', content: '另一设备完成的回答', toolCalls: [], createdAt: new Date().toISOString() }]
+  revision++
+  await b.receive({ type: 'ping' })
+  const synced = phone.findLast((event) => event.type === 'session.snapshot')
+  assert.equal(synced?.type, 'session.snapshot')
+  if (synced?.type === 'session.snapshot') {
+    assert.equal(synced.snapshot.messages[0]?.content, messages[0]!.content)
+  }
+  assert.equal(sessions[0]!.messages.length, 0, 'Each device refreshes its own authorized view')
+  await a.receive({ type: 'ping' })
+  assert.equal(sessions[0]!.messages[0]?.content, messages[0]!.content)
+  assert.equal(sessions[1]!.task, null, 'Completed conversations still refresh without a current task')
+
+  let finishRefresh!: () => void
+  refresh = new Promise<void>((resolve) => {
+    finishRefresh = resolve
+  })
+  const pending = b.receive({ type: 'ping' })
+  await Promise.resolve()
+  assert.equal(sessions[1]!.finishing, true)
+  finishRefresh()
+  await pending
+  assert.equal(sessions[1]!.finishing, false)
+  const snapshotCount = phone.filter((event) => event.type === 'session.snapshot').length
+  authorize = false
+  messages[0]!.content = '授权撤销后不可泄露的内容'
+  await b.receive({ type: 'ping' })
+  assert.equal(phone.filter((event) => event.type === 'session.snapshot').length, snapshotCount)
+  assert.equal(JSON.stringify(phone).includes('授权撤销后不可泄露的内容'), false)
+})
 
 test('authenticated blank chat gets a fresh transport after restart or idle expiry', async (t) => {
   for (const reason of ['restart', 'expiry'] as const) {

@@ -10,7 +10,7 @@ import {
   UserSessionEntity,
 } from '@t-box/server-foundation/persistence/identity-entities'
 import { isoTime } from '@t-box/server-foundation/time'
-import { Raw } from 'typeorm'
+import { LessThan } from 'typeorm'
 import { digest, hashPassword, verifyPassword } from '../admin/crypto.js'
 import { password } from '../admin/validation.js'
 import { ErrorCode } from '../error-codes.js'
@@ -45,7 +45,7 @@ export class IdentityService {
     this.attempts.set(key, entry)
   }
 
-  private async session(
+  async session(
     db: EntityManager,
     user: AppUser,
     device = '未知设备',
@@ -60,6 +60,15 @@ export class IdentityService {
       sessionId: randomUUID(),
     })
     return { token, user }
+  }
+
+  /** External identities have no user-chosen password or public registration step. */
+  async createExternal(db: EntityManager, nickname: string): Promise<AppUser> {
+    const user = { id: randomUUID(), username: `wx_${randomBytes(16).toString('hex')}`, nickname }
+    await db.getRepository(AppUserEntity).insert({ ...user, passwordHash: '!wechat-only' })
+    await this.onRegistered?.(db, user.id)
+    const row = await db.getRepository(AppUserEntity).findOneByOrFail({ id: user.id })
+    return { ...user, createdAt: isoTime(row.createdAt) }
   }
 
   async register(value: unknown, ip: string, device?: string) {
@@ -160,7 +169,7 @@ export class IdentityService {
     }
     await this.source
       .getRepository(UserSessionEntity)
-      .delete({ expiresAt: Raw((column) => `${column} < UTC_TIMESTAMP(3)`) })
+      .delete({ expiresAt: LessThan(new Date()) })
     return result
   }
 
@@ -180,9 +189,10 @@ export class IdentityService {
   ): Promise<Principal> {
     const [user] = await db
       .createQueryBuilder()
-      .select('u.id,u.username,u.nickname,u.created_at AS createdAt')
+      .select('u.id,u.username,u.nickname,u.created_at AS createdAt,w.avatar_url AS avatarUrl')
       .from('user_sessions', 's')
       .innerJoin('app_users', 'u', 'u.id=s.user_id')
+      .leftJoin('app_user_profiles', 'w', 'w.user_id=u.id')
       .where(
         's.token_hash=:p0 AND s.expires_at>UTC_TIMESTAMP(3) AND u.enabled=TRUE',
       )

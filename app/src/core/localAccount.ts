@@ -11,14 +11,14 @@ export function readLocalProfile(): AppUser | null {
     }
     const user = value as Record<string, unknown>
     if (['id', 'username', 'nickname', 'createdAt'].every((key) => typeof user[key] === 'string' && (user[key] as string).length <= 200) && user.id && user.username) {
-      return { id: String(user.id), username: String(user.username), nickname: String(user.nickname), createdAt: String(user.createdAt) }
+      return { id: String(user.id), username: String(user.username), nickname: String(user.nickname), createdAt: String(user.createdAt), ...(typeof user.avatarUrl === 'string' && user.avatarUrl.length <= 2048 ? { avatarUrl: user.avatarUrl } : {}) }
     }
   } catch { /* Missing or corrupt local state must not prevent online login. */ }
   return null
 }
 export function saveLocalProfile(user: AppUser) {
   try {
-    localStorage.setItem(profileKey, JSON.stringify({ id: user.id, username: user.username, nickname: user.nickname, createdAt: user.createdAt }))
+    localStorage.setItem(profileKey, JSON.stringify({ id: user.id, username: user.username, nickname: user.nickname, createdAt: user.createdAt, avatarUrl: user.avatarUrl }))
   } catch { /* Local browsing remains available in memory. */ }
 }
 export function localCatalogKey(userId: string) {

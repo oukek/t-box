@@ -2,6 +2,7 @@ import type { DatabaseSchema } from '@t-box/server-foundation/persistence/schema
 import type { DataSource } from 'typeorm'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '../error-codes.js'
+import { extendDatabase } from './extensions.js'
 
 export const DATABASE_BASELINE = '2026-10-23.2'
 const marker = 'schema_initialization'
@@ -53,7 +54,7 @@ export function schemaTables(schemas: readonly DatabaseSchema[]) {
   return ordered
 }
 
-/** Fresh installation only. Never alters, drops or adopts an unknown existing schema. */
+/** Immutable baseline plus tracked additive extensions. Never adopts an unknown schema. */
 export async function initializeDatabase(
   source: DataSource,
   schemas: readonly DatabaseSchema[],
@@ -113,8 +114,10 @@ export async function initializeDatabase(
           `数据库初始化记录已完成但缺少表：${missing.join(', ')}。请检查备份，不能按空库重新初始化。`,
         )
       }
+      const upgraded = await extendDatabase(runner, schemas, options.checkOnly)
       return {
         initialized: false,
+        upgraded,
         tables: tables.size,
         baseline: DATABASE_BASELINE,
       }
@@ -161,8 +164,10 @@ export async function initializeDatabase(
       await runner.rollbackTransaction()
       throw error
     }
+    const upgraded = await extendDatabase(runner, schemas)
     return {
       initialized: true,
+      upgraded,
       tables: tables.size,
       baseline: DATABASE_BASELINE,
     }

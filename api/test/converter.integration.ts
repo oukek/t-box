@@ -1,6 +1,6 @@
 import type { ApplicationContext } from '@t-box/app-contracts'
 import type { ConversionResult } from '@t-box/converter-contracts'
-import type { DesktopSnapshot, UserSession } from '@t-box/shared'
+import type { DesktopSnapshot } from '@t-box/shared'
 import type { ToolContext } from '../src/agent/contracts.js'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
@@ -22,9 +22,7 @@ const bills = createBillRepository(source)
 const app = createApp({ platform, bills, health: async () => ({ mysql: 'up', redis: 'disabled' }) })
 const users: string[] = []
 try {
-  const registration = await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload: { username: `test_converter_${randomUUID().replaceAll('-', '')}`, password: 'test123', nickname: '单位换算验收' } })
-  assert.equal(registration.statusCode, 201, registration.body)
-  const session = registration.json<{ data: UserSession }>().data
+  const session = await platform.identity.register({ username: `test_converter_${randomUUID().replaceAll('-', '')}`, password: 'test123', nickname: '单位换算验收' }, 'fixture')
   users.push(session.user.id)
   const headers = { 'authorization': `Bearer ${session.token}`, 'idempotency-key': randomUUID() }
   const desktop = await app.inject({ url: '/api/v1/desktop/mobile', headers })

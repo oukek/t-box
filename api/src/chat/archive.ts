@@ -33,11 +33,66 @@ type Saved = Pick<
 }
 export class ConversationArchive {
   private readonly active = new Set<string>()
+  private readonly subscribers = new Map<string, { userId: string, id: string, fingerprint?: string, listeners: Set<() => void> }>()
+  private watchTimer?: ReturnType<typeof setInterval>
+  private watching = false
   constructor(
     readonly source: DataSource,
     private access: ResourceAccessRegistry,
     private readonly memory?: Pick<MemoryService, 'saved' | 'removed'>,
   ) {}
+
+  subscribe(userId: string, id: string, listener: () => void) {
+    const key = `${userId}:${id}`
+    const entry = this.subscribers.get(key) ?? { userId, id, listeners: new Set<() => void>() }
+    entry.listeners.add(listener)
+    this.subscribers.set(key, entry)
+    this.watchTimer ??= setInterval(() => void this.watchChanges().catch(() => {}), 2000)
+    this.watchTimer.unref()
+    return () => {
+      entry.listeners.delete(listener)
+      if (!entry.listeners.size) {
+        this.subscribers.delete(key)
+      }
+      if (!this.subscribers.size) {
+        clearInterval(this.watchTimer)
+        this.watchTimer = undefined
+      }
+    }
+  }
+
+  private changed(userId: string, id: string) {
+    for (const listener of this.subscribers.get(`${userId}:${id}`)?.listeners ?? []) {
+      listener()
+    }
+  }
+
+  /** One bounded probe also detects commits from the independent PM2 worker. */
+  private async watchChanges() {
+    if (this.watching || !this.subscribers.size) {
+      return
+    }
+    this.watching = true
+    try {
+      const entries = [...this.subscribers.values()]
+      const rows: { id: string, userId: string, revision: string, title: string, taskId: string | null, taskStatus: string | null, taskUpdated: Date | null }[] = await this.source.createQueryBuilder()
+        .select('c.id,c.user_id AS userId,c.revision,c.title,t.id AS taskId,t.status AS taskStatus,t.updated_at AS taskUpdated')
+        .from('conversations', 'c')
+        .leftJoin('agent_tasks', 't', 't.active_key=c.id')
+        .where('c.id IN (:...ids)', { ids: [...new Set(entries.map((entry) => entry.id))] })
+        .getRawMany()
+      const fingerprints = new Map(rows.map((row) => [`${row.userId}:${row.id}`, JSON.stringify([row.revision, row.title, row.taskId, row.taskStatus, row.taskUpdated])]))
+      for (const entry of entries) {
+        const fingerprint = fingerprints.get(`${entry.userId}:${entry.id}`) ?? 'deleted'
+        if (entry.fingerprint !== fingerprint) {
+          entry.fingerprint = fingerprint
+          this.changed(entry.userId, entry.id)
+        }
+      }
+    } finally {
+      this.watching = false
+    }
+  }
 
   setAccess(access: ResourceAccessRegistry) {
     this.access = access
@@ -202,6 +257,7 @@ export class ConversationArchive {
     )
     session.archived = true
     session.archiveRevision = revision
+    this.changed(session.userId, id)
     delete session.pendingAnswerVersion
   }
 
@@ -388,7 +444,7 @@ export class ConversationArchive {
     id: string,
     title: string,
   ): Promise<string> {
-    return this.source.transaction(async (db) => {
+    const result = await this.source.transaction(async (db) => {
       const row = await db.getRepository(ConversationEntity).findOne({
         select: { title: true, title_source: true },
         where: { id: parseId(id), user_id: principal.user.id },
@@ -409,6 +465,8 @@ export class ConversationArchive {
         )
       return title
     })
+    this.changed(principal.user.id, id)
+    return result
   }
 
   async rename(principal: Actor, id: string, value: unknown) {
@@ -440,6 +498,7 @@ export class ConversationArchive {
     if (!changed.affected) {
       throw ErrorCode.CONVERSATION_NOT_FOUND()
     }
+    this.changed(principal.user.id, id)
     return { id, title: title.trim() }
   }
 
@@ -484,5 +543,6 @@ export class ConversationArchive {
         .delete({ id, user_id: principal.user.id })
       await this.memory?.removed(db, principal.user.id, id)
     })
+    this.changed(principal.user.id, id)
   }
 }

@@ -2,10 +2,27 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { PlatformService } from '../platform/service.js'
 import { object } from '@t-box/server-foundation/input'
 import { parseId } from '@t-box/server-foundation/validation'
+import { ErrorCode } from '../error-codes.js'
 import { bearer } from '../identity/service.js'
 import { requestKey } from '../payments/service.js'
 
 export function registerBilling(app: FastifyInstance, p: PlatformService) {
+  const checkoutLinks = () => {
+    if (!p.checkoutLinks) {
+      throw ErrorCode.OAUTH_UNAVAILABLE()
+    }
+    return p.checkoutLinks
+  }
+  const actor = (request: FastifyRequest) => p.identity.authenticate(bearer(request.headers.authorization))
+  app.post('/api/v1/payments/orders/:id/handoff', async (request) => ({ data: await checkoutLinks().create((await actor(request)).user.id, parseId((request.params as { id: string }).id)) }))
+  app.post('/api/v1/payments/handoff/preview', async (request) => ({ data: await checkoutLinks().preview(await actor(request), request.body) }))
+  app.post('/api/v1/payments/handoff/intent', async (request) => ({ data: await checkoutLinks().intent(await actor(request), request.body, request.ip) }))
+  app.post('/api/v1/payments/handoff/js-sdk', async (request) => ({ data: await checkoutLinks().jsSdk(await actor(request), request.body) }))
+  app.post('/api/v1/payments/handoff/refresh', async (request) => ({ data: await checkoutLinks().refresh(await actor(request), request.body) }))
+  app.post('/api/v1/payments/handoff/cancel', async (request) => {
+    await checkoutLinks().cancel(await actor(request), request.body)
+    return { data: { cancelled: true } }
+  })
   app.addHook('onSend', async (request, reply, payload) => {
     if (/^\/api\/v1\/(?:wallet|payments)(?:[/?]|$)/.test(request.url)) {
       reply.header('Cache-Control', 'no-store')
@@ -73,6 +90,10 @@ export function registerBilling(app: FastifyInstance, p: PlatformService) {
   app.post('/api/v1/payments/orders/:id/refresh', async (r) => ({
     data: await p.payments.refresh(await user(r), id(r)),
   }))
+  app.post('/api/v1/payments/orders/:id/js-sdk', async (r) => {
+    const input = object(r.body, ['url'])
+    return { data: await p.payments.jsapiConfiguration(await user(r), id(r), input.url) }
+  })
   if (p.wechatAuthorization) {
     app.get('/api/v1/payments/wechat/oauth/callback', async (r, reply) => {
       const q = r.query as { state?: unknown, code?: unknown }

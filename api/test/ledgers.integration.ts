@@ -43,23 +43,18 @@ async function call(
 try {
   const actors = []
   for (let i = 0; i < 3; i++) {
-    const result = await call(
-      'POST',
-      '/api/v1/auth/register',
-      '',
-      {
-        username: `test_${randomUUID().replaceAll('-', '')}`,
-        password: 'test123',
-        nickname: `测试${i}`,
-      },
-      201,
-    )
+    const result = { data: await p.identity.register({
+      username: `test_${randomUUID().replaceAll('-', '')}`,
+      password: 'test123',
+      nickname: `测试${i}`,
+    }, 'fixture') }
     actors.push(result.data)
     users.push(result.data.user.id)
     const list = await call('GET', '/api/v1/ledgers', result.data.token)
     books.push(...list.data.map((row: any) => row.id))
   }
   const [a, b, c] = actors
+  assert.ok(a && b && c)
   const book = (
     await call(
       'POST',

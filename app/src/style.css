@@ -114,14 +114,14 @@
 .welcome-timeline {
   display: flex;
   align-items: stretch;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 26px 0;
   flex-direction: column;
 }
 .welcome-content {
   width: 100%;
   text-align: center;
-  margin: auto 0;
+  margin: 0;
 }
 .welcome-symbol {
   margin: 0 auto 23px;

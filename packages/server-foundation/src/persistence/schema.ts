@@ -4,5 +4,7 @@ import type { QueryRunner } from 'typeorm'
 export interface DatabaseSchema {
   id: string
   tables: readonly string[]
+  /** Additive, versioned extensions do not change the published baseline. */
+  extensions?: readonly { id: string, tables: readonly string[] }[]
   seed?: (db: QueryRunner) => Promise<void>
 }

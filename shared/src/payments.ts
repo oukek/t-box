@@ -1,4 +1,25 @@
 export type WechatPaymentMode = 'native' | 'h5' | 'jsapi' | 'app'
+export interface WechatJsSdkConfiguration {
+  appId: string
+  timestamp: number
+  nonceStr: string
+  signature: string
+}
+export interface WechatCheckoutLink {
+  url: string
+  expiresAt: string
+}
+export type WechatCheckoutStage = 'waiting' | 'scanned' | 'confirming' | 'paying' | 'cancelled' | 'expired' | 'paid' | 'closed'
+export interface WechatCheckoutState {
+  order: import('./billing.js').PaymentOrder
+  stage: WechatCheckoutStage
+}
+export interface WechatCheckoutPreview {
+  order: import('./billing.js').PaymentOrder
+  recipient: Pick<import('./identity.js').AppUser, 'id' | 'nickname' | 'avatarUrl'>
+  sameAccount: boolean
+  payerUnavailable: boolean
+}
 export interface WechatPaymentConfiguration {
   id?: string
   enabled: boolean

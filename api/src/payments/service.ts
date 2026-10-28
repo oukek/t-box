@@ -17,6 +17,8 @@ import { decimal, money } from '../billing/money.js'
 import { quota } from '../billing/quota/math.js'
 import { PaymentOrderEntity } from '../db/records/payments-entities.js'
 import { ErrorCode } from '../error-codes.js'
+import { qrChanged } from '../realtime/qr-signals.js'
+import { CheckoutLinkEntity } from './checkout-link-entity.js'
 
 type OrderRow = Pick<
   StoredPaymentOrder,
@@ -203,6 +205,7 @@ export class PaymentService {
     id: string,
     mode: WechatPaymentMode = 'native',
     clientIp?: string,
+    payerUserId?: string,
   ) {
     const gateway = this.adapter()
     const order = await this.get(userId, id)
@@ -226,6 +229,10 @@ export class PaymentService {
       if (!row) {
         throw ErrorCode.ORDER_NOT_FOUND()
       }
+      const checkout = await db.getRepository(CheckoutLinkEntity).findOneBy({ orderId: id })
+      if (!payerUserId && checkout?.scanFlowId && (checkout.payerUserId || (checkout.stage !== 'cancelled' && (checkout.scanExpiresAt?.getTime() ?? 0) > Date.now()))) {
+        throw ErrorCode.CHECKOUT_LINK_BUSY()
+      }
       if (row.payment_mode && row.payment_mode !== mode) {
         throw ErrorCode.PAYMENT_MODE_LOCKED()
       }
@@ -237,9 +244,23 @@ export class PaymentService {
         mode,
         clientIp,
         userId,
+        ...(payerUserId ? { payerUserId } : {}),
       }
     })
     return gateway.create(order, Number(money(order.amount) / 10_000n), context)
+  }
+
+  async jsapiConfiguration(userId: string, id: string, url: unknown) {
+    const order = await this.get(userId, id)
+    if (order.status !== 'pending' || Date.parse(order.expiresAt) <= Date.now()) {
+      throw ErrorCode.ORDER_NOT_PAYABLE()
+    }
+    const row = await this.source.getRepository(PaymentOrderEntity).findOneByOrFail({ id, user_id: userId })
+    const gateway = this.adapter()
+    if (!gateway.jsapiConfiguration || row.payment_mode !== 'jsapi') {
+      throw ErrorCode.INVALID_PAYMENT_MODE()
+    }
+    return gateway.jsapiConfiguration(url, { configurationId: row.configuration_id ?? undefined, userId, mode: 'jsapi' })
   }
 
   async close(userId: string, id: string) {
@@ -254,6 +275,7 @@ export class PaymentService {
     await this.source
       .getRepository(PaymentOrderEntity)
       .update({ id, user_id: userId, status: 'pending' }, { status: 'closed' })
+    qrChanged(this.source, `order:${id}`)
     return this.get(userId, id)
   }
 
@@ -420,5 +442,6 @@ export class PaymentService {
     if (owner) {
       this.billing.changed(owner.user_id)
     }
+    qrChanged(this.source, `order:${event.orderId}`)
   }
 }

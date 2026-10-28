@@ -34,17 +34,11 @@ try {
   const users = []
   for (let i = 0; i < 2; i++) {
     const session = (
-      await call(
-        'POST',
-        '/api/v1/auth/register',
-        '',
-        {
-          username: `test_profile_${randomUUID().replaceAll('-', '')}`,
-          password: 'test123',
-          nickname: `测试${i}`,
-        },
-        201,
-      )
+      { data: await p.identity.register({
+        username: `test_profile_${randomUUID().replaceAll('-', '')}`,
+        password: 'test123',
+        nickname: `测试${i}`,
+      }, 'fixture') }
     ).data
     ids.push(session.user.id)
     assert.ok(Number.isFinite(Date.parse(session.user.createdAt)))
@@ -55,6 +49,7 @@ try {
     users.push(session)
   }
   const [a, b] = users
+  assert.ok(a && b)
   await call('PATCH', '/api/v1/auth/me', '', { nickname: '无权限' }, 401)
   const next = (
     await call('PATCH', '/api/v1/auth/me', a.token, {
@@ -96,10 +91,10 @@ try {
     boundary,
   )
   const session = (
-    await call('POST', '/api/v1/auth/login', '', {
+    { data: await p.identity.login({
       username: a.user.username,
       password: 'test123',
-    })
+    }, 'fixture') }
   ).data
   assert.equal(session.user.nickname, boundary)
   assert.equal(session.user.createdAt, a.user.createdAt)

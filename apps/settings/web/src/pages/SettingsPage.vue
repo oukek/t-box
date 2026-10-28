@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { iconSizeOptions } from '@t-box/app-contracts'
 import { appInfo, backFromApplication, identity, navigation, openAccountSettings, openDevicePermissions, openShortcuts, preferences, setPreference, tabLabel } from '@t-box/app-shell-sdk'
-import { AppIcon, Modal } from '@t-box/ui-kit'
+import { AppIcon, Modal, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import WallpaperSettings from './WallpaperSettings.vue'
 
 const aboutOpen = ref(false)
-const avatar = computed(() => [...(identity.user?.nickname || '我')][0])
 function sizeKeydown(event: KeyboardEvent) {
   const keys = [
     'ArrowLeft',
@@ -51,10 +50,10 @@ function sizeKeydown(event: KeyboardEvent) {
       aria-label="查看账号信息与安全设置"
       @click="openAccountSettings"
     >
-      <span class="profile-avatar" aria-hidden="true">{{ avatar }}</span>
+      <UserAvatar :src="identity.user?.avatarUrl" :size="64" />
       <span class="settings-identity-copy">
         <strong>{{ identity.user?.nickname }}</strong>
-        <small>@{{ identity.user?.username }}</small>
+        <small>微信已登录</small>
         <span>个人信息与账号安全</span>
       </span>
       <AppIcon name="right" :size="18" />

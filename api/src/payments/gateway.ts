@@ -2,6 +2,7 @@ import type {
   PaymentCapabilities,
   PaymentIntent,
   PaymentOrder,
+  WechatJsSdkConfiguration,
   WechatPaymentMode,
 } from '@t-box/shared'
 
@@ -10,6 +11,8 @@ export interface PaymentContext {
   mode?: WechatPaymentMode
   clientIp?: string
   userId?: string
+  /** Explicit payer for a confirmed checkout link; quota still belongs to the order owner. */
+  payerUserId?: string
 }
 export interface VerifiedPayment {
   configurationId?: string
@@ -45,6 +48,7 @@ export interface VerifiedRefund {
  * query must use authenticated merchant API, never a client-reported payment state.
  */
 export interface PaymentGateway {
+  jsapiConfiguration?(url: unknown, context: PaymentContext): Promise<WechatJsSdkConfiguration>
   statement?(day: string, context: PaymentContext): Promise<MerchantStatement>
   refund?(
     input: RefundRequest,

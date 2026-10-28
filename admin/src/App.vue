@@ -19,6 +19,7 @@ import ProvidersPage from './features/ProvidersPage.vue'
 import ResourcePackagesPage from './features/ResourcePackagesPage.vue'
 import SupportPage from './features/SupportPage.vue'
 import UsersPage from './features/UsersPage.vue'
+import WechatLoginPage from './features/WechatLoginPage.vue'
 import WorkflowPage from './features/WorkflowPage.vue'
 
 const pages = {
@@ -57,6 +58,7 @@ const pages = {
     component: ResourcePackagesPage,
   },
   'payments': { title: '支付订单', symbol: 'model', component: PaymentsPage },
+  'wechat-login': { title: '微信登录', symbol: 'users', component: WechatLoginPage },
   'users': { title: '管理员', symbol: 'users', component: UsersPage },
   'support': { title: '客服配置', symbol: 'chat', component: SupportPage },
 }

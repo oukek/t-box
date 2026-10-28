@@ -5,6 +5,19 @@ import {
 } from '@t-box/errors'
 
 const apiErrors = defineApiErrors({
+  CHECKOUT_LINK_BUSY: { statusCode: 409, message: '此二维码已由另一台手机扫描，请在原手机完成支付；如需更换手机，请先在原设备核对并取消订单后重新下单' },
+  CHECKOUT_WECHAT_AUTH_REQUIRED: { statusCode: 409, message: '请重新核对当前微信身份后支付，旧的本站登录状态不能代替本次微信授权' },
+  CHECKOUT_LINK_INVALID: { statusCode: 410, message: '支付链接已失效，请在原设备刷新二维码后重试' },
+  CHECKOUT_ACCOUNT_MISMATCH: { statusCode: 409, message: '当前账号与下单账号不一致，请明确确认是否为对方付款' },
+  CHECKOUT_PAYER_CHANGED: { statusCode: 409, message: '此订单已由另一微信账号发起支付，请返回原设备核对订单后重新下单' },
+  PROFILE_AVATAR_INVALID: { statusCode: 400, message: '请选择不超过 2 MB 的 JPG、PNG 或 WebP 图片作为头像' },
+  WECHAT_LOGIN_DISABLED: { statusCode: 503, message: '微信登录尚未开放，请联系管理员完成公众号配置' },
+  WECHAT_LOGIN_INVALID: { statusCode: 400, message: '微信登录请求无效，请重新发起登录' },
+  WECHAT_LOGIN_EXPIRED: { statusCode: 410, message: '本次微信登录已失效，请重新获取二维码或授权' },
+  WECHAT_LOGIN_BUSY: { statusCode: 409, message: '此二维码已被扫描或取消，请刷新后重试' },
+  WECHAT_LOGIN_FAILED: { statusCode: 502, message: '微信授权未完成，请重试并同意获取昵称和头像' },
+  WECHAT_ACCOUNT_INVALID: { statusCode: 400, message: '微信登录配置无效，请检查 AppID、AppSecret 和网站地址' },
+  WECHAT_ACCOUNT_STALE: { statusCode: 409, message: '微信登录配置已更新，请刷新后再保存' },
   NATIVE_ACTION_INVALID: { statusCode: 400, message: '快捷指令参数无效' },
   NATIVE_ACTION_UNAVAILABLE: { statusCode: 409, message: '动作未开放、应用已更新或安装已变化，请打开应用重新配置快捷指令' },
   INVALID_MARKET_SETTINGS: { statusCode: 400, message: '应用市场设置无效' },

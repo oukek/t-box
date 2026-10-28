@@ -22,7 +22,14 @@ export function selectPaymentMode(
   if (/MicroMessenger/i.test(userAgent)) {
     return 'jsapi'
   }
-  return /Android|iPhone|iPad|iPod/i.test(userAgent) || coarsePointer
+  return /Android|iPhone|iPad|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && coarsePointer)
     ? 'h5'
-    : 'native'
+    : 'jsapi'
+}
+
+export function isWechatPayBrowser(userAgent: string, coarsePointer = false, touchPoints = 0) {
+  return /MicroMessenger/i.test(userAgent) && (/Android|iPhone|iPad|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && (coarsePointer || touchPoints > 1)))
+}
+export function usesWechatCheckoutLink(native: boolean, userAgent: string, coarsePointer: boolean, touchPoints = 0) {
+  return !native && !isWechatPayBrowser(userAgent, coarsePointer, touchPoints) && selectPaymentMode(native, userAgent, coarsePointer) === 'jsapi'
 }

@@ -264,3 +264,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.checkout-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  text-align: left;
+  font-size: 13px;
+}
+.checkout-account small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}

@@ -5,6 +5,7 @@ import type {
 import type { DataSource } from 'typeorm'
 import type { createVault } from '../admin/crypto.js'
 import type { ConfigurationCache } from '../configuration/cache.js'
+import type { WechatAccountConfiguration } from '../identity/wechat-configuration.js'
 import {
   createPrivateKey,
   createPublicKey,
@@ -64,7 +65,13 @@ export class PaymentConfiguration {
     readonly source: DataSource,
     readonly vault: ReturnType<typeof createVault>,
     private readonly cache?: ConfigurationCache,
+    private readonly account?: WechatAccountConfiguration,
   ) {}
+
+  private async officialSecret(appId: string, fallback: string) {
+    const account = await this.account?.runtime()
+    return account?.appId === appId && account.appSecret ? account.appSecret : fallback
+  }
 
   async runtime(id?: string): Promise<WechatRuntime | null> {
     if (this.cache) {
@@ -93,7 +100,7 @@ export class PaymentConfiguration {
           })
         return row ?? null
       })
-      return row
+      const runtime = row
         ? {
             ...emptyWechat,
             ...(typeof row.public_json === 'string'
@@ -103,6 +110,10 @@ export class PaymentConfiguration {
             id: row.id,
           }
         : null
+      if (runtime) {
+        runtime.appSecret = await this.officialSecret(runtime.appId, runtime.appSecret)
+      }
+      return runtime
     }
     const query = this.source
       .createQueryBuilder()
@@ -119,7 +130,7 @@ export class PaymentConfiguration {
     if (!row) {
       return null
     }
-    return {
+    const runtime: WechatRuntime = {
       ...emptyWechat,
       ...(typeof row.public_json === 'string'
         ? JSON.parse(row.public_json)
@@ -127,6 +138,8 @@ export class PaymentConfiguration {
       ...JSON.parse(this.vault.decrypt(row.secret_cipher)),
       id: row.id,
     }
+    runtime.appSecret = await this.officialSecret(runtime.appId, runtime.appSecret)
+    return runtime
   }
 
   async credentials(bound: WechatRuntime): Promise<WechatRuntime> {
@@ -230,6 +243,11 @@ export class PaymentConfiguration {
           return [k, (b[k] as string | undefined)?.trim() || old?.[k] || '']
         }),
       ) as Required<WechatPaymentSecrets>
+      const account = await this.account?.runtime()
+      if (c.jsapi && account?.appId && account.appId !== c.appId) {
+        throw ErrorCode.INVALID_PAYMENT_CONFIG('JSAPI 支付的服务号 AppID 必须与“微信登录”中的 AppID 一致')
+      }
+      secrets.appSecret = await this.officialSecret(c.appId, secrets.appSecret)
       const supplied = !!c.appId || !!c.mobileAppId || c.enabled
       if (supplied) {
         if (

@@ -126,17 +126,11 @@ const release: AppRelease = {
 const catalog = new ApplicationPlatform(source, [release])
 catalog.bind(id, remote)
 try {
-  const registration = await app.inject({
-    method: 'POST',
-    url: '/api/v1/auth/register',
-    payload: {
-      username: 'test_platform_' + randomUUID().replaceAll('-', ''),
-      password: 'test123',
-      nickname: '应用测试',
-    },
-  })
-  assert.equal(registration.statusCode, 201)
-  const session = registration.json().data
+  const session = await platform.identity.register({
+    username: 'test_platform_' + randomUUID().replaceAll('-', ''),
+    password: 'test123',
+    nickname: '应用测试',
+  }, 'fixture')
   users.push(session.user.id)
   const user = session.user.id
   await platform.applications.bootstrap(user)
@@ -449,17 +443,11 @@ try {
     ),
     /权限/,
   )
-  const other = await app.inject({
-    method: 'POST',
-    url: '/api/v1/auth/register',
-    payload: {
-      username: 'test_platform_' + randomUUID().replaceAll('-', ''),
-      password: 'test123',
-      nickname: '隔离测试',
-    },
-  })
-  assert.equal(other.statusCode, 201)
-  const b = other.json().data
+  const b = await platform.identity.register({
+    username: 'test_platform_' + randomUUID().replaceAll('-', ''),
+    password: 'test123',
+    nickname: '隔离测试',
+  }, 'fixture')
   users.push(b.user.id)
   await assert.rejects(recovered.events(b.user.id, id, { releaseId: release.releaseId, generation: active.installation.generation, channel: 'changed' }), /安装/)
   await assert.rejects(recovered.operation(b.user.id, pending.id), /不存在/)

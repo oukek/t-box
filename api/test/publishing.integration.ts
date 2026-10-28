@@ -89,17 +89,11 @@ try {
     payload: fixture,
   })
   assert.equal(csrf.statusCode, 403)
-  const registration = await app.inject({
-    method: 'POST',
-    url: '/api/v1/auth/register',
-    payload: {
-      username: `publish_user_${marker}`,
-      password: 'test123',
-      nickname: '发布测试',
-    },
-  })
-  assert.equal(registration.statusCode, 201)
-  const session = registration.json().data
+  const session = await platform.identity.register({
+    username: `publish_user_${marker}`,
+    password: 'test123',
+    nickname: '发布测试',
+  }, 'fixture')
   users.push(session.user.id)
   const market = async () => platform.applications.catalog(session.user.id)
   const initial = await market()

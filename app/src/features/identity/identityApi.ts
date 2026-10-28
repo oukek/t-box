@@ -1,4 +1,4 @@
-import type { AppUser, UserSession } from '@t-box/shared'
+import type { AppUser } from '@t-box/shared'
 import { request, RequestError } from '../../core/network'
 import {
   identity,
@@ -7,6 +7,7 @@ import {
   restoreLocalIdentity,
   setSession,
 } from '../../core/session'
+import { suppressAutomaticWechatLogin } from './wechatLogin'
 
 let restoring: { token: string, promise: Promise<void> } | undefined
 let retry: ReturnType<typeof setTimeout> | undefined
@@ -67,20 +68,8 @@ window.addEventListener('offline', () => {
     restoreLocalIdentity()
   }
 })
-export async function authenticate(
-  mode: 'login' | 'register',
-  input: { username: string, password: string, nickname?: string },
-) {
-  const { data } = await request<{ data: UserSession }>(`/auth/${mode}`, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
-  setSession(data)
-}
-export async function recoverPassword(input: { username: string, recoveryCode: string, newPassword: string }) {
-  await request('/auth/password-recovery', { method: 'POST', body: JSON.stringify(input) })
-}
 export async function logout() {
+  suppressAutomaticWechatLogin()
   try {
     await request('/auth/session', { method: 'DELETE' })
   } finally {
@@ -92,5 +81,12 @@ export async function updateNickname(nickname: string) {
     method: 'PATCH',
     body: JSON.stringify({ nickname }),
   })
+  restoreIdentity(data)
+}
+export async function updateAvatar(file: File | null) {
+  if (file && (!file.size || file.size > 2 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) {
+    throw new Error('请选择不超过 2 MB 的 JPG、PNG 或 WebP 图片')
+  }
+  const { data } = await request<{ data: AppUser }>('/auth/avatar', file ? { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' }, timeoutMs: 60_000 } : { method: 'DELETE' })
   restoreIdentity(data)
 }
