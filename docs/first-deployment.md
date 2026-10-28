@@ -230,3 +230,11 @@ OSS 上传统一使用官方 `ali-oss` SDK，部署脚本共用 `deploy/oss/clie
 | `ENOENT` | 本地打包产物路径，属于文件问题。 |
 
 如需公开托管应用静态文件，全局与该 Bucket 的阻止公共访问均需允许公共访问；只有 Bucket 开关关闭而全局仍开启时不会生效，见 [阿里云阻止公共访问说明](https://help.aliyun.com/zh/oss/user-guide/block-public-access/)。不要将任何桶设置成公共写。若仍失败，提供新的脱敏错误行即可，不要发送 AccessKey Secret。
+
+若错误是 `Public static verification failed`、`UND_ERR_CONNECT_TIMEOUT` 或原来的 `TypeError: fetch failed`，且堆栈来自 `oss-static.mjs`，失败发生在上传后的公开 HTTPS 读取校验。此时应检查报错中的具体文件 URL、域名 DNS、CDN 节点路由、访问控制与证书；它与 OSS SDK 上传权限是不同环节。静态文件读取遇到临时连接中断、超时、HTTP 408 / 429 / 500 / 502 / 503 / 504 时最多尝试三次，只重试读取，不重复上传。
+
+自定义域名连续出现临时网络连接错误时，脚本改用 Bucket 的标准公网 HTTPS 地址匿名读取文件，继续核对每个对象的公开可读性、大小和 SHA-256；同一次初始应用上传会共享该状态，避免每个应用重复等待 CDN 超时。OSS 校验通过后允许发布继续，并在 Actions 输出告警：本次没有验证 CDN 域名连通性和目录首页规则，应从目标用户网络另外确认。此机制不改变应用使用的公开域名，也不要求将国内 CDN 改成全球加速。
+
+403、404、证书错误、文件大小或摘要不符不会因 CDN 回退而被忽略；OSS 公网读取失败仍使发布失败，不继续发布后续首页、服务工作线程或版本清单。
+
+使用 CDN 时，国内网络访问正常并不能证明 GitHub Actions 所在网络可达。应从 Actions 的执行环境核对具体文件 URL，并检查域名加速区域与海外访问限制。阿里云的“仅中国内地”区域会将海外访问调度到中国内地节点，配置说明见 [加速区域](https://help.aliyun.com/zh/cdn/user-guide/change-the-accelerated-region/)。不要通过更换 AccessKey 或关闭 HTTPS 校验处理连接超时。

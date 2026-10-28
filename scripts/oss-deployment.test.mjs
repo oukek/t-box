@@ -209,6 +209,147 @@ test('website dependencies precede HTML and the service worker; metadata control
   assert.equal(remote.calls[2].options.mime, 'text/html; charset=utf-8')
 })
 
+test('temporary public read failures retry verification without reuploading or publishing entrypoints early', async () => {
+  for (const failure of ['connect', 'body', 'server']) {
+    const remote = storage()
+    const delays = []
+    let failed = false
+    let reads = 0
+    await publishFiles([file('index.html', 'html'), file('assets/main.js', 'script'), file('tbox-offline-sw.js', 'worker')], settings(), {
+      ...remote.options,
+      pause: async (delay) => delays.push(delay),
+      request: async (url, options) => {
+        reads++
+        if (!failed) {
+          failed = true
+          assert.equal(url.pathname, '/assets/main.js')
+          assert.equal(remote.objects.has('/index.html'), false)
+          const error = new TypeError('fetch failed', { cause: Object.assign(new Error('interrupted'), { code: failure === 'body' ? 'UND_ERR_SOCKET' : 'UND_ERR_CONNECT_TIMEOUT' }) })
+          if (failure === 'connect') {
+            throw error
+          }
+          return failure === 'server'
+            ? new Response('temporarily unavailable', { status: 503 })
+            : new Response(new ReadableStream({ start: (controller) => controller.error(error) }))
+        }
+        return remote.options.request(url, options)
+      },
+    })
+    assert.deepEqual(delays, [1000])
+    assert.equal(reads, 5)
+    assert.deepEqual(remote.calls.map(({ key }) => key), ['assets/main.js', 'index.html', 'tbox-offline-sw.js'])
+  }
+})
+
+test('CDN timeouts verify anonymous OSS objects and disclose unverified domain routing before activating the artifact', async (t) => {
+  const warnings = []
+  t.mock.method(console, 'warn', (message) => warnings.push(message))
+  const files = [file('index.html', 'html'), file('assets/main.js', 'script')]
+  const hashes = Object.fromEntries(files.map((entry) => [entry.path, sha256(Buffer.from(entry.content, 'base64'))]).sort(([a], [b]) => a.localeCompare(b)))
+  const digest = sha256(JSON.stringify(hashes))
+  for (const failure of ['asset', 'directory']) {
+    const remote = storage()
+    const delays = []
+    const verification = { ossOnly: false }
+    let cdnReads = 0
+    let ossReads = 0
+    await publishArtifact('calendar', digest, files, settings(), {
+      ...remote.options,
+      verification,
+      pause: async (delay) => delays.push(delay),
+      request: async (url, options) => {
+        assert.equal(options.credentials, 'omit')
+        assert.equal(options.headers?.authorization, undefined)
+        if (url.hostname === 'apps.example.com') {
+          cdnReads++
+          if (failure === 'directory' ? url.pathname.endsWith('/') : url.pathname.endsWith('/assets/main.js')) {
+            throw new TypeError('fetch failed', { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } })
+          }
+        } else {
+          assert.equal(url.origin, 'https://test-public-bucket.oss-cn-hangzhou.aliyuncs.com')
+          assert.equal(url.pathname.endsWith('/'), false, 'OSS object reads cannot assert CDN directory index behavior')
+          ossReads++
+        }
+        return remote.options.request(url, options)
+      },
+    })
+    assert.equal(verification.ossOnly, true)
+    assert.deepEqual(delays, [1000, 2000])
+    assert.equal(cdnReads, failure === 'asset' ? 3 : 5)
+    assert.equal(ossReads, failure === 'asset' ? 3 : 2)
+    assert.deepEqual(remote.calls.map(({ key }) => key), [`calendar/${digest}/assets/main.js`, `calendar/${digest}/index.html`, `calendar/${digest}/artifact.json`])
+  }
+  assert.equal(warnings.filter((message) => message.includes('::warning::')).length, 2)
+  assert.ok(warnings.some((message) => message.includes('directory indexes remain unverified')))
+})
+
+test('OSS connection, permission and content failures remain fatal after CDN fallback without exposing raw errors', async () => {
+  for (const failure of ['connect', 'permission', 'checksum']) {
+    const files = [file('index.html', 'html'), file('assets/main.js', 'script')]
+    const hashes = Object.fromEntries(files.map((entry) => [entry.path, sha256(Buffer.from(entry.content, 'base64'))]).sort(([a], [b]) => a.localeCompare(b)))
+    const digest = sha256(JSON.stringify(hashes))
+    const remote = storage()
+    const delays = []
+    const secret = 'private-fixture-error-data'
+    let reads = 0
+    await assert.rejects(publishArtifact('calendar', digest, files, settings(), {
+      ...remote.options,
+      pause: async (delay) => delays.push(delay),
+      request: async (url) => {
+        reads++
+        if (url.hostname !== 'apps.example.com') {
+          assert.equal(url.origin, 'https://test-public-bucket.oss-cn-hangzhou.aliyuncs.com')
+          if (failure === 'permission') {
+            return new Response(secret, { status: 403 })
+          }
+          if (failure === 'checksum') {
+            return new Response('wrong!')
+          }
+        }
+        throw new TypeError(secret, { cause: Object.assign(new Error(secret), { code: 'UND_ERR_CONNECT_TIMEOUT' }) })
+      },
+    }), (error) => {
+      assert.ok(error.message.includes(`https://test-public-bucket.oss-cn-hangzhou.aliyuncs.com/calendar/${digest}/assets/main.js`))
+      assert.match(error.message, failure === 'connect' ? /code=UND_ERR_CONNECT_TIMEOUT/ : failure === 'permission' ? /HTTP 403/ : /checksum mismatch/)
+      assert.ok(!String(error.stack).includes(secret))
+      assert.equal(error.cause, undefined)
+      return true
+    })
+    assert.equal(reads, failure === 'connect' ? 6 : 4)
+    assert.deepEqual(delays, failure === 'connect' ? [1000, 2000, 1000, 2000] : [1000, 2000])
+    assert.equal(remote.calls.length, 1)
+    assert.equal(remote.objects.has(`/calendar/${digest}/index.html`), false)
+    assert.equal(remote.objects.has(`/calendar/${digest}/artifact.json`), false)
+  }
+})
+
+test('public permission, missing-file and checksum failures fail immediately before entrypoint publication', async () => {
+  for (const failure of [403, 404, 'checksum', 'size', 'certificate']) {
+    const remote = storage()
+    let reads = 0
+    await assert.rejects(publishFiles([file('index.html', 'html'), file('assets/main.js', 'original')], settings(), {
+      ...remote.options,
+      pause: async () => assert.fail('Permanent public file failures must not retry'),
+      request: async () => {
+        reads++
+        if (failure === 'certificate') {
+          throw new TypeError('private-error-body', { cause: { code: 'ERR_TLS_CERT_ALTNAME_INVALID' } })
+        }
+        return typeof failure === 'number'
+          ? new Response('private-error-body', { status: failure })
+          : new Response(failure === 'checksum' ? 'tampered' : 'oversized-content')
+      },
+    }), (error) => {
+      assert.ok(error.message.includes('https://apps.example.com/assets/main.js'))
+      assert.match(error.message, typeof failure === 'number' ? new RegExp(`HTTP ${failure}`) : failure === 'checksum' ? /checksum mismatch/ : failure === 'certificate' ? /ERR_TLS_CERT_ALTNAME_INVALID/ : /expected size/)
+      assert.ok(!error.message.includes('private-error-body'))
+      return true
+    })
+    assert.equal(reads, 1)
+    assert.equal(remote.objects.has('/index.html'), false)
+  }
+})
+
 test('a missing or changed remote dependency prevents entrypoint publication', async () => {
   for (const failure of [{ corrupt: true }, { missing: true }]) {
     const remote = storage(failure)
@@ -258,6 +399,38 @@ test('PM2 bootstrap uploads exactly the packaged application digest', async (t) 
   assert.equal(remote.calls.length, 2)
   await writeFile(join(directory, 'index.html'), 'tampered')
   await assert.rejects(publishBootstrap(root, settings(), remote.options), /checksum/)
+})
+
+test('bootstrap shares CDN fallback across applications and verifies every uploaded OSS object', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'tbox-bootstrap-cdn-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  for (const appId of ['calculator', 'calendar']) {
+    const files = { 'index.html': sha256(appId) }
+    const digest = sha256(JSON.stringify(files))
+    const directory = join(root, appId, digest)
+    await mkdir(directory, { recursive: true })
+    await writeFile(join(directory, 'index.html'), appId)
+    await writeFile(join(directory, 'artifact.json'), JSON.stringify({ protocol: 1, appId, digest, files }))
+  }
+  const remote = storage()
+  let cdnReads = 0
+  let ossReads = 0
+  await publishBootstrap(root, settings(), {
+    ...remote.options,
+    pause: async () => {},
+    request: async (url, options) => {
+      if (url.hostname === 'apps.example.com') {
+        cdnReads++
+        throw new TypeError('fetch failed', { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } })
+      }
+      assert.equal(url.origin, 'https://test-public-bucket.oss-cn-hangzhou.aliyuncs.com')
+      ossReads++
+      return remote.options.request(url, options)
+    },
+  })
+  assert.equal(cdnReads, 3)
+  assert.equal(ossReads, 4)
+  assert.equal(remote.calls.length, 4)
 })
 
 test('application CSP is embedded in built HTML for direct OSS hosting', () => {

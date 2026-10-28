@@ -43,6 +43,10 @@ for (const { site, settings } of targets) {
   if (site === 'app') {
     await prepareWebVerification(cwd, directory, settings.origin)
   }
-  await publishSite(directory, settings)
-  console.info(`${site} published and verified: ${settings.origin}`)
+  const verification = { ossOnly: false }
+  await publishSite(directory, settings, { verification })
+  console.info(`${site} uploaded files verified: ${settings.origin}`)
+  if (verification.ossOnly) {
+    console.warn(`${site}: CDN/custom-domain reachability was not verified from this runner; check the website from the target user network.`)
+  }
 }
