@@ -17,7 +17,8 @@ import { receiptCompletion } from './completion.js'
 import { prepareContext } from './context.js'
 import { receiptEvidence } from './evidence.js'
 import { executeTool, toolError } from './executor.js'
-import { modelRequest } from './model-retry.js'
+import { switchFailedModel } from './model-failover.js'
+import { failoverModelError, modelRequest, modelRequestKey } from './model-retry.js'
 import { object } from './schema.js'
 import { MessageTimeline } from './timeline.js'
 import { boundedToolHistory, modelToolResult } from './tool-results.js'
@@ -131,7 +132,7 @@ export async function orchestrate(
     }
     if (frame.done) {
       if (state.frames.length === 1) {
-        return
+        return provider
       }
       state.frames.pop()
       const parent = state.frames.at(-1)!
@@ -563,8 +564,25 @@ export async function orchestrate(
     }
     const compactId = randomUUID()
     const contextId = `${compactId}:context`
-    const contextState = structuredClone(frame.contextState || {})
     const records = (frame.modelRequests ||= {})
+    // A saved logical request survives changes to history caused by compaction and failover.
+    frame.modelRequestKey ||= Object.entries(records).find(([, record]) => record.status !== 'completed')?.[0] ??
+      modelRequestKey('next', modelInput)
+    if (records[frame.modelRequestKey]?.status === 'failed') {
+      // Explicit resumption may probe the last model once after an operator fixes the pool.
+      // The saved automatic retry counter is retained.
+      delete frame.modelFailover
+    }
+    if (records[frame.modelRequestKey]?.status === 'waiting' && !frame.modelFailover && provider.failover && provider.modelIdentity) {
+      // Upgrade checkpoints created before task-level failover existed.
+      frame.modelFailover = { pending: true, modelIds: [provider.modelIdentity.modelId], providerIds: [provider.modelIdentity.providerId] }
+    }
+    let contextUsageFailed = false
+    const selectReplacement = async () => {
+      provider = await switchFailedModel(provider, state, frame, ctx.session, options.registry, options.host?.attachments, run.abort.signal)
+      const failedProvider = frame.modelFailover?.providerIds.at(-1)
+      return !!failedProvider && !!provider.modelIdentity && provider.modelIdentity.providerId !== failedProvider
+    }
     const request = <T>(
       method: string,
       input: ProviderInput,
@@ -573,13 +591,20 @@ export async function orchestrate(
     ) =>
       modelRequest(method, input, invoke, {
         records,
+        key: main ? frame.modelRequestKey : `${provider.configurationKey || provider.mode}:${modelRequestKey(method, input)}`,
+        retry: main,
+        canFailover: main && provider.failover && provider.modelIdentity ? failoverModelError : undefined,
+        allowRetry: () => !contextUsageFailed,
+        beforeRetry: main && provider.failover ? selectReplacement : undefined,
         save,
-        onUsage: (usage, operationId) =>
-          recordUsage(
-            usage,
-            operationId,
-            input.execution?.purpose ?? (main ? purpose : 'compaction'),
-          ),
+        onUsage: async (usage, operationId) => {
+          try {
+            await recordUsage(usage, operationId, input.execution?.purpose ?? (main ? purpose : 'compaction'))
+          } catch (error) {
+            contextUsageFailed = true
+            throw error
+          }
+        },
         onAttempt: main
           ? (operationId) => {
               turnId = operationId
@@ -596,6 +621,12 @@ export async function orchestrate(
             }
           : undefined,
         onRetry: async (progress) => {
+          if (main && provider.failover && provider.modelIdentity && progress.error.code !== 'MEMORY_EXTRACTION_INVALID') {
+            const routing = (frame.modelFailover ||= { pending: false, modelIds: [], providerIds: [] })
+            routing.pending = true
+            routing.modelIds = [...new Set([...routing.modelIds, provider.modelIdentity.modelId])]
+            routing.providerIds = [...new Set([...routing.providerIds, provider.modelIdentity.providerId])]
+          }
           if (main) {
             for (const id of textIds) {
               const item = message.timeline?.find((item) => item.id === id)
@@ -622,101 +653,112 @@ export async function orchestrate(
           timeline.text(
             id,
             'notice',
-            `${progress.error.message}，${Math.ceil(progress.delayMs / 1000)} 秒后重试（${progress.attempt}/${progress.maxRetries}）。已完成的工具不会重新执行。`,
+            `${progress.error.message}，${frame.modelFailover?.pending ? '准备切换可用模型重试' : `${Math.ceil(progress.delayMs / 1000)} 秒后重试`}（${progress.attempt}/${progress.maxRetries}）。已完成的工具不会重新执行。`,
             false,
             '自动重试',
           )
           timeline.finishText(id)
         },
       })
-    const contextProvider: ChatProvider = {
-      mode: provider.mode,
-      contextPolicy: provider.contextPolicy,
-      maxOutputTokens: provider.maxOutputTokens,
-      next: (input) => request('next', input, provider.next.bind(provider)),
-      countInputTokens: provider.countInputTokens
-        ? (input) =>
-            request('count', input, provider.countInputTokens!.bind(provider))
-        : undefined,
-      summarize: provider.summarize
-        ? (input) =>
-            request('summary', input, provider.summarize!.bind(provider))
-        : undefined,
-      compact: provider.compact
-        ? (input) => request('compact', input, provider.compact!.bind(provider))
-        : undefined,
-    }
-    let context: Awaited<ReturnType<typeof prepareContext>>
-    try {
-      context = await abortable(
-        prepareContext(
-          contextProvider,
-          {
-            ...modelInput,
-            execution: modelInput.execution
-              ? {
-                  ...modelInput.execution,
-                  operationId: compactId,
-                  purpose: 'compaction',
-                }
-              : undefined,
-            onUsage: (usage) => recordUsage(usage, compactId, 'compaction'),
-          },
-          {
-            state: contextState,
-            onUsage: (usage, operationId) =>
-              recordUsage(usage, operationId, 'compaction'),
-            onProgress: async (progress) => {
-              const qualifier = progress.estimated ? '估算 ' : ''
-              const text =
-                progress.phase === 'start'
-                  ? `上下文${qualifier}${progress.beforeTokens.toLocaleString()} token，达到压缩阈值 ${progress.triggerTokens.toLocaleString()}（有效输入预算 ${progress.inputBudget.toLocaleString()}）。正在整理早期会话；保留最近请求与工具结果。`
-                  : progress.phase === 'progress'
-                    ? `正在整理第 ${progress.part}/${progress.parts} 段历史，保留最近 ${progress.retainedTurns} 轮原文。`
-                    : `上下文已整理：${qualifier}${progress.beforeTokens.toLocaleString()} → ${progress.afterTokens!.toLocaleString()} token（有效输入预算 ${progress.inputBudget.toLocaleString()}）。原始消息与执行记录保留。`
-              timeline.text(contextId, 'analysis', text, false, '整理上下文')
-              if (progress.phase === 'completed') {
-                timeline.finishText(contextId)
-              }
-              await save()
+    const prepareModelContext = async (attemptInput: ProviderInput) => {
+      const contextProvider: ChatProvider = {
+        mode: provider.mode,
+        contextPolicy: provider.contextPolicy,
+        maxOutputTokens: provider.maxOutputTokens,
+        next: (input) => request('next', input, provider.next.bind(provider)),
+        countInputTokens: provider.countInputTokens
+          ? (input) =>
+              request('count', input, provider.countInputTokens!.bind(provider))
+          : undefined,
+        summarize: provider.summarize
+          ? (input) =>
+              request('summary', input, provider.summarize!.bind(provider))
+          : undefined,
+        compact: provider.compact
+          ? (input) => request('compact', input, provider.compact!.bind(provider))
+          : undefined,
+      }
+      const contextState = structuredClone(frame.contextState || {})
+      let context: Awaited<ReturnType<typeof prepareContext>>
+      try {
+        context = await abortable(
+          prepareContext(
+            contextProvider,
+            {
+              ...attemptInput,
+              execution: attemptInput.execution
+                ? {
+                    ...attemptInput.execution,
+                    operationId: compactId,
+                    purpose: 'compaction',
+                  }
+                : undefined,
+              onUsage: (usage) => recordUsage(usage, compactId, 'compaction'),
             },
-          },
-        ),
-        run.abort.signal,
-      )
-    } catch (error) {
-      if (message.timeline?.some((item) => item.id === contextId)) {
-        timeline.text(
-          contextId,
-          'analysis',
-          '上下文整理未完成，原始历史保留。',
-          false,
-          '整理上下文',
+            {
+              state: contextState,
+              onUsage: (usage, operationId) =>
+                recordUsage(usage, operationId, 'compaction'),
+              onProgress: async (progress) => {
+                const qualifier = progress.estimated ? '估算 ' : ''
+                const text =
+                  progress.phase === 'start'
+                    ? `上下文${qualifier}${progress.beforeTokens.toLocaleString()} token，达到压缩阈值 ${progress.triggerTokens.toLocaleString()}（有效输入预算 ${progress.inputBudget.toLocaleString()}）。正在整理早期会话；保留最近请求与工具结果。`
+                    : progress.phase === 'progress'
+                      ? `正在整理第 ${progress.part}/${progress.parts} 段历史，保留最近 ${progress.retainedTurns} 轮原文。`
+                      : `上下文已整理：${qualifier}${progress.beforeTokens.toLocaleString()} → ${progress.afterTokens!.toLocaleString()} token（有效输入预算 ${progress.inputBudget.toLocaleString()}）。原始消息与执行记录保留。`
+                timeline.text(contextId, 'analysis', text, false, '整理上下文')
+                if (progress.phase === 'completed') {
+                  timeline.finishText(contextId)
+                }
+                await save()
+              },
+            },
+          ),
+          run.abort.signal,
         )
-        timeline.finishText(contextId, undefined, 'interrupted')
+      } catch (error) {
+        if (message.timeline?.some((item) => item.id === contextId)) {
+          timeline.text(
+            contextId,
+            'analysis',
+            '上下文整理未完成，原始历史保留。',
+            false,
+            '整理上下文',
+          )
+          timeline.finishText(contextId, undefined, 'interrupted')
+        }
+        throw error
       }
-      throw error
-    }
-    if (context.compacted) {
-      const durableHistory =
-        options.host?.attachments?.restoreContextReferences?.(
-          frame.history,
-          modelInput.history,
-          context.history,
-        ) ?? context.history
-      frame.history.splice(0, frame.history.length, ...durableHistory)
-      frame.contextState = contextState
-      if (state.frames.length === 1) {
-        ctx.session.contextState = contextState
+      if (context.compacted) {
+        const durableHistory =
+          options.host?.attachments?.restoreContextReferences?.(
+            frame.history,
+            attemptInput.history,
+            context.history,
+          ) ?? context.history
+        frame.history.splice(0, frame.history.length, ...durableHistory)
+        frame.contextState = contextState
+        if (state.frames.length === 1) {
+          ctx.session.contextState = contextState
+        }
+        await save()
       }
-      await save()
+      return context.history
     }
     const turn = await abortable(
       request(
         'next',
-        { ...modelInput, history: context.history },
+        modelInput,
         async (input) => {
-          const turn = await provider.next(input)
+          await selectReplacement()
+          await save()
+          const history = ctx.actor && options.host?.attachments
+            ? await options.host.attachments.modelHistory(ctx.actor, boundedToolHistory(frame.history, current))
+            : boundedToolHistory(frame.history, current)
+          const prepared = await prepareModelContext({ ...input, history })
+          input.signal.throwIfAborted()
+          const turn = await provider.next({ ...input, history: prepared })
           if (
             turn.calls.length > 8 ||
             JSON.stringify(turn.output).length > 400_000
@@ -810,6 +852,8 @@ export async function orchestrate(
     }
     // Provider receipts are temporary replay protection until this logical turn commits.
     delete frame.modelRequests
+    delete frame.modelRequestKey
+    delete frame.modelFailover
     state.totalRounds++
     if (
       flow &&
@@ -924,4 +968,5 @@ export async function orchestrate(
     frame.done = !flow && !turn.calls.length
     await save()
   }
+  return provider
 }

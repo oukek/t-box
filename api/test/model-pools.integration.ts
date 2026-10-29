@@ -84,6 +84,7 @@ const app = createApp({
 let adminId = ''
 let rejectNext = false
 let rejectImage = false
+const unavailableModels = new Set<string>()
 const requested: string[] = []
 const chatBodies: any[] = []
 let chat: ApplicationChatService | undefined
@@ -115,18 +116,20 @@ const remote = createServer(async (req, res) => {
     return
   }
   requested.push(body.model)
-  if (rejectNext || (rejectImage && req.url === '/v1/images/generations')) {
+  if (rejectNext || unavailableModels.has(body.model) || (rejectImage && req.url === '/v1/images/generations')) {
     rejectNext = false
-    res.writeHead(429, {
+    const unavailable = unavailableModels.has(body.model)
+    res.writeHead(unavailable ? 503 : 429, {
       'content-type': 'application/json',
       'x-request-id': 'fixture-error-request',
+      ...(unavailable ? { 'retry-after': '600' } : {}),
     })
     res.end(
       JSON.stringify({
         error: {
           message: `fixture rate limited; echo ${apiKey}`,
-          type: 'rate_limit_error',
-          code: 'rate_limit_exceeded',
+          type: unavailable ? 'upstream_error' : 'rate_limit_error',
+          code: unavailable ? 'service_unavailable' : 'rate_limit_exceeded',
         },
       }),
     )
@@ -298,6 +301,9 @@ try {
     'A new task can leave an unavailable preferred model without weakening strict resume pinning',
   )
   await service.selectModel({ modelIds: [a, b, c] })
+  const replacement = await database.forRun({ configurationKey: pinned!.configurationKey })
+  assert.equal((await replacement.failover!({ excludeModelIds: [a], avoidProviderIds: [providers[0]!], supportsVision: false })).modelIdentity!.modelId, c, 'Failover prefers a different provider over an idle sibling')
+  await assert.rejects(replacement.failover!({ excludeModelIds: [b], avoidProviderIds: [], supportsVision: true }), { code: 'MODEL_POOL_UNAVAILABLE' })
   const price = await new BillingPricingService(
     new QuotaCatalog(source),
   ).schedule()
@@ -450,7 +456,7 @@ try {
   assert.equal(
     new Set(recorded.map((call) => call.id)).size,
     1,
-    'Retry remains on the pinned model',
+    'The low-level retry primitive retains its bound provider; task orchestration owns failover',
   )
   const failed = recorded.find((call) => call.status === 'failed')!
   const succeeded = recorded.find((call) => call.status === 'succeeded')!
@@ -708,23 +714,36 @@ try {
     events.push(structuredClone(event)),
   )
   const until = async (check: () => boolean) => {
-    const deadline = Date.now() + 8000
+    const deadline = Date.now() + 18000
     while (!check()) {
       if (Date.now() >= deadline) {
-        throw new Error('Socket pool test timed out')
+        throw new Error(`Socket pool test timed out: ${JSON.stringify(events.filter((event) => event.type === 'error' || event.type === 'run.finished').map((event) => ({ type: event.type, code: event.code, message: event.message, status: event.status, runId: event.runId, task: event.snapshot?.task })).slice(-5))}`)
       }
       await new Promise((resolve) => setTimeout(resolve, 10))
     }
   }
   await connection.receive({ type: 'session.open', authToken: login.token })
   await until(() => events.some((event) => event.type === 'session.ready'))
+  const sendWhenIdle = async (event: Record<string, unknown>) => {
+    // Archive subscription refreshes can temporarily take the local lock after run.finished.
+    // Retry only a command rejected before admission, keeping the same request ID.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await until(() => [...chat!.sessions.all()].every((session) => !session.active && !session.finishing))
+      const offset = events.length
+      await connection.receive(event)
+      if (!events.slice(offset).some((reply) => reply.type === 'error' && reply.code === 'RUN_IN_PROGRESS' && reply.requestId === event.requestId)) {
+        return
+      }
+    }
+    assert.fail('The socket command could not acquire its idle session')
+  }
   const socketTasks: string[] = []
   for (const text of [
     'First tiny question',
     'Continue using the previous answer',
   ]) {
     const requestId = randomUUID()
-    await connection.receive({
+    await sendWhenIdle({
       type: 'message.send',
       requestId,
       text,
@@ -765,10 +784,34 @@ try {
     socketModels[1]![0]!.id,
     'The same conversation keeps its model and cached prefix',
   )
+  // An entire upstream provider is unavailable: leave its sibling models and continue on provider 1.
+  await service.selectModel({ modelIds: [a, b, c] })
+  await source.query('UPDATE ai_model_routing SET cooldown_until=NULL,failures=0 WHERE model_id IN (?,?,?)', [a, b, c])
+  unavailableModels.add('fixture-a')
+  unavailableModels.add('fixture-b')
+  const failoverRequest = randomUUID()
+  await sendWhenIdle({ type: 'message.send', requestId: failoverRequest, text: 'Continue through an upstream outage', localDate: '2026-10-15' })
+  await until(() => events.some((event) => event.type === 'run.finished' && events.some((started) => started.type === 'run.started' && started.run.id === event.runId && started.run.requestId === failoverRequest)))
+  const failoverTask = events.find((event) => event.type === 'run.started' && event.run.requestId === failoverRequest).run.id
+  socketTasks.push(failoverTask)
+  const failoverCalls = await operations.forTask(failoverTask)
+  assert.equal(failoverCalls.length, 2, 'A provider outage does not consume all five retries on that provider')
+  assert.equal(failoverCalls.find((call) => call.status === 'failed')!.providerId, providers[0])
+  assert.equal(failoverCalls.find((call) => call.status === 'succeeded')!.providerId, providers[1])
+  assert.equal(failoverCalls.find((call) => call.status === 'succeeded')!.id, c)
+  assert.equal(new Set(failoverCalls.map((call) => call.logicalId)).size, 1)
+  assert.deepEqual(failoverCalls.map((call) => call.retryIndex).sort(), [0, 1])
+  assert.equal([...chat.sessions.all()][0]!.configurationKey?.startsWith(`${c}:`), true)
+  const chargedModel = (await source.query('SELECT model_config_id,prices_json FROM billing_usage WHERE id=?', [failoverCalls.find((call) => call.status === 'succeeded')!.callId]))[0]
+  assert.equal(chargedModel.model_config_id, c, 'Replacement calls are metered against the actual replacement model')
+  const chargedPrices = typeof chargedModel.prices_json === 'string' ? JSON.parse(chargedModel.prices_json) : chargedModel.prices_json
+  assert.equal(Number(chargedPrices.inputPrice), 1, 'Replacement calls use their own price snapshot')
+  unavailableModels.clear()
+  await source.query('UPDATE ai_model_routing SET cooldown_until=NULL,failures=0 WHERE model_id IN (?,?,?)', [a, b, c])
   const alternative = socketModels[0]![0]!.id === a ? b : a
   await service.selectModel({ modelIds: [alternative] })
   const switchedId = randomUUID()
-  await connection.receive({
+  await sendWhenIdle({
     type: 'message.send',
     requestId: switchedId,
     text: 'Continue after changing the model pool',
@@ -807,6 +850,27 @@ try {
   for (const id of socketTasks) {
     assert.equal((await platform.operations.task(id)).status, 'completed')
   }
+  // Exhausting compatible alternatives pauses safely; explicitly resuming after repair probes once again.
+  await service.selectModel({ modelIds: [a, b, c] })
+  await source.query('UPDATE ai_model_routing SET cooldown_until=NULL,failures=0 WHERE model_id IN (?,?,?)', [a, b, c])
+  for (const model of ['fixture-a', 'fixture-b', 'fixture-c']) {
+    unavailableModels.add(model)
+  }
+  const unavailableRequest = randomUUID()
+  await sendWhenIdle({ type: 'message.send', requestId: unavailableRequest, text: 'Retain this task while all providers are unavailable', localDate: '2026-10-15' })
+  await until(() => events.some((event) => event.type === 'run.finished' && events.some((started) => started.type === 'run.started' && started.run.id === event.runId && started.run.requestId === unavailableRequest)))
+  const unavailableTask = events.find((event) => event.type === 'run.started' && event.run.requestId === unavailableRequest).run.id
+  const unavailableCalls = await operations.forTask(unavailableTask)
+  assert.equal(unavailableCalls.length, 3)
+  assert.equal(new Set(unavailableCalls.map((call) => call.id)).size, 3, 'Every failed model is tried once, even when its cooldown expires')
+  assert.equal((await platform.operations.task(unavailableTask)).status, 'paused')
+  unavailableModels.clear()
+  await sendWhenIdle({ type: 'task.resume', taskId: unavailableTask })
+  await until(() => [...chat!.sessions.all()][0]!.task?.id === unavailableTask && [...chat!.sessions.all()][0]!.task?.status === 'completed')
+  const repairedCalls = await operations.forTask(unavailableTask)
+  assert.equal(repairedCalls.length, 4, 'Repair/resume retains the previous attempts without resetting their budget')
+  assert.deepEqual(repairedCalls.map((call) => call.retryIndex).sort(), [0, 1, 2, 3])
+  assert.equal(new Set(repairedCalls.map((call) => call.logicalId)).size, 1)
   await chat.close()
   chat = undefined
   await service.selectModel({ modelIds: [b] })

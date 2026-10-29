@@ -25,6 +25,7 @@ export class ModelRouting {
     candidates: T[],
     configuration?: ConfigurationSnapshot,
     preferredModelId?: string,
+    avoidProviderIds: string[] = [],
   ): Promise<T> {
     if (!candidates.length) {
       throw ErrorCode.MODEL_POOL_UNAVAILABLE()
@@ -102,6 +103,7 @@ export class ModelRouting {
       )
       available.sort(
         (a, b) =>
+          Number(avoidProviderIds.includes(a.id)) - Number(avoidProviderIds.includes(b.id)) ||
           score(a) - score(b) ||
           Number(states.get(a.modelId)?.last_selected || 0) -
           Number(states.get(b.modelId)?.last_selected || 0) ||

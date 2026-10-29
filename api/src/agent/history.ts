@@ -22,7 +22,11 @@ export function portableHistory(history: ProviderItem[]): ProviderItem[] | undef
       const content = item.content.flatMap((part) => 'text' in part ? [part.text] : 'refusal' in part ? [part.refusal] : []).join('\n')
       return content ? [{ role: 'assistant', content }] : []
     }
-    return [item]
+    if ('role' in item && 'content' in item) {
+      // Message IDs/status belong to the source provider just like reasoning IDs.
+      return [{ role: item.role, content: item.content } as ProviderItem]
+    }
+    return []
   })
 }
 /** Rehydrate portable history without treating visible candidate text as evidence of successful writes. */

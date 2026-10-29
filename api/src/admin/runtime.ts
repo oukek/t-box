@@ -8,7 +8,7 @@ import { createConversationProvider } from '../chat/provider-factory.js'
 import { UnconfiguredProvider } from '../chat/provider.js'
 import { ErrorCode } from '../error-codes.js'
 import { AuditedChatProvider } from '../models/provider.js'
-/** Resolve once per run, so configuration updates never split a tool loop. */
+/** Keep a model until an explicit, checkpointed failover; never swap inside a tool call. */
 export class DatabaseChatProvider implements ChatProvider {
   readonly mode = 'unconfigured'
   constructor(
@@ -45,7 +45,16 @@ export class DatabaseChatProvider implements ChatProvider {
           this.configuration.configuration,
         )
       : metered
-    return audited
+    return Object.assign(audited, {
+      modelIdentity: { modelId: config.billingModelId, providerId: config.providerId },
+      // Explicit memory-extraction model selection remains an administrator constraint.
+      ...(options?.modelId || options?.peek
+        ? {}
+        : {
+            failover: (selection: Parameters<NonNullable<ChatProvider['failover']>>[0]) =>
+              this.forRun({ ...selection, supportsVision: options?.supportsVision || selection.supportsVision }),
+          }),
+    })
   }
 
   async next(_input: ProviderInput): Promise<never> {

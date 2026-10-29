@@ -314,12 +314,12 @@ export async function runConversation(
       type: 'session.snapshot',
       snapshot: snapshot(session, provider.mode),
     })
-    await orchestrate(options, ctx, run, assistant, provider, state, save)
+    const activeProvider = await orchestrate(options, ctx, run, assistant, provider, state, save)
     await generateConversationTitle(
       options,
       session,
       principal,
-      provider,
+      activeProvider,
       run.abort.signal,
       state.configuration,
     )

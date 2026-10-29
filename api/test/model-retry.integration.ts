@@ -9,6 +9,7 @@ import type {
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createBillRepository } from '@t-box/ledger-server/repository'
+import { resolveContextPolicy } from '@t-box/shared'
 import OpenAI from 'openai'
 import { defaultWorkflowPrompts } from '../src/agent-workflow/defaults.js'
 import { MeteredChatProvider } from '../src/billing/provider.js'
@@ -23,6 +24,8 @@ const source = await createDataSource().initialize()
 const platform = new PlatformService(source)
 const providerId = randomUUID()
 const modelId = randomUUID()
+const replacementModels = [randomUUID(), randomUUID()]
+const routed: { key: string, purpose?: string, agentId?: string, logicalId?: string, retry?: number }[] = []
 let userId: string | undefined
 const services: ApplicationChatService[] = []
 const call = (name: string, args: unknown): ProviderTurn => {
@@ -79,6 +82,7 @@ try {
   let childFailed = false
   let rootFailed = false
   let requestCount = 0
+  let contextRequestCount = 0
   const operations = new Set<string>()
   const raw: ChatProvider = {
     mode: 'openai',
@@ -144,11 +148,70 @@ try {
       return say(input, '时间助手已完成处理。')
     },
   }
-  const provider = new MeteredChatProvider(raw, platform.billing, modelId, {
-    inputPrice: '0',
-    outputPrice: '0',
-    imagePrice: '0',
-  })
+  for (const id of replacementModels) {
+    await source.query(
+      'INSERT INTO ai_models(id,provider_id,model_id,name,enabled) VALUES(?,?,?,?,1)',
+      [id, providerId, `fixture-${id}`, 'retry-failover-fixture'],
+    )
+  }
+  const pool = new Map<string, ChatProvider>()
+  for (const [index, id] of [modelId, ...replacementModels].entries()) {
+    const key = `retry-fixture-${id}`
+    const inner: ChatProvider = {
+      ...raw,
+      configurationKey: key,
+      ...(index === 0
+        ? {
+            contextPolicy: { ...resolveContextPolicy(), tokenCounting: true, compaction: true, compactionMode: 'native' },
+            async countInputTokens(input: ProviderInput) {
+              return input.history.some((item) => item.type === 'compaction')
+                ? 1000
+                : input.history.some((item) => item.type === 'function_call_output' && input.history.some((call) => call.type === 'function_call' && call.call_id === item.call_id && call.name === 'time_timer_create')) ? 100000 : 1000
+            },
+            async compact(input: ProviderInput) {
+              contextRequestCount++
+              await input.onUsage?.({ responseId: randomUUID(), inputTokens: 100000, outputTokens: 1000 })
+              return [{ type: 'compaction' as const, id: 'opaque-child', encrypted_content: 'private-native-memory' }, ...input.history.filter((item) => item.type !== 'reasoning')]
+            },
+          }
+        : {}),
+      async next(input) {
+        routed.push({ key, purpose: input.execution?.purpose, agentId: input.execution?.agentId, logicalId: input.execution?.logicalRequestId, retry: input.execution?.retryIndex })
+        assert.ok(input.history.every((item) => item.type !== 'reasoning' || item.id === `private-${id}`), 'No reasoning from another model is reused')
+        if (index > 0) {
+          assert.ok(input.history.every((item) => item.type !== 'compaction'), 'Opaque native memory is rebuilt before failover')
+        }
+        const turn = await raw.next(input)
+        turn.output.unshift({ type: 'reasoning', id: `private-${id}`, summary: [], encrypted_content: `cipher-${id}` })
+        return turn
+      },
+    }
+    const metered = new MeteredChatProvider(inner, platform.billing, id, {
+      inputPrice: String(index + 1),
+      outputPrice: '2',
+      imagePrice: '0',
+    })
+    Object.assign(metered, {
+      modelIdentity: { modelId: id, providerId },
+      failover: async (selection: { excludeModelIds: string[] }) => {
+        const chosen = [...pool.values()].slice(index + 1).find((candidate) => !selection.excludeModelIds.includes(candidate.modelIdentity!.modelId))
+        assert.ok(chosen, 'A compatible replacement is available')
+        return chosen
+      },
+    })
+    pool.set(key, metered)
+  }
+  const provider: ChatProvider = {
+    mode: 'openai',
+    async next() {
+      throw new Error('Resolve the fixture pool first')
+    },
+    async forRun(options) {
+      const resolved = options?.configurationKey ? pool.get(options.configurationKey) : [...pool.values()][0]
+      assert.ok(resolved)
+      return resolved
+    },
+  }
   const realCheckpoint = platform.tasks.checkpoint.bind(platform.tasks)
   let crash = true
   platform.tasks.checkpoint = async (...args) => {
@@ -235,6 +298,18 @@ try {
   const final = [...restarted.service.sessions.all()][0]!
   const message = final.messages.at(-1)!
   assert.equal(final.task!.status, 'completed')
+  assert.equal(new Set(routed.map((call) => call.key)).size, 3, 'Child and root failures each select a replacement model')
+  for (const id of replacementModels) {
+    const first = routed.findIndex((call) => call.key === `retry-fixture-${id}`)
+    assert.ok(first > 0)
+    assert.equal(routed[first]!.logicalId, routed[first - 1]!.logicalId, 'The logical request survives history migration and worker restart')
+    assert.equal(routed[first]!.retry, 1)
+  }
+  assert.equal(final.configurationKey, `retry-fixture-${replacementModels[1]}`)
+  assert.ok(message.timeline!.some((item) => item.kind === 'notice' && item.text.includes('切换可用模型重试')))
+  assert.ok(cp.frames.at(-1)!.modelFailover?.pending, 'Pending failover survives worker restart')
+  assert.deepEqual(cp.frames.at(-1)!.modelFailover!.modelIds, [modelId])
+  assert.ok(cp.frames.at(-1)!.history.some((item) => item.type === 'compaction'), 'The interrupted specialist had native compressed history')
   assert.equal(message.outcome, 'completed')
   assert.equal(
     (await platform.time.list(userId)).timers.length,
@@ -257,21 +332,21 @@ try {
   )
   assert.equal(
     message.usage!.calls.length,
-    requestCount - 2,
+    requestCount + contextRequestCount - 2,
     'failed requests without usage are not fabricated as zero-token calls',
   )
   const usage = await source.query(
     'SELECT id,status FROM billing_usage WHERE user_id=?',
     [userId],
   )
-  assert.equal(usage.length, requestCount)
+  assert.equal(usage.length, requestCount + contextRequestCount)
   assert.equal(
     usage.filter((u: { status: string }) => u.status === 'review').length,
     2,
   )
   assert.equal(
     new Set(usage.map((u: { id: string }) => u.id)).size,
-    requestCount,
+    requestCount + contextRequestCount,
   )
   console.log(
     'PASS: delegated timer executes once; retry checkpoint survives runtime restart; root stream resets; browser disconnection does not stop retry; per-attempt usage audit is unique.',
@@ -283,7 +358,9 @@ try {
   if (userId) {
     await cleanupUsers(source, [userId])
   }
-  await source.query('DELETE FROM ai_models WHERE id=?', [modelId])
+  for (const id of [modelId, ...replacementModels]) {
+    await source.query('DELETE FROM ai_models WHERE id=?', [id])
+  }
   await source.query('DELETE FROM ai_providers WHERE id=?', [providerId])
   await source.destroy()
 }

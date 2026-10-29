@@ -72,6 +72,13 @@ export interface ChatProvider {
   summarize?(input: ProviderInput): Promise<string>
   compact?(input: ProviderInput): Promise<ProviderItem[]>
   configurationKey?: string
+  /** Server-only routing identity; each replacement retains its own billing/audit decorators. */
+  modelIdentity?: { modelId: string, providerId: string }
+  failover?: (options: {
+    excludeModelIds: string[]
+    avoidProviderIds: string[]
+    supportsVision: boolean
+  }) => Promise<ChatProvider>
   forRun?: (options?: {
     modelId?: string
     configurationKey?: string

@@ -8,6 +8,13 @@ export interface AgentFrame {
   capabilities?: import('./capability-loading.js').CapabilitySelection
   discoveryRounds?: number
   modelRequests?: Record<string, import('./model-retry.js').ModelRequestRecord>
+  /** Stable across compaction/model changes so failover cannot reset the retry budget. */
+  modelRequestKey?: string
+  modelFailover?: {
+    pending: boolean
+    modelIds: string[]
+    providerIds: string[]
+  }
   workflow?: import('./workflow.js').FrameWorkflow
   contextState?: import('./context.js').ContextState
   /** Receipt ownership survives provider-history compaction. */

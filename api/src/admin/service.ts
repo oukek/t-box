@@ -386,6 +386,8 @@ export class ConfigurationService {
       supportsVision?: boolean
       imageTier?: import('@t-box/shared').ImageTier
       peek?: boolean
+      excludeModelIds?: string[]
+      avoidProviderIds?: string[]
     } = {},
   ) {
     const column = purpose === 'image' ? 'image_model_id' : 'model_id'
@@ -463,6 +465,10 @@ export class ConfigurationService {
         ? ErrorCode.VISION_MODEL_REQUIRED.unavailable()
         : ErrorCode.AI_DISABLED()
     }
+    const candidates = eligible.filter((row) => !options.excludeModelIds?.includes(row.modelId))
+    if (!candidates.length) {
+      throw ErrorCode.MODEL_POOL_UNAVAILABLE('暂无其他可用模型，任务已暂停；已完成的操作仍保留，请稍后继续')
+    }
     const configuration = await this.configuration.snapshot()
     const pinned = options.configurationKey
       ? eligible.find((row) =>
@@ -491,9 +497,10 @@ export class ConfigurationService {
         ? eligible[0]!
         : await new ModelRouting(this.store.source).select(
             purpose,
-            eligible,
+            candidates,
             configuration,
             preferred?.modelId,
+            options.avoidProviderIds,
           ))
     const method = invocationMode(row.invocationMode, purpose)
     const supportedTiers = storedImageTiers(row.imageTiers)

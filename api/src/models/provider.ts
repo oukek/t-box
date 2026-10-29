@@ -11,7 +11,7 @@ import { ErrorCode } from '../error-codes.js'
 import { ModelCallAudit } from './audit.js'
 import { ModelRouting } from './routing.js'
 
-/** One pinned model per task; every real request gets its own queue/usage/error/IO record. */
+/** One resolved model; every real request gets its own queue/usage/error/IO record. */
 export class AuditedChatProvider implements ChatProvider {
   readonly mode
   readonly configurationKey

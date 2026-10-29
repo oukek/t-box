@@ -5,6 +5,7 @@ import test from 'node:test'
 import { ApiError } from '@t-box/server-foundation/errors'
 import OpenAI from 'openai'
 import {
+  failoverModelError,
   modelRequest,
   retryableModelError,
 } from '../src/agent/model-retry.js'
@@ -136,6 +137,10 @@ test('automatic attempts are exactly initial + five retries, including restored 
   )
   const restore = fixture()
   restore.options.records = f.persisted()
+  // Simulate a crash while the final request is still in flight, before a terminal save.
+  for (const record of Object.values(restore.options.records)) {
+    record.status = 'in_flight'
+  }
   let recovered = 0
   // A persisted in-flight final attempt consumes no fresh retry allowance.
   await assert.rejects(
@@ -164,6 +169,26 @@ test('malformed provider completions retry the current request, then stop after 
   assert.equal(calls, 6)
   assert.deepEqual(f.progress.map((p) => p.attempt), [1, 2, 3, 4, 5])
   assert.ok(f.progress.every((p) => p.error.code === 'PROVIDER_FAILED'))
+})
+test('terminal pool selection failure is checkpointed so explicit repair/resume can probe without resetting retries', async () => {
+  const f = fixture()
+  let attempts = 0
+  await assert.rejects(modelRequest('next', input(), async () => {
+    if (++attempts === 1) {
+      throw upstream()
+    }
+    throw ErrorCode.MODEL_POOL_UNAVAILABLE()
+  }, f.options), { code: 'MODEL_POOL_UNAVAILABLE' })
+  const [record] = Object.values(f.persisted())
+  assert.equal(record!.status, 'failed')
+  assert.equal(record!.retries, 1)
+  const restored = fixture()
+  restored.options.records = f.persisted()
+  await modelRequest('next', input(), async (request) => {
+    assert.equal(request.execution!.retryIndex, 1)
+    return 'repaired'
+  }, restored.options)
+  assert.equal(restored.progress.length, 0)
 })
 test('parameter/auth/quota/host/billing/unknown errors are never automatically retried', async () => {
   for (const error of [
@@ -200,6 +225,62 @@ test('parameter/auth/quota/host/billing/unknown errors are never automatically r
     )
     assert.equal(calls, 1)
     assert.equal(f.progress.length, 0)
+  }
+})
+test('provider credentials/quota permit bounded failover only when an alternative selector exists', async () => {
+  for (const error of [new OpenAI.APIError(401, {}, undefined, undefined), new OpenAI.APIError(429, { code: 'insufficient_quota' }, undefined, undefined)]) {
+    const f = fixture()
+    let calls = 0
+    await modelRequest('next', input(), async () => {
+      if (++calls === 1) {
+        throw error
+      }
+      return 'replacement'
+    }, { ...f.options, canFailover: failoverModelError })
+    assert.equal(calls, 2)
+    assert.equal(f.progress.length, 1)
+  }
+  assert.equal(failoverModelError(ErrorCode.MEMORY_EXTRACTION_INVALID()), false)
+  assert.equal(failoverModelError(new ApiError(402, 'INSUFFICIENT_BALANCE', 'wallet')), false)
+  assert.equal(failoverModelError(new OpenAI.APIError(400, { code: 'content_policy_violation' }, undefined, undefined)), false)
+})
+test('one-shot context failures use the enclosing budget; successful context results remain cached', async () => {
+  const f = fixture()
+  let calls = 0
+  await assert.rejects(modelRequest('summary', input(), async () => {
+    calls++
+    throw upstream()
+  }, { ...f.options, retry: false }), { code: undefined })
+  assert.equal(calls, 1)
+  assert.equal(f.progress.length, 0)
+  const result = await modelRequest('summary', input(), async () => {
+    calls++
+    return 'saved memory'
+  }, { ...f.options, retry: false })
+  assert.equal(result, 'saved memory')
+  assert.equal(calls, 2)
+  await modelRequest('summary', input(), async () => {
+    throw new Error('must reuse success')
+  }, { ...f.options, retry: false })
+})
+test('Retry-After applies to the failed provider; switching providers retains only the bounded backoff', async () => {
+  for (const differentProvider of [false, true]) {
+    const f = fixture()
+    const delays: number[] = []
+    let calls = 0
+    await modelRequest('next', input(), async () => {
+      if (++calls === 1) {
+        throw new OpenAI.APIError(429, {}, undefined, new Headers({ 'retry-after': '600' }))
+      }
+      return 'done'
+    }, {
+      ...f.options,
+      beforeRetry: async () => differentProvider,
+      wait: async (ms) => {
+        delays.push(ms)
+      },
+    })
+    assert.deepEqual(delays, [differentProvider ? 1000 : 600000])
   }
 })
 test('canceling a delayed retry never starts another request', async () => {

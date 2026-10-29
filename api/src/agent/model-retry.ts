@@ -15,6 +15,7 @@ export interface ModelRequestRecord {
   retries: number
   status: 'ready' | 'in_flight' | 'waiting' | 'failed' | 'completed'
   nextAttemptAt?: number
+  backoffUntil?: number
   error?: RunError
   result?: unknown
 }
@@ -36,6 +37,14 @@ export function retryableModelError(error: unknown): boolean {
   const failure = publicRunError(error)
   return failure.retryable && failure.code !== 'RUN_INTERNAL_ERROR'
 }
+/** Switching providers may recover authentication/quota faults; repeating them on one provider cannot. */
+export function failoverModelError(error: unknown): boolean {
+  if (retryableModelError(error)) {
+    return !(error instanceof ApiError && error.code === 'MEMORY_EXTRACTION_INVALID')
+  }
+  return error instanceof OpenAI.APIError &&
+    (error.status === 401 || error.status === 403 || publicRunError(error).code === 'PROVIDER_QUOTA')
+}
 function retryAfter(error: unknown, now: number): number | undefined {
   if (!(error instanceof OpenAI.APIError)) {
     return
@@ -55,6 +64,13 @@ function retryAfter(error: unknown, now: number): number | undefined {
   return Number.isFinite(date) ? Math.max(0, date - now) : undefined
 }
 export interface ModelRequestOptions {
+  key?: string
+  /** Context subrequests cache successes; the enclosing turn owns their retry budget. */
+  retry?: boolean
+  canFailover?: (error: unknown) => boolean
+  allowRetry?: () => boolean
+  /** Resolve/migrate a replacement before waiting. True means the failed provider's Retry-After does not apply. */
+  beforeRetry?: () => Promise<boolean>
   records: Record<string, ModelRequestRecord>
   save(): Promise<void>
   onRetry(progress: RetryProgress): Promise<void>
@@ -65,7 +81,20 @@ export interface ModelRequestOptions {
   random?: () => number
   wait?: (ms: number, signal: AbortSignal) => Promise<void>
 }
-/** Retry one provider request, retaining its exact input. No application tools run in this loop. */
+export function modelRequestKey(method: string, input: ProviderInput): string {
+  return createHash('sha256').update(JSON.stringify({
+    method,
+    history: input.history,
+    tools: input.tools,
+    instructions: input.instructions,
+    toolChoice: input.toolChoice,
+    publicReasoning: input.publicReasoning,
+    outputTokenBudget: input.outputTokenBudget,
+    localDate: input.localDate,
+    purpose: input.execution?.purpose,
+  })).digest('hex')
+}
+/** Retry one logical model turn. No application tools run in this loop. */
 export async function modelRequest<T>(
   method: string,
   input: ProviderInput,
@@ -83,21 +112,7 @@ export async function modelRequest<T>(
     'ai.retry.maxRetries',
     MAX_MODEL_RETRIES,
   )
-  const key = createHash('sha256')
-    .update(
-      JSON.stringify({
-        method,
-        history: input.history,
-        tools: input.tools,
-        instructions: input.instructions,
-        toolChoice: input.toolChoice,
-        publicReasoning: input.publicReasoning,
-        outputTokenBudget: input.outputTokenBudget,
-        localDate: input.localDate,
-        purpose: input.execution?.purpose,
-      }),
-    )
-    .digest('hex')
+  const key = options.key ?? modelRequestKey(method, input)
   const record = (options.records[key] ||= {
     id: randomUUID(),
     retries: 0,
@@ -114,14 +129,16 @@ export async function modelRequest<T>(
           retryable: true,
         }
       : publicRunError(error)
-    if (!recovered && !retryableModelError(error)) {
+    if (!recovered && !retryableModelError(error) && !options.canFailover?.(error)) {
       record.status = 'failed'
       record.error = failure
+      await options.save()
       throw error
     }
     if (record.retries >= maxRetries) {
       record.status = 'failed'
       record.error = failure
+      await options.save()
       throw ErrorCode.MODEL_RETRIES_EXHAUSTED(
         `${failure.message}；已自动重试 ${maxRetries} 次仍未成功`,
       )
@@ -137,6 +154,7 @@ export async function modelRequest<T>(
     // Do not cap a provider's Retry-After and send earlier than requested. The run deadline still applies.
     const delayMs = Math.max(backoff, retryAfter(error, now()) ?? 0)
     record.nextAttemptAt = now() + delayMs
+    record.backoffUntil = now() + backoff
     record.status = 'waiting'
     record.error = failure
     await options.onRetry({
@@ -149,16 +167,35 @@ export async function modelRequest<T>(
     await options.save()
   }
   // A recovered in-flight request has no committed response. Consume a retry instead of resetting the budget.
-  if (record.status === 'in_flight') {
+  if (record.status === 'in_flight' && options.retry !== false) {
     await schedule(undefined, true)
   }
   if (record.status === 'failed') {
     // Manual resumption may try once after operator intervention; automatic budget never resets.
     record.status = 'ready'
+    if (options.retry === false) {
+      record.retries++
+    }
   }
   for (;;) {
     input.signal.throwIfAborted()
     if (record.status === 'waiting') {
+      if (options.beforeRetry) {
+        try {
+          if (await options.beforeRetry()) {
+            record.nextAttemptAt = Math.min(record.nextAttemptAt ?? now(), record.backoffUntil ?? record.nextAttemptAt ?? now())
+          }
+        } catch (error) {
+          if (input.signal.aborted) {
+            throw error
+          }
+          record.status = 'failed'
+          record.error = publicRunError(error)
+          await options.save()
+          throw error
+        }
+        await options.save()
+      }
       await wait(
         Math.max(0, (record.nextAttemptAt ?? now()) - now()),
         input.signal,
@@ -168,6 +205,7 @@ export async function modelRequest<T>(
     const operationId = randomUUID()
     record.status = 'in_flight'
     delete record.nextAttemptAt
+    delete record.backoffUntil
     await options.save()
     options.onAttempt?.(operationId)
     let usageCallbackFailed = false
@@ -196,7 +234,13 @@ export async function modelRequest<T>(
       record.result = structuredClone(result)
       // Save outside the retry catch: storage failures must never replay a successful provider call.
     } catch (error) {
-      if (input.signal.aborted || usageCallbackFailed) {
+      if (input.signal.aborted || usageCallbackFailed || options.allowRetry?.() === false) {
+        throw error
+      }
+      if (options.retry === false) {
+        record.status = 'failed'
+        record.error = publicRunError(error)
+        await options.save()
         throw error
       }
       await schedule(error)
