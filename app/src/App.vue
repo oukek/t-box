@@ -5,13 +5,12 @@ import { AppIcon, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { applicationModules } from './applications/registry'
-import ApplicationLaunch from './core/app-runtime/ApplicationLaunch.vue'
-import ApplicationView from './core/app-runtime/ApplicationView.vue'
+import ApplicationSurface from './core/app-runtime/ApplicationSurface.vue'
+import ApplicationWindow from './core/app-runtime/ApplicationWindow.vue'
 import { closeApplicationRuntimes } from './core/app-runtime/bridge'
 import {
   appCatalog,
   isInstalled,
-  repairInstallation,
 } from './core/app-runtime/catalog'
 import { startCatalogSync } from './core/app-runtime/catalogSync'
 import { shellVersionCompatible } from './core/app-runtime/compatibility'
@@ -25,15 +24,13 @@ import { startNativeRuntime } from './core/native-runtime/lifecycle'
 import NativeDownloadDialog from './core/native-runtime/NativeDownloadDialog.vue'
 import ShortcutsPage from './core/native-runtime/ShortcutsPage.vue'
 import {
-  backFromApplication,
+  closeApplicationWindow,
   navigateTab,
   navigation,
-  openApplication,
   openDevicePermissions,
   openProfile,
   primaryTabs,
   startNavigation,
-  tabLabel,
 } from './core/navigation'
 import { identity } from './core/session'
 import { observeViewport } from './core/viewport'
@@ -63,14 +60,6 @@ const currentApplication = computed(() =>
 const showPrimaryNavigation = computed(() =>
   ['home', 'applications'].includes(navigation.screen),
 )
-const currentView = computed(() =>
-  navigation.application
-    ? applicationModules.find(
-        (module) => module.manifest.id === navigation.application!.appId,
-      )
-    : null,
-)
-const currentInstallation = computed(() => appCatalog.entries.find((e) => e.release.appId === navigation.application?.appId)?.installation)
 const loginRequired = computed(() => !identity.user && !['devicePermissions', 'shortcuts', 'paymentHandoff'].includes(navigation.screen) && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
 const loginPrompt = computed(() => {
   const pages: Record<string, [string, string]> = {
@@ -84,18 +73,6 @@ const loginPrompt = computed(() => {
   const [title, description] = pages[navigation.screen] ?? [currentApplication.value?.name || '个人空间', '此功能需要登录账号。日历、时间等本地工具可以继续使用。']
   return { title, description }
 })
-const installationError = computed(() => appCatalog.error || currentInstallation.value?.error || '')
-async function retryCurrentApplication() {
-  const id = navigation.application?.appId
-  if (!id) {
-    return
-  }
-  try {
-    await repairInstallation(id)
-  } catch (cause) {
-    appCatalog.error = cause instanceof Error ? cause.message : '应用修复失败'
-  }
-}
 const stopCatalogSync = startCatalogSync()
 const stopNativeRuntime = startNativeRuntime()
 function hostCompatible(appId: string) {
@@ -103,16 +80,8 @@ function hostCompatible(appId: string) {
   const module = applicationModules.find((m) => m.manifest.id === appId)
   return entry?.release.runtime.type !== 'shell' || !entry.installation?.version || !!(module && shellVersionCompatible(entry.installation.version, module.manifest.version, module.shellCompatibility?.minimumVersion))
 }
-const currentCompatible = computed(
-  () =>
-    !currentView.value ||
-    hostCompatible(currentView.value.manifest.id),
-)
 let stopViewport: (() => void) | undefined
 const isWebHost = !window.Capacitor?.isNativePlatform?.()
-function reloadHost() {
-  location.reload()
-}
 function focusWorkspace() {
   document.getElementById('workspace')?.focus()
 }
@@ -120,6 +89,7 @@ watch(
   () => identity.user?.id,
   (id) => {
     stopChat()
+    closeApplicationWindow()
     closeApplicationRuntimes()
     clearApplicationBindings()
     if (id) {
@@ -211,7 +181,7 @@ onBeforeUnmount(() => {
         v-show="navigation.screen === 'home'"
         :active="navigation.screen === 'home'"
       />
-      <section v-if="loginRequired" class="login-required">
+      <section v-if="loginRequired && navigation.screen !== 'application'" class="login-required">
         <ApplicationHeader
           v-if="!showPrimaryNavigation"
           :title="currentApplication?.name || '登录'"
@@ -241,67 +211,11 @@ onBeforeUnmount(() => {
       <ResourcesPage v-if="identity.user && navigation.screen === 'resources'" />
       <MemoryPage v-if="identity.user && navigation.screen === 'memory'" :key="identity.user.id" />
       <AccountSettingsPage v-if="identity.user && navigation.screen === 'account'" />
-      <ApplicationView
-        v-if="!loginRequired && navigation.screen === 'application' && currentApplication && currentView && isInstalled(currentApplication.id) && currentCompatible"
-        :key="currentApplication.id"
-        :module="currentView"
-        :application="currentApplication"
-        :params="navigation.application?.params || {}"
+      <ApplicationSurface
+        v-if="navigation.screen === 'application' && navigation.application"
+        :destination="navigation.application"
         :open-revision="navigation.revision"
       />
-      <section
-        v-else-if="!loginRequired && navigation.screen === 'application' && currentApplication"
-        class="application-unavailable"
-      >
-        <ApplicationHeader
-          :title="currentApplication.name"
-          :back-label="tabLabel(navigation.backTo)"
-          @back="backFromApplication"
-        />
-        <ApplicationLaunch
-          v-if="appCatalog.loading || currentInstallation?.status === 'installing'"
-          :application="currentApplication"
-          stage="resolving"
-        />
-        <div v-else class="application-unavailable-body">
-          <AppIcon name="apps" :size="28" />
-          <h2>
-            {{
-              appCatalog.loading
-                ? "正在读取应用…"
-                : !currentCompatible
-                  ? "需要更新宿主应用"
-                  : currentInstallation?.status === 'failed'
-                    ? "应用暂不可用"
-                    : "此应用尚未安装"
-            }}
-          </h2>
-          <p v-if="!appCatalog.loading">
-            {{
-              installationError || (!currentCompatible
-                ? (isWebHost ? "请刷新网页后重试。" : "请更新 T方舟 应用后再打开。")
-                : "安装后可以继续使用，卸载前保存的数据仍然保留。")
-            }}
-          </p>
-          <button
-            v-if="!currentCompatible && isWebHost"
-            class="button button-primary"
-            @click="reloadHost"
-          >刷新网页</button>
-          <button
-            v-if="currentInstallation && currentInstallation.status !== 'active'"
-            class="button button-primary"
-            @click="retryCurrentApplication"
-          >重试安装</button>
-          <button
-            v-if="!appCatalog.loading && currentApplication.id !== 'market' && isInstalled('market') && hostCompatible('market')"
-            class="button button-primary"
-            @click="openApplication({ appId: 'market' })"
-          >
-            打开应用市场
-          </button>
-        </div>
-      </section>
     </main>
     <nav
       v-if="showPrimaryNavigation"
@@ -330,6 +244,19 @@ onBeforeUnmount(() => {
         <button v-if="isWebHost" @click="openPromotionShare"><AppIcon name="share" :size="21" /><span>分享</span></button>
       </div>
     </nav>
+    <Teleport to="body">
+      <ApplicationWindow
+        v-if="navigation.screen === 'home' && navigation.applicationPresentation === 'window' && navigation.application && currentApplication"
+        :application="currentApplication"
+        @close="closeApplicationWindow"
+      >
+        <ApplicationSurface
+          :destination="navigation.application"
+          :open-revision="navigation.revision"
+          embedded
+        />
+      </ApplicationWindow>
+    </Teleport>
     <ReminderHost />
     <LoginPage />
     <PromotionShareDialog v-if="isWebHost" />
@@ -372,24 +299,5 @@ onBeforeUnmount(() => {
   .guest-mode-notice > span {
     display: none;
   }
-}
-.application-unavailable {
-  margin: 0 auto;
-  width: 100%;
-  max-width: 1220px;
-}
-.application-unavailable-body {
-  padding: 48px 20px;
-  text-align: center;
-  color: var(--muted);
-}
-.application-unavailable h2 {
-  font-size: 18px;
-  color: var(--text);
-  margin: 16px 0 8px;
-}
-.application-unavailable p {
-  font-size: 14px;
-  margin-bottom: 20px;
 }
 </style>

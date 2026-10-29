@@ -8,7 +8,7 @@ import ApplicationLaunch from './ApplicationLaunch.vue'
 import ApplicationUpdatePrompt from './ApplicationUpdatePrompt.vue'
 import { createLaunchState, launchStateKey } from './launchState'
 
-defineProps<{ module: ClientApplicationModule, application: ApplicationManifest, params: Record<string, string>, openRevision: number }>()
+defineProps<{ module: ClientApplicationModule, application: ApplicationManifest, params: Record<string, string>, openRevision: number, embedded?: boolean }>()
 const launch = createLaunchState()
 provide(launchStateKey, launch)
 const error = ref(false)
@@ -31,7 +31,7 @@ function retry() {
 <template>
   <section class="application-workspace">
     <ApplicationHeader
-      v-if="module.navigation === 'shell' && !launch.appNavigation.value"
+      v-if="!embedded && module.navigation === 'shell' && !launch.appNavigation.value"
       :title="application.name"
       :back-label="tabLabel(navigation.backTo)"
       @back="backFromApplication"

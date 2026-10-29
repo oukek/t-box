@@ -1,5 +1,5 @@
 import type { OpenAppArguments } from '@t-box/shared'
-import { nextTick, reactive, readonly } from 'vue'
+import { nextTick, reactive, readonly, watch } from 'vue'
 import { applicationModules } from '../applications/registry'
 import { ErrorCode } from '../error-codes.js'
 import { clearCheckoutTicket } from '../features/billing/checkoutLink'
@@ -35,17 +35,21 @@ const state = reactive<{
   capabilityAppId: string | null
   revision: number
   backTo: BackTarget
+  applicationPresentation: 'page' | 'window'
 }>({
   screen: 'home',
   application: null,
   capabilityAppId: null,
   revision: 0,
   backTo: 'home',
+  applicationPresentation: 'page',
 })
 export const navigation = readonly(state)
 let started = false
+let returnFocus: HTMLElement | null = null
 
 function readHash() {
+  closeApplicationWindow()
   const [path, query] = window.location.hash.replace(/^#/, '').split('?')
   if (path !== '/pay/wechat') {
     clearCheckoutTicket()
@@ -161,6 +165,9 @@ export function startNavigation() {
 }
 
 export function navigateTab(screen: Tab) {
+  if (screen !== 'home') {
+    closeApplicationWindow()
+  }
   state.screen = screen
   state.backTo = screen
   const hash = primaryTabs.find((tab) => tab.id === screen)!.hash
@@ -177,6 +184,20 @@ export async function openApplication(value: unknown) {
     await showWechatLogin()
     return args
   }
+  if (state.screen === 'home') {
+    // Presentation belongs to the host. App parameters and SDK contracts remain unchanged.
+    if (state.applicationPresentation !== 'window') {
+      returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    }
+    state.application = args
+    state.applicationPresentation = 'window'
+    state.revision++
+    await applicationModules.find((module) => module.manifest.id === args.appId)?.prepare?.()
+    await nextTick()
+    await nextTick()
+    return args
+  }
+  state.applicationPresentation = 'page'
   if (state.screen !== 'application') {
     state.backTo =
       state.screen === 'capabilities'
@@ -228,6 +249,10 @@ export function openApplicationCapabilities(appId: string) {
 }
 
 export function backFromApplication() {
+  if (state.screen === 'home' && state.applicationPresentation === 'window') {
+    closeApplicationWindow()
+    return
+  }
   if (state.backTo === 'profile') {
     void openProfile()
   } else if (state.backTo === 'wallet') {
@@ -236,6 +261,28 @@ export function backFromApplication() {
     navigateTab(state.backTo)
   }
 }
+export function closeApplicationWindow() {
+  if (state.applicationPresentation !== 'window') {
+    return
+  }
+  state.applicationPresentation = 'page'
+  state.application = null
+  const target = returnFocus
+  returnFocus = null
+  void nextTick(() => {
+    if (state.screen === 'home' && target?.isConnected) {
+      target.focus({ preventScroll: true })
+    }
+  })
+}
+export function isApplicationActive(appId: string) {
+  return state.application?.appId === appId && (state.screen === 'application' || (state.screen === 'home' && state.applicationPresentation === 'window'))
+}
+watch(() => state.screen, (screen) => {
+  if (screen !== 'home') {
+    closeApplicationWindow()
+  }
+}, { flush: 'sync' })
 export function openProfile() {
   return openApplication({ appId: 'profile' })
 }

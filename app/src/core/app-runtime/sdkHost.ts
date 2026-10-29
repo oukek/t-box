@@ -16,7 +16,7 @@ import { promptNativeDownload } from '../native-runtime/downloads'
 import { deviceHostMethods, handleDeviceCall } from '../native-runtime/host'
 import {
   backFromApplication,
-  navigation,
+  isApplicationActive,
   openApplication,
 } from '../navigation'
 import { chatWebSocketUrl, request } from '../network'
@@ -546,20 +546,19 @@ export function createHostTransport(options: HostOptions): AppTransport {
         )
       } else if (method === 'updates.openMarket') {
         if (
-          navigation.screen !== 'application' ||
-          navigation.application?.appId !== options.appId
+          !isApplicationActive(options.appId)
         ) {
           throw SdkErrorCode.NAVIGATION_DENIED()
         }
-        // Reply before navigating unmounts and closes the app's transport.
+        // Cross-origin frames need a delivery turn before navigation tears down their MessageChannel.
         setTimeout(() => {
-          if (!closed && navigation.application?.appId === options.appId) {
+          if (!closed && isApplicationActive(options.appId)) {
             void openApplication({
               appId: 'market',
               params: { appId: options.appId },
             }).catch(() => {})
           }
-        }, 0)
+        }, 50)
       } else if (method === 'updates.presentation') {
         if (
           typeof a.registrationId !== 'string' ||
@@ -799,7 +798,7 @@ export function createHostTransport(options: HostOptions): AppTransport {
         // Handle the login intent without granting general cross-application navigation.
         const requestsLogin = !identity.user && ['calendar', 'time'].includes(options.appId) && Object.keys(params).length === 1 && params.appId === 'profile'
         if (requestsLogin) {
-          if (navigation.screen !== 'application' || navigation.application?.appId !== options.appId) {
+          if (!isApplicationActive(options.appId)) {
             throw SdkErrorCode.NAVIGATION_DENIED('只有当前应用可以打开登录窗口')
           }
           value = await openApplication({ appId: 'profile' })
@@ -807,15 +806,15 @@ export function createHostTransport(options: HostOptions): AppTransport {
           value = await openApplication({ appId: options.appId, params })
         }
       } else if (method === 'navigation.back') {
-        if (navigation.application?.appId !== options.appId) {
+        if (!isApplicationActive(options.appId)) {
           throw SdkErrorCode.NAVIGATION_DENIED('只有当前应用可以返回')
         }
-        // Acknowledge before the renderer unmounts and disposes its transport.
+        // Allow the reply to reach the cross-origin frame before disposing its pending back request.
         setTimeout(() => {
-          if (navigation.application?.appId === options.appId) {
+          if (isApplicationActive(options.appId)) {
             backFromApplication()
           }
-        }, 0)
+        }, 50)
       }
       assertEpoch(started)
       return value as T
