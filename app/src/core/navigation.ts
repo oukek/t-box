@@ -1,7 +1,8 @@
 import type { OpenAppArguments } from '@t-box/shared'
-import { nextTick, reactive, readonly, watch } from 'vue'
+import { nextTick, reactive, readonly } from 'vue'
 import { applicationModules } from '../applications/registry'
 import { ErrorCode } from '../error-codes.js'
+import { canFloatAssistant } from '../features/assistant/geometry'
 import { clearCheckoutTicket } from '../features/billing/checkoutLink'
 import { showWechatLogin } from '../features/identity/wechatLogin'
 import { parseOpenAppArguments } from './applications'
@@ -9,12 +10,12 @@ import { promptNativeDownload } from './native-runtime/downloads'
 import { identity } from './session'
 
 export const primaryTabs = [
-  { id: 'home', label: 'AI', icon: 'sparkle', hash: '#/' },
-  { id: 'applications', label: 'OS', icon: 'apps', hash: '#/applications' },
+  { id: 'home', label: 'AI', icon: 'sparkle', hash: '#/ai' },
+  { id: 'applications', label: '桌面', icon: 'apps', hash: '#/' },
 ] as const
 type Tab = (typeof primaryTabs)[number]['id']
 type Screen =
-  | Tab |
+  | Exclude<Tab, 'home'> |
   'application' |
   'capabilities' |
   'resources' |
@@ -35,22 +36,76 @@ const state = reactive<{
   capabilityAppId: string | null
   revision: number
   backTo: BackTarget
-  applicationPresentation: 'page' | 'window'
+  assistantOpen: boolean
 }>({
-  screen: 'home',
+  screen: 'applications',
   application: null,
   capabilityAppId: null,
   revision: 0,
-  backTo: 'home',
-  applicationPresentation: 'page',
+  backTo: 'applications',
+  assistantOpen: false,
 })
 export const navigation = readonly(state)
 let started = false
-let returnFocus: HTMLElement | null = null
+let workspaceHash = ''
+let assistantWorkspaceHash = '#/'
+
+function assistantHash(hash: string, open: boolean) {
+  const [path, query] = (hash || '#/').split('?')
+  const params = new URLSearchParams(query)
+  params.delete('__assistant')
+  if (open) {
+    params.set('__assistant', '1')
+  }
+  return `${path}${params.size ? `?${params}` : ''}`
+}
+function pushWorkspace(hash: string, assistant = false) {
+  workspaceHash = assistantHash(hash, false)
+  state.assistantOpen = assistant
+  const nextHash = assistantHash(hash, assistant)
+  if (location.hash !== nextHash) {
+    history.pushState(null, '', nextHash)
+  }
+  if (assistant) {
+    assistantWorkspaceHash = workspaceHash
+  }
+}
+export function openAssistant() {
+  if (state.assistantOpen) {
+    return
+  }
+  assistantWorkspaceHash = assistantHash(location.hash || '#/', false)
+  state.assistantOpen = true
+  history.pushState({ tboxAssistantEntry: true }, '', assistantHash(assistantWorkspaceHash, true))
+}
+export function closeAssistant() {
+  if (!state.assistantOpen) {
+    return
+  }
+  state.assistantOpen = false
+  if (history.state?.tboxAssistantEntry) {
+    history.back()
+  } else {
+    history.replaceState(null, '', assistantHash(location.hash.split('?')[0] === '#/ai' ? '#/' : location.hash, false))
+  }
+}
 
 function readHash() {
-  closeApplicationWindow()
-  const [path, query] = window.location.hash.replace(/^#/, '').split('?')
+  const [path, rawQuery] = window.location.hash.replace(/^#/, '').split('?')
+  const params = new URLSearchParams(rawQuery)
+  state.assistantOpen = params.get('__assistant') === '1' || path === '/ai'
+  params.delete('__assistant')
+  const query = params.toString()
+  const background = path === '/ai' || path === '/applications' || !path ? '#/' : `#${path}${query ? `?${query}` : ''}`
+  if (state.assistantOpen) {
+    assistantWorkspaceHash = background
+  }
+  // Opening/closing the assistant must not remount the application underneath.
+  if (background === workspaceHash) {
+    return
+  }
+  workspaceHash = background
+  state.application = null
   if (path !== '/pay/wechat') {
     clearCheckoutTicket()
   }
@@ -68,9 +123,9 @@ function readHash() {
       return
     }
   }
-  if (tab) {
-    state.screen = tab.id
-    state.backTo = tab.id
+  if (tab || path === '/applications') {
+    state.screen = 'applications'
+    state.backTo = 'applications'
     return
   }
   if (path === '/profile') {
@@ -152,7 +207,7 @@ function readHash() {
       /* Invalid application hashes fall back to the home screen. */
     }
   }
-  state.screen = 'home'
+  state.screen = 'applications'
 }
 
 export function startNavigation() {
@@ -165,15 +220,19 @@ export function startNavigation() {
 }
 
 export function navigateTab(screen: Tab) {
-  if (screen !== 'home') {
-    closeApplicationWindow()
+  if (screen === 'home') {
+    if (!['applications', 'application'].includes(state.screen)) {
+      history.pushState(null, '', assistantHash(assistantWorkspaceHash, true))
+      readHash()
+    } else {
+      openAssistant()
+    }
+    return
   }
-  state.screen = screen
-  state.backTo = screen
-  const hash = primaryTabs.find((tab) => tab.id === screen)!.hash
-  if (location.hash !== hash) {
-    history.pushState(null, '', hash)
-  }
+  state.screen = 'applications'
+  state.application = null
+  state.backTo = 'applications'
+  pushWorkspace('#/')
   window.scrollTo({ top: 0 })
 }
 
@@ -184,35 +243,8 @@ export async function openApplication(value: unknown) {
     await showWechatLogin()
     return args
   }
-  if (state.screen === 'home') {
-    // Presentation belongs to the host. App parameters and SDK contracts remain unchanged.
-    if (state.applicationPresentation !== 'window') {
-      returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    }
-    state.application = args
-    state.applicationPresentation = 'window'
-    state.revision++
-    await applicationModules.find((module) => module.manifest.id === args.appId)?.prepare?.()
-    await nextTick()
-    await nextTick()
-    return args
-  }
-  state.applicationPresentation = 'page'
-  if (state.screen !== 'application') {
-    state.backTo =
-      state.screen === 'capabilities'
-        ? 'applications'
-        : ['account', 'devicePermissions', 'shortcuts'].includes(state.screen)
-            ? state.backTo
-            : ['resources', 'wallet', 'recharge', 'pricing', 'memory'].includes(
-                state.screen,
-              )
-                ? 'home'
-                : (state.screen as Tab)
-  }
-  if (args.appId === 'profile') {
-    state.backTo = 'applications'
-  }
+  const keepAssistant = state.assistantOpen && canFloatAssistant({ width: window.innerWidth, height: window.innerHeight })
+  state.backTo = 'applications'
   state.application = args
   state.screen = 'application'
   state.revision++
@@ -221,7 +253,7 @@ export async function openApplication(value: unknown) {
     params.set(key, value)
   }
   const query = params.size ? `?${params}` : ''
-  history.pushState(null, '', `#/applications/${args.appId}${query}`)
+  pushWorkspace(`#/applications/${args.appId}${query}`, keepAssistant)
   window.scrollTo({ top: 0 })
   // Enter the launch view before a cold module download, while callers still await preparation.
   await applicationModules
@@ -244,15 +276,11 @@ export function openApplicationCapabilities(appId: string) {
   state.capabilityAppId = appId
   state.screen = 'capabilities'
   state.backTo = 'applications'
-  history.pushState(null, '', `#/applications/${appId}/capabilities`)
+  pushWorkspace(`#/applications/${appId}/capabilities`)
   window.scrollTo({ top: 0 })
 }
 
 export function backFromApplication() {
-  if (state.screen === 'home' && state.applicationPresentation === 'window') {
-    closeApplicationWindow()
-    return
-  }
   if (state.backTo === 'profile') {
     void openProfile()
   } else if (state.backTo === 'wallet') {
@@ -261,74 +289,51 @@ export function backFromApplication() {
     navigateTab(state.backTo)
   }
 }
-export function closeApplicationWindow() {
-  if (state.applicationPresentation !== 'window') {
-    return
-  }
-  state.applicationPresentation = 'page'
-  state.application = null
-  const target = returnFocus
-  returnFocus = null
-  void nextTick(() => {
-    if (state.screen === 'home' && target?.isConnected) {
-      target.focus({ preventScroll: true })
-    }
-  })
-}
 export function isApplicationActive(appId: string) {
-  return state.application?.appId === appId && (state.screen === 'application' || (state.screen === 'home' && state.applicationPresentation === 'window'))
+  return state.application?.appId === appId && state.screen === 'application'
 }
-watch(() => state.screen, (screen) => {
-  if (screen !== 'home') {
-    closeApplicationWindow()
-  }
-}, { flush: 'sync' })
 export function openProfile() {
   return openApplication({ appId: 'profile' })
 }
 export function openResources() {
   state.screen = 'resources'
   state.backTo = 'home'
-  history.pushState(null, '', '#/ai/resources')
+  pushWorkspace('#/ai/resources')
   window.scrollTo({ top: 0 })
 }
 
 export function openMemory() {
   state.screen = 'memory'
   state.backTo = 'home'
-  history.pushState(null, '', '#/ai/memory')
+  pushWorkspace('#/ai/memory')
   window.scrollTo({ top: 0 })
 }
 
 export function openAccountSettings() {
   state.screen = 'account'
   state.backTo = 'profile'
-  history.pushState(null, '', '#/profile/settings')
+  pushWorkspace('#/profile/settings')
   window.scrollTo({ top: 0 })
 }
 
 export function openWallet() {
   state.screen = 'wallet'
   state.backTo = 'home'
-  history.pushState(null, '', '#/ai/wallet')
+  pushWorkspace('#/ai/wallet')
   window.scrollTo({ top: 0 })
 }
 
 export function openRecharge(orderId?: string) {
   state.screen = 'recharge'
   state.backTo = 'wallet'
-  history.pushState(
-    null,
-    '',
-    `#/ai/recharge${orderId ? `?paymentOrder=${encodeURIComponent(orderId)}` : ''}`,
-  )
+  pushWorkspace(`#/ai/recharge${orderId ? `?paymentOrder=${encodeURIComponent(orderId)}` : ''}`)
   window.scrollTo({ top: 0 })
 }
 export function openPricing() {
   const fromWallet = state.screen === 'wallet'
   state.screen = 'pricing'
   state.backTo = fromWallet ? 'wallet' : 'home'
-  history.pushState(null, '', `#/ai/pricing${fromWallet ? '?from=wallet' : ''}`)
+  pushWorkspace(`#/ai/pricing${fromWallet ? '?from=wallet' : ''}`)
   window.scrollTo({ top: 0 })
 }
 
@@ -336,7 +341,7 @@ export function openDevicePermissions() {
   promptNativeDownload('本机设备权限', 'ios')
   state.backTo = state.screen === 'applications' ? 'applications' : 'profile'
   state.screen = 'devicePermissions'
-  history.pushState(null, '', '#/profile/device-permissions')
+  pushWorkspace('#/profile/device-permissions')
 }
 export function openShortcuts() {
   if (promptNativeDownload('快捷指令', 'ios')) {
@@ -344,5 +349,5 @@ export function openShortcuts() {
   }
   state.screen = 'shortcuts'
   state.backTo = 'profile'
-  history.pushState(null, '', '#/profile/shortcuts')
+  pushWorkspace('#/profile/shortcuts')
 }

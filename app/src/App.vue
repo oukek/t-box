@@ -3,10 +3,9 @@ import ReminderHost from '@t-box/device-reminders/ReminderHost.vue'
 import AccountSettingsPage from '@t-box/settings-web/pages/AccountSettingsPage.vue'
 import { AppIcon, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { applicationModules } from './applications/registry'
 import ApplicationSurface from './core/app-runtime/ApplicationSurface.vue'
-import ApplicationWindow from './core/app-runtime/ApplicationWindow.vue'
 import { closeApplicationRuntimes } from './core/app-runtime/bridge'
 import {
   appCatalog,
@@ -24,24 +23,23 @@ import { startNativeRuntime } from './core/native-runtime/lifecycle'
 import NativeDownloadDialog from './core/native-runtime/NativeDownloadDialog.vue'
 import ShortcutsPage from './core/native-runtime/ShortcutsPage.vue'
 import {
-  closeApplicationWindow,
+  closeAssistant,
   navigateTab,
   navigation,
   openDevicePermissions,
   openProfile,
-  primaryTabs,
   startNavigation,
 } from './core/navigation'
 import { identity } from './core/session'
 import { observeViewport } from './core/viewport'
 import ApplicationCapabilitiesPage from './features/applications/ApplicationCapabilitiesPage.vue'
 import ApplicationsPage from './features/applications/ApplicationsPage.vue'
+import AssistantHost from './features/assistant/AssistantHost.vue'
 import PaymentHandoffPage from './features/billing/PaymentHandoffPage.vue'
 import { recoverNativeCheckout } from './features/billing/pendingCheckout'
 import PricingPage from './features/billing/PricingPage.vue'
 import RechargePage from './features/billing/RechargePage.vue'
 import WalletPage from './features/billing/WalletPage.vue'
-import ChatPage from './features/chat/ChatPage.vue'
 import { startChat, stopChat } from './features/chat/chatStore'
 import MemoryConfirmationDialog from './features/chat/MemoryConfirmationDialog.vue'
 import MemoryPage from './features/chat/MemoryPage.vue'
@@ -57,9 +55,7 @@ const currentApplication = computed(() =>
     ? getApplication(navigation.application.appId)
     : undefined,
 )
-const showPrimaryNavigation = computed(() =>
-  ['home', 'applications'].includes(navigation.screen),
-)
+const assistantFullscreen = ref(false)
 const loginRequired = computed(() => !identity.user && !['devicePermissions', 'shortcuts', 'paymentHandoff'].includes(navigation.screen) && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
 const loginPrompt = computed(() => {
   const pages: Record<string, [string, string]> = {
@@ -87,9 +83,11 @@ function focusWorkspace() {
 }
 watch(
   () => identity.user?.id,
-  (id) => {
+  (id, previousId) => {
     stopChat()
-    closeApplicationWindow()
+    if (previousId) {
+      closeAssistant()
+    }
     closeApplicationRuntimes()
     clearApplicationBindings()
     if (id) {
@@ -101,9 +99,6 @@ watch(
 )
 onMounted(() => {
   startNavigation()
-  if (!identity.token && localApplications.releases.length && (!location.hash || location.hash === '#')) {
-    navigateTab('applications')
-  }
   void initializeWechatLogin()
   stopViewport = observeViewport()
 })
@@ -120,46 +115,20 @@ onBeforeUnmount(() => {
   <NativeDownloadDialog />
   <MemoryConfirmationDialog v-if="identity.user" />
   <aside
-    v-if="localApplications.error"
+    v-if="localApplications.error && !assistantFullscreen"
     class="offline-banner"
     role="alert"
   >{{ localApplications.error }}</aside>
   <aside
-    v-if="!online"
+    v-if="!online && !assistantFullscreen"
     class="offline-banner"
     role="status"
   >当前离线，本地计算可继续使用。云端数据、AI 和支付需要联网。</aside>
   <div
     class="super-app"
-    :class="{ 'super-app--detail': !showPrimaryNavigation }"
+    :class="{ 'super-app--detail': navigation.screen !== 'applications' }"
+    :inert="assistantFullscreen || undefined"
   >
-    <aside class="workspace-rail" aria-label="工作区导航">
-      <a
-        class="workspace-brand"
-        href="#/"
-        aria-label="T方舟首页"
-      ><span class="workspace-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>T方舟</span></a>
-      <nav aria-label="桌面主要导航">
-        <button
-          v-for="tab in primaryTabs"
-          :key="tab.id"
-          class="workspace-rail-tab"
-          :class="{ active: tab.id === 'home' ? navigation.screen === 'home' : navigation.screen === 'applications' }"
-          :aria-current="(tab.id === 'home' ? navigation.screen === 'home' : navigation.screen === 'applications') ? 'page' : undefined"
-          @click="navigateTab(tab.id)"
-        ><AppIcon :name="tab.icon" :size="22" /><span>{{ tab.id === 'home' ? 'AI 对话' : '应用桌面' }}</span></button>
-        <button
-          v-if="isWebHost"
-          class="workspace-rail-tab"
-          @click="openPromotionShare"
-        ><AppIcon name="share" :size="22" /><span>分享方舟</span></button>
-      </nav>
-      <button
-        class="workspace-rail-profile"
-        :aria-label="identity.user ? '打开账号设置' : '微信登录'"
-        @click="identity.user ? openProfile() : showWechatLogin()"
-      ><UserAvatar :src="identity.user?.avatarUrl" :size="36" /><span>{{ identity.user?.nickname || '登录' }}</span></button>
-    </aside>
     <a
       class="skip-link"
       href="#workspace"
@@ -176,25 +145,41 @@ onBeforeUnmount(() => {
       }"
       tabindex="-1"
     >
-      <ChatPage
-        v-if="identity.user"
-        v-show="navigation.screen === 'home'"
-        :active="navigation.screen === 'home'"
-      />
+      <header v-if="navigation.screen === 'applications'" class="desktop-topbar">
+        <a
+          class="desktop-brand"
+          href="#/"
+          @click.prevent="navigateTab('applications')"
+        ><span class="desktop-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>T方舟</span></a>
+        <div class="desktop-topbar__actions">
+          <button
+            v-if="!identity.user"
+            class="desktop-action"
+            aria-label="设备权限"
+            @click="openDevicePermissions"
+          ><AppIcon name="lock" :size="19" /></button>
+          <button
+            v-if="isWebHost"
+            class="desktop-action"
+            aria-label="分享方舟"
+            title="分享方舟"
+            @click="openPromotionShare"
+          ><AppIcon name="share" :size="19" /></button>
+          <button
+            class="desktop-account"
+            :aria-label="identity.user ? '打开账号设置' : '微信登录'"
+            @click="identity.user ? openProfile() : showWechatLogin()"
+          ><UserAvatar :src="identity.user?.avatarUrl" :size="28" /><span>{{ identity.user?.nickname || '登录' }}</span></button>
+        </div>
+      </header>
       <section v-if="loginRequired && navigation.screen !== 'application'" class="login-required">
         <ApplicationHeader
-          v-if="!showPrimaryNavigation"
           :title="currentApplication?.name || '登录'"
-          back-label="OS"
+          back-label="桌面"
           @back="navigateTab('applications')"
         />
         <LoginGate :title="loginPrompt.title" :description="loginPrompt.description" />
       </section>
-      <div v-if="!identity.user && navigation.screen === 'applications'" class="guest-mode-notice">
-        <span>本地工具，直接使用</span>
-        <button class="button button-secondary" @click="openDevicePermissions">设备权限</button>
-        <button class="button button-secondary" @click="showWechatLogin">微信登录</button>
-      </div>
       <ShortcutsPage v-if="navigation.screen === 'shortcuts'" />
       <PaymentHandoffPage v-if="navigation.screen === 'paymentHandoff'" :key="navigation.revision" />
       <DevicePermissionsPage v-if="navigation.screen === 'devicePermissions'" />
@@ -217,46 +202,6 @@ onBeforeUnmount(() => {
         :open-revision="navigation.revision"
       />
     </main>
-    <nav
-      v-if="showPrimaryNavigation"
-      class="bottom-navigation"
-      :class="{ 'bottom-navigation--share': isWebHost }"
-      aria-label="主要导航"
-    >
-      <div>
-        <button
-          v-for="tab in primaryTabs"
-          :key="tab.id"
-          :class="{
-            active:
-              (navigation.screen === 'home' ? 'home' : 'applications')
-              === tab.id,
-          }"
-          :aria-current="
-            (navigation.screen === 'home' ? 'home' : 'applications') === tab.id
-              ? 'page'
-              : undefined
-          "
-          @click="navigateTab(tab.id)"
-        >
-          <AppIcon :name="tab.icon" :size="21" /><span>{{ tab.label }}</span>
-        </button>
-        <button v-if="isWebHost" @click="openPromotionShare"><AppIcon name="share" :size="21" /><span>分享</span></button>
-      </div>
-    </nav>
-    <Teleport to="body">
-      <ApplicationWindow
-        v-if="navigation.screen === 'home' && navigation.applicationPresentation === 'window' && navigation.application && currentApplication"
-        :application="currentApplication"
-        @close="closeApplicationWindow"
-      >
-        <ApplicationSurface
-          :destination="navigation.application"
-          :open-revision="navigation.revision"
-          embedded
-        />
-      </ApplicationWindow>
-    </Teleport>
     <ReminderHost />
     <LoginPage />
     <PromotionShareDialog v-if="isWebHost" />
@@ -271,33 +216,14 @@ onBeforeUnmount(() => {
       />
     </template>
   </div>
+  <AssistantHost @fullscreen="assistantFullscreen = $event" />
 </template>
 
 <style scoped>
-.guest-mode-notice {
-  position: absolute;
-  z-index: 2;
-  top: max(12px, env(safe-area-inset-top));
-  right: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  color: #fff;
-}
-.guest-mode-notice .button {
-  padding: 5px 12px;
-  min-height: 30px;
-}
 .login-required {
   width: 100%;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-}
-@media (max-width: 600px) {
-  .guest-mode-notice > span {
-    display: none;
-  }
 }
 </style>

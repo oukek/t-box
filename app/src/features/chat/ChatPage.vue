@@ -294,7 +294,7 @@ watch(
   <section
     class="chat-page"
     :class="{ 'has-messages': hasMessages }"
-    aria-label="首页对话"
+    aria-label="AI 对话"
   >
     <div class="chat-toolbar">
       <button
