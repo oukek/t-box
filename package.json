@@ -13,6 +13,7 @@
     "check": "pnpm lint && pnpm check:apps && pnpm check:business && pnpm typecheck",
     "test:unit": "pnpm test && pnpm test:ui-components && pnpm test:admin-controls && pnpm test:app-sdk && pnpm test:native && pnpm test:application-release && node --test scripts/business-code.test.mjs scripts/dev*.test.mjs",
     "dev": "node scripts/dev.mjs",
+    "dev:ios": "node scripts/dev-ios.mjs",
     "dev:app": "pnpm --filter @t-box/app dev",
     "dev:api": "pnpm --filter @t-box/api dev",
     "build": "pnpm build:contracts && pnpm -r --filter @t-box/api --filter @t-box/app --filter @t-box/admin --filter \"./apps/*/web\" --if-present build",

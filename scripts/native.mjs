@@ -4,10 +4,11 @@ import { existsSync } from 'node:fs'
 import { homedir, networkInterfaces } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runIosSimulator } from './ios-simulator.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const [command, ...arguments_] = process.argv.slice(2).filter((value) => value !== '--')
-const usage = `Usage: node scripts/native.mjs <sync|open|run|dev> [ios|android] [--url http://LAN-IP:5173] [--run]
+const usage = `Usage: node scripts/native.mjs <sync|open|run|dev> [ios|android] [--url http://LAN-IP:5173] [--run] [--target DEVICE-ID]
   sync          Build fresh web assets, then copy them to the native projects.
   open PLATFORM Build and sync bundled assets, then open Xcode or Android Studio.
   run PLATFORM  Build and sync bundled assets, then run on a device/emulator.
@@ -32,6 +33,7 @@ if (!['sync', 'open', 'run', 'dev'].includes(command)) {
 let platform
 let requestedUrl
 let runInDevice = false
+let target
 for (let index = 0; index < arguments_.length; index += 1) {
   const value = arguments_[index]
   if (['ios', 'android'].includes(value) && !platform) {
@@ -40,6 +42,8 @@ for (let index = 0; index < arguments_.length; index += 1) {
     requestedUrl = arguments_[++index] || fail('--url requires a URL.')
   } else if (value === '--run') {
     runInDevice = true
+  } else if (value === '--target') {
+    target = arguments_[++index] || fail('--target requires a device ID.')
   } else {
     fail(`Unknown argument: ${value}\n${usage}`)
   }
@@ -50,11 +54,15 @@ if (command !== 'sync' && !platform) {
 if (command !== 'dev' && (requestedUrl || runInDevice)) {
   fail('--url and --run are only available for native:dev.')
 }
+if (target && command !== 'run' && !runInDevice) {
+  fail('--target requires run or dev --run.')
+}
 
 const environment = { ...process.env }
 // Never inherit a developer's live reload URL into a bundled build or sync.
 delete environment.CAP_LIVE_RELOAD_URL
 delete environment.CAP_SERVER_URL
+delete environment.VITE_NATIVE_DEV_SERVER
 
 function execute(args, env = environment) {
   const result = spawnSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', args, {
@@ -72,13 +80,6 @@ function execute(args, env = environment) {
 
 function cap(...args) {
   execute(['--filter', '@t-box/capacitor', 'exec', 'cap', ...args])
-}
-
-execute(['--filter', '@t-box/capacitor', 'sync:version'])
-execute(['--filter', '@t-box/capacitor', 'sync:wechat'])
-if (command !== 'dev' || !existsSync(resolve(root, 'capacitor/www/index.html'))) {
-  execute(['--filter', '@t-box/capacitor', 'build:web'])
-  execute(['--filter', '@t-box/capacitor', 'copy:web'])
 }
 
 if (command === 'dev') {
@@ -101,9 +102,17 @@ if (command === 'dev') {
     fail('The live reload URL must use HTTP(S) and must not include credentials.')
   }
   environment.CAP_LIVE_RELOAD_URL = parsedUrl.toString()
+  // The signed local fallback must match current sources, not an old www build.
+  environment.VITE_NATIVE_DEV_SERVER = parsedUrl.origin
+  environment.VITE_API_BASE_URL = process.env.VITE_API_BASE_URL || `${parsedUrl.origin}/api/v1`
   console.log(`Live reload: ${environment.CAP_LIVE_RELOAD_URL}`)
   console.log('Keep pnpm dev running. Use pnpm native:sync before packaging bundled assets.')
 }
+
+execute(['--filter', '@t-box/capacitor', 'sync:version'])
+execute(['--filter', '@t-box/capacitor', 'sync:wechat'])
+execute(['--filter', '@t-box/capacitor', 'build:web'])
+execute(['--filter', '@t-box/capacitor', 'copy:web'])
 
 if (platform === 'android') {
   // Use the local SDK when installed in the standard macOS location. These
@@ -132,5 +141,7 @@ if (command === 'open' || (command === 'dev' && !runInDevice)) {
   cap('open', platform)
 }
 if (command === 'run' || (command === 'dev' && runInDevice)) {
-  cap('run', platform, '--no-sync')
+  if (platform !== 'ios' || !runIosSimulator(root, target)) {
+    cap('run', platform, '--no-sync', ...(target ? ['--target', target] : []))
+  }
 }

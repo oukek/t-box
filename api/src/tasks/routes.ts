@@ -32,6 +32,16 @@ export function registerTasks(
       })),
     }
   })
+  app.get<{ Params: { id: string } }>('/api/v1/tasks/:id/reference', async (req) => {
+    const actor = await p.identity.authenticate(bearer(req.headers.authorization))
+    const task = await p.tasks.get(actor, parseId(req.params.id))
+    const checkpoint = task.checkpoint as RunCheckpoint
+    const resources = access.references(checkpoint.session.messages)
+    for (const resource of resources) {
+      await access.inspect(actor, resource, 'read', '查看通知关联任务')
+    }
+    return { data: { ...task.summary, protectedResources: resources } }
+  })
   app.get<{ Params: { id: string } }>('/api/v1/tasks/:id', async (req) => {
     const actor = await p.identity.authenticate(
       bearer(req.headers.authorization),

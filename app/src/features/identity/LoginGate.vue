@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AppIcon } from '@t-box/ui-kit'
+import { AppIcon, BrandMark } from '@t-box/ui-kit'
 import { navigateTab, openApplication } from '../../core/navigation'
 import { showWechatLogin, wechatLogin } from './wechatLogin'
 
@@ -9,7 +9,7 @@ defineProps<{ title: string, description: string }>()
 <template>
   <div class="login-gate">
     <div class="login-gate-intro">
-      <span class="identity-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>
+      <BrandMark class="identity-brand-mark" />
       <p class="login-gate-eyebrow">T方舟 · 你的日常空间</p>
       <h1>{{ title }}</h1>
       <p class="login-gate-description">{{ description }}</p>

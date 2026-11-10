@@ -91,17 +91,20 @@ test('bundled sync clears both live reload variables; dev keeps an explicit URL'
 }, (t) => {
   const f = fixture(t)
   f.put('scripts/native.mjs', readFileSync(new URL('../../scripts/native.mjs', import.meta.url), 'utf8'))
+  f.put('scripts/ios-simulator.mjs', readFileSync(new URL('../../scripts/ios-simulator.mjs', import.meta.url), 'utf8'))
   f.put('capacitor/www/index.html', 'cached')
   // Replace only the pnpm child process to inspect the orchestration without opening IDEs.
   f.put('bin/pnpm', `#!${process.execPath}
 import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.TBOX_TEST_COMMAND_LOG, JSON.stringify({ args: process.argv.slice(2),
-  live: process.env.CAP_LIVE_RELOAD_URL, server: process.env.CAP_SERVER_URL }) + '\\n');
+  live: process.env.CAP_LIVE_RELOAD_URL, server: process.env.CAP_SERVER_URL, fallback: process.env.VITE_NATIVE_DEV_SERVER, api: process.env.VITE_API_BASE_URL }) + '\\n');
 `)
   chmodSync(join(f.root, 'bin/pnpm'), 0o755)
+  f.put('bin/xcrun', `#!${process.execPath}\nconsole.log('{"devices":{}}')\n`)
+  chmodSync(join(f.root, 'bin/xcrun'), 0o755)
   const log = join(f.root, 'commands.log')
   const run = (...args) => spawnSync(process.execPath, [join(f.root, 'scripts/native.mjs'), ...args], {
-    env: { ...process.env, PATH: `${join(f.root, 'bin')}${delimiter}${process.env.PATH}`, CAP_LIVE_RELOAD_URL: 'http://localhost:1111', CAP_SERVER_URL: 'http://localhost:2222', TBOX_TEST_COMMAND_LOG: log },
+    env: { ...process.env, PATH: `${join(f.root, 'bin')}${delimiter}${process.env.PATH}`, CAP_LIVE_RELOAD_URL: 'http://localhost:1111', CAP_SERVER_URL: 'http://localhost:2222', TBOX_TEST_COMMAND_LOG: log, VITE_NATIVE_DEV_SERVER: 'http://stale-dev:5173' },
     encoding: 'utf8',
   })
   assert.equal(run('sync').status, 0)
@@ -113,14 +116,24 @@ appendFileSync(process.env.TBOX_TEST_COMMAND_LOG, JSON.stringify({ args: process
   for (const command of commands) {
     assert.equal(command.live, undefined)
     assert.equal(command.server, undefined)
+    assert.equal(command.fallback, undefined)
   }
   f.put('commands.log', '')
   assert.equal(run('dev', 'ios', '--url', 'http://192.168.1.10:5173').status, 0)
   const dev = f.read('commands.log').trim().split('\n').map(JSON.parse)
-  assert.equal(dev.length, 4)
-  assert.deepEqual(dev[2].args.slice(-3), ['cap', 'sync', 'ios'])
-  assert.equal(dev[2].live, 'http://192.168.1.10:5173/')
-  assert.equal(dev[2].server, undefined)
+  assert.equal(dev.length, 6)
+  assert.equal(dev[2].args.at(-1), 'build:web', 'hot reload ships a fresh local fallback even if www already exists')
+  assert.equal(dev[3].args.at(-1), 'copy:web')
+  assert.equal(dev[2].fallback, 'http://192.168.1.10:5173')
+  assert.equal(dev[2].api, 'http://192.168.1.10:5173/api/v1')
+  assert.deepEqual(dev[4].args.slice(-3), ['cap', 'sync', 'ios'])
+  assert.equal(dev[4].live, 'http://192.168.1.10:5173/')
+  assert.equal(dev[4].server, undefined)
+  f.put('commands.log', '')
+  assert.equal(run('dev', 'ios', '--run', '--target', 'simulator-id', '--url', 'http://127.0.0.1:5173').status, 0)
+  const launched = f.read('commands.log').trim().split('\n').map(JSON.parse)
+  assert.deepEqual(launched.at(-1).args.slice(-5), ['run', 'ios', '--no-sync', '--target', 'simulator-id'])
+  assert.notEqual(run('open', 'ios', '--target', 'simulator-id').status, 0)
 })
 test('native web build invokes the project pack script, never pnpm publishing pack', () => {
   const config = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))

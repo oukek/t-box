@@ -1,0 +1,23 @@
+<!-- Geometry source: assets/brand/mark.svg -->
+<template>
+  <svg
+    width="1em"
+    height="1em"
+    viewBox="0 0 64 64"
+    fill="currentColor"
+    aria-hidden="true"
+    focusable="false"
+    class="brand-mark"
+  >
+    <path d="M19 12h26a4 4 0 0 1 0 8h-9v16a4 4 0 0 1-8 0V20h-9a4 4 0 0 1 0-8Z" />
+    <path d="M12 38c12 5 28 5 40 0a2 2 0 0 1 2.5 2.7l-6 9A8 8 0 0 1 42 53H22a8 8 0 0 1-6.5-3.3l-6-9A2 2 0 0 1 12 38Z" />
+  </svg>
+</template>
+
+<style scoped>
+.brand-mark {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+}
+</style>

@@ -49,6 +49,8 @@ export async function cleanupUsers(source: DataSource, userIds: string[]) {
       await unlink(join(root, file.id)).catch(() => {})
     }
     await source.query('DELETE FROM resources WHERE user_id=?', [id])
+    await source.query('DELETE FROM system_notifications WHERE user_id=?', [id])
+    await source.query('DELETE FROM system_notification_cursors WHERE user_id=?', [id])
     await source.query('DELETE FROM agent_tasks WHERE user_id=?', [id])
     await source.query('DELETE FROM conversations WHERE user_id=?', [id])
     await source.query('DELETE FROM ledger_members WHERE user_id=?', [id])

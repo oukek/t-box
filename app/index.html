@@ -8,6 +8,7 @@
     />
     <meta name="theme-color" content="#f4f6f8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="application-name" content="T方舟 · T Ark" />
     <meta name="description" content="随时与 AI 对话，按需安装应用。T方舟，从一句话开始，探索持续扩展的更多可能。" />
     <meta property="og:title" content="T方舟｜AI 助手 × 应用平台" />
@@ -16,7 +17,41 @@
     <title>T方舟 · T Ark</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div
+        id="startup"
+        style="
+          min-height: 100dvh;
+          display: grid;
+          place-content: center;
+          justify-items: center;
+          gap: 16px;
+          background: #f4f6f8;
+          color: #315a50;
+          font-family: system-ui, sans-serif;
+          text-align: center;
+        "
+      >
+        <img src="/favicon.svg" width="64" height="64" alt="方舟" />
+        <p id="startup-status" role="status" style="margin: 0; font-size: 14px">正在打开方舟…</p>
+        <button
+          id="startup-retry"
+          hidden
+          style="
+            padding: 12px 20px;
+            border: 0;
+            border-radius: 12px;
+            background: #176d63;
+            color: white;
+            font: inherit;
+            cursor: pointer;
+          "
+        >
+          重新打开
+        </button>
+      </div>
+    </div>
+    <script src="/startup.js" defer></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

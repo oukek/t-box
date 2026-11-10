@@ -7,6 +7,7 @@ declare module 'virtual:tbox-local-applications' {
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string
+  readonly VITE_NATIVE_DEV_SERVER?: string
 }
 
 interface Window {

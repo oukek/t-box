@@ -30,7 +30,7 @@ export function createCapabilities(
   >,
 ) {
   const modules = [
-    ...createApplicationModules(options).map(adaptApplication),
+    ...createApplicationModules(options).map((module) => adaptApplication(module, options.platform?.notifications)),
     ...(options.modules || []),
   ].map((module) =>
     bindInstalledCapabilities(module, options.platform?.applications),

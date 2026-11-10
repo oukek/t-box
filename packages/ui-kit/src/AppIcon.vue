@@ -2,6 +2,7 @@
 withDefaults(defineProps<{ name: string, size?: number }>(), { size: 20 })
 
 const paths: Record<string, string> = {
+  bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4',
   copy: 'M8 8h13v13H8z M16 8V3H3v13h5',
   clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18 M12 7v5l4 2',
   calculator:

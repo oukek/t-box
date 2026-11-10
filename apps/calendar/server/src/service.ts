@@ -318,18 +318,18 @@ export class CalendarService {
     )
   }
 
-  async reminders(userId: string, timezone = 'Asia/Shanghai') {
+  async reminders(userId: string, timezone = 'Asia/Shanghai', since?: number) {
     const now = new Date()
     const today = temporalDomain(() => timeSnapshot(timezone, now).date)
     const end = dayjs.utc(today).add(180, 'day').format('YYYY-MM-DD')
     const result = await this.occurrences(userId, {
-      from: dayjs.utc(today).subtract(1, 'day').format('YYYY-MM-DD'),
+      from: since === undefined ? dayjs.utc(today).subtract(1, 'day').format('YYYY-MM-DD') : dayjs(since).tz(timezone).format('YYYY-MM-DD'),
       to: end,
       timezone,
     })
     const reminders = occurrenceReminders(
       result.occurrences,
-      now.getTime() - 10 * 60000,
+      since ?? now.getTime() - 10 * 60000,
     )
     return {
       reminders: reminders.slice(0, 500),

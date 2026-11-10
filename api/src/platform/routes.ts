@@ -9,16 +9,29 @@ import { registerPromotions } from '../promotions/routes.js'
 export function registerPlatform(app: FastifyInstance, p: PlatformService) {
   const principal = (req: FastifyRequest) =>
     p.identity.authenticate(bearer(req.headers.authorization))
-  app.get('/api/v1/notifications', async (req, reply) => {
+  app.get<{ Querystring: { filter?: string, cursor?: string } }>('/api/v1/notifications', async (req, reply) => {
+    if ((req.query.filter !== undefined && !['all', 'unread'].includes(req.query.filter)) || (req.query.cursor !== undefined && typeof req.query.cursor !== 'string')) {
+      throw ErrorCode.INVALID_ARGUMENTS('通知筛选或分页参数不正确')
+    }
     reply.header('Cache-Control', 'no-store')
-    return { data: await p.notifications.list(await principal(req)) }
+    return { data: await p.notifications.list(await principal(req), { unread: req.query.filter === 'unread', cursor: req.query.cursor }) }
+  })
+  app.patch<{ Body: { key: string } }>('/api/v1/notifications/reminders/read', async (req, reply) => {
+    if (!req.body || Object.keys(req.body).some((key) => key !== 'key') || typeof req.body.key !== 'string') {
+      throw ErrorCode.INVALID_ARGUMENTS()
+    }
+    await p.notifications.readReminder(await principal(req), req.body.key)
+    return reply.code(204).send()
   })
   app.patch('/api/v1/notifications/read', async (req, reply) => {
     await p.notifications.read(await principal(req))
     return reply.code(204).send()
   })
-  app.patch<{ Params: { id: string } }>('/api/v1/notifications/:id/read', async (req, reply) => {
-    await p.notifications.read(await principal(req), req.params.id)
+  app.patch<{ Params: { id: string }, Body: { read?: boolean } }>('/api/v1/notifications/:id/read', async (req, reply) => {
+    if (req.body !== undefined && (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).some((key) => key !== 'read') || (req.body.read !== undefined && typeof req.body.read !== 'boolean'))) {
+      throw ErrorCode.INVALID_ARGUMENTS()
+    }
+    await p.notifications.read(await principal(req), req.params.id, req.body?.read !== false)
     return reply.code(204).send()
   })
   registerWechatLogin(app, p)

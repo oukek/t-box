@@ -5,6 +5,29 @@ export const operationsSchema: DatabaseSchema = {
   async seed(db) {
     await db.query('INSERT INTO notification_watermark(id,started_at) VALUES(1,UTC_TIMESTAMP(3))')
   },
+  extensions: [{
+    id: '2026-11-02.system-notifications',
+    tables: [`CREATE TABLE system_notifications (
+      id char(36) NOT NULL,
+      user_id char(36) NOT NULL,
+      source_app_id varchar(64) NOT NULL,
+      source_key varchar(190) NOT NULL,
+      task_id char(36) DEFAULT NULL,
+      kind varchar(80) NOT NULL,
+      content json NOT NULL,
+      read_at datetime(3) DEFAULT NULL,
+      created_at datetime(3) NOT NULL DEFAULT (utc_timestamp(3)),
+      PRIMARY KEY (id),
+      UNIQUE KEY system_notification_source (user_id,source_app_id,source_key),
+      KEY system_notification_inbox (user_id,created_at,id),
+      KEY system_notification_unread (user_id,read_at,created_at,id),
+      KEY system_notification_task (task_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, `CREATE TABLE system_notification_cursors (
+      user_id char(36) NOT NULL,
+      reminders_at datetime(3) NOT NULL,
+      PRIMARY KEY (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`],
+  }],
   tables: [
     `CREATE TABLE notification_watermark (
       id tinyint NOT NULL,

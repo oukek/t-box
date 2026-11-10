@@ -29,9 +29,11 @@ pnpm native:version # 只更新版本，不构建网页
 
 ## 开发热更新
 
+模拟器可在根目录直接运行 `pnpm dev:ios`，一次启动开发服务、等待就绪并安装打开 App，无需手动打开 Xcode。优先使用已启动的模拟器；`--target <UDID>` 可指定模拟器，`--existing` 可复用已运行的 `pnpm dev`。Ctrl+C 只停止本次启动的服务。MySQL 和开发数据库配置仍需准备好。
+
 保持 `pnpm dev` 运行，再执行 `pnpm native:dev:ios` 或 `pnpm native:dev:android`。支持 `--url http://192.168.1.10:5173` 和 `--run`，也支持 `CAP_LIVE_RELOAD_URL`（兼容参考项目的 `CAP_SERVER_URL`）。
 
-热更新已有 `www/index.html` 时复用网页资源。正式 `sync` / `open` / `run` 会重新构建，并清除两种开发地址环境变量，避免把局域网地址打进发行包。直接调用 `cap` 不经过此保护，发行使用上述封装命令。
+热更新也重新构建内置网页和本地应用，保证开发服务不可达时的回退桌面与当前源码一致。iOS 加载热更新地址失败时通过 `server.errorPath` 打开内置桌面，可在页面中重连开发服务。`pnpm dev:ios --bundled` 使用内置资源启动，便于测试关闭服务后的重启；AI 和登录仍需 API。正式 `sync` / `open` / `run` 会重新构建，并清除两种开发地址环境变量，避免把局域网地址打进发行包。直接调用 `cap` 不经过此保护，发行使用上述封装命令。
 
 ## 原生插件
 

@@ -259,6 +259,8 @@ export * from './icons.js'
 export * from './identifiers.js'
 export * from './market-settings.js'
 
+export * from './notifications.js'
 export * from './resources.js'
 export * from './sdk.js'
+
 export * from './wallpapers.js'

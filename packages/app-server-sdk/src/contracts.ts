@@ -60,6 +60,10 @@ export interface SpecialistAgent {
 }
 /** Application adapters only see the context they need, not AI history or transport credentials. */
 export interface ApplicationToolContext {
+  /** Account/source scoped by the trusted host. This is not a model-callable tool. */
+  notifications?: {
+    publish(sourceKey: string, content: import('@t-box/app-contracts').NotificationContent, kind?: string): Promise<{ id: string }>
+  }
   readonly actor?: Actor
   readonly bindings: readonly ResourceRef[]
   readonly requestId: string

@@ -249,7 +249,7 @@ export async function syncDeviceReminders(force = false): Promise<SyncResult> {
             title: n.title,
             body: n.body,
             schedule: { at: new Date(Date.parse(n.at) - serverOffset) },
-            extra: { owner: uid, destination: n.destination },
+            extra: { owner: uid, key: n.key, destination: n.destination },
           })),
         })
       }

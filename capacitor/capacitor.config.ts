@@ -17,6 +17,7 @@ const config: CapacitorConfig = {
     ? {
         server: {
           url: liveReloadUrl,
+          errorPath: 'index.html',
           cleartext: new URL(liveReloadUrl).protocol === 'http:',
         },
       }

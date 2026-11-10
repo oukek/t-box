@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ReminderHost from '@t-box/device-reminders/ReminderHost.vue'
 import AccountSettingsPage from '@t-box/settings-web/pages/AccountSettingsPage.vue'
-import { AppIcon, UserAvatar } from '@t-box/ui-kit'
+import { AppIcon, BrandMark, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { applicationModules } from './applications/registry'
@@ -17,6 +17,7 @@ import { localApplications } from './core/app-runtime/localApplications'
 import { clearApplicationBindings } from './core/app-runtime/resourceBindings'
 import { getApplication } from './core/applications'
 import { online } from './core/connectivity'
+import DevelopmentFallbackNotice from './core/native-runtime/DevelopmentFallbackNotice.vue'
 import DeviceConsentDialog from './core/native-runtime/DeviceConsentDialog.vue'
 import DevicePermissionsPage from './core/native-runtime/DevicePermissionsPage.vue'
 import { startNativeRuntime } from './core/native-runtime/lifecycle'
@@ -46,6 +47,10 @@ import MemoryPage from './features/chat/MemoryPage.vue'
 import LoginGate from './features/identity/LoginGate.vue'
 import LoginPage from './features/identity/LoginPage.vue'
 import { initializeWechatLogin, showWechatLogin } from './features/identity/wechatLogin'
+import NotificationBell from './features/notifications/NotificationBell.vue'
+import NotificationCenter from './features/notifications/NotificationCenter.vue'
+import NotificationToast from './features/notifications/NotificationToast.vue'
+import { startNotificationSync } from './features/notifications/store'
 import PromotionShareDialog from './features/promotions/PromotionShareDialog.vue'
 import { openPromotionShare } from './features/promotions/share'
 import ResourcesPage from './features/resources/ResourcesPage.vue'
@@ -71,6 +76,7 @@ const loginPrompt = computed(() => {
 })
 const stopCatalogSync = startCatalogSync()
 const stopNativeRuntime = startNativeRuntime()
+const stopNotifications = startNotificationSync()
 function hostCompatible(appId: string) {
   const entry = appCatalog.entries.find((e) => e.release.appId === appId)
   const module = applicationModules.find((m) => m.manifest.id === appId)
@@ -105,12 +111,14 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopCatalogSync()
   stopNativeRuntime()
+  stopNotifications()
   stopChat()
   stopViewport?.()
 })
 </script>
 
 <template>
+  <DevelopmentFallbackNotice v-if="navigation.screen === 'applications' && !assistantFullscreen" />
   <DeviceConsentDialog />
   <NativeDownloadDialog />
   <MemoryConfirmationDialog v-if="identity.user" />
@@ -150,8 +158,9 @@ onBeforeUnmount(() => {
           class="desktop-brand"
           href="#/"
           @click.prevent="navigateTab('applications')"
-        ><span class="desktop-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>T方舟</span></a>
+        ><BrandMark class="desktop-brand-mark" /><span>T方舟</span></a>
         <div class="desktop-topbar__actions">
+          <NotificationBell v-if="identity.user" />
           <button
             v-if="!identity.user"
             class="desktop-action"
@@ -203,6 +212,8 @@ onBeforeUnmount(() => {
       />
     </main>
     <ReminderHost />
+    <NotificationCenter v-if="identity.user" />
+    <NotificationToast v-if="identity.user" />
     <LoginPage />
     <PromotionShareDialog v-if="isWebHost" />
     <template v-for="module in applicationModules" :key="module.manifest.id">

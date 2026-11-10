@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AppIcon, Modal, UserAvatar } from '@t-box/ui-kit'
+import { AppIcon, BrandMark, Modal, UserAvatar } from '@t-box/ui-kit'
 import { computed, onBeforeUnmount } from 'vue'
 import { authorizeWechatProfile, closeWechatLogin, confirmWechatLogin, copyWechatLink, inWechat, retryWechatLogin, startWechatLogin, stopWechatUpdates, wechatLogin } from './wechatLogin'
 
@@ -15,7 +15,7 @@ onBeforeUnmount(stopWechatUpdates)
     @close="closeWechatLogin"
   >
     <div class="wechat-login-content">
-      <div class="wechat-login-brand"><span class="identity-brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>T方舟<small>日常，一处安放</small></span></div>
+      <div class="wechat-login-brand"><BrandMark class="identity-brand-mark" /><span>T方舟<small>日常，一处安放</small></span></div>
       <template v-if="wechatLogin.phase === 'profile'">
         <div class="wechat-profile-request">
           <span class="wechat-profile-icon"><AppIcon name="user" :size="23" /><i><AppIcon name="check" :size="11" /></i></span>

@@ -41,6 +41,7 @@ import { registerDesktop } from './desktop/routes.js'
 import { ErrorCode } from './error-codes.js'
 import { registerMemory } from './memory/routes.js'
 import { MemoryWorker } from './memory/worker.js'
+import { registerNotificationSocket } from './notifications/socket.js'
 import { registerApplicationCatalog } from './platform/application-catalog.js'
 import { registerPlatform } from './platform/routes.js'
 import { registerLedgerSocket } from './platform/socket.js'
@@ -269,6 +270,7 @@ export function createApp(deps: AppDependencies) {
       if (deps.platform.applicationCatalogUpdates) {
         registerApplicationCatalogSocket(scope, deps.platform, allowed)
         registerQuotaSocket(scope, deps.platform, allowed)
+        registerNotificationSocket(scope, deps.platform, allowed)
       }
     }
   })

@@ -143,6 +143,22 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 ## iOS / Android 开发热更新
 
+**iOS 模拟器一条命令启动：**
+
+```bash
+pnpm dev:ios
+```
+
+自动启动完整开发服务，等待 Vite 和 API 就绪，再编译、安装并打开模拟器中的 App。优先使用已启动的模拟器，否则选择最近使用的 iPhone 模拟器；默认通过 `127.0.0.1:5173` 访问 Mac。保持终端运行即可热更新，Ctrl+C 停止本次启动的服务。MySQL 与 `api/.env` 仍需提前准备好。
+
+如果另一个终端已经运行 `pnpm dev`，用 `pnpm dev:ios --existing` 复用，退出时不会关闭已有服务。指定模拟器可用 `pnpm dev:ios --target <UDID>`，UDID 通过 `xcrun simctl list devices available` 查看。
+
+模拟器启动兼容 Xcode 27 的 Device Hub 与旧版 Simulator，使用当前 Xcode 的 `xcodebuild` / `simctl` 编译和运行。
+
+调试版每次同步都会更新内置桌面和本地工具。关闭开发服务后再次打开 App，会自动进入内置桌面并提示重新连接；登录、AI 等云端功能仍依赖 API 服务。验证内置资源模式可运行 `pnpm dev:ios --bundled`，页面不使用热更新，修改代码后需重新运行。该模式的 API 仍指向本地开发服务，正式发布需配置真实 HTTPS API。
+
+**真机或手动选择 Xcode 运行目标时：**
+
 先在一个终端保持运行：
 
 ```bash

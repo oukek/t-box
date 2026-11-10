@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import type { DockPosition, Point, WindowRect } from './geometry'
-import { AppIcon } from '@t-box/ui-kit'
+import { AppIcon, BrandMark } from '@t-box/ui-kit'
 import { lockDocumentScroll } from '@t-box/ui-kit/scroll'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { online } from '../../core/connectivity'
 import { closeAssistant, navigation, openAssistant } from '../../core/navigation'
 import { identity } from '../../core/session'
 import ChatPage from '../chat/ChatPage.vue'
-import { chatBusy } from '../chat/chatStore'
+import { chatBusy, chatState } from '../chat/chatStore'
 import { showWechatLogin } from '../identity/wechatLogin'
+import { AssistantActivityIndicator } from './activity'
 import { canFloatAssistant, constrainAssistant, dockLauncher, initialAssistant, launcherPoint, readAssistantLayout } from './geometry'
 
 const emit = defineEmits<{ fullscreen: [value: boolean] }>()
@@ -32,13 +33,15 @@ const introduced = ref(saved.introduced || false)
 const idle = ref(false)
 const coarse = ref(window.matchMedia('(pointer: coarse)').matches)
 const unread = ref(false)
+const activity = new AssistantActivityIndicator()
+let activityAccount = identity.user?.id
 const panel = ref<HTMLElement>()
 const launcher = ref<HTMLButtonElement>()
 const draggedPoint = ref<Point | null>(null)
 const point = computed(() => draggedPoint.value || launcherPoint(dock.value, viewport.value))
 const drag = ref<{ id: number, kind: 'launcher' | 'move' | 'resize', start: Point, point: Point, rect: WindowRect, moved: boolean } | null>(null)
 const tucked = computed(() => idle.value && (coarse.value || !floating.value) && !chatBusy.value && !unread.value)
-const launcherLabel = computed(() => chatBusy.value ? '打开方舟 AI，正在处理' : unread.value ? '打开方舟 AI，有新进展' : '打开方舟 AI')
+const launcherLabel = computed(() => unread.value ? '打开方舟 AI，有新进展' : chatBusy.value ? '打开方舟 AI，正在处理' : '打开方舟 AI')
 const layerStyle = computed(() => ({ left: `${viewport.value.left}px`, top: `${viewport.value.top}px`, width: `${viewport.value.width}px`, height: `${viewport.value.height}px` }))
 const windowStyle = computed(() => fullscreen.value ? {} : ({ left: `${rect.value.x}px`, top: `${rect.value.y}px`, width: `${rect.value.width}px`, height: `${rect.value.height}px` }))
 let idleTimer: ReturnType<typeof setTimeout> | undefined
@@ -179,9 +182,6 @@ watch(fullscreen, (value) => {
 }, { immediate: true })
 watch(() => navigation.assistantOpen, async (open, previous) => {
   wake()
-  if (open) {
-    unread.value = false
-  }
   await nextTick()
   if (open) {
     panel.value?.focus({ preventScroll: true })
@@ -192,14 +192,19 @@ watch(() => navigation.assistantOpen, async (open, previous) => {
 watch(() => navigation.revision, () => {
   expanded.value = false
 })
-watch(chatBusy, (busy, previous) => {
-  if (previous && !busy && !navigation.assistantOpen) {
-    unread.value = true
+watch([
+  () => identity.user?.id,
+  () => navigation.assistantOpen,
+  () => chatState.activeRun?.id || chatState.task?.id || '',
+  () => chatState.activeRun?.status || chatState.task?.status || '',
+  chatBusy,
+], ([account, open, id, status, busy]) => {
+  if (account !== activityAccount) {
+    activity.reset()
+    activityAccount = account
   }
-})
-watch(() => identity.user?.id, () => {
-  unread.value = false
-})
+  unread.value = account ? activity.observe({ id, status, busy }, open) : false
+}, { immediate: true })
 onMounted(() => {
   window.addEventListener('resize', resize)
   window.visualViewport?.addEventListener('resize', resize)
@@ -242,7 +247,7 @@ onBeforeUnmount(() => {
         @keydown="adjustWithKeys($event, 'launcher')"
         @click="open"
       >
-        <span class="assistant-launcher__face"><AppIcon name="sparkle" :size="25" /><i
+        <span class="assistant-launcher__face"><BrandMark class="assistant-launcher__mark" /><i
           v-if="chatBusy || unread"
           class="assistant-launcher__status"
           :class="{ 'is-busy': chatBusy }"
@@ -282,7 +287,7 @@ onBeforeUnmount(() => {
             @pointercancel="endDrag"
             @lostpointercapture="endDrag"
             @keydown="adjustWithKeys($event, 'move')"
-          ><span class="assistant-brand" aria-hidden="true"><i /><i /><i /><i /></span><strong>方舟 AI</strong><span class="assistant-window__state">{{ !online ? '当前离线' : chatBusy ? '正在处理' : '随时在这里' }}</span></div>
+          ><BrandMark class="assistant-brand" /><strong>方舟 AI</strong><span class="assistant-window__state">{{ !online ? '当前离线' : chatBusy ? '正在处理' : '随时在这里' }}</span></div>
           <button
             v-if="floating"
             class="assistant-control"
@@ -323,7 +328,7 @@ onBeforeUnmount(() => {
             :active="navigation.assistantOpen"
           />
           <div v-else class="assistant-welcome">
-            <span class="assistant-welcome__symbol"><AppIcon name="sparkle" :size="32" /></span>
+            <span class="assistant-welcome__symbol"><BrandMark class="assistant-welcome__mark" /></span>
             <p class="assistant-welcome__eyebrow">T方舟 · 你的日常助手</p>
             <h1>从一句话开始</h1>
             <p>聊想法、排日程、整理记录。<br>登录后，让方舟帮你一起完成。</p>
@@ -505,26 +510,14 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .assistant-brand {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  transform: rotate(-5deg);
+  width: 28px;
+  height: 28px;
+  color: #176d63;
 }
-.assistant-brand i {
-  border-radius: 3px;
-  background: #137b72;
-}
-.assistant-brand i:first-child {
-  background: #c5dfd4;
-}
-.assistant-brand i:nth-child(2) {
-  background: #83b3a4;
-}
-.assistant-brand i:last-child {
-  background: #4b9784;
+.assistant-launcher__mark,
+.assistant-welcome__mark {
+  width: 34px;
+  height: 34px;
 }
 .assistant-control {
   display: grid;

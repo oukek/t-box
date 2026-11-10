@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ApplicationId, Resource } from '@t-box/shared'
-import { AppIcon } from '@t-box/ui-kit'
+import { AppIcon, BrandMark } from '@t-box/ui-kit'
 import {
   computed,
   nextTick,
@@ -359,9 +359,7 @@ watch(
       @scroll.passive="trackScroll"
     >
       <div v-if="!hasMessages" class="welcome-content">
-        <div class="welcome-symbol" aria-hidden="true">
-          <span /><span /><span /><span />
-        </div>
+        <BrandMark class="welcome-symbol" />
         <p class="welcome-eyebrow">T方舟 · 你的日常助手</p>
         <h1>有什么<span>想聊的？</span></h1>
         <p class="welcome-description">

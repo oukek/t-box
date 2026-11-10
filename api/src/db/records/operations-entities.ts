@@ -84,7 +84,9 @@ export interface StoredUserNotification {
   id: string
   user_id: string
   source_key: string
-  task_id: string
+  task_id: string | null
+  source_app_id: string
+  content: import('@t-box/app-contracts').NotificationContent
   kind: string
   read_at: string | null
   created_at: string
@@ -92,13 +94,15 @@ export interface StoredUserNotification {
 
 export const UserNotificationEntity = new EntitySchema<StoredUserNotification>({
   name: 'UserNotification',
-  tableName: 'user_notifications',
+  tableName: 'system_notifications',
   columns: {
     id: { type: 'char', length: 36, primary: true },
     user_id: { type: 'char', name: 'user_id', length: 36 },
-    source_key: { type: 'varchar', name: 'source_key', length: 100 },
-    task_id: { type: 'char', name: 'task_id', length: 36 },
-    kind: { type: 'varchar', length: 24 },
+    source_key: { type: 'varchar', name: 'source_key', length: 190 },
+    source_app_id: { type: 'varchar', length: 64 },
+    content: { type: 'json' },
+    task_id: { type: 'char', name: 'task_id', length: 36, nullable: true },
+    kind: { type: 'varchar', length: 80 },
     read_at: {
       type: 'datetime',
       name: 'read_at',
@@ -114,10 +118,10 @@ export const UserNotificationEntity = new EntitySchema<StoredUserNotification>({
     },
   },
   indices: [
-    { name: 'notification_inbox', columns: ['user_id', 'created_at', 'id'] },
+    { name: 'system_notification_inbox', columns: ['user_id', 'created_at', 'id'] },
     {
-      name: 'notification_source',
-      columns: ['user_id', 'source_key'],
+      name: 'system_notification_source',
+      columns: ['user_id', 'source_app_id', 'source_key'],
       unique: true,
     },
     { name: 'task_id', columns: ['task_id'] },

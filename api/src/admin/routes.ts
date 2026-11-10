@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { PlatformService } from '../platform/service.js'
 import type { ConfigurationService } from './service.js'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { registerHolidayAdministration } from '@t-box/calendar-server/holiday-admin-routes'
 import { registerLedgerCategoryAdministration } from '@t-box/ledger-server/categories/admin-routes'
 import { CategoryPresetAdministration } from '@t-box/ledger-server/categories/administration'
@@ -48,6 +49,23 @@ export function registerAdmin(
         reply.header('Set-Cookie', cookie(result.token))
         return { data: result.user }
       })
+      if (platform?.paymentConfiguration) {
+        scope.post('/payments/wechat/export', async (request, reply) => {
+          const key = process.env.WECHAT_CONFIG_EXPORT_KEY || ''
+          // A separate server-only credential enables repeatable CLI exports.
+          if (Buffer.byteLength(key) < 32) {
+            return reply.code(404).send({ message: '配置导出未启用' })
+          }
+          const authorization = request.headers.authorization || ''
+          const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
+          const hash = (value: string) => createHash('sha256').update(value).digest()
+          if (!token || !timingSafeEqual(hash(token), hash(key))) {
+            throw ErrorCode.UNAUTHENTICATED('配置导出密钥无效')
+          }
+          reply.header('Content-Disposition', 'attachment; filename="wechat-payment-config.json"')
+          return { data: await platform.paymentConfiguration!.runtime() }
+        })
+      }
       scope.register(async (secure) => {
         secure.addHook('preHandler', async (request) => {
           await auth.authenticate(sessionToken(request))

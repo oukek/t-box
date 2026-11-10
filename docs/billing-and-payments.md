@@ -54,6 +54,23 @@ iOS 原生端仍可查看额度、资源包和记录，购买按钮保持禁用�
 
 微信支付通知为 `/api/v1/payments/webhooks/wechat`，退款通知为 `/api/v1/payments/webhooks/wechat/refunds`。服务器需可公网 HTTPS 访问，配置公众号授权域名、JSAPI 支付目录、H5 域名、APP 应用身份及相应产品权限。代理应正确传递客户端 IP；只信任已配置的代理地址。宝塔/Nginx 应放行 REST 与 WebSocket 转发，支付通知保持原始请求体，不得由网关改写后再验签。
 
+跨项目迁移可使用 `POST /api/v1/admin/payments/wechat/export`，无需更新前端或后台登录 Cookie。服务器环境变量 `WECHAT_CONFIG_EXPORT_KEY` 为独立导出密钥，至少 32 字节，建议用 `openssl rand -hex 32` 生成；未配置或不足 32 字节时返回 404。PM2 部署填写 `shared/api.env` 后重启 `t-box-api` 生效。该接口持续可用，清空密钥并重启即可关闭。
+
+请求必须带 `Authorization: Bearer <导出密钥>` 和 `x-admin-request: 1`。返回 `{ "data": ... }`，包含当前生效的普通支付配置、商户私钥、API v3 密钥和有效 AppSecret；未保存支付配置时 `data` 为 `null`。响应禁止缓存，原有后台查询仍脱敏。密钥不要放在 URL 中，导出的文件包含明文凭证，应私密保存。
+
+本机 zsh / bash 可交互输入密钥后导出（将域名替换为实际 API 域名）：
+
+```sh
+printf '导出密钥: '
+read -r -s wechat_export_key
+printf '\n'
+(umask 077; printf 'Authorization: Bearer %s\n' "$wechat_export_key" | curl --fail-with-body --silent --show-error \
+  --request POST 'https://你的API域名/api/v1/admin/payments/wechat/export' \
+  --header @- --header 'x-admin-request: 1' \
+  --output wechat-payment-config.json)
+unset wechat_export_key
+```
+
 使用数据库基线 `2026-10-23.2`。PM2/Docker 仍通过 `node dist/init-db.js --check` 预检，执行 `node dist/init-db.js` 初始化空库或应用已识别基线的新增扩展。旧开发库不会自动转换、覆盖或删除，请配置新数据库后初始化。发布工作流保持手动触发，不需要增加新密钥或构建依赖。
 
 ## 主要接口

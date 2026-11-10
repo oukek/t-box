@@ -44,7 +44,15 @@ export function applicationContext(
   })
 }
 
-export function adaptApplication(module: SdkModule): ApplicationModule {
+export function adaptApplication(module: SdkModule, notifications?: import('../notifications/service.js').NotificationService): ApplicationModule {
+  const scoped = (context: ToolContext): ApplicationToolContext => ({
+    ...applicationContext(context, module.id),
+    ...(notifications && context.actor
+      ? { notifications: {
+          publish: (key, content, kind) => notifications.publish(context.actor!.user.id, module.id, key, content, kind),
+        } }
+      : {}),
+  })
   const tools: Record<string, ToolRegistration> = {}
   for (const [name, tool] of Object.entries(module.tools)) {
     tools[name] = {
@@ -52,25 +60,25 @@ export function adaptApplication(module: SdkModule): ApplicationModule {
       ...(tool.handler
         ? {
             handler: (value, context) =>
-              tool.handler!(value, applicationContext(context, module.id)),
+              tool.handler!(value, scoped(context)),
           }
         : {}),
       ...(tool.resources
         ? {
             resources: (value, context) =>
-              tool.resources!(value, applicationContext(context, module.id)),
+              tool.resources!(value, scoped(context)),
           }
         : {}),
       ...(tool.confirm
         ? {
             confirm: (value, context) =>
-              tool.confirm!(value, applicationContext(context, module.id)),
+              tool.confirm!(value, scoped(context)),
           }
         : {}),
       ...(tool.validate
         ? {
             validate: (value, context) =>
-              tool.validate!(value, applicationContext(context, module.id)),
+              tool.validate!(value, scoped(context)),
           }
         : {}),
       ...(tool.normalizeClientArguments
@@ -78,7 +86,7 @@ export function adaptApplication(module: SdkModule): ApplicationModule {
             normalizeClientArguments: (value, context) =>
               tool.normalizeClientArguments!(
                 value,
-                applicationContext(context, module.id),
+                scoped(context),
               ),
           }
         : {}),
@@ -87,7 +95,7 @@ export function adaptApplication(module: SdkModule): ApplicationModule {
             restoreState: (result, context) =>
               tool.restoreState!(
                 result,
-                applicationContext(context, module.id),
+                scoped(context),
               ),
           }
         : {}),
@@ -99,7 +107,7 @@ export function adaptApplication(module: SdkModule): ApplicationModule {
     ...(module.instructions
       ? {
           instructions: (context) =>
-            module.instructions!(applicationContext(context, module.id)),
+            module.instructions!(scoped(context)),
         }
       : {}),
     ...(module.navigation
@@ -111,7 +119,7 @@ export function adaptApplication(module: SdkModule): ApplicationModule {
                   contextualize: (params, context) =>
                     module.navigation!.contextualize!(
                       params,
-                      applicationContext(context, module.id),
+                      scoped(context),
                     ),
                 }
               : {}),

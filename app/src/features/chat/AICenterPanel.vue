@@ -12,7 +12,7 @@ import { request } from '../../core/network'
 import { identity } from '../../core/session'
 import { displayMoney } from '../billing/format'
 import { useQuotaRefresh } from '../billing/quota-events'
-import NotificationPanel from './NotificationPanel.vue'
+import { notifications, openNotifications } from '../notifications/store'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [], tasks: [] }>()
@@ -30,13 +30,6 @@ useQuotaRefresh(
     }
   },
   () => props.open,
-)
-const notificationsOpen = ref(false)
-watch(
-  () => [props.open, identity.user?.id],
-  () => {
-    notificationsOpen.value = false
-  },
 )
 let controller: AbortController | undefined
 watch(
@@ -74,9 +67,9 @@ function openPage(action: () => void) {
   emit('close')
   action()
 }
-function openTasksFromNotification() {
-  notificationsOpen.value = false
-  emit('tasks')
+function showNotifications() {
+  emit('close')
+  openNotifications()
 }
 </script>
 
@@ -121,9 +114,9 @@ function openTasksFromNotification() {
         <AppIcon name="right" :size="16" />
       </button>
       <h3>资料与任务</h3>
-      <button class="ai-center-link" @click="notificationsOpen = true">
+      <button class="ai-center-link" @click="showNotifications">
         <span class="ai-center-icon"><AppIcon name="info" :size="20" /></span>
-        <span>通知<small>已完成与待处理的任务</small></span>
+        <span>通知<small>{{ notifications.unread ? `${notifications.unread} 条未读` : '任务进展与应用消息' }}</small></span>
         <AppIcon name="right" :size="16" />
       </button>
       <button class="ai-center-link" @click="openPage(openResources)">
@@ -138,11 +131,6 @@ function openTasksFromNotification() {
       </button>
     </div>
   </SidePanel>
-  <NotificationPanel
-    :open="notificationsOpen"
-    @close="notificationsOpen = false"
-    @tasks="openTasksFromNotification"
-  />
 </template>
 
 <style scoped>

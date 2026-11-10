@@ -27,25 +27,9 @@
   text-shadow: 0 1px 12px #08253633;
 }
 .desktop-brand-mark {
-  display: grid;
-  width: 27px;
-  height: 27px;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  transform: rotate(-5deg);
-}
-.desktop-brand-mark i {
-  border-radius: 4px;
-  background: #e1f2e9;
-}
-.desktop-brand-mark i:first-child {
-  background: #ffffff8c;
-}
-.desktop-brand-mark i:nth-child(2) {
-  background: #c2ded1;
-}
-.desktop-brand-mark i:last-child {
-  background: #8dbdab;
+  width: 32px;
+  height: 32px;
+  color: #f4faf7;
 }
 .desktop-topbar__actions {
   display: flex;

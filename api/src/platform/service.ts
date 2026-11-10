@@ -135,7 +135,16 @@ export class PlatformService {
       paymentConfiguration,
     )
     this.tasks = new TaskStore(source)
-    this.notifications = new NotificationService(source)
+    this.notifications = new NotificationService(source, async (userId, since) => {
+      const [calendar, time] = await Promise.all([this.calendar.reminders(userId, 'Asia/Shanghai', since), this.time.list(userId)])
+      return [...calendar.reminders, ...time.timers.filter((timer) => timer.deadline && ['running', 'completed'].includes(timer.status)).map((timer) => ({
+        key: `time:${timer.id}:${timer.deadline}`,
+        at: timer.deadline!,
+        title: timer.label,
+        body: '倒计时已结束',
+        destination: { appId: 'time', params: { tab: 'timers' } },
+      }))]
+    })
     this.operations = new OperationsService(source)
     // Runtime composition always supplies the WeChat account. Internal service
     // fixtures can construct the platform without an external identity provider.

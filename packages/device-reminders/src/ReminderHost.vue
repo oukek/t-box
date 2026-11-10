@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Capacitor } from '@capacitor/core'
-import { identity, openApplication } from '@t-box/app-shell-sdk'
+import { identity, openApplication, request } from '@t-box/app-shell-sdk'
 import { AppIcon } from '@t-box/ui-kit'
 import { onBeforeUnmount, onMounted, watch } from 'vue'
 import {
@@ -13,6 +13,19 @@ let unmounted = false
 let ticker: ReturnType<typeof setInterval> | undefined
 let poll: ReturnType<typeof setInterval> | undefined
 let listener: { remove: () => Promise<void> } | undefined
+function readReminder(key: string) {
+  if (navigator.onLine && identity.user) {
+    void request('/notifications/reminders/read', { method: 'PATCH', body: JSON.stringify({ key }) }).catch(() => {})
+  }
+}
+function openDueReminder() {
+  const item = dueReminder.value
+  if (item) {
+    readReminder(item.key)
+    void openApplication(item.destination)
+    dueReminder.value = null
+  }
+}
 const refresh = () => {
   if (identity.user) {
     void syncDeviceReminders()
@@ -43,6 +56,9 @@ onMounted(async () => {
       (event) => {
         const extra = event.notification.extra
         if (extra?.owner === identity.user?.id && extra.destination) {
+          if (typeof extra.key === 'string') {
+            readReminder(extra.key)
+          }
           void openApplication(extra.destination)
         }
       },
@@ -69,10 +85,7 @@ onBeforeUnmount(() => {
   >
     <AppIcon name="calendar" :size="22" /><button
       class="device-reminder-open"
-      @click="
-        openApplication(dueReminder.destination);
-        dueReminder = null;
-      "
+      @click="openDueReminder"
     >
       <strong>{{ dueReminder.title }}</strong><span>{{ dueReminder.body }}</span>
     </button><button
