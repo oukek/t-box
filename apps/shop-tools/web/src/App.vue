@@ -25,18 +25,33 @@ import {
   paste,
   routesFrom,
 } from '@t-box/shop-tools-core'
-import { Modal, SheetSelect } from '@t-box/ui-kit'
+import { BottomSheet, Modal, SheetSelect } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ConfigPage from './ConfigPage.vue'
 import EditDialog from './EditDialog.vue'
 import { download, exportBook, importBook } from './excel'
 import ExchangePage from './ExchangePage.vue'
+import { lockPageZoom } from './pageViewport'
 import ResultsPage from './ResultsPage.vue'
+import TableViewport from './TableViewport.vue'
 import { createWorkspaceStore } from './workspace'
 
 const props = defineProps<{ client: AppClient }>()
 const workspaceStore = createWorkspaceStore(props.client)
+const actionsOpen = ref(false)
+const searchOpen = ref(false)
+const tableScale = ref(1)
+let unlockZoom: (() => void) | undefined
+function zoomTable(delta: number) {
+  tableScale.value =
+    Math.round(Math.max(0.6, Math.min(1.8, tableScale.value + delta)) * 100) /
+    100
+}
+function action(fn: () => unknown) {
+  actionsOpen.value = false
+  void fn()
+}
 const reloadOpen = ref(false)
 const leaveOpen = ref(false)
 const leaving = ref(false)
@@ -53,6 +68,21 @@ const saveState = ref('')
 const ready = ref(false)
 const busy = ref(false)
 const recovery = ref(false)
+const compactSaveStatus = computed(() => {
+  if (!ready.value) {
+    return saveState.value.includes('无法') ? '连接失败' : '连接中…'
+  }
+  if (recovery.value) {
+    return saveState.value === '云端版本冲突' ? '保存冲突' : '需重新加载'
+  }
+  if (saveState.value === '尚未保存到云端') {
+    return '未保存'
+  }
+  if (saveState.value.includes('正在保存') || saveState.value.includes('等待')) {
+    return '保存中…'
+  }
+  return '云端同步'
+})
 const active = computed(
   () =>
     book.value.sheets.find((s) => s.id === book.value.activeSheetId) ||
@@ -470,6 +500,7 @@ async function reloadWorkspace() {
   }
 }
 onMounted(() => {
+  unlockZoom = lockPageZoom()
   void reloadWorkspace()
   poll = setInterval(() => {
     if (!document.hidden && ready.value) {
@@ -480,6 +511,7 @@ onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload)
 })
 onUnmounted(() => {
+  unlockZoom?.()
   clearInterval(poll)
   persist()
   document.removeEventListener('visibilitychange', visible)
@@ -519,7 +551,22 @@ function refreshAll() {
       title="跨境运营助手"
       back-label="OS"
       @back="goBack"
-    />
+    ><template #actions><span
+      class="cloud-status"
+      :class="{
+        'save-warning':
+          (ready && recovery) || saveState === '尚未保存到云端',
+      }"
+      :title="saveState"
+      role="status"
+    >{{ compactSaveStatus }}</span><button
+      class="app-menu-button"
+      aria-label="应用操作"
+      :aria-expanded="actionsOpen"
+      @click="actionsOpen = true"
+    >
+      •••
+    </button></template></ApplicationHeader>
     <header class="shop-nav">
       <button class="brand" @click="page = 'home'">
         <span>跨</span>工具首页
@@ -543,18 +590,6 @@ function refreshAll() {
         </button>
       </nav>
     </header>
-    <div class="cloud-toolbar" aria-live="polite">
-      <span>{{ saveState || '正在连接云端…' }}</span>
-      <div class="actions">
-        <button v-if="ready && !recovery" @click="persist">立即保存</button><button
-          v-if="ready && !recovery && saveState === '尚未保存到云端'"
-          @click="persist"
-        >
-          重试保存</button><button @click="ready ? (reloadOpen = true) : reloadWorkspace()">
-          {{ ready ? '重新加载云端' : '重试加载' }}
-        </button>
-      </div>
-    </div>
     <p
       v-if="error"
       class="notice error"
@@ -654,10 +689,9 @@ function refreshAll() {
         </button>
       </template>
       <template v-if="page === 'calculator'">
-        <div class="toolbar">
+        <div class="toolbar workbook-toolbar">
           <div>
-            <strong>商品定价工作簿</strong><small>{{ saveState }} · {{ summary.ok }} 行已计算 ·
-              {{ summary.errors }} 行待处理</small>
+            <strong>商品定价工作簿</strong><small>{{ summary.ok }} 行已计算 · {{ summary.errors }} 行待处理</small>
           </div>
           <div class="actions">
             <button :disabled="busy" @click="exportFile(true)">下载模板</button><button :disabled="busy" @click="fileInput?.click()">
@@ -698,28 +732,51 @@ function refreshAll() {
                 · {{ route?.currency || '本币' }}</small>
             </div>
             <div class="actions">
-              <button @click="editSheet">工作表设置</button><button @click="addSheet(true)">复制</button><button
-                :disabled="book.sheets.length === 1"
-                @click="deleteOpen = true"
-              >
-                删除工作表
-              </button>
+              <button @click="editSheet">工作表设置</button>
             </div>
           </div>
           <div class="toolbar grid-toolbar">
-            <div class="actions">
-              <button @click="addRows()">＋ 添加商品</button><button @click="addRows(10)">添加10行</button><label><input v-model="moreFees" type="checkbox">展开费率列</label><input
-                v-model="search"
-                placeholder="搜索 SKU / 商品名称"
+            <div class="actions grid-primary">
+              <button class="add-product" @click="addRows()">＋ 添加商品</button><label class="desktop-fees"><input v-model="moreFees" type="checkbox">费率列</label><button
+                class="mobile-search-trigger"
                 aria-label="搜索商品"
+                :aria-expanded="searchOpen"
+                @click="searchOpen = !searchOpen"
               >
-            </div>
-            <div class="actions">
-              <button @click="rulesOpen = true">运费费率表</button><button @click="showLogs">官方更新记录</button><button @click="refreshAll">刷新数据</button>
+                搜索</button><input
+                v-model="search"
+                class="row-search"
+                :class="{ 'is-open': searchOpen }"
+                placeholder="搜索 SKU / 商品"
+                aria-label="搜索商品"
+              ><button class="table-options" @click="actionsOpen = true">
+                更多
+              </button>
             </div>
           </div>
-          <div class="table-scroll">
-            <table class="pricing-table">
+          <TableViewport v-model="tableScale">
+            <table
+              class="pricing-table"
+              :style="{
+                '--input-columns': cols.length,
+                '--output-columns': outputs.length,
+              }"
+            >
+              <colgroup>
+                <col class="number-column">
+                <col
+                  v-for="[key] in cols"
+                  :key="key"
+                  class="input-column"
+                  :class="[{ 'name-column': key === 'name' }]"
+                >
+                <col
+                  v-for="[key] in outputs"
+                  :key="key"
+                  class="result-column"
+                >
+                <col class="action-column">
+              </colgroup>
               <thead>
                 <tr>
                   <th class="row-number">#</th>
@@ -801,18 +858,32 @@ function refreshAll() {
                 </tr>
               </tbody>
             </table>
-          </div>
+          </TableViewport>
           <footer class="table-footer">
-            <span>{{ active.rows.length }}/1000 行 · 蓝色输入，灰色结果 · 支持
-              Excel 区域粘贴与 Enter 向下填写</span><span>汇率：{{ quote?.source || '未获取' }} ·
-              {{
-                quote ? new Date(quote.updatedAt).toLocaleString() : '—'
-              }}</span>
+            <span>{{ active.rows.length }} 行<span class="desktop-note">
+              · 蓝色输入，灰色结果</span></span>
+            <div
+              class="table-zoom"
+              role="group"
+              aria-label="表格缩放"
+            >
+              <button
+                aria-label="缩小表格"
+                :disabled="tableScale <= 0.6"
+                @click="zoomTable(-0.1)"
+              >
+                −</button><button aria-label="重置表格缩放" @click="tableScale = 1">
+                {{ Math.round(tableScale * 100) }}%</button><button
+                aria-label="放大表格"
+                :disabled="tableScale >= 1.8"
+                @click="zoomTable(0.1)"
+              >
+                ＋
+              </button>
+            </div>
+            <span class="desktop-note">{{ summary.ok }} 行已计算 · {{ summary.errors }} 行待处理</span>
           </footer>
         </section>
-        <p class="muted">
-          历史日期仅还原物流规则，佣金和汇率使用获取时数据。已有行保留独立费率；修改默认参数仅影响新行。印尼固定费沿用原口径，详见计算说明。
-        </p>
       </template>
       <ExchangePage
         v-if="page === 'exchange'"
@@ -838,6 +909,60 @@ function refreshAll() {
     <footer v-if="page !== 'calculator'" class="app-footer">
       跨境运营助手 · 商品与配置按方舟账号保存到云端
     </footer>
+    <BottomSheet
+      :open="actionsOpen"
+      title="应用操作"
+      compact
+      @close="actionsOpen = false"
+    ><div class="app-actions-panel">
+      <p class="muted">{{ saveState }}</p>
+      <div class="menu-actions">
+        <button v-if="ready && !recovery" @click="action(persist)">
+          {{
+            saveState === '尚未保存到云端' ? '重试保存' : '立即保存'
+          }}</button><button
+          @click="
+            action(() => (ready ? (reloadOpen = true) : reloadWorkspace()))
+          "
+        >
+          重新加载云端
+        </button>
+      </div>
+      <template v-if="page === 'calculator'"><h3>工作簿</h3>
+        <div class="menu-actions">
+          <button :disabled="busy" @click="action(() => fileInput?.click())">
+            导入 Excel</button><button :disabled="busy" @click="action(() => exportFile())">
+            导出工作簿</button><button :disabled="busy" @click="action(() => exportFile(true))">
+            下载模板</button><button @click="action(() => addSheet())">新增工作表</button><button @click="action(() => addSheet(true))">复制工作表</button><button
+            :disabled="book.sheets.length === 1"
+            class="danger"
+            @click="action(() => (deleteOpen = true))"
+          >
+            删除工作表
+          </button>
+        </div>
+        <h3>表格与费率</h3>
+        <div class="menu-actions">
+          <button @click="action(() => addRows(10))">添加10行</button><button @click="action(() => (moreFees = !moreFees))">
+            {{ moreFees ? '收起' : '展开' }}费率列</button><button @click="action(() => (rulesOpen = true))">
+            运费费率表</button><button @click="action(showLogs)">官方更新记录</button><button @click="action(refreshAll)">刷新数据</button>
+        </div>
+        <details class="calculation-notes">
+          <summary>使用与计算说明</summary>
+          <p>
+            表格支持双指缩放，也可使用底部的 − / ＋。支持 Excel 区域粘贴和
+            Enter 向下填写。
+          </p>
+          <p>
+            历史日期仅还原物流规则，佣金与汇率使用获取时数据；已有行保留独立费率，默认参数仅影响新行。
+          </p>
+          <p>印尼固定费沿用原项目每单3000 IDR，未核验现行政策。</p>
+          <p>
+            汇率：{{ quote?.source || '未获取' }} ·
+            {{ quote ? new Date(quote.updatedAt).toLocaleString() : '—' }}
+          </p>
+        </details></template>
+    </div></BottomSheet>
     <Modal
       :open="leaveOpen"
       title="尚有未保存的修改"

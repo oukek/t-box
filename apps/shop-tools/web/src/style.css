@@ -1,4 +1,8 @@
 :root {
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   font-family: 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
   color: #263447;
   background: #f3f6f9;
@@ -13,6 +17,7 @@
 }
 body {
   margin: 0;
+  touch-action: pan-x pan-y;
 }
 button,
 input {
@@ -22,10 +27,10 @@ button {
   cursor: pointer;
   border: 1px solid var(--line);
   border-radius: 7px;
-  padding: 8px 13px;
+  padding: 6px 10px;
   background: #fff;
   color: var(--ink);
-  min-height: 36px;
+  min-height: 32px;
 }
 button:hover {
   border-color: #ed542e;
@@ -37,7 +42,7 @@ button:disabled {
 }
 button:focus-visible,
 input:focus-visible {
-  outline: 3px solid #ed542e;
+  outline: 2px solid #ed542e;
   outline-offset: 2px;
 }
 input {
@@ -60,7 +65,7 @@ p {
   margin: 0;
 }
 h2 {
-  font-size: 18px;
+  font-size: 15px;
 }
 p {
   line-height: 1.7;
@@ -96,15 +101,14 @@ small {
 }
 .brand {
   border: 0;
-  font-size: 19px;
+  font-size: 14px;
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 12px;
   white-space: nowrap;
 }
-.brand > span,
-.intro-mark {
+.brand > span {
   background: var(--accent);
   color: #fff;
   display: grid;
@@ -140,24 +144,6 @@ small {
   max-width: none;
   padding: 20px 24px;
 }
-.intro {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 35px 0 45px;
-}
-.intro h1 {
-  font-size: 30px;
-  margin-bottom: 10px;
-}
-.intro p {
-  color: var(--muted);
-}
-.intro-mark {
-  width: 70px;
-  height: 80px;
-  font-size: 40px;
-}
 .tool-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -177,7 +163,7 @@ small {
   gap: 18px;
 }
 .tool-card strong {
-  font-size: 21px;
+  font-size: 16px;
 }
 .tool-card p {
   font-size: 14px;
@@ -280,7 +266,7 @@ thead th {
 }
 .pricing-table td {
   background: #f5f7f9;
-  min-width: 140px;
+  min-width: 0;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -293,12 +279,12 @@ thead th {
 }
 .input-cell input {
   width: 100%;
-  min-width: 125px;
+  min-width: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: 13px 10px;
-  height: 49px;
+  padding: 6px 8px;
+  height: 34px;
 }
 .pricing-table .row-number {
   min-width: 45px;
@@ -372,8 +358,7 @@ thead th {
   gap: 18px;
 }
 .fields label,
-.field,
-.exchange-converter label {
+.field {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -389,24 +374,6 @@ thead th {
   padding-top: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
-}
-.exchange-converter {
-  padding: 24px;
-  display: flex;
-  align-items: end;
-  gap: 18px;
-  flex-wrap: wrap;
-  margin: 20px 0;
-}
-.exchange-converter label {
-  flex: 1;
-  min-width: 130px;
-}
-.exchange-converter strong {
-  font-size: 25px;
-  min-height: 40px;
-  align-self: center;
-  color: var(--accent);
 }
 .app-footer {
   text-align: center;
@@ -488,19 +455,6 @@ pre {
   .workbook-content {
     padding: 18px 12px;
   }
-  .intro {
-    padding: 20px 8px 30px;
-    gap: 18px;
-  }
-  .intro h1 {
-    font-size: 24px;
-  }
-  .intro-mark {
-    width: 50px;
-    height: 60px;
-    font-size: 30px;
-    flex-shrink: 0;
-  }
   .tool-grid {
     grid-template-columns: 1fr;
   }
@@ -512,13 +466,6 @@ pre {
   }
   .config-section {
     padding: 18px;
-  }
-  .exchange-converter {
-    padding: 18px;
-    gap: 12px;
-  }
-  .exchange-converter label {
-    min-width: 110px;
   }
   .toolbar {
     gap: 12px;
@@ -574,7 +521,7 @@ pre {
   margin-bottom: 16px;
 }
 .home-intro h1 {
-  font-size: 42px;
+  font-size: 28px;
   line-height: 1.35;
   letter-spacing: -1px;
 }
@@ -701,7 +648,7 @@ pre {
   overflow-wrap: anywhere;
 }
 .converted-value {
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 600;
   margin-top: 18px;
   overflow-wrap: anywhere;
@@ -721,7 +668,7 @@ pre {
     padding: 24px 8px 34px;
   }
   .home-intro h1 {
-    font-size: 34px;
+    font-size: 24px;
   }
   .cost-sheet {
     transform: none;
@@ -735,7 +682,7 @@ pre {
     padding: 15px 12px;
   }
   .converted-value {
-    font-size: 22px;
+    font-size: 20px;
   }
   .exchange-panel {
     padding: 18px 14px;
@@ -776,7 +723,7 @@ pre {
   border-radius: 5px;
 }
 .price-number {
-  font-size: 34px;
+  font-size: 24px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
@@ -791,7 +738,7 @@ pre {
 }
 .profit-strip strong {
   display: block;
-  font-size: 18px;
+  font-size: 15px;
   margin: 7px 0;
 }
 .fee-list > div {
@@ -819,25 +766,490 @@ summary {
     padding: 20px;
   }
 }
-.cloud-toolbar {
+
+/* Compact application chrome and a bounded spreadsheet workspace. */
+.shop-app > .application-page-header {
+  min-height: 44px;
+  margin: 0;
+  padding: 4px 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  gap: 6px;
+}
+.shop-app .application-page-title h1 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.shop-app .application-page-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 8px 24px;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 12px;
-  background: #fff;
 }
-.cloud-toolbar button {
+.cloud-status {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.save-warning {
+  color: #b53229;
+}
+.app-menu-button {
+  font-size: 16px;
+  min-width: 34px;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  letter-spacing: 1px;
+}
+.shop-nav {
+  min-height: 44px;
+  padding: 0 20px;
+  gap: 16px;
+}
+.brand {
+  gap: 8px;
+  font-weight: 600;
+}
+.brand > span {
+  width: 24px;
+  height: 26px;
+  font-size: 15px;
+  transform: none;
+}
+.shop-nav nav {
+  gap: 24px;
+}
+.shop-nav nav button {
   font-size: 12px;
-  padding: 5px 9px;
+  padding: 10px 0;
+  border-bottom-width: 2px;
+}
+.shop-content {
+  padding: 20px 24px;
+}
+.workbook-content {
+  padding: 12px 16px;
+}
+.workbook-toolbar {
+  margin-bottom: 10px;
+}
+.workbook-toolbar strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.workbook-toolbar small {
+  font-size: 11px;
+}
+.toolbar {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.sheet-tabs {
+  gap: 4px;
+  margin-bottom: 8px;
+  padding-bottom: 0;
+}
+.sheet-tabs button {
+  font-size: 12px;
   min-height: 30px;
+  padding: 5px 10px;
+}
+.workbook-panel > .toolbar {
+  padding: 10px 12px 0;
+}
+.route-summary {
+  min-width: 0;
+  flex: 1;
+}
+.route-summary strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.route-summary small {
+  font-size: 11px;
+}
+.grid-toolbar {
+  margin-bottom: 0;
+  padding: 8px 12px !important;
+}
+.grid-primary {
+  width: 100%;
+  gap: 8px;
+}
+.row-search {
+  font-size: 12px;
+  height: 30px;
+  padding: 5px 9px;
+  margin-left: auto;
+  width: 180px;
+}
+.mobile-search-trigger {
+  display: none;
+}
+.desktop-fees {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+}
+.desktop-fees input {
+  margin-right: 5px;
+}
+.pricing-viewport {
+  touch-action: pan-x pan-y;
+  max-height: 65dvh;
+  border-top: 1px solid var(--line);
+  outline: none;
+  scroll-padding-left: 32px;
+}
+.pricing-viewport:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.table-surface {
+  width: max-content;
+  min-width: 100%;
+}
+.pricing-table {
+  --row-width: 32px;
+  --cell-width: 98px;
+  --result-width: 104px;
+  --action-width: 164px;
+  --name-extra: 34px;
+  table-layout: fixed;
+  min-width: 100%;
+  width: calc(
+    var(--row-width) + var(--input-columns) * var(--cell-width) + var(--name-extra) + var(--output-columns) *
+      var(--result-width) + var(--action-width)
+  );
+  font-size: 12px;
+}
+.pricing-table col.number-column {
+  width: var(--row-width);
+}
+.pricing-table col.input-column {
+  width: var(--cell-width);
+}
+.pricing-table col.name-column {
+  width: calc(var(--cell-width) + var(--name-extra));
+}
+.pricing-table col.result-column {
+  width: var(--result-width);
+}
+.pricing-table col.action-column {
+  width: var(--action-width);
+}
+.pricing-table th,
+.pricing-table td {
+  padding: 5px 7px;
+  font-weight: 400;
+}
+.pricing-table thead th {
+  font-size: 11px;
+  line-height: 1.3;
+  height: 38px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.pricing-table .row-number {
+  min-width: 0;
+}
+.pricing-table tbody th {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+.pricing-table .input-cell {
+  padding: 0;
+}
+.pricing-table .input-cell input {
+  display: block;
+  font-size: 12px;
+  line-height: 20px;
+  height: 34px;
+  padding: 7px 8px;
+  outline: none;
+  box-shadow: none;
+}
+.pricing-table .input-cell input:focus {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.pricing-table td small {
+  font-size: 10px;
+  line-height: 1.4;
+}
+.pricing-table td button {
+  min-height: 25px;
+  padding: 3px 5px;
+  font-size: 11px;
+  margin-right: 3px;
+}
+.pricing-table .error-text {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.table-footer {
+  align-items: center;
+  font-size: 11px;
+  padding: 5px 10px;
+  gap: 8px;
+}
+.table-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.table-zoom button {
+  min-height: 26px;
+  min-width: 27px;
+  padding: 2px 5px;
+  font-size: 11px;
+  border: 0;
+  background: transparent;
+}
+.table-zoom button:nth-child(2) {
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+}
+.app-actions-panel {
+  padding: 0 4px 12px;
+}
+.app-actions-panel > .muted {
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+.app-actions-panel h3 {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  margin: 20px 0 8px;
+}
+.menu-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.menu-actions button {
+  font-size: 13px;
+  text-align: left;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+.calculation-notes {
+  margin-top: 20px;
+  font-size: 12px;
+}
+.calculation-notes p {
+  margin-top: 10px;
+  color: var(--muted);
+}
+.notice {
+  font-size: 12px;
+  padding: 8px 12px;
+  margin: 8px 16px;
 }
 @media (max-width: 760px) {
-  .cloud-toolbar {
-    padding: 8px 12px;
+  .shop-app > .application-page-header {
+    min-height: 42px;
+    padding: 2px 10px;
+  }
+  .shop-app .application-page-title h1 {
+    font-size: 13px;
+  }
+  .shop-app .application-page-actions {
+    gap: 6px;
+  }
+  .cloud-status {
+    font-size: 10px;
+  }
+  .shop-nav {
+    flex-direction: row;
+    align-items: center;
+    padding: 0 12px;
+    min-height: 36px;
+    gap: 12px;
+  }
+  .brand {
+    font-size: 0;
+    padding: 0;
+    min-height: 30px;
+    gap: 0;
+  }
+  .brand > span {
+    width: 22px;
+    height: 24px;
+    font-size: 13px;
+  }
+  .shop-nav nav {
+    flex: 1;
+    gap: 0;
+    justify-content: space-around;
+  }
+  .shop-nav nav button {
+    padding: 8px 0;
+    font-size: 12px;
+    min-height: 36px;
+  }
+  .shop-content {
+    padding: 12px;
+  }
+  .workbook-content {
+    padding: 8px 0 0;
+    min-height: 0;
+  }
+  .workbook-toolbar {
+    display: none;
+  }
+  .sheet-tabs {
+    margin: 0 10px 6px;
+  }
+  .sheet-tabs button {
+    font-size: 11px;
+    min-height: 28px;
+    padding: 4px 8px;
+  }
+  .workbook-panel {
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+  .workbook-panel > .toolbar {
+    padding: 7px 10px 0;
+    gap: 8px;
+    margin-bottom: 7px;
+    flex-wrap: nowrap;
+  }
+  .route-summary strong {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .route-summary small {
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workbook-panel > .toolbar button {
+    font-size: 11px;
+    min-height: 28px;
+    padding: 4px 7px;
+    white-space: nowrap;
+  }
+  .workbook-panel > .grid-toolbar {
+    padding: 5px 10px !important;
+    margin: 0;
+  }
+  .grid-primary {
+    gap: 6px;
     flex-wrap: wrap;
+  }
+  .grid-primary .add-product {
+    margin-right: auto;
+  }
+  .mobile-search-trigger {
+    display: inline-block;
+  }
+  .desktop-fees,
+  .desktop-note {
+    display: none;
+  }
+  .row-search {
+    display: none;
+    width: 100%;
+    max-width: none !important;
+    margin: 0;
+    order: 5;
+    height: 30px;
+  }
+  .row-search.is-open {
+    display: block;
+  }
+  .pricing-table {
+    --row-width: 28px;
+    --cell-width: 80px;
+    --result-width: 88px;
+    --action-width: 148px;
+    --name-extra: 28px;
+    font-size: 11px;
+  }
+  .pricing-table thead th {
+    font-size: 10px;
+    height: 34px;
+    padding: 4px 6px;
+  }
+  .pricing-table .input-cell input {
+    font-size: 12px;
+    height: 32px;
+    line-height: 20px;
+    padding: 6px;
+  }
+  .pricing-table td {
+    padding: 4px 6px;
+  }
+  .pricing-viewport {
+    max-height: calc(100dvh - 244px - env(safe-area-inset-bottom));
+    min-height: 160px;
+  }
+  .table-footer {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+  .table-zoom button {
+    font-size: 10px;
+    min-height: 26px;
+  }
+  .tool-card {
+    padding: 18px;
+    gap: 12px;
+  }
+  .home-intro {
+    padding: 12px 2px 24px;
+    gap: 24px;
+  }
+  .home-intro h1 {
+    font-size: 24px;
+    letter-spacing: 0;
+  }
+  .intro-copy {
+    font-size: 13px;
+    margin: 14px 0;
+  }
+  .eyebrow {
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .cost-sheet {
+    padding: 18px;
+    box-shadow: none;
+  }
+  .exchange-panel,
+  .config-section {
+    padding: 14px;
+  }
+  .converted-value {
+    font-size: 18px;
+  }
+  .price-number {
+    font-size: 22px;
+  }
+  .profit-strip strong {
+    font-size: 15px;
+  }
+  .notice {
+    margin: 6px 10px;
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 760px) {
+  .table-footer {
+    padding-bottom: max(3px, env(safe-area-inset-bottom));
   }
 }
