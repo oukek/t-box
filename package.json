@@ -50,7 +50,7 @@
     "test:desktop": "pnpm build:contracts && pnpm --filter @t-box/api test:desktop",
     "test:desktop-appearance": "pnpm build:contracts && pnpm --filter @t-box/api test:desktop-appearance",
     "build:contracts": "pnpm -r --filter \"./packages/**\" --filter \"./apps/*/contracts\" --filter \"./apps/*/core\" --filter \"./apps/*/server\" --filter @t-box/shared --if-present build",
-    "dev:apps": "pnpm --parallel --filter @t-box/calculator-web --filter @t-box/calendar-web --filter @t-box/time-web --filter @t-box/ledger-web --filter @t-box/converter-web --filter @t-box/baby-diary-web dev",
+    "dev:apps": "pnpm --parallel --filter @t-box/calculator-web --filter @t-box/calendar-web --filter @t-box/time-web --filter @t-box/ledger-web --filter @t-box/converter-web --filter @t-box/baby-diary-web --filter @t-box/shop-tools-web dev",
     "test:app-platform": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/app-platform.integration.ts",
     "dev:packages": "pnpm -r --parallel --filter \"./packages/**\" --filter \"./apps/*/contracts\" --filter \"./apps/*/core\" --filter \"./apps/*/server\" --filter @t-box/shared --if-present dev",
     "serve:apps": "node scripts/serve-application-artifacts.mjs",
@@ -88,7 +88,9 @@
     "test:baby-diary": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx --test test/baby-diary.test.ts",
     "test:baby-diary:integration": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/baby-diary.integration.ts",
     "test:memory": "pnpm build:contracts && pnpm --filter @t-box/api test:memory && pnpm --filter @t-box/api exec tsx --test ../app/test/memory-confirmation.test.ts",
-    "test:native-platform": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/native-platform.integration.ts"
+    "test:native-platform": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/native-platform.integration.ts",
+    "test:shop-tools": "pnpm --filter @t-box/shop-tools-contracts --filter @t-box/shop-tools-core --filter @t-box/shop-tools-server build && pnpm --filter @t-box/api exec tsx --test '../apps/shop-tools/test/*.test.ts' '../apps/shop-tools/web/test/*.test.ts'",
+    "test:shop-tools:integration": "pnpm build:contracts && pnpm --filter @t-box/api exec tsx test/shop-tools.integration.ts"
   },
   "devDependencies": {
     "@antfu/eslint-config": "9.5.1",

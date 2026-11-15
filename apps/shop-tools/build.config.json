@@ -1,0 +1,7 @@
+{
+  "appId": "shop-tools",
+  "package": "@t-box/shop-tools-web",
+  "releasePackage": "@t-box/shop-tools-server",
+  "releaseModule": "server/dist/release.js",
+  "releaseExport": "applicationRelease"
+}

@@ -16,6 +16,7 @@ on:
           - '日历 (calendar)'
           - '单位换算 (converter)'
           - '记账 (ledger)'
+          - '跨境运营助手 (shop-tools)'
           - '时间 (time)'
         # END GENERATED APPLICATIONS
         # eslint-enable yaml/plain-scalar

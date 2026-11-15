@@ -9,6 +9,7 @@ import { createLedgerShellModule } from '@t-box/ledger-shell'
 import { marketModule } from '@t-box/market-web'
 import { profileModule } from '@t-box/settings-web'
 import { APPLICATION_CONTRACT_VERSION } from '@t-box/shared'
+import { createShopToolsShellModule } from '@t-box/shop-tools-shell'
 import { createTimeShellModule } from '@t-box/time-shell'
 import { defineAsyncComponent, shallowReactive } from 'vue'
 import {
@@ -60,6 +61,7 @@ export const applicationModules: ClientApplicationModule[] = shallowReactive<Cli
   createBabyDiaryShellModule(() => import('../core/app-runtime/WebApplication.vue')),
   calculatorModule,
   converterModule,
+  createShopToolsShellModule(() => import('../core/app-runtime/WebApplication.vue')),
   calendarModule,
   timeModule,
   profileModule,

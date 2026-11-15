@@ -26,7 +26,8 @@
     "@t-box/ledger-contracts": "workspace:*",
     "@t-box/market-contracts": "workspace:*",
     "@t-box/settings-contracts": "workspace:*",
-    "@t-box/time-contracts": "workspace:*"
+    "@t-box/time-contracts": "workspace:*",
+    "@t-box/shop-tools-contracts": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~5.9.3"

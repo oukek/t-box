@@ -37,7 +37,8 @@
     "dompurify": "^3.4.16",
     "marked": "^18.1.0",
     "qrcode": "^1.5.4",
-    "vue": "3.5.43"
+    "vue": "3.5.43",
+    "@t-box/shop-tools-shell": "workspace:*"
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",

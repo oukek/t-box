@@ -2,6 +2,7 @@ import type { DatabaseSchema } from '@t-box/server-foundation/persistence/schema
 import { babyDiarySchema } from '@t-box/baby-diary-server'
 import { calendarSchema } from '@t-box/calendar-server/schema'
 import { ledgerSchema } from '@t-box/ledger-server/schema'
+import { shopToolsSchema } from '@t-box/shop-tools-server'
 import { timeSchema } from '@t-box/time-server/schema'
 import { aiSchema } from './ai.js'
 import { applicationsSchema } from './applications.js'
@@ -21,7 +22,7 @@ export const databaseSchemas: readonly DatabaseSchema[] = [
   aiSchema,
   billingSchema,
   quotaSchema,
-  applicationsSchema,
+  { ...applicationsSchema, extensions: [...(applicationsSchema.extensions ?? []), ...(shopToolsSchema.extensions ?? [])] },
   resourcesSchema,
   configurationSchema,
   memorySchema,

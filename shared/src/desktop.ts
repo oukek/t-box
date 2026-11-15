@@ -10,6 +10,7 @@ import { marketManifest } from '@t-box/market-contracts'
 import { legacyApplicationIcon as marketLegacyIcon } from '@t-box/market-contracts/legacy-icon'
 import { profileManifest } from '@t-box/settings-contracts'
 import { legacyApplicationIcon as settingsLegacyIcon } from '@t-box/settings-contracts/legacy-icon'
+import { manifest as shopToolsManifest } from '@t-box/shop-tools-contracts'
 import { timeManifest } from '@t-box/time-contracts/index'
 import { legacyApplicationIcon as timeLegacyIcon } from '@t-box/time-contracts/legacy-icon'
 import { calculatorManifest } from './applications/calculator/index.js'
@@ -46,6 +47,7 @@ export const systemApplicationManifests: readonly ApplicationManifest[] = [
   babyDiaryManifest,
   calculatorManifest,
   converterManifest,
+  shopToolsManifest,
   calendarManifest,
   timeManifest,
   profileManifest,
