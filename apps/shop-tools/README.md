@@ -38,7 +38,7 @@ MySQL集成测试使用当前连接配置创建随机命名、受保护的临时
 
 业务表通过 `2026-11-15.shop-tools-workspaces` 增量扩展接入平台 applications schema，保持已发布初始化基线及指纹不变。首次或升级部署需执行方舟既有 `pnpm db:init` / 后端PM2部署初始化流程，扩展可重复运行。没有本地数据迁移或数据库外键。
 
-发布顺序：部署后端并应用建表扩展 → 更新主前端 →「子应用发布（OSS）」选择「跨境运营助手 (shop-tools)」→ 后台上架。新增读写接口权限已登记；发布包位于 `output/application-releases/shop-tools/1.0.0/`，版本以contracts清单为准。当前未执行线上部署。
+发布顺序：部署后端并应用建表扩展 → 更新主前端 →「子应用发布（OSS）」选择「跨境运营助手 (shop-tools)」→ 后台上架。新增读写接口权限已登记；发布包位于 `output/application-releases/shop-tools/<manifest.version>/`，版本以contracts清单为准。当前未执行线上部署。
 
 ## 验证记录
 
