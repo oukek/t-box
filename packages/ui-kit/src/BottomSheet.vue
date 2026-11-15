@@ -10,6 +10,7 @@ const props = defineProps<{
   busy?: boolean
   fullHeight?: boolean
   compact?: boolean
+  desktopModal?: boolean
 }>()
 const emit = defineEmits<{ close: [], opened: [] }>()
 const viewportHeight = ref<number>()
@@ -49,7 +50,7 @@ const { dialog, closed } = useDialog(() => props.open, {
     <dialog
       ref="dialog"
       class="sheet-dialog"
-      :class="{ 'sheet-full-height': fullHeight, 'sheet-compact': compact }"
+      :class="{ 'sheet-full-height': fullHeight, 'sheet-compact': compact, 'sheet-desktop-modal': desktopModal }"
       :style="
         fullHeight
           ? {
@@ -69,7 +70,7 @@ const { dialog, closed } = useDialog(() => props.open, {
     >
       <div class="sheet-handle" aria-hidden="true" />
       <header class="sheet-heading">
-        <h2>{{ title }}</h2>
+        <h2 :tabindex="desktopModal ? -1 : undefined" :data-dialog-initial-focus="desktopModal ? '' : undefined">{{ title }}</h2>
         <button
           class="icon-button"
           type="button"
@@ -234,6 +235,34 @@ const { dialog, closed } = useDialog(() => props.open, {
 @media (prefers-reduced-motion: reduce) {
   .sheet-dialog[open] {
     animation: none;
+  }
+}
+@media (min-width: 761px) {
+  .sheet-desktop-modal {
+    inset: 0;
+    margin: auto;
+    width: min(560px, calc(100% - 48px));
+    height: fit-content;
+    max-height: min(680px, calc(100dvh - 64px));
+    padding: 0;
+    border-radius: 12px;
+    box-shadow: 0 20px 90px #112a3840;
+  }
+  .sheet-desktop-modal[open] {
+    animation: none;
+  }
+  .sheet-desktop-modal .sheet-handle {
+    display: none;
+  }
+  .sheet-desktop-modal .sheet-heading {
+    padding: 14px 20px;
+    border-bottom: 1px solid #edf1f2;
+  }
+  .sheet-desktop-modal .sheet-heading h2:focus {
+    outline: none;
+  }
+  .sheet-desktop-modal .sheet-body {
+    padding: 16px 20px 20px;
   }
 }
 </style>

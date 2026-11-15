@@ -15,6 +15,7 @@ const props = defineProps<{
   label: string
   disabled?: boolean
   placeholder?: string
+  desktopModal?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: T] }>()
 const open = ref(false)
@@ -62,11 +63,12 @@ function move(event: KeyboardEvent) {
   </button><BottomSheet
     :open="open"
     :title="label"
+    :desktop-modal="desktopModal"
     @close="open = false"
   >
     <div
       class="sheet-options"
-      :class="{ 'sheet-options--annotated': hasSuffix }"
+      :class="{ 'sheet-options--annotated': hasSuffix, 'sheet-options--desktop-modal': desktopModal }"
       role="listbox"
       :aria-label="label"
       @keydown="move"
@@ -184,5 +186,15 @@ function move(event: KeyboardEvent) {
 }
 .sheet-options button:hover:not(:disabled) {
   background: #f2f7f5;
+}
+@media (min-width: 761px) {
+  .sheet-options--desktop-modal button {
+    min-height: 42px;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+  .sheet-options--desktop-modal strong {
+    font-size: 13px;
+  }
 }
 </style>

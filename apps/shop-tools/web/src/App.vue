@@ -34,6 +34,7 @@ import { download, exportBook, importBook } from './excel'
 import ExchangePage from './ExchangePage.vue'
 import { lockPageZoom } from './pageViewport'
 import ResultsPage from './ResultsPage.vue'
+import RoutePicker from './RoutePicker.vue'
 import TableViewport from './TableViewport.vue'
 import { createWorkspaceStore } from './workspace'
 
@@ -78,11 +79,15 @@ const compactSaveStatus = computed(() => {
   if (saveState.value === '尚未保存到云端') {
     return '未保存'
   }
-  if (saveState.value.includes('正在保存') || saveState.value.includes('等待')) {
+  if (
+    saveState.value.includes('正在保存') ||
+    saveState.value.includes('等待')
+  ) {
     return '保存中…'
   }
-  return '云端同步'
+  return saveState.value === '已保存到云端' ? '已保存' : '自动保存已开启'
 })
+const saveInFlight = computed(() => saveState.value === '正在保存到云端…')
 const active = computed(
   () =>
     book.value.sheets.find((s) => s.id === book.value.activeSheetId) ||
@@ -255,12 +260,7 @@ const draft = ref<{ name: string, settings: Settings }>({
   name: '',
   settings: clone(first.settings),
 })
-const draftRoutes = computed(() =>
-  routes(draft.value.settings.date).map((r) => ({
-    value: r.key,
-    label: r.label,
-  })),
-)
+const draftRoutes = computed(() => routes(draft.value.settings.date))
 function editSheet() {
   draft.value = {
     name: active.value.name,
@@ -282,7 +282,7 @@ function saveSheet() {
       throw ShopError.invalid('工作表名称须为1–100个字符')
     }
     if (
-      !draftRoutes.value.some((r) => r.value === draft.value.settings.routeKey)
+      !draftRoutes.value.some((r) => r.key === draft.value.settings.routeKey)
     ) {
       throw ShopError.invalid('请选择有效物流方案')
     }
@@ -560,6 +560,17 @@ function refreshAll() {
       :title="saveState"
       role="status"
     >{{ compactSaveStatus }}</span><button
+      class="save-workspace"
+      :disabled="!ready || recovery || saveInFlight"
+      @click="persist"
+    >
+      {{
+        saveInFlight
+          ? '保存中…'
+          : saveState === '尚未保存到云端'
+            ? '重试保存'
+            : '保存'
+      }}</button><button
       class="app-menu-button"
       aria-label="应用操作"
       :aria-expanded="actionsOpen"
@@ -913,6 +924,7 @@ function refreshAll() {
       :open="actionsOpen"
       title="应用操作"
       compact
+      desktop-modal
       @close="actionsOpen = false"
     ><div class="app-actions-panel">
       <p class="muted">{{ saveState }}</p>
@@ -1003,10 +1015,10 @@ function refreshAll() {
           v-model="draft.settings.mode"
           :options="modes"
           label="计算模式"
-        /></label><label>站点 / 货物 / 渠道 / 地区<SheetSelect
+          desktop-modal
+        /></label><label>物流方案<RoutePicker
           v-model="draft.settings.routeKey"
-          :options="draftRoutes"
-          label="物流方案"
+          :routes="draftRoutes"
         /></label>
       </div>
       <p class="muted">

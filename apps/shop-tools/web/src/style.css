@@ -1253,3 +1253,19 @@ summary {
     padding-bottom: max(3px, env(safe-area-inset-bottom));
   }
 }
+.save-workspace {
+  font-size: 12px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-color: #f6aa98;
+  color: var(--accent);
+  background: #fff9f6;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .save-workspace {
+    font-size: 11px;
+    min-height: 28px;
+    padding: 4px 8px;
+  }
+}
