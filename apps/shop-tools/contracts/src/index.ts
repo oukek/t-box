@@ -9,7 +9,7 @@ export const manifest = {
   icon: 'apps',
   iconAsset: applicationIcon,
   color: 'orange',
-  version: '1.0.2',
+  version: '1.1.0',
   skillIds: [],
 } as const satisfies ApplicationManifest
 export const currencies = [
@@ -57,7 +57,13 @@ export interface Fee {
   increment_amount?: number
   [key: string]: unknown
 }
+export interface Coupon {
+  threshold: number
+  reduction: number
+}
 export interface Route {
+  coupons?: Coupon[]
+  precision?: number
   key: string
   site: string
   siteName: string
@@ -93,7 +99,7 @@ export interface Config {
   order: string[]
   sites: Record<
     string,
-    { enabled: boolean, precision?: number, disabled: string[] }
+    { enabled: boolean, precision?: number, disabled: string[], coupons?: Coupon[] }
   >
 }
 export interface Quote {
@@ -127,6 +133,8 @@ export interface SitePayload {
 export const outputs = [
   ['price', '折前售价'],
   ['sale', '折后售价'],
+  ['coupon', '优惠券减免'],
+  ['paid', '券后成交价'],
   ['profit', '汇损后利润（CNY）'],
   ['margin', '净利润率（%）'],
   ['hidden', '藏价'],

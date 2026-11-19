@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { Config, Route } from '@t-box/shop-tools-contracts'
-import { clone } from '@t-box/shop-tools-core'
+import type { Config, Coupon, Route } from '@t-box/shop-tools-contracts'
+import { clone, validateCoupons } from '@t-box/shop-tools-core'
 import { computed, ref } from 'vue'
 import EditDialog from './EditDialog.vue'
 
@@ -14,6 +14,7 @@ const site = ref('')
 const draft = ref<{
   enabled: boolean
   precision?: number | string
+  coupons?: Coupon[]
   disabled: string[]
 }>({ enabled: true, disabled: [] })
 const fields = [
@@ -87,6 +88,7 @@ function saveBasic() {
 function openSite(id: string) {
   site.value = id
   draft.value = clone(props.config.sites[id] || { enabled: true, disabled: [] })
+  draft.value.coupons ??= []
   error.value = ''
   siteOpen.value = true
 }
@@ -106,8 +108,15 @@ function saveSite() {
     error.value = '小数位须为0–6的整数'
     return
   }
+  let coupons: Coupon[]
+  try { coupons = validateCoupons(draft.value.coupons) }
+  catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+    return
+  }
   const value = clone(props.config)
   value.sites[site.value] = {
+    coupons,
     enabled: draft.value.enabled,
     disabled: clone(draft.value.disabled),
     ...(p === undefined || p === '' ? {} : { precision: Number(p) }),
@@ -164,7 +173,7 @@ function setAll(enabled: boolean) {
         <div>
           <strong>{{ s.name }}</strong><small>{{
             config.sites[s.id]?.enabled === false ? '已停用' : '已启用'
-          }}</small>
+          }} · {{ config.sites[s.id]?.coupons?.length || 0 }} 张优惠券</small>
         </div>
       </div>
       <div class="actions">
@@ -228,6 +237,16 @@ function setAll(enabled: boolean) {
       max="6"
       step="1"
     ></label>
+    <div class="toolbar">
+      <strong>站点满减券（{{ routes.find(r => r.site === site)?.currency }}）</strong>
+      <button @click="draft.coupons?.push({ threshold: 0, reduction: 0 })">添加优惠券</button>
+    </div>
+    <p class="muted">按单件折后商品价判断门槛，同时满足多张券时使用减免最大的一张。按售价模式保留目标折后价，显示用券后的实际利润。</p>
+    <div v-for="(coupon, index) in draft.coupons" :key="index" class="toolbar">
+      <label class="field">满<input v-model.number="coupon.threshold" type="number" min="0" step="any"></label>
+      <label class="field">减<input v-model.number="coupon.reduction" type="number" min="0" step="any"></label>
+      <button @click="draft.coupons?.splice(index, 1)">移除</button>
+    </div>
     <div
       v-for="p in paths"
       :key="p.id"

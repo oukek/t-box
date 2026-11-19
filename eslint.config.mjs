@@ -72,6 +72,19 @@ export default antfu(
     },
   },
   {
+    files: ['extensions/product-collector/**/*.vue'],
+    rules: {
+      'vue/singleline-html-element-content-newline': ['error', {
+        ignoreWhenNoAttributes: false,
+        ignoreWhenEmpty: true,
+        ignores: ['pre', 'textarea'],
+      }],
+      'vue/multiline-html-element-content-newline': ['error', {
+        ignoreWhenEmpty: true,
+      }],
+    },
+  },
+  {
     files: ['**/*.{js,mjs,cjs}'],
     rules: {
       // typescript-eslint 8.71 misclassifies Espree value references as types.

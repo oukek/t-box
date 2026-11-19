@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
+import type { AdminPage } from './core/navigation'
 import { hostBrand } from '@t-box/app-contracts'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AdminButton from './components/AdminButton.vue'
 import AdminDialog from './components/AdminDialog.vue'
 import AdminIcon from './components/AdminIcon.vue'
 import AdminInput from './components/AdminInput.vue'
+import AdminNavigation from './components/AdminNavigation.vue'
 import { errorMessage } from './core/api'
+import { navigationGroups } from './core/navigation'
 import { administrator, login, logout, restoreSession } from './core/session'
 import ApplicationsPage from './features/ApplicationsPage.vue'
 import BillingPage from './features/BillingPage.vue'
@@ -53,18 +57,27 @@ const pages = {
   },
   'models': { title: '模型', symbol: 'model', component: ModelsPage },
   'billing': { title: '用户与额度', symbol: 'users', component: BillingPage },
-  'promotions': { title: '推广渠道', symbol: 'connection', component: PromotionsPage },
+  'promotions': {
+    title: '推广渠道',
+    symbol: 'connection',
+    component: PromotionsPage,
+  },
   'packages': {
     title: '资源包与费率',
     symbol: 'model',
     component: ResourcePackagesPage,
   },
   'payments': { title: '支付订单', symbol: 'model', component: PaymentsPage },
-  'wechat-login': { title: '微信登录', symbol: 'users', component: WechatLoginPage },
+  'wechat-login': {
+    title: '微信登录',
+    symbol: 'users',
+    component: WechatLoginPage,
+  },
   'users': { title: '管理员', symbol: 'users', component: UsersPage },
   'support': { title: '客服配置', symbol: 'chat', component: SupportPage },
-}
-type Page = keyof typeof pages
+} satisfies Record<AdminPage, { title: string, symbol: string, component: Component }>
+type Page = AdminPage
+const mobileNavOpen = ref(false)
 const page = ref<Page>('providers')
 const username = ref('')
 const password = ref('')
@@ -73,15 +86,21 @@ const busy = ref(false)
 const loading = ref(true)
 const logoutOpen = ref(false)
 const current = computed(() => pages[page.value])
+const currentGroup = computed(() =>
+  navigationGroups.find((g) => g.pages.some((p) => p === page.value)),
+)
 function readHash() {
   const value = location.hash.slice(2)
   page.value = Object.hasOwn(pages, value) ? (value as Page) : 'providers'
+  mobileNavOpen.value = false
 }
 function navigate(value: Page) {
+  mobileNavOpen.value = false
   location.hash = `/${value}`
   page.value = value
 }
 function expired() {
+  mobileNavOpen.value = false
   administrator.value = null
   error.value = '登录已失效，请重新登录'
 }
@@ -102,6 +121,7 @@ async function signOut() {
   error.value = ''
   try {
     await logout()
+    mobileNavOpen.value = false
     logoutOpen.value = false
   } catch (e) {
     error.value = errorMessage(e)
@@ -109,7 +129,13 @@ async function signOut() {
     busy.value = false
   }
 }
+function closeMobileOnDesktop() {
+  if (window.innerWidth > 760) {
+    mobileNavOpen.value = false
+  }
+}
 onMounted(async () => {
+  window.addEventListener('resize', closeMobileOnDesktop)
   readHash()
   window.addEventListener('hashchange', readHash)
   window.addEventListener('admin-session-expired', expired)
@@ -122,6 +148,7 @@ onMounted(async () => {
   }
 })
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', closeMobileOnDesktop)
   window.removeEventListener('hashchange', readHash)
   window.removeEventListener('admin-session-expired', expired)
 })
@@ -188,17 +215,11 @@ function openLogout() {
         class="brand"
         href="#/providers"
       ><span class="brand-icon"><AdminIcon name="grid" :size="21" /></span><span>T方舟<small>管理工作台</small></span></a><span class="nav-caption">工作空间</span>
-      <nav aria-label="后台导航">
-        <AdminButton
-          v-for="(item, key) in pages"
-          :key="key"
-          :class="{ active: page === key }"
-          :aria-current="page === key ? 'page' : undefined"
-          @click="navigate(key)"
-        >
-          <AdminIcon :name="item.symbol" />{{ item.title }}
-        </AdminButton>
-      </nav>
+      <AdminNavigation
+        :current="page"
+        :pages="pages"
+        @navigate="navigate"
+      />
       <div class="sidebar-note">
         <span class="sidebar-note-title">{{ hostBrand.englishName }} · 管理工作台</span>
         <p>管理连接，配置应用能力。</p>
@@ -206,7 +227,16 @@ function openLogout() {
     </aside>
     <div class="admin-main">
       <header class="topbar">
-        <span>工作台 <span class="slash">/</span> {{ current.title }}</span>
+        <div class="topbar-location">
+          <AdminButton
+            class="mobile-nav-toggle icon-button"
+            aria-label="打开后台导航"
+            aria-haspopup="dialog"
+            aria-controls="admin-mobile-navigation"
+            :aria-expanded="mobileNavOpen"
+            @click="mobileNavOpen = true"
+          ><AdminIcon name="menu" :size="19" /></AdminButton><span class="breadcrumb"><span class="breadcrumb-group">{{ currentGroup?.title }}<span class="slash">/</span></span><span>{{ current.title }}</span></span>
+        </div>
         <div>
           <span class="avatar" aria-hidden="true">{{
             administrator.username[0]?.toUpperCase()
@@ -232,6 +262,17 @@ function openLogout() {
       </main>
     </div>
     <AdminDialog
+      id="admin-mobile-navigation"
+      class="admin-navigation-dialog"
+      :open="mobileNavOpen"
+      title="后台导航"
+      @close="mobileNavOpen = false"
+    ><AdminNavigation
+      :current="page"
+      :pages="pages"
+      @navigate="navigate"
+    /></AdminDialog>
+    <AdminDialog
       :open="logoutOpen"
       title="退出工作台？"
       description="退出后需要重新登录，已保存的配置不会受影响。"
@@ -247,7 +288,10 @@ function openLogout() {
         {{ error }}
       </p>
       <template #footer>
-        <AdminButton :disabled="busy" @click="logoutOpen = false">取消</AdminButton><AdminButton
+        <AdminButton
+          :disabled="busy"
+          @click="logoutOpen = false"
+        >取消</AdminButton><AdminButton
           class="primary"
           :disabled="busy"
           @click="signOut"

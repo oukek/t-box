@@ -153,3 +153,26 @@ test('workbook rejects duplicate ids and invalid mode', () => {
     }),
   )
 })
+
+test('coupon pricing rechecks higher thresholds and uses one largest eligible voucher', () => {
+  const r = {
+    ...route, exchange: 1, fees: [], commission: 0, trade: 0, precision: 2,
+    coupons: [{ threshold: 115, reduction: 25 }, { threshold: 100, reduction: 15 }],
+  }
+  const input = { ...row(), cost: 80, target: 20, domestic: 0, loss: 0, activity: 0, withdraw: 0, discount: 0 }
+  const result = calculate(input, settings, r)
+  assert.equal(result.sale, 125)
+  assert.equal(result.coupon, 25)
+  assert.equal(result.paid, 100)
+  assert.equal(result.profit, 20)
+  const margin = calculate(input, { ...settings, mode: 'profitRate' }, r)
+  assert.equal(margin.margin, 20)
+  const fixed = calculate({ ...input, target: 115 }, { ...settings, mode: 'price' }, r)
+  assert.equal(fixed.paid, 90)
+  assert.equal(fixed.profit, 10)
+  const below = calculate({ ...input, target: 19.99 }, settings, r)
+  assert.equal(below.coupon, 0)
+  const rounded = calculate({ ...input, target: 19.999, discount: 10 }, settings, r)
+  assert.equal(rounded.coupon, 25)
+  assert.ok(rounded.profit >= 19.999)
+})

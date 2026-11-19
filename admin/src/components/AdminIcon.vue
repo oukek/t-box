@@ -1,6 +1,7 @@
 <script setup lang="ts">
 withDefaults(defineProps<{ name: string, size?: number }>(), { size: 18 })
 const paths: Record<string, string> = {
+  menu: 'M4 6h16 M4 12h16 M4 18h16',
   grid: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
   connection:
     'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2',

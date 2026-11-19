@@ -224,7 +224,7 @@ export function calculate(
     throw ShopError.invalid('费率与目标利润率过高，无法计算有效售价')
   }
   const costs = (n.cost! + n.domestic!) * rate
-  const sale =
+  const targetSale =
     settings.mode === 'price'
       ? n.target!
       : ((costs + (settings.mode === 'profit' ? n.target! * rate : 0)) /
@@ -232,18 +232,41 @@ export function calculate(
         hidden +
         fixed) /
         denominator
-  const commission = (sale * route.commission) / 100
-  const trade = indonesia ? 3000 : ((sale + buyer) * route.trade) / 100
-  const activity = (sale * n.activity!) / 100
-  const revenue = sale - hidden - commission - trade - activity
+  const discountFactor = 1 - n.discount! / 100
+  let sale = targetSale
+  let price = sale / discountFactor
+  let coupon = 0
+  if (route.coupons?.length) {
+    const precision = route.precision ?? 2
+    const roundUp = (value: number) => Number(display(value, precision))
+    // Raising the price to cover one voucher may unlock a larger voucher.
+    for (let attempt = 0; attempt <= route.coupons.length; attempt++) {
+      const required = settings.mode === 'price' ? targetSale : targetSale + coupon
+      price = roundUp(required / discountFactor)
+      sale = roundUp(price * discountFactor)
+      const eligible = route.coupons.reduce((largest, rule) =>
+        sale >= rule.threshold ? Math.max(largest, rule.reduction) : largest, 0)
+      if (coupon === eligible) break
+      coupon = eligible
+      if (settings.mode === 'price') break
+    }
+  }
+  const paid = sale - coupon
+  const commission = (paid * route.commission) / 100
+  const trade = indonesia ? 3000 : ((paid + buyer) * route.trade) / 100
+  const activity = (paid * n.activity!) / 100
+  const revenue = paid - hidden - commission - trade - activity
   const withdraw = (revenue * n.withdraw!) / 100
   const loss = ((revenue - withdraw) * n.loss!) / 100
   const profit = (revenue - withdraw - loss - costs) / rate
+  if (paid <= 0) throw ShopError.invalid('优惠券抵扣全部售价，无法计算利润率')
   const result = {
-    price: sale / (1 - n.discount! / 100),
+    price,
     sale,
+    paid,
+    coupon,
     profit,
-    margin: ((profit * rate) / sale) * 100,
+    margin: ((profit * rate) / paid) * 100,
     hidden,
     buyer,
     commission,
@@ -349,6 +372,8 @@ export function routesFrom(
               channel.cn_name,
               zone.cn_name || zone.name,
             ].join(' / '),
+            coupons: cfg?.coupons,
+            precision: cfg?.precision ?? Number(config.basic.precision),
             fees: zone.fee_modes ?? [],
             exchange,
             commission: Number(site.platform_commission ?? 6),

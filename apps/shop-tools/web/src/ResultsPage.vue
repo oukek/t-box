@@ -87,7 +87,7 @@ function money(value: number, route: Route) {
           ≈
           {{ money(entry.result.price / entry.route.exchange, entry.route) }}
           CNY · 折后 {{ money(entry.result.sale, entry.route) }}
-          {{ entry.route.currency }}
+          {{ entry.route.currency }}<span v-if="entry.result.coupon"> · 满减 {{ money(entry.result.coupon, entry.route) }} · 券后 {{ money(entry.result.paid, entry.route) }}</span>
         </p>
         <div class="profit-strip">
           <div>

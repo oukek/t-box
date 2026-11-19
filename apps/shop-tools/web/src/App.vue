@@ -1118,7 +1118,7 @@ function refreshAll() {
         <div v-for="[key, label] in outputs" :key="key">
           <dt>{{ label }}</dt>
           <dd>
-            {{ display(detail.result[key], Number(config.basic.precision)) }}
+            {{ display(detail.result[key] ?? (key === 'paid' ? detail.result.sale : 0), detail.route.precision ?? Number(config.basic.precision)) }}
             {{
               key === 'profit'
                 ? 'CNY'

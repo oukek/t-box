@@ -151,38 +151,12 @@ a {
   font-size: 10px;
   letter-spacing: 1px;
 }
-.sidebar nav {
-  display: grid;
-  gap: 6px;
-}
-.sidebar nav button {
-  position: relative;
-  justify-content: flex-start;
-  padding: 12px 14px;
-  gap: 13px;
-  border: 0;
-  color: #687386;
-  background: transparent;
-  font-size: 13px;
-  min-height: 43px;
-}
-.sidebar nav button:hover {
-  color: var(--accent);
-  background: #f7f9ff;
-}
-.sidebar nav button.active {
-  color: var(--accent);
-  background: var(--accent-soft);
-  font-weight: 600;
-}
-.sidebar nav button.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  height: 18px;
-  width: 3px;
-  border-radius: 3px;
-  background: var(--accent);
+.sidebar nav.admin-nav {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 5px;
 }
 .sidebar-note {
   margin-top: auto;
@@ -959,49 +933,6 @@ small {
   .admin-layout {
     display: block;
   }
-  .sidebar {
-    position: static;
-    width: 100%;
-    padding: 16px 17px 10px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-  .sidebar > .brand {
-    padding: 0;
-  }
-  .sidebar .brand small,
-  .nav-caption,
-  .sidebar-note {
-    display: none;
-  }
-  .sidebar .brand {
-    font-size: 14px;
-  }
-  .sidebar .brand-icon {
-    width: 29px;
-    height: 29px;
-    border-radius: 7px;
-  }
-  .sidebar nav {
-    display: flex;
-    margin-top: 14px;
-    gap: 6px;
-    max-width: 100%;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-  }
-  .sidebar nav button {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    justify-content: center;
-    padding: 10px 8px;
-    gap: 8px;
-    min-height: 36px;
-    font-size: 12px;
-  }
-  .sidebar nav button.active::before {
-    display: none;
-  }
   .admin-main {
     margin-left: 0;
   }
@@ -1118,5 +1049,76 @@ small {
   *::after {
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+/* Grouped navigation keeps application settings separate from platform configuration. */
+.sidebar .nav-caption {
+  margin-top: 28px;
+}
+
+.sidebar-note {
+  margin-top: 12px;
+  flex-shrink: 0;
+}
+.topbar-location {
+  min-width: 0;
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0;
+}
+.breadcrumb > span:last-child {
+  color: #48566d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.breadcrumb-group {
+  white-space: nowrap;
+  color: var(--muted);
+}
+.topbar .mobile-nav-toggle {
+  display: none;
+}
+.admin-dialog.admin-navigation-dialog {
+  inset: 0 auto 0 0;
+  margin: 0;
+  width: min(320px, 88vw);
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+}
+.admin-navigation-dialog .dialog-body {
+  padding: 8px 12px 20px;
+  overflow: auto;
+  flex: 1;
+}
+@media (max-width: 760px) {
+  .admin-layout > .sidebar {
+    display: none;
+  }
+  .topbar .mobile-nav-toggle {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .topbar-location {
+    gap: 8px !important;
+    flex: 1;
+  }
+  .breadcrumb {
+    font-size: 12px;
+  }
+  .breadcrumb-group {
+    display: none;
+  }
+  .admin-main .topbar {
+    padding: 0 12px;
+    gap: 12px;
+  }
+  .topbar-username {
+    display: none;
   }
 }

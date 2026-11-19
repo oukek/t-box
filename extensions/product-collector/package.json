@@ -1,0 +1,34 @@
+{
+  "name": "@t-box/product-collector",
+  "type": "module",
+  "version": "0.3.1",
+  "private": true,
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix --max-warnings 0",
+    "format": "pnpm lint:fix",
+    "format:check": "pnpm lint",
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "dev": "vite --host 127.0.0.1 --port 5186",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "pnpm lint && pnpm typecheck && vite build && node scripts/build-extension.mjs",
+    "test": "tsx --test test/*.test.ts",
+    "pack": "pnpm build && node scripts/pack.mjs"
+  },
+  "dependencies": {
+    "@t-box/ui-kit": "workspace:*",
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.32",
+    "@types/jsdom": "30.0.0",
+    "@types/node": "^24.19.1",
+    "@vitejs/plugin-vue": "6.0.9",
+    "esbuild": "0.28.2",
+    "jsdom": "30.1.2",
+    "tsx": "4.23.15",
+    "typescript": "~5.9.3",
+    "vite": "8.3.2",
+    "vue-tsc": "^3.2.5"
+  }
+}
