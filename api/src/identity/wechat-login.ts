@@ -235,37 +235,11 @@ export class WechatLoginService {
     }
     try {
       const account = await this.account(row.appId)
-      if (authorization?.scope === 'snsapi_base') {
-        const openid = await fetchWechatOpenid(account.appId, account.appSecret, input.code, this.transport)
-        await this.configuration.source.transaction(async (db) => {
-          const current = await this.flow(db, input, true)
-          if (current.status !== 'exchanging') {
-            throw ErrorCode.WECHAT_LOGIN_EXPIRED()
-          }
-          // Payment scans still prove the current WeChat identity, but an existing
-          // account does not need another profile-consent screen to pay.
-          if (current.checkoutTokenHash) {
-            const configured = await db.getRepository(WechatAccountEntity).findOne({ where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
-            if (!configured?.enabled || configured.appId !== row.appId) {
-              throw ErrorCode.WECHAT_LOGIN_DISABLED()
-            }
-            const mapping = await db.getRepository(WechatIdentityEntity).findOneBy({ appId: row.appId, openidHash: digest(openid) })
-            if (mapping) {
-              const user = await this.user(db, mapping.userId, row.appId)
-              await db.getRepository(PaymentWechatUserEntity).upsert({ user_id: user.id, app_id: row.appId, openid_cipher: this.configuration.vault.encrypt(openid), updated_at: new Date().toISOString().slice(0, 23).replace('T', ' ') }, ['user_id', 'app_id'])
-              const session = await this.identity.session(db, user, row.device)
-              await db.getRepository(WechatFlowEntity).update({ id: row.id }, { status: 'complete', userId: user.id, sessionHash: digest(session.token), sessionCipher: this.configuration.vault.encrypt(JSON.stringify(session)) })
-              return
-            }
-          }
-          await db.getRepository(WechatAuthorizationEntity).update({ flowId: row.id }, { openidHash: digest(openid) })
-          await db.getRepository(WechatFlowEntity).update({ id: row.id }, { status: 'pending', stateHash: null })
-        })
-        await this.changed(row, 'confirming')
-        return this.poll(input)
-      }
-      const profile = await fetchWechatProfile(account.appId, account.appSecret, input.code, this.transport)
-      if (authorization && authorization.openidHash !== digest(profile.openid)) {
+      const silent = authorization?.scope === 'snsapi_base'
+      const profile = silent ? null : await fetchWechatProfile(account.appId, account.appSecret, input.code, this.transport)
+      const openid = profile?.openid ?? await fetchWechatOpenid(account.appId, account.appSecret, input.code, this.transport)
+      const openidHash = digest(openid)
+      if (profile && authorization && authorization.openidHash !== openidHash) {
         throw ErrorCode.WECHAT_LOGIN_FAILED('两次微信授权的账号不一致，请使用同一个微信重新登录')
       }
       await this.configuration.source.transaction(async (db) => {
@@ -280,7 +254,25 @@ export class WechatLoginService {
             throw ErrorCode.WECHAT_LOGIN_BUSY()
           }
         }
-        const user = await this.upsertUser(db, row.appId, profile, row.id)
+        let user: AppUser
+        if (profile) {
+          user = await this.upsertUser(db, row.appId, profile, row.id)
+        } else {
+          const configured = await db.getRepository(WechatAccountEntity).findOne({ where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
+          if (!configured?.enabled || configured.appId !== row.appId) {
+            throw ErrorCode.WECHAT_LOGIN_DISABLED()
+          }
+          const mapping = await db.getRepository(WechatIdentityEntity).findOneBy({ appId: row.appId, openidHash })
+          if (!mapping) {
+            await db.getRepository(WechatAuthorizationEntity).update({ flowId: row.id }, { openidHash })
+            await db.getRepository(WechatFlowEntity).update({ id: row.id }, { status: 'pending', stateHash: null })
+            return
+          }
+          user = await this.user(db, mapping.userId, row.appId)
+          if (current.checkoutTokenHash) {
+            await db.getRepository(PaymentWechatUserEntity).upsert({ user_id: user.id, app_id: row.appId, openid_cipher: this.configuration.vault.encrypt(openid), updated_at: new Date().toISOString().slice(0, 23).replace('T', ' ') }, ['user_id', 'app_id'])
+          }
+        }
         if (parent) {
           await db.getRepository(WechatFlowEntity).update({ id: parent.id }, { status: 'scanned', userId: user.id })
           await db.getRepository(WechatFlowEntity).update({ id: row.id }, { status: 'scanned', userId: user.id })

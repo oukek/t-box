@@ -1269,3 +1269,10 @@ summary {
     padding: 4px 8px;
   }
 }
+
+@media (max-width: 600px) {
+  .shop-app .application-page-title h1 { white-space: nowrap; }
+  .project-switch { max-width: 24vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-switch .project-caption,
+  .shop-app .cloud-status:not(.save-warning) { display: none; }
+}

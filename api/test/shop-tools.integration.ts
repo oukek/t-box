@@ -1,5 +1,6 @@
 import type { BackendInvocation, LifecycleRequest } from '@t-box/app-contracts'
 import type {
+  Creation,
   WorkspaceHeader,
   WorkspacePatch,
   WorkspaceState,
@@ -39,7 +40,7 @@ try {
   const runner = source.createQueryRunner()
   await runner.connect()
   try {
-    assert.equal(await extendDatabase(runner, [shopToolsSchema]), 1)
+    assert.equal(await extendDatabase(runner, [shopToolsSchema]), 3)
     assert.equal(await extendDatabase(runner, [shopToolsSchema]), 0)
   } finally {
     await runner.release()
@@ -49,7 +50,11 @@ try {
       .filter((m) => m.tableName.startsWith('shop_tools_'))
       .every((m) => m.foreignKeys.length === 0),
   )
-  const service = new ShopToolsService(source)
+  let textCalls = 0
+  const service = new ShopToolsService(source, () => ({
+    async text() { textCalls++; return { title: 'Travel cup' } },
+    async image() { throw new Error('测试图片服务失败') },
+  }))
   const subject = 'a'.repeat(64)
   const other = 'b'.repeat(64)
   const releaseId = 'shop-tools-1.0.0'
@@ -97,7 +102,7 @@ try {
   ]
   const state: WorkspaceState = {
     book: { version: 1, activeSheetId: sheet.id, sheets: [sheet] },
-    config: defaultConfig(),
+    config: { ...defaultConfig(), creativeTemplates: [{ id: 'english', name: '英语主图', language: '英语', title: '短标题', description: '列出规格', image: '白底' }] },
     detail: null,
     comparison: null,
   }
@@ -139,6 +144,7 @@ try {
     request(subject, 'workspace_get', {}),
   )) as WorkspaceHeader
   assert.equal(header.revision, 1)
+  assert.deepEqual(header.config?.creativeTemplates, state.config.creativeTemplates)
   assert.equal(header.config?.basic.loss, 4)
   assert.equal(header.metadata?.sheets[0]?.name, sheet.name)
   const page = (await restored.invoke(
@@ -300,6 +306,46 @@ try {
     ),
   )) as { items: unknown[] }
   assert.equal(afterDelete.items.length, 0)
+  const projectCall = (actor: string, action: string, args: Record<string, unknown> = {}) =>
+    service.invoke(request(actor, 'projects', { action, ...args }, randomUUID(), actor === subject ? 2 : 1))
+  await projectCall(subject, 'list')
+  const projectRead = (actor: string, id: string) =>
+    service.invoke(request(actor, 'workspace_get', { projectId: id }, randomUUID(), actor === subject ? 2 : 1)) as Promise<WorkspaceHeader>
+  assert.equal((await projectRead(subject, subject)).revision, revision + 1)
+  const { id: projectId } = await projectCall(subject, 'create', { name: '团队' }) as { id: string }
+  assert.equal((await projectRead(subject, projectId)).revision, 0)
+  await assert.rejects(projectRead(other, projectId), { code: 'SHOP_PROJECT_DENIED' })
+  const { code } = await projectCall(subject, 'invite', { projectId, role: 'viewer' }) as { code: string }
+  await projectCall(other, 'join', { code, name: '同事' })
+  await assert.rejects(projectCall(other, 'join', { code, name: '重复加入' }))
+  assert.equal((await projectRead(other, projectId)).revision, 0)
+  const write = () => service.invoke(request(other, 'workspace_patch', { ...patch, projectId, revision: 0 }))
+  await assert.rejects(write(), { code: 'SHOP_PROJECT_DENIED' })
+  await assert.rejects(projectCall(other, 'role', { projectId, subject: other, role: 'admin' }), { code: 'SHOP_PROJECT_DENIED' })
+  const input = { title: '旅行杯', description: '', imageId: 'sample', fields: ['title', 'image'], rules: { title: '简短', description: '', image: '白底', language: '英语' } }
+  const create = { projectId, action: 'create', input }
+  await assert.rejects(service.invoke(request(other, 'creative', create)), { code: 'SHOP_PROJECT_DENIED' })
+  const submission = request(subject, 'creative', create, randomUUID(), 2)
+  const [job, replay] = await Promise.all([service.invoke(submission), service.invoke(submission)]) as { id: string }[]
+  assert.deepEqual(job, replay)
+  const get = { projectId, action: 'get', id: job!.id }
+  let result: Creation | null = null
+  for (let i = 0; i < 100; i++) {
+    result = await service.invoke(request(subject, 'creative', get, randomUUID(), 2)) as Creation
+    if (result.status === 'finished') break
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  assert.equal(textCalls, 1)
+  assert.equal(result?.status, 'finished')
+  assert.deepEqual(result?.input, input)
+  assert.deepEqual(result?.output, { title: 'Travel cup' })
+  assert.match(result!.errors[0]!, /图片/)
+  assert.equal(await service.invoke(request(other, 'creative', get)), null)
+  await projectCall(subject, 'role', { projectId, subject: other, role: 'editor' })
+  await write()
+  assert.equal((await projectRead(subject, projectId)).revision, 1)
+  await projectCall(subject, 'remove', { projectId, subject: other })
+  await assert.rejects(projectRead(other, projectId), { code: 'SHOP_PROJECT_DENIED' })
   console.log(
     'Shop tools MySQL integration passed: extension replay, account isolation, durable rows/config, CAS concurrency, idempotency, pagination, rollback, installation fencing and data retention.',
   )

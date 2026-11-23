@@ -38,5 +38,29 @@ export const shopToolsSchema: DatabaseSchema = {
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
       ],
     },
+    {
+      id: '2026-11-22.shop-tools-projects',
+      tables: [
+        `CREATE TABLE shop_tools_projects (
+  id char(64) PRIMARY KEY, name varchar(80) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+        `CREATE TABLE shop_tools_members (
+  project char(64) NOT NULL, subject char(64) NOT NULL, name varchar(80) NOT NULL,
+  role varchar(10) NOT NULL, PRIMARY KEY(project, subject), KEY shop_members_subject(subject)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+        `CREATE TABLE shop_tools_invites (
+  id char(64) PRIMARY KEY, project char(64) NOT NULL, role varchar(10) NOT NULL,
+  expires_at datetime(3) NOT NULL, remaining int NOT NULL, KEY shop_invites_project(project)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+      ],
+    },
+    {
+      id: '2026-11-22.shop-tools-creations',
+      tables: [`CREATE TABLE shop_tools_creations (
+  id char(64) PRIMARY KEY, subject char(64) NOT NULL, project char(64) NOT NULL,
+  created_at varchar(24) NOT NULL, status varchar(12) NOT NULL, input json NOT NULL,
+  output json NOT NULL, errors json NOT NULL, KEY shop_creations_history(project,subject,created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`],
+    },
   ],
 }

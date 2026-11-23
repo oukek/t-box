@@ -4,12 +4,12 @@ import { applicationIcon } from './icon.js'
 export { ShopError } from './error-codes.js'
 export const manifest = {
   id: 'shop-tools',
-  name: '跨境运营助手',
-  description: 'Shopee 商品批量定价、物流方案、汇率与 Excel 工作簿',
+  name: '电商助手',
+  description: 'Shopee 商品定价、物流与汇率工具，支持按模板优化商品文案和图片',
   icon: 'apps',
   iconAsset: applicationIcon,
   color: 'orange',
-  version: '1.1.0',
+  version: '1.3.2',
   skillIds: [],
 } as const satisfies ApplicationManifest
 export const currencies = [
@@ -95,6 +95,7 @@ export interface Book {
   sheets: Sheet[]
 }
 export interface Config {
+  creativeTemplates?: CreativeTemplate[]
   basic: Record<string, string | number>
   order: string[]
   sites: Record<
@@ -194,4 +195,48 @@ export interface WorkspaceHeader {
 export interface ProductPage {
   items: ProductUpdate[]
   nextOffset: number | null
+}
+
+export type ProjectRole = 'owner' | 'admin' | 'editor' | 'viewer'
+export interface ProjectSummary {
+  id: string
+  name: string
+  role: ProjectRole
+}
+export interface ProjectMember {
+  subject: string
+  name: string
+  role: ProjectRole
+}
+export interface ProjectInvite {
+  id: string
+  role: Exclude<ProjectRole, 'owner'>
+  expiresAt: string
+  remaining: number
+}
+
+export interface CreativeRules {
+  title: string
+  description: string
+  image: string
+  language: string
+}
+export interface CreativeTemplate extends CreativeRules {
+  id: string
+  name: string
+}
+export interface CreativeInput {
+  title: string
+  description: string
+  imageId: string
+  fields: ('title' | 'description' | 'image')[]
+  rules: CreativeRules
+}
+export interface Creation {
+  id: string
+  input: CreativeInput
+  output: Partial<Record<'title' | 'description' | 'image', string>>
+  errors: string[]
+  status: 'running' | 'finished'
+  createdAt: string
 }

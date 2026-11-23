@@ -18,3 +18,5 @@ export function createShopToolsModule(): ApplicationModule {
 export { applicationRelease } from './release.js'
 export { shopToolsSchema } from './schema.js'
 export { ShopToolsService } from './workspace.js'
+
+export type { CreativeModel } from './creative.js'

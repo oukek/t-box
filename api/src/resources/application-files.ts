@@ -38,6 +38,11 @@ export class ApplicationFiles {
       'uploaded',
       true,
     )
+    await this.grantCreatedResource(actor, appId, generation, file.id)
+    return file
+  }
+
+  async grantCreatedResource(actor: Actor, appId: string, generation: number, resourceId: string) {
     await this.resources.source.transaction(async (db) => {
       // Match application lifecycle lock order: user, then installation. Network
       // upload is already complete, so neither lock spans object storage I/O.
@@ -77,10 +82,9 @@ export class ApplicationFiles {
         user_id: actor.user.id,
         app_id: appId,
         generation,
-        resource_id: file.id,
+        resource_id: resourceId,
       })
     })
-    return file
   }
 
   async read(

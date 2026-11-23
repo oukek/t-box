@@ -1,3 +1,4 @@
+import { shopCreativeModel } from '../applications/shop-creative.js'
 import type { DataSource } from 'typeorm'
 import type { ConfigurationService } from '../admin/service.js'
 import type { WechatAccountConfiguration } from '../identity/wechat-configuration.js'
@@ -114,7 +115,7 @@ export class PlatformService {
     this.applications.bind('baby-diary', this.babyDiary.backend())
     this.applications.bind('calculator', calculatorBackend)
     this.applications.bind('converter', converterBackend)
-    this.applications.bind('shop-tools', new ShopToolsService(source).backend())
+    this.applications.bind('shop-tools', new ShopToolsService(source, r => shopCreativeModel(this, configuration, r)).backend())
     this.desktop = new DesktopService(source, this.applications)
     this.calendar = new CalendarService(source, configuration?.cache)
     this.time = new TimeService(source)

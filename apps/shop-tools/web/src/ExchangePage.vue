@@ -5,7 +5,7 @@ import { clone } from '@t-box/shop-tools-core'
 import { ref } from 'vue'
 import EditDialog from './EditDialog.vue'
 
-const props = defineProps<{ quote: Quote | null, config: Config }>()
+const props = defineProps<{ readonly?: boolean, quote: Quote | null, config: Config }>()
 const emit = defineEmits<{ save: [value: Config], refresh: [] }>()
 const amount = ref('100')
 const inverse = ref(false)
@@ -65,7 +65,7 @@ function convert(rate: number | undefined) {
           按结汇人民币收入减少此比例预留，仅影响后续定价，市场汇率保持原值。
         </p>
       </div>
-      <button @click="edit">设置汇损</button>
+      <button v-if="!readonly" @click="edit">设置汇损</button>
     </div>
     <div class="exchange-controls">
       <label class="field">{{ inverse ? '外币金额' : '人民币金额'

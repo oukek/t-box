@@ -14,11 +14,13 @@ const codes = defineApiErrors({
     statusCode: 409,
     message: '同一保存标识不能用于不同内容',
   },
+  SHOP_PROJECT_DENIED: { statusCode: 403, message: '当前账号没有此项目的操作权限' },
   SHOP_INVALID: { statusCode: 400, message: '跨境运营参数无效' },
 })
 export const ShopError = Object.freeze({
   conflict: () => codes.SHOP_CONFLICT(),
   installation: () => codes.SHOP_INSTALLATION_CHANGED(),
   replay: () => codes.SHOP_REPLAY_CONFLICT(),
+  denied: () => codes.SHOP_PROJECT_DENIED(),
   invalid: (message: string) => codes.SHOP_INVALID(message),
 })

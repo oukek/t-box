@@ -20,7 +20,7 @@ export async function exportBook(
 ) {
   const { default: ExcelJS } = await import('exceljs')
   const book = new ExcelJS.Workbook()
-  book.creator = 'T方舟 · 跨境运营助手'
+  book.creator = 'T方舟 · 电商助手'
   const meta = book.addWorksheet('_定价配置')
   meta.addRow(['版本', 1])
   meta.addRow([

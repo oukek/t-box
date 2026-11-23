@@ -4,6 +4,7 @@ import type {
   Book,
   Config,
   Product,
+  ProjectSummary,
   Quote,
   Result,
   Route,
@@ -28,6 +29,7 @@ import {
 import { BottomSheet, Modal, SheetSelect } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import CreativeStudio from './CreativeStudio.vue'
 import ConfigPage from './ConfigPage.vue'
 import EditDialog from './EditDialog.vue'
 import { download, exportBook, importBook } from './excel'
@@ -38,8 +40,10 @@ import RoutePicker from './RoutePicker.vue'
 import TableViewport from './TableViewport.vue'
 import { createWorkspaceStore } from './workspace'
 
-const props = defineProps<{ client: AppClient }>()
-const workspaceStore = createWorkspaceStore(props.client)
+const props = defineProps<{ client: AppClient, project: ProjectSummary }>()
+const emit = defineEmits<{ projects: [] }>()
+const readonly = computed(() => props.project.role === 'viewer')
+const workspaceStore = createWorkspaceStore(props.client, props.project.id)
 const actionsOpen = ref(false)
 const searchOpen = ref(false)
 const tableScale = ref(1)
@@ -58,6 +62,7 @@ const leaveOpen = ref(false)
 const leaving = ref(false)
 let editSequence = 0
 let dirty = false
+const section = ref<'operations' | 'assistant'>('operations')
 const page = ref('home')
 const config = ref<Config>(defaultConfig())
 const quote = ref<Quote | null>(null)
@@ -179,6 +184,7 @@ async function run(fn: () => Promise<unknown> | unknown) {
 let timer: ReturnType<typeof setTimeout> | undefined
 let saving = Promise.resolve()
 function scheduleSave() {
+  if (readonly.value) return
   if (!ready.value || recovery.value) {
     return
   }
@@ -190,6 +196,7 @@ function scheduleSave() {
 }
 let saveSequence = 0
 async function persist() {
+  if (readonly.value) return true
   clearTimeout(timer)
   if (!ready.value || recovery.value) {
     return false
@@ -513,7 +520,7 @@ onMounted(() => {
 onUnmounted(() => {
   unlockZoom?.()
   clearInterval(poll)
-  persist()
+  clearTimeout(timer)
   document.removeEventListener('visibilitychange', visible)
   window.removeEventListener('beforeunload', beforeUnload)
 })
@@ -533,6 +540,12 @@ async function goBack() {
     leaving.value = false
   }
 }
+async function flushProject() {
+  await nextTick()
+  await saving.catch(() => {})
+  return !dirty || await persist()
+}
+defineExpose({ flushProject })
 function beforeUnload(event: BeforeUnloadEvent) {
   if (dirty) {
     event.preventDefault()
@@ -548,10 +561,10 @@ function refreshAll() {
 <template>
   <div class="shop-app">
     <ApplicationHeader
-      title="跨境运营助手"
+      title="电商助手"
       back-label="OS"
       @back="goBack"
-    ><template #actions><span
+    ><template #actions><button class="project-switch" :aria-label="project.name + ' · 项目管理'" @click="emit('projects')"><span>{{ project.name }}</span><span class="project-caption"> · 项目管理</span></button><span
       class="cloud-status"
       :class="{
         'save-warning':
@@ -559,8 +572,8 @@ function refreshAll() {
       }"
       :title="saveState"
       role="status"
-    >{{ compactSaveStatus }}</span><button
-      class="save-workspace"
+    >{{ readonly ? '只读' : compactSaveStatus }}</span><button
+      v-if="!readonly" class="save-workspace"
       :disabled="!ready || recovery || saveInFlight"
       @click="persist"
     >
@@ -579,10 +592,11 @@ function refreshAll() {
       •••
     </button></template></ApplicationHeader>
     <header class="shop-nav">
-      <button class="brand" @click="page = 'home'">
-        <span>跨</span>工具首页
-      </button>
-      <nav aria-label="主导航">
+      <nav aria-label="功能分区">
+        <button :class="{ selected: section === 'operations' }" :aria-pressed="section === 'operations'" @click="section = 'operations'; page = 'home'">运营工具</button>
+        <button :class="{ selected: section === 'assistant' }" :aria-pressed="section === 'assistant'" @click="section = 'assistant'">小助手</button>
+      </nav>
+      <nav v-if="section === 'operations'" aria-label="运营工具导航">
         <button
           v-for="item in [
             ['calculator', '商品定价'],
@@ -613,8 +627,10 @@ function refreshAll() {
       class="notice"
       role="status"
     >正在读取云端工作区…</p>
+    <CreativeStudio v-if="ready" v-show="section === 'assistant'" :client="client" :project="project" :templates="config.creativeTemplates || []" :visible="section === 'assistant'" @templates="config = { ...config, creativeTemplates: $event }" />
     <main
-      v-else
+      v-if="ready && section === 'operations'"
+
       :inert="leaving"
       class="shop-content"
       :class="[{ 'workbook-content': page === 'calculator' }]"
@@ -705,7 +721,7 @@ function refreshAll() {
             <strong>商品定价工作簿</strong><small>{{ summary.ok }} 行已计算 · {{ summary.errors }} 行待处理</small>
           </div>
           <div class="actions">
-            <button :disabled="busy" @click="exportFile(true)">下载模板</button><button :disabled="busy" @click="fileInput?.click()">
+            <button :disabled="busy" @click="exportFile(true)">下载模板</button><button v-if="!readonly" :disabled="busy" @click="fileInput?.click()">
               导入 Excel</button><button
               class="primary"
               :disabled="busy"
@@ -733,7 +749,7 @@ function refreshAll() {
             :class="{ selected: s.id === active.id }"
             @click="book.activeSheetId = s.id"
           >
-            {{ s.name }}</button><button @click="addSheet()">＋ 新增工作表</button>
+            {{ s.name }}</button><button v-if="!readonly" @click="addSheet()">＋ 新增工作表</button>
         </div>
         <section class="panel workbook-panel">
           <div class="toolbar">
@@ -743,12 +759,12 @@ function refreshAll() {
                 · {{ route?.currency || '本币' }}</small>
             </div>
             <div class="actions">
-              <button @click="editSheet">工作表设置</button>
+              <button v-if="!readonly" @click="editSheet">工作表设置</button>
             </div>
           </div>
           <div class="toolbar grid-toolbar">
             <div class="actions grid-primary">
-              <button class="add-product" @click="addRows()">＋ 添加商品</button><label class="desktop-fees"><input v-model="moreFees" type="checkbox">费率列</label><button
+              <button v-if="!readonly" class="add-product" @click="addRows()">＋ 添加商品</button><label class="desktop-fees"><input v-model="moreFees" type="checkbox">费率列</label><button
                 class="mobile-search-trigger"
                 aria-label="搜索商品"
                 :aria-expanded="searchOpen"
@@ -821,11 +837,11 @@ function refreshAll() {
                     class="input-cell"
                   >
                     <input
-                      v-model="row[key]"
+                      :readonly="readonly" v-model="row[key]"
                       :data-cell="`${index}-${ci}`"
                       :aria-label="`第${index + 1}行 ${label}`"
                       :inputmode="ci < 2 ? 'text' : 'decimal'"
-                      @paste="onPaste($event, index, ci)"
+                      @paste="!readonly && onPaste($event, index, ci)"
                       @keydown.enter="nextCell($event, index, ci)"
                     >
                   </td>
@@ -858,7 +874,7 @@ function refreshAll() {
                     >
                       明细</button><button :disabled="!hasProduct(row)" @click="compare(row)">
                       比较方案</button><button
-                      :aria-label="`删除第${index + 1}行`"
+                      v-if="!readonly" :aria-label="`删除第${index + 1}行`"
                       @click="active.rows.splice(index, 1)"
                     >
                       ×</button><small
@@ -896,7 +912,7 @@ function refreshAll() {
           </footer>
         </section>
       </template>
-      <ExchangePage
+      <ExchangePage :readonly="readonly"
         v-if="page === 'exchange'"
         :quote="quote"
         :config="config"
@@ -909,16 +925,16 @@ function refreshAll() {
         :config="config"
         @back="page = 'calculator'"
       />
-      <ConfigPage
+      <fieldset v-if="page === 'config'" :disabled="readonly" style="border:0;padding:0;margin:0"><ConfigPage
         v-if="page === 'config'"
         :config="config"
         :routes="routes(localDate(), true)"
         @save="config = $event"
         @reload="loadDate(localDate(), true)"
-      />
+      /></fieldset>
     </main>
     <footer v-if="page !== 'calculator'" class="app-footer">
-      跨境运营助手 · 商品与配置按方舟账号保存到云端
+      电商助手 · {{ project.name }} · 商品与配置按项目保存到云端
     </footer>
     <BottomSheet
       :open="actionsOpen"
@@ -929,7 +945,7 @@ function refreshAll() {
     ><div class="app-actions-panel">
       <p class="muted">{{ saveState }}</p>
       <div class="menu-actions">
-        <button v-if="ready && !recovery" @click="action(persist)">
+        <button v-if="ready && !recovery && !readonly" @click="action(persist)">
           {{
             saveState === '尚未保存到云端' ? '重试保存' : '立即保存'
           }}</button><button
@@ -942,11 +958,11 @@ function refreshAll() {
       </div>
       <template v-if="page === 'calculator'"><h3>工作簿</h3>
         <div class="menu-actions">
-          <button :disabled="busy" @click="action(() => fileInput?.click())">
+          <button :disabled="busy" v-if="!readonly" @click="action(() => fileInput?.click())">
             导入 Excel</button><button :disabled="busy" @click="action(() => exportFile())">
             导出工作簿</button><button :disabled="busy" @click="action(() => exportFile(true))">
-            下载模板</button><button @click="action(() => addSheet())">新增工作表</button><button @click="action(() => addSheet(true))">复制工作表</button><button
-            :disabled="book.sheets.length === 1"
+            下载模板</button><button v-if="!readonly" @click="action(() => addSheet())">新增工作表</button><button v-if="!readonly" @click="action(() => addSheet(true))">复制工作表</button><button
+            v-if="!readonly" :disabled="book.sheets.length === 1"
             class="danger"
             @click="action(() => (deleteOpen = true))"
           >
@@ -955,7 +971,7 @@ function refreshAll() {
         </div>
         <h3>表格与费率</h3>
         <div class="menu-actions">
-          <button @click="action(() => addRows(10))">添加10行</button><button @click="action(() => (moreFees = !moreFees))">
+          <button v-if="!readonly" @click="action(() => addRows(10))">添加10行</button><button @click="action(() => (moreFees = !moreFees))">
             {{ moreFees ? '收起' : '展开' }}费率列</button><button @click="action(() => (rulesOpen = true))">
             运费费率表</button><button @click="action(showLogs)">官方更新记录</button><button @click="action(refreshAll)">刷新数据</button>
         </div>

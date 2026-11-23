@@ -10,6 +10,7 @@ test('real host transport boots locally without HTTP, blocks backend work offlin
   const before = new Map(globals.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   let online = false
   let requests = 0
+  let sessionValid = true
   Object.defineProperty(dom.window.navigator, 'onLine', { configurable: true, get: () => online })
   for (const key of globals.filter((key) => key !== 'fetch')) {
     Object.defineProperty(globalThis, key, { configurable: true, value: dom.window[key] })
@@ -27,6 +28,9 @@ test('real host transport boots locally without HTTP, blocks backend work offlin
     appCatalog.entries = [{ release, installedRelease: release, localBinding: { subject, storage: true }, installation: { appId: 'notes', releaseId: 'notes-1', generation: 1, status: 'active', grants: ['storage'], targetReleaseId: null, operationId: null } }]
     Object.defineProperty(globalThis, 'fetch', { configurable: true, value: async (path: string) => {
       requests++
+      if (path.endsWith('/auth/me') && sessionValid) {
+        return Response.json({ data: identity.user })
+      }
       if (path.includes('/context')) {
         return new Response(JSON.stringify({ data: { sdkVersion: 1, appId: 'notes', releaseId: 'notes-1', generation: 1, subject, platform: 'web', runtime: 'web', params: {}, permissions: [], capabilities: ['api.invoke'] } }))
       }
@@ -59,6 +63,9 @@ test('real host transport boots locally without HTTP, blocks backend work offlin
       assert.deepEqual(events, [], 'revalidating the same account after reconnect must not close its applications')
       assert.deepEqual(await transport.call('storage.get', { key: 'history' }), ['1+1=2'])
       stopEvents()
+      await assert.rejects(request('/calendar/events'), { status: 401 })
+      assert.ok(identity.token, 'A feature-specific 401 must preserve a valid session')
+      sessionValid = false
       await restoreSession()
       assert.equal(identity.user, null, '401 revokes the locally restored shell account')
       assert.equal(restoreLocalIdentity(), false, 'revoked snapshots cannot silently restore the account')

@@ -1,3 +1,4 @@
+import { CreativeService, type CreativeModel } from './creative.js'
 import type { BackendInvocation, LifecycleRequest } from '@t-box/app-contracts'
 import type { ApplicationBackend } from '@t-box/app-server-sdk'
 import type { ProductPage, WorkspaceHeader } from '@t-box/shop-tools-contracts'
@@ -12,6 +13,8 @@ import {
   ShopProductEntity,
   ShopWorkspaceEntity,
 } from './entities.js'
+
+import { authorize, projects } from './projects.js'
 
 function binding(r: {
   appId: string
@@ -39,7 +42,10 @@ function invocationKey(value: unknown): asserts value is string {
 }
 export class ShopToolsService {
   private readonly data = createDataService()
-  constructor(private readonly source: DataSource) {}
+  private readonly creative: CreativeService
+  constructor(private readonly source: DataSource, models?: (r: BackendInvocation) => CreativeModel) {
+    this.creative = new CreativeService(source, models)
+  }
   private async current(
     db: EntityManager,
     r: BackendInvocation,
@@ -157,14 +163,44 @@ export class ShopToolsService {
     }
   }
 
+  private async workspace(db: EntityManager, r: BackendInvocation, write = false) {
+    const lock = write ? 'pessimistic_write' : 'pessimistic_read'
+    const personal = await this.current(db, r, lock)
+    const id = (r.arguments as { projectId?: unknown } | null)?.projectId
+    if (id === undefined) {
+      return personal
+    }
+    const member = await authorize(db, r.subject, id, write ? 'editor' : 'viewer')
+    if (member.project === personal.subject) {
+      return personal
+    }
+    return db.findOneOrFail(ShopWorkspaceEntity, { where: { subject: member.project }, lock: { mode: lock } })
+  }
+
   async invoke(r: BackendInvocation, signal?: AbortSignal): Promise<unknown> {
     signal?.throwIfAborted()
+    if (r.method === 'creative') {
+      invocationKey(r.invocationId)
+      const args = (r.arguments || {}) as Record<string, unknown>
+      const project = await this.source.transaction(async db => {
+        await this.current(db, r, 'pessimistic_read')
+        return (await authorize(db, r.subject, args.projectId, ['history','get'].includes(String(args.action)) ? 'viewer' : 'editor')).project
+      })
+      return this.creative.invoke(r, project)
+    }
+    if (r.method === 'projects') {
+      invocationKey(r.invocationId)
+      return this.source.transaction(async (db) => {
+        await this.current(db, r, 'pessimistic_write')
+        return projects(db, r)
+      })
+    }
     if (r.method === 'workspace_patch') {
       return this.patch(r)
     }
     if (r.method === 'workspace_get') {
       return this.source.transaction(async (db) => {
-        const row = await this.current(db, r, 'pessimistic_read')
+        const row = await this.workspace(db, r)
         return {
           revision: row.revision,
           metadata: row.metadata,
@@ -175,7 +211,7 @@ export class ShopToolsService {
     }
     if (r.method === 'workspace_rows') {
       return this.source.transaction(async (db) => {
-        const row = await this.current(db, r, 'pessimistic_read')
+        const row = await this.workspace(db, r)
         const args = r.arguments as { revision?: unknown, offset?: unknown }
         if (
           !args ||
@@ -191,7 +227,7 @@ export class ShopToolsService {
         }
         const records = await db.getRepository(ShopProductEntity).find({
           select: { sheetId: true, id: true, position: true, data: true },
-          where: { subject: r.subject },
+          where: { subject: row.subject },
           order: { sheetId: 'ASC', position: 'ASC', id: 'ASC' },
           skip: Number(args.offset),
           take: 50,
@@ -230,9 +266,10 @@ export class ShopToolsService {
 
   private async patch(r: BackendInvocation) {
     invocationKey(r.invocationId)
-    const input = validatePatch(r.arguments)
+    const { projectId: _project, ...patch } = (r.arguments || {}) as Record<string, unknown>
+    const input = validatePatch(patch)
     return this.source.transaction(async (db) => {
-      const current = await this.current(db, r, 'pessimistic_write')
+      const current = await this.workspace(db, r, true)
       const key = fingerprint(['workspace_patch', r.invocationId])
       const hash = fingerprint([r.generation, r.releaseId, r.arguments])
       const old = await db
@@ -265,12 +302,12 @@ export class ShopToolsService {
           .filter((s) => !ids.has(s.id))
           .map((s) => s.id) ?? []
       if (removed.length) {
-        await products.delete({ subject: r.subject, sheetId: In(removed) })
+        await products.delete({ subject: current.subject, sheetId: In(removed) })
       }
       if (input.removals.length) {
         await products.delete(
           input.removals.map((p) => ({
-            subject: r.subject,
+            subject: current.subject,
             sheetId: p.sheetId,
             id: p.id,
           })),
@@ -279,7 +316,7 @@ export class ShopToolsService {
       if (input.upserts.length) {
         await products.upsert(
           input.upserts.map((p) => ({
-            subject: r.subject,
+            subject: current.subject,
             sheetId: p.sheetId,
             id: p.row.id,
             position: p.position,
@@ -290,7 +327,7 @@ export class ShopToolsService {
       }
       for (const id of new Set(input.upserts.map((p) => p.sheetId))) {
         if (
-          (await products.countBy({ subject: r.subject, sheetId: id })) > 1000
+          (await products.countBy({ subject: current.subject, sheetId: id })) > 1000
         ) {
           throw ShopError.invalid('每个工作表最多1000行商品')
         }

@@ -13,7 +13,7 @@ import {
   validateConfig,
 } from '@t-box/shop-tools-core'
 
-export function createWorkspaceStore(client: AppClient) {
+export function createWorkspaceStore(client: AppClient, projectId?: string) {
   let revision = 0
   let baseline: WorkspaceState | null = null
   let pending: {
@@ -32,7 +32,7 @@ export function createWorkspaceStore(client: AppClient) {
       try {
         const header = await client.api.invoke<WorkspaceHeader>(
           'workspace_get',
-          {},
+          projectId ? { projectId } : {},
         )
         if (!header.metadata) {
           revision = header.revision
@@ -49,7 +49,7 @@ export function createWorkspaceStore(client: AppClient) {
         while (offset !== null) {
           const page: ProductPage = await client.api.invoke<ProductPage>(
             'workspace_rows',
-            { revision: header.revision, offset },
+            { revision: header.revision, offset, ...(projectId ? { projectId } : {}) },
           )
           for (const item of page.items) {
             const sheet = sheets.find((s) => s.id === item.sheetId)
@@ -100,7 +100,7 @@ export function createWorkspaceStore(client: AppClient) {
       try {
         const result = await client.api.invoke<{ revision: number }>(
           'workspace_patch',
-          item.request,
+          projectId ? { ...item.request, projectId } : item.request,
           { idempotencyKey: item.key },
         )
         revision = result.revision

@@ -1,6 +1,6 @@
 import { connectAppClient } from '@t-box/app-web-sdk'
 import { createApp } from 'vue'
-import App from './App.vue'
+import App from './Projects.vue'
 import './style.css'
 
 connectAppClient({})

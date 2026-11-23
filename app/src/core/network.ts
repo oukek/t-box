@@ -15,6 +15,21 @@ export const configurationError =
     ? '应用尚未配置服务地址。请设置 VITE_API_BASE_URL 后重新打包应用。'
     : ''
 
+// A feature can reject its own credential while the account session is still valid.
+let checkingSession: { token: string, promise: Promise<void> } | undefined
+function verifySession(token: string) {
+  if (checkingSession?.token === token) {
+    return checkingSession.promise
+  }
+  const promise = request('/auth/me', { timeoutMs: 4000 }).then(() => {}, () => {}).finally(() => {
+    if (checkingSession?.promise === promise) {
+      checkingSession = undefined
+    }
+  })
+  checkingSession = { token, promise }
+  return promise
+}
+
 export async function request<T>(
   path: string,
   options: RequestInit & { timeoutMs?: number } = {},
@@ -77,8 +92,12 @@ export async function request<T>(
           details?: Record<string, string>
         }
       }
-      if (response.status === 401 && path !== '/auth/login' && identity.token === token) {
-        setSession(null)
+      if (response.status === 401 && token && identity.token === token) {
+        if (path === '/auth/me') {
+          setSession(null)
+        } else if (!path.startsWith('/auth/')) {
+          void verifySession(token)
+        }
       }
       throw RequestError.fromResponse(response.status, errorBody.error)
     }

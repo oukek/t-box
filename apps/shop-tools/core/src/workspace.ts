@@ -1,3 +1,4 @@
+import { parseTemplates } from './creative.js'
 import type {
   Config,
   Coupon,
@@ -170,6 +171,7 @@ export function validateConfig(value: unknown): Config {
     ) as Config['basic'],
     order: c.order as string[],
     sites: normalized,
+    ...(c.creativeTemplates === undefined ? {} : { creativeTemplates: parseTemplates(c.creativeTemplates) }),
   }
 }
 function historyRoute(value: unknown) {

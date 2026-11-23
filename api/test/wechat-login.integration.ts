@@ -33,7 +33,7 @@ const transport: typeof fetch = async (input) => {
     if (code === 'denied') {
       return Response.json({ errcode: 40029 })
     }
-    return Response.json({ openid: `openid_${code?.includes('other') ? 'other' : 'fixture'}_123456789`, access_token: `access_${code}`, scope: code?.startsWith('silent') ? 'snsapi_base' : 'snsapi_userinfo' })
+    return Response.json({ openid: `openid_${code?.split('_')[1] ?? (code === 'other' ? 'other' : 'fixture')}_123456789`, access_token: `access_${code}`, scope: code?.startsWith('silent') ? 'snsapi_base' : 'snsapi_userinfo' })
   }
   assert.equal(url.pathname, '/sns/userinfo')
   profileRequests++
@@ -206,33 +206,33 @@ try {
   const usersBeforeSilent = await source.getRepository(AppUserEntity).count()
   const profilesBeforeSilent = profileRequests
   const identified = await exchange(silent, 'silent')
-  assert.equal(identified.requiresProfileAuthorization, true)
-  assert.equal(identified.session, undefined)
-  assert.equal(identified.user, undefined)
-  assert.equal(JSON.stringify(identified).includes('openid'), false, 'The silent identity stays on the server')
-  assert.equal(profileRequests, profilesBeforeSilent, 'Silent identification never calls userinfo')
-  assert.equal(await source.getRepository(AppUserEntity).count(), usersBeforeSilent, 'Silent identification alone never creates an account')
-  const afterSilent = await platform.identity.authenticate(direct.session!.token)
-  assert.equal(afterSilent.user.nickname, '静默阶段保留', 'Silent identification never overwrites a nickname')
-  assert.equal(afterSilent.user.avatarUrl, customAvatar.json().data.avatarUrl, 'Silent identification never overwrites an avatar')
-  assert.equal((await poll(silent)).requiresProfileAuthorization, true, 'Reloading can recover the consent prompt')
-  await assert.rejects(service.authorizeProfile({ id: silent.id, secret: secret() }), /失效/)
-  const consentReply = await app.inject({ method: 'POST', url: '/api/v1/auth/wechat/authorize-profile', payload: silentProof })
+  assert.ok(identified.session)
+  assert.equal(identified.requiresProfileAuthorization, undefined)
+  assert.equal(identified.user!.id, direct.user!.id)
+  assert.equal(identified.user!.nickname, '静默阶段保留')
+  assert.equal(identified.user!.avatarUrl, customAvatar.json().data.avatarUrl)
+  assert.equal(profileRequests, profilesBeforeSilent)
+  assert.equal((await poll(silent)).session!.token, identified.session.token)
+  const [ttl] = await source.query('SELECT TIMESTAMPDIFF(SECOND,last_seen_at,expires_at) AS seconds FROM user_sessions WHERE token_hash=?', [digest(identified.session.token)])
+  assert.equal(Number(ttl.seconds), 7 * 86400)
+
+  const first = await start('login', undefined, true)
+  assert.equal((await exchange(first, 'silent_new')).requiresProfileAuthorization, true)
+  assert.equal((await poll(first)).session, undefined)
+  assert.equal(await source.getRepository(AppUserEntity).count(), usersBeforeSilent)
+  const consentReply = await app.inject({ method: 'POST', url: '/api/v1/auth/wechat/authorize-profile', payload: { id: first.id, secret: first.secret } })
   assert.equal(consentReply.statusCode, 200, consentReply.body)
-  const consent = { ...silent, ...consentReply.json().data }
-  assert.notEqual(consent.state, silent.state)
+  const consent = { ...first, ...consentReply.json().data }
+  assert.notEqual(consent.state, first.state)
   assert.equal(new URL(consent.authorizationUrl!).searchParams.get('scope'), 'snsapi_userinfo')
-  assert.equal(new URL(consent.authorizationUrl!).searchParams.get('redirect_uri'), 'https://tboxos.cn/')
-  await assert.rejects(exchange(silent, 'fixture'), /无效/, 'The silent callback state cannot authorize the profile stage')
-  const authorized = await exchange(consent)
+  await assert.rejects(exchange(first, 'fixture_new'), /无效/)
+  const authorized = await exchange(consent, 'fixture_new')
   assert.ok(authorized.session)
-  assert.equal(authorized.user!.id, direct.user!.id)
-  assert.equal(authorized.user!.nickname, wxNickname, 'The profile stage replaces the nickname only after authorization succeeds')
-  assert.equal(authorized.user!.avatarUrl, wxAvatar)
-  assert.equal((await exchange(consent)).session!.token, authorized.session!.token)
+  assert.notEqual(authorized.user!.id, direct.user!.id)
+  assert.equal((await exchange(consent, 'fixture_new')).session!.token, authorized.session!.token)
 
   const mismatch = await start('login', undefined, true)
-  await exchange(mismatch, 'silent')
+  await exchange(mismatch, 'silent_unknown')
   const mismatchConsent = { ...mismatch, ...await service.authorizeProfile({ id: mismatch.id, secret: mismatch.secret }) }
   await assert.rejects(exchange(mismatchConsent, 'other'), /账号不一致/)
   assert.equal((await poll(mismatch)).status, 'failed')
@@ -240,17 +240,16 @@ try {
 
   const silentQr = await start('qr')
   const silentScan = await start('scan', silentQr.id, true)
-  assert.equal((await exchange(silentScan, 'silent')).requiresProfileAuthorization, true)
-  assert.equal((await poll(silentQr)).session, undefined)
-  const scanConsent = { ...silentScan, ...await service.authorizeProfile({ id: silentScan.id, secret: silentScan.secret }) }
-  assert.equal((await exchange(scanConsent)).status, 'scanned')
-  assert.equal((await poll(silentQr)).session, undefined, 'Profile consent still requires explicit desktop login confirmation')
+  const beforeScan = profileRequests
+  assert.equal((await exchange(silentScan, 'silent')).status, 'scanned')
+  assert.equal(profileRequests, beforeScan)
+  assert.equal((await poll(silentQr)).session, undefined, 'Returning users must confirm the desktop device')
   const mobileConfirmation = await service.confirm({ id: silentScan.id, secret: silentScan.secret, approve: true })
   assert.ok(mobileConfirmation.session)
   assert.notEqual(mobileConfirmation.session!.token, (await poll(silentQr)).session!.token)
 
   const silentExpired = await start('login', undefined, true)
-  await exchange(silentExpired, 'silent')
+  await exchange(silentExpired, 'silent_unknown')
   await source.getRepository(WechatFlowEntity).update({ id: silentExpired.id }, { expiresAt: new Date(Date.now() - 1) })
   await assert.rejects(service.authorizeProfile({ id: silentExpired.id, secret: silentExpired.secret }), /失效/)
   await source.getRepository(AppUserEntity).update({ id: direct.user!.id }, { enabled: false })

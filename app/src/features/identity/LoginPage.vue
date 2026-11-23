@@ -19,9 +19,9 @@ onBeforeUnmount(stopWechatUpdates)
       <template v-if="wechatLogin.phase === 'profile'">
         <div class="wechat-profile-request">
           <span class="wechat-profile-icon"><AppIcon name="user" :size="23" /><i><AppIcon name="check" :size="11" /></i></span>
-          <div><strong>微信身份已识别</strong><span>再确认一次，就可以进入自己的账号。</span></div>
+          <div><strong>微信身份已识别</strong><span>首次登录需要授权昵称和头像。</span></div>
         </div>
-        <p class="wechat-login-description">授权后，将使用微信昵称和头像更新你的账号资料。</p>
+        <p class="wechat-login-description">以后用同一微信登录，会直接使用已保存的账号资料。</p>
         <button
           class="wechat-login-primary"
           :disabled="wechatLogin.busy"

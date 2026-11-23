@@ -4,6 +4,7 @@ import type { ApplicationPlatform } from './service.js'
 import { validId } from '@t-box/app-contracts'
 import { ErrorCode } from '../error-codes.js'
 import { bearer } from '../identity/service.js'
+import { applicationActor } from './actor-context.js'
 import { parseLaunchReport } from './launch-report.js'
 
 export function registerApplicationPlatform(
@@ -184,7 +185,7 @@ export function registerApplicationPlatform(
     }
     reply.header('Cache-Control', 'no-store')
     return {
-      data: await service.invoke(
+      data: await applicationActor.run(a, () => service.invoke(
         a.user.id,
         req.params.id,
         b.releaseId,
@@ -192,7 +193,7 @@ export function registerApplicationPlatform(
         b.method,
         b.arguments,
         key,
-      ),
+      )),
     }
   })
   app.post<{ Params: { id: string } }>(
