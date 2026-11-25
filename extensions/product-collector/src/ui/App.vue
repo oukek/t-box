@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { version } from '../../package.json'
 import { emptySession, exportProducts } from '../core/session'
 import { getSession, request, subscribe } from './api'
+import AccountMenu from './components/AccountMenu.vue'
 import Icon from './components/Icon.vue'
 import ProductDetail from './components/ProductDetail.vue'
 
@@ -124,6 +125,7 @@ async function remove() {
       <span class="muted">
         临时预览 · 关闭浏览器后清除 · 尚未上传方舟
       </span>
+      <AccountMenu />
     </header>
     <section class="import-panel" aria-label="读取店小秘列表">
       <div class="toolbar">

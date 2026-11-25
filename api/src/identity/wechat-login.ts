@@ -6,7 +6,7 @@ import type { WechatFlowRow } from './wechat-entities.js'
 import type { WechatProfile } from './wechat-profile.js'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { object } from '@t-box/server-foundation/input'
-import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
+import { AppUserEntity, UserSessionEntity } from '@t-box/server-foundation/persistence/identity-entities'
 import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
 import { isoTime } from '@t-box/server-foundation/time'
 import { IsNull, LessThan, Raw } from 'typeorm'
@@ -19,6 +19,8 @@ import { qrChanged } from '../realtime/qr-signals.js'
 import { UserProfileEntity } from './profile-entity.js'
 import { WechatAccountEntity, WechatAuthorizationEntity, WechatFlowEntity, WechatIdentityEntity } from './wechat-entities.js'
 import { fetchWechatOpenid, fetchWechatProfile } from './wechat-profile.js'
+
+export const collectorDevice = 'T方舟采集插件 · Chrome'
 
 const ttl = 5 * 60_000
 const selected = { id: true, kind: true, appId: true, parentId: true, device: true, status: true, userId: true, sessionCipher: true, expiresAt: true, checkoutTokenHash: true } as const
@@ -313,7 +315,7 @@ export class WechatLoginService {
         result.status = parent.status
       }
     }
-    if (row.status === 'complete' && result.status === 'complete' && row.sessionCipher) {
+    if (row.device !== collectorDevice && row.status === 'complete' && result.status === 'complete' && row.sessionCipher) {
       const session = JSON.parse(this.configuration.vault.decrypt(row.sessionCipher)) as UserSession
       const actor = await this.identity.authenticate(session.token)
       result.session = { ...session, user: actor.user }
@@ -355,13 +357,53 @@ export class WechatLoginService {
     return this.poll({ id: input.id, secret: input.secret })
   }
 
+  /** The browser proof binds approval and one-time redemption to one extension attempt. */
+  async approveCollector(value: unknown, token: string) {
+    const input = object(value, ['id', 'secret', 'userId'])
+    await this.configuration.source.transaction(async (db) => {
+      const row = await this.flow(db, input, true)
+      await this.account(row.appId)
+      const actor = await this.identity.authenticate(token, db)
+      if (row.kind !== 'qr' || row.device !== collectorDevice || row.status !== 'pending' || input.userId !== actor.user.id) {
+        throw ErrorCode.WECHAT_LOGIN_INVALID()
+      }
+      const session = await this.identity.session(db, actor.user, collectorDevice)
+      await db.getRepository(WechatFlowEntity).update({ id: row.id }, { status: 'complete', userId: actor.user.id, sessionHash: digest(session.token), sessionCipher: this.configuration.vault.encrypt(JSON.stringify(session)) })
+    })
+    qrChanged(this.configuration.source, `login:${String(input.id)}`)
+  }
+
+  async redeemCollector(value: unknown): Promise<UserSession> {
+    const input = object(value, ['id', 'secret'])
+    return this.configuration.source.transaction(async (db) => {
+      const row = await this.flow(db, input, true)
+      await this.account(row.appId)
+      if (row.kind !== 'qr' || row.device !== collectorDevice || row.status !== 'complete' || !row.sessionCipher) {
+        throw ErrorCode.WECHAT_LOGIN_INVALID()
+      }
+      const session = JSON.parse(this.configuration.vault.decrypt(row.sessionCipher)) as UserSession
+      const actor = await this.identity.authenticate(session.token, db)
+      await db.getRepository(WechatFlowEntity).update({ id: row.id }, { sessionCipher: null })
+      return { ...session, user: actor.user }
+    })
+  }
+
   async cancel(value: unknown) {
     const input = object(value, ['id', 'secret'])
-    const row = await this.flow(this.configuration.source.manager, input)
-    if (row.kind !== 'qr') {
-      throw ErrorCode.WECHAT_LOGIN_INVALID()
-    }
-    await this.configuration.source.getRepository(WechatFlowEntity).update({ id: row.id, status: Raw((column) => `${column} IN ('pending','scanned')`) }, { status: 'cancelled', sessionCipher: null })
-    await this.changed(row)
+    const cancelled = await this.configuration.source.transaction(async (db) => {
+      const row = await this.flow(db, input, true)
+      if (row.kind !== 'qr') {
+        throw ErrorCode.WECHAT_LOGIN_INVALID()
+      }
+      if (row.device === collectorDevice && row.status === 'complete' && row.sessionCipher) {
+        const session = JSON.parse(this.configuration.vault.decrypt(row.sessionCipher)) as UserSession
+        await db.getRepository(UserSessionEntity).delete({ tokenHash: digest(session.token) })
+        await db.getRepository(WechatFlowEntity).update({ id: row.id }, { status: 'cancelled', sessionCipher: null })
+      } else {
+        await db.getRepository(WechatFlowEntity).update({ id: row.id, status: Raw((column) => `${column} IN ('pending','scanned')`) }, { status: 'cancelled', sessionCipher: null })
+      }
+      return row
+    })
+    await this.changed(cancelled)
   }
 }

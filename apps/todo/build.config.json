@@ -1,0 +1,7 @@
+{
+  "appId": "todo",
+  "package": "@t-box/todo-web",
+  "releasePackage": "@t-box/todo-server",
+  "releaseModule": "server/dist/release.js",
+  "releaseExport": "applicationRelease"
+}

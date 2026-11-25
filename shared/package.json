@@ -27,6 +27,7 @@
     "@t-box/market-contracts": "workspace:*",
     "@t-box/settings-contracts": "workspace:*",
     "@t-box/time-contracts": "workspace:*",
+    "@t-box/todo-contracts": "workspace:*",
     "@t-box/shop-tools-contracts": "workspace:*"
   },
   "devDependencies": {

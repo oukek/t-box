@@ -17,6 +17,7 @@ import {
   PrivateFileQuotaEntity,
 } from '@t-box/server-foundation/persistence/private-media'
 import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
+import { todoEntities } from '@t-box/todo-server'
 import { shopToolsEntities } from '@t-box/shop-tools-server'
 import { TimerEntity } from '@t-box/time-server/entity'
 import { EntitySchema } from 'typeorm'
@@ -256,6 +257,7 @@ export const entities = [
   UserProfileEntity,
   ...wechatIdentityEntities,
   ...babyDiaryEntities,
+  ...todoEntities,
   ...shopToolsEntities,
   PrivateFileEntity,
   PrivateFileQuotaEntity,

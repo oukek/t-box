@@ -16,6 +16,7 @@ import { createConverterModule } from '@t-box/converter-server'
 import { createImagesModule } from '@t-box/images-server/module'
 import { ledgerAccessAdapter } from '@t-box/ledger-server/ai/access'
 import { createLedgerModule } from '@t-box/ledger-server/ai/module'
+import { createTodoModule } from '@t-box/todo-server'
 import { createShopToolsModule } from '@t-box/shop-tools-server'
 import { createTimeModule, timeAccessAdapter } from '@t-box/time-server/module'
 import { ErrorCode } from '../error-codes.js'
@@ -102,6 +103,7 @@ export function createApplicationModules(options: {
     createImagesModule(options.platform?.images),
     createCalculatorModule(),
     createConverterModule(),
+    createTodoModule(),
     createShopToolsModule(),
     createCalendarModule(options.platform?.calendar),
     createTimeModule(options.platform?.time),

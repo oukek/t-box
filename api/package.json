@@ -77,6 +77,8 @@
     "reflect-metadata": "^0.2.2",
     "sharp": "^0.34.5",
     "typeorm": "1.1.1",
+    "@t-box/todo-contracts": "workspace:*",
+    "@t-box/todo-server": "workspace:*",
     "@t-box/shop-tools-server": "workspace:*",
     "@t-box/shop-tools-core": "workspace:*",
     "@t-box/shop-tools-contracts": "workspace:*"

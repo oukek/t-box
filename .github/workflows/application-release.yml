@@ -18,6 +18,7 @@ on:
           - '记账 (ledger)'
           - '电商助手 (shop-tools)'
           - '时间 (time)'
+          - '待办事项 (todo)'
         # END GENERATED APPLICATIONS
         # eslint-enable yaml/plain-scalar
 

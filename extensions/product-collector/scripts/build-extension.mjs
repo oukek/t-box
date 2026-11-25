@@ -14,7 +14,7 @@ await build({
   sourcemap: false,
 })
 const matches = ['https://www.dianxiaomi.com/*']
-await build({ entryPoints: ['src/extension/content.ts'], outdir: 'dist', bundle: true, format: 'iife', loader: { '.css': 'text' }, target: 'chrome120', minify: false })
+await build({ entryPoints: ['src/extension/content.ts', 'src/extension/account-bridge.ts'], outdir: 'dist', bundle: true, format: 'iife', loader: { '.css': 'text' }, target: 'chrome120', minify: false })
 const manifest = {
   manifest_version: 3,
   name: 'T方舟采集插件',
@@ -27,9 +27,11 @@ const manifest = {
   },
   background: { service_worker: 'background.js', type: 'module' },
   permissions: ['scripting', 'storage', 'offscreen'],
-  host_permissions: matches,
+  host_permissions: [...matches, 'https://tboxos.cn/*', 'https://api.tboxos.cn/*'],
+  externally_connectable: { matches: ['https://tboxos.cn/*'] },
   content_scripts: [
     { matches, js: ['content.js'], run_at: 'document_idle' },
+    { matches: ['https://tboxos.cn/*'], js: ['account-bridge.js'], run_at: 'document_idle' },
   ],
   web_accessible_resources: [{ resources: ['index.html', 'assets/*', 'icon*.png'], matches }],
   icons: { 16: 'icon16.png', 48: 'icon48.png', 128: 'icon128.png' },

@@ -1,7 +1,5 @@
 import { createApp } from 'vue'
-import App from './App.vue'
-import { initializeApplicationShell } from './applications/shellAdapter'
-import { loadLocalApplications } from './core/app-runtime/localApplications'
+import { installCollectorBridge } from './features/identity/collectorBridge'
 import { capturePromotionLink } from './features/promotions/attribution'
 import '@t-box/ui-kit/base.css'
 import './style.css'
@@ -19,7 +17,14 @@ if (openPath) {
   history.replaceState(null, '', `/#/applications/${openPath[1]}${location.search}`)
 }
 
-void loadLocalApplications().finally(() => {
-  initializeApplicationShell()
-  createApp(App).mount('#app')
-})
+if (location.hash.startsWith('#collector-login=')) {
+  void import('./features/identity/CollectorLogin.vue').then(({ default: CollectorLogin }) => createApp(CollectorLogin).mount('#app'))
+} else {
+  installCollectorBridge()
+  void Promise.all([import('./App.vue'), import('./applications/shellAdapter'), import('./core/app-runtime/localApplications')]).then(([{ default: App }, { initializeApplicationShell }, { loadLocalApplications }]) => {
+    void loadLocalApplications().finally(() => {
+      initializeApplicationShell()
+      createApp(App).mount('#app')
+    })
+  })
+}

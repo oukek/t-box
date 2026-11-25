@@ -1,0 +1,30 @@
+{
+  "name": "@t-box/todo-server",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "@t-box/app-contracts": "workspace:*",
+    "@t-box/app-server-sdk": "workspace:*",
+    "@t-box/server-foundation": "workspace:*",
+    "@t-box/todo-contracts": "workspace:*",
+    "typeorm": "1.1.1"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

@@ -126,6 +126,12 @@ importers:
       '@t-box/time-server':
         specifier: workspace:*
         version: link:../apps/time/server
+      '@t-box/todo-contracts':
+        specifier: workspace:*
+        version: link:../apps/todo/contracts
+      '@t-box/todo-server':
+        specifier: workspace:*
+        version: link:../apps/todo/server
       ali-oss:
         specifier: 6.23.0
         version: 6.23.0(supports-color@10.2.2)
@@ -1242,6 +1248,72 @@ importers:
         specifier: ^3.2.5
         version: 3.3.12(typescript@5.9.3)
 
+  apps/todo/contracts:
+    dependencies:
+      '@t-box/app-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/app-contracts
+      '@t-box/errors':
+        specifier: workspace:*
+        version: link:../../../packages/errors
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  apps/todo/server:
+    dependencies:
+      '@t-box/app-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/app-contracts
+      '@t-box/app-server-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-server-sdk
+      '@t-box/server-foundation':
+        specifier: workspace:*
+        version: link:../../../packages/server-foundation
+      '@t-box/todo-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      typeorm:
+        specifier: 1.1.1
+        version: 1.1.1(mysql2@3.24.5(@types/node@26.6.4))(redis@5.12.1)(supports-color@10.2.2)
+    devDependencies:
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  apps/todo/web:
+    dependencies:
+      '@t-box/app-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-sdk
+      '@t-box/app-web-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/app-web-sdk
+      '@t-box/todo-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@t-box/ui-kit':
+        specifier: workspace:*
+        version: link:../../../packages/ui-kit
+      vue:
+        specifier: 3.5.43
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: 6.0.9
+        version: 6.0.9(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.43(typescript@5.9.3))
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vite:
+        specifier: 8.3.2
+        version: 8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vue-tsc:
+        specifier: ^3.2.5
+        version: 3.3.12(typescript@5.9.3)
+
   capacitor:
     dependencies:
       '@capacitor/android':
@@ -1545,6 +1617,9 @@ importers:
       '@t-box/time-contracts':
         specifier: workspace:*
         version: link:../apps/time/contracts
+      '@t-box/todo-contracts':
+        specifier: workspace:*
+        version: link:../apps/todo/contracts
     devDependencies:
       typescript:
         specifier: ~5.9.3

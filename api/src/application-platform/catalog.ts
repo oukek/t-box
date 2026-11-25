@@ -5,6 +5,7 @@ import { calendarRelease } from '@t-box/calendar-server'
 import { converterRelease } from '@t-box/converter-server'
 import { ledgerRelease } from '@t-box/ledger-server'
 import { systemApplicationManifests } from '@t-box/shared'
+import { applicationRelease as todoRelease } from '@t-box/todo-server'
 import { applicationRelease as shopToolsRelease } from '@t-box/shop-tools-server'
 import { timeRelease } from '@t-box/time-server'
 import { resolveWebDeployment } from './deployment.js'
@@ -20,6 +21,7 @@ const webRelease = (release: AppRelease) => {
 }
 /** App-level policy is independent of immutable historical release definitions. */
 export const builtinKinds: Readonly<Record<string, AppRelease['kind']>> = {
+  'todo': 'user',
   'shop-tools': 'user',
   'ledger': 'user',
   'baby-diary': 'user',
@@ -30,7 +32,7 @@ export const builtinKinds: Readonly<Record<string, AppRelease['kind']>> = {
   'profile': 'system',
   'market': 'system',
 }
-const webReleases: Record<string, AppRelease> = { 'shop-tools': shopToolsRelease, 'baby-diary': babyDiaryRelease, 'converter': converterRelease, 'calculator': calculatorRelease, 'ledger': ledgerRelease, 'calendar': calendarRelease, 'time': timeRelease }
+const webReleases: Record<string, AppRelease> = { 'todo': todoRelease, 'shop-tools': shopToolsRelease, 'baby-diary': babyDiaryRelease, 'converter': converterRelease, 'calculator': calculatorRelease, 'ledger': ledgerRelease, 'calendar': calendarRelease, 'time': timeRelease }
 /** Build-time composition of trusted deployments. Legacy apps remain shell modules until migrated. */
 export const deployedApplications: readonly AppRelease[] =
   systemApplicationManifests.map((manifest) =>

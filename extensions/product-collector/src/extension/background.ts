@@ -2,6 +2,7 @@ import type { Product, Session } from '../core/types'
 import type { parseList } from '../dianxiaomi/normalize'
 import { emptySession, mergeProducts } from '../core/session'
 import { fetchListInPage, isDianxiaomi, listBody } from '../dianxiaomi/request'
+import { authAction } from './auth'
 
 const KEY = 'tark-dianxiaomi-preview-v1'
 let state: Session = emptySession()
@@ -85,6 +86,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     }
     if (!embedded) {
       throw new Error('请从采集箱操作')
+    }
+    if (message.action === 'account' || message.action?.startsWith('account-')) {
+      return authAction(message.action, message)
     }
     if (message.action === 'session') {
       return state
