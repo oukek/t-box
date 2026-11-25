@@ -16,6 +16,7 @@ import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
 import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Editor from './Editor.vue'
+import PlanStepRow from './PlanStepRow.vue'
 import Statistics from './Statistics.vue'
 import { useItems } from './store'
 
@@ -565,23 +566,13 @@ onBeforeUnmount(() => {
               class="day-plan"
             >
               <summary><strong>{{ plan.title }}</strong><span>{{ progress(plan) }}</span><AppIcon name="down" :size="15" /></summary>
-              <label
+              <PlanStepRow
                 v-for="step in plan.steps"
                 :key="step.id"
-                class="day-step"
-              >
-                <FormControl
-                  type="checkbox"
-                  :checked="!!step.done"
-                  :disabled="busy"
-                  @change="toggleStep(plan, step.id)"
-                />
-                <span class="day-step-copy">
-                  <span :class="{ finished: step.done }">{{ step.title }}</span>
-                  <time v-if="step.date" :datetime="step.date">{{ step.date }}</time>
-                </span>
-                <span v-if="step.milestone" class="milestone-tag"><span aria-hidden="true">◆</span> 里程碑</span>
-              </label>
+                :step="step"
+                :disabled="busy"
+                @toggle="toggleStep(plan, step.id)"
+              />
               <button class="plain" @click="open(plan)">查看计划</button>
             </details>
           </section>
@@ -713,7 +704,16 @@ onBeforeUnmount(() => {
                                         detailItem.skipped ? "已跳过" : progress(detailItem)
                                       }}</small>
                                     </div>
-          <div class="sublist">
+          <div v-if="detailItem.kind === 'plan'">
+            <PlanStepRow
+              v-for="step in detailItem.steps"
+              :key="step.id"
+              :step="step"
+              :disabled="busy"
+              @toggle="toggleStep(detailItem, step.id)"
+            />
+          </div>
+          <div v-else class="sublist">
             <div
               v-for="s in detailItem.steps"
               :key="s.id"

@@ -168,12 +168,20 @@ const artifactOptions = computed(() =>
 )
 const date = (value: string | null) =>
   value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
+const policyLoadError = ref('')
+async function loadMarketPolicy() {
+  policyLoadError.value = ''
+  try {
+    marketHidden.value = (await request<{ hidden: boolean }>('/application-market/settings')).hidden
+    policyReady.value = true
+  } catch (e) {
+    policyLoadError.value = errorMessage(e)
+  }
+}
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    marketHidden.value = (await request<{ hidden: boolean }>('/application-market/settings')).hidden
-    policyReady.value = true
     const result = await request<{
       applications: ManagedApplication[]
       artifactOrigin: string
@@ -379,7 +387,10 @@ const eventNames: Record<string, string> = {
   publish: '发布版本',
   migrate_runtime: '迁移为独立应用',
 }
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadMarketPolicy()
+})
 </script>
 
 <template>
@@ -416,6 +427,11 @@ onMounted(load)
     <span class="muted" style="flex:1">禁止用户自行安装；已安装应用可继续使用和更新，系统应用仍自动初始化。</span>
     <AdminButton :disabled="loading || policySaving || !policyReady" @click="saveMarketPolicy">{{ policySaving ? "保存中…" : "保存设置" }}</AdminButton>
   </div>
+  <p
+    v-if="policyLoadError"
+    class="alert"
+    role="alert"
+  >{{ policyLoadError }} <AdminButton @click="loadMarketPolicy">重试市场设置</AdminButton></p>
   <HostDownloadsSettings />
   <div class="publication-workspace">
     <aside class="panel application-catalog">
@@ -514,9 +530,10 @@ onMounted(load)
           <p
             v-if="entry.status !== 'published' && !entry.readiness.development"
             class="readiness"
-            :class="{ blocked: !entry.readiness.ready }"
+            :class="{ blocked: !entry.readiness.ready && !entry.readiness.pendingVerification, pending: entry.readiness.pendingVerification }"
           >
             <AdminIcon
+              v-if="!entry.readiness.pendingVerification"
               :name="entry.readiness.ready ? 'check' : 'lock'"
               :size="13"
             />{{ entry.readiness.reason }}
@@ -543,14 +560,14 @@ onMounted(load)
                 @click="edit(entry)"
               > 编辑更新信息</AdminButton><AdminButton
                 v-if="entry.status === 'draft'"
-                :disabled="busy || !entry.readiness.ready"
+                :disabled="busy || (!entry.readiness.ready && !entry.readiness.pendingVerification)"
                 @click="prepare(entry, 'submit')"
               > 提交版本</AdminButton><AdminButton
                 v-if="
                   entry.status === 'submitted' || entry.status === 'retired'
                 "
                 class="primary"
-                :disabled="busy || !entry.readiness.ready"
+                :disabled="busy || (!entry.readiness.ready && !entry.readiness.pendingVerification)"
                 @click="prepare(entry, 'publish')"
               >
                 {{ entry.status === "retired" ? "切换到此版本" : "发布" }}
@@ -983,6 +1000,9 @@ onMounted(load)
   color: #397852;
   font-size: 11px;
   margin: 12px 0 0;
+}
+.readiness.pending {
+  color: var(--muted);
 }
 .readiness.blocked {
   color: #98682f;

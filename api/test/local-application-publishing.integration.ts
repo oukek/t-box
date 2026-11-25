@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { mock } from 'node:test'
 import { AppUserEntity } from '@t-box/server-foundation/persistence/identity-entities'
 import { createConnection } from 'mysql2/promise'
 import { ApplicationArtifacts } from '../src/application-platform/artifacts.js'
@@ -56,12 +57,15 @@ try {
   const results = await Promise.all([publishing.submitLocalBuild('fixture', '1.2.0', artifact.digest), publishing.submitLocalBuild('fixture', '1.2.0', artifact.digest)])
   assert.equal(results[0]!.releaseId, results[1]!.releaseId)
   const releaseId = results[0]!.releaseId
+  const verification = mock.method(artifacts, 'verify')
   let managed = (await publishing.list())[0]!
+  assert.equal(verification.mock.callCount(), 0, 'listing releases must not read artifact files')
+  verification.mock.restore()
   let staged = managed.releases.find((row) => row.release.releaseId === releaseId)!
   assert.equal(staged.status, 'submitted')
   assert.deepEqual(staged.release.permissions, deployed.permissions, 'new build inherits deployed capabilities, not the older published preview')
   assert.equal(staged.release.runtime.type === 'web' && staged.release.runtime.entryUrl, `http://localhost:6176/fixture/${artifact.digest}/`)
-  assert.equal(staged.readiness.ready, true)
+  assert.equal(staged.readiness.pendingVerification, true)
   assert.equal(managed.currentReleaseId, preview.releaseId, 'submission must not publish')
   const installation = await source.getRepository(ApplicationInstallationEntity).findOneByOrFail({ user_id: userId, app_id: 'fixture' })
   assert.equal(installation.release_id, preview.releaseId)
@@ -80,6 +84,7 @@ try {
   await assert.rejects(publishing.transition(deployed.releaseId, { action: 'publish', revision: 1, expectedCurrentReleaseId: preview.releaseId }, userId), /开发预览/)
   await writeFile(join(root, 'fixture', artifact.digest, 'index.html'), 'corrupted')
   assert.equal((await publishing.readiness(staged.release)).ready, false)
+  await assert.rejects(publishing.transition(releaseId, { action: 'publish', revision: staged.revision, expectedCurrentReleaseId: preview.releaseId }, userId), /摘要不一致/)
   await assert.rejects(publishing.submitLocalBuild('fixture', '1.2.0', artifact.digest), /摘要不一致/)
   await writeFile(join(root, 'fixture', artifact.digest, 'index.html'), file)
   const wrongOrigin: AppRelease = { ...staged.release, runtime: { type: 'web', integrity: `sha256-${artifact.digest}`, entryUrl: `http://127.0.0.1:6176/fixture/${artifact.digest}/` } }

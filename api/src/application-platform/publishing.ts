@@ -119,7 +119,7 @@ export class ApplicationPublishing {
     })
   }
 
-  async readiness(release: AppRelease) {
+  private describeReadiness(release: AppRelease): ManagedRelease['readiness'] {
     if (isDevelopmentRelease(release)) {
       return {
         ready: false,
@@ -156,8 +156,16 @@ export class ApplicationPublishing {
         reason: '此版本使用其他产物服务地址；草稿可重新选择产物，已锁定版本需提交新版本',
       }
     }
+    return { ready: false, pendingVerification: true, reason: '提交或发布时校验构建产物' }
+  }
+
+  async readiness(release: AppRelease) {
+    const status = this.describeReadiness(release)
+    if (!status.pendingVerification || release.runtime.type !== 'web') {
+      return status
+    }
     try {
-      await this.artifacts.verify(release.appId, digest)
+      await this.artifacts.verify(release.appId, release.runtime.integrity.slice(7))
       return { ready: true, reason: '构建产物及文件摘要已校验' }
     } catch (e) {
       return {
@@ -182,52 +190,40 @@ export class ApplicationPublishing {
           release_id: true,
           app_id: true,
           definition: true,
-          definition_hash: true,
-          published: true,
           created_at: true,
           status: true,
           revision: true,
           release_notes: true,
-          submitted_by: true,
           submitted_at: true,
-          published_by: true,
           published_at: true,
         },
         order: { created_at: 'DESC', release_id: 'DESC' },
       })
-    return Promise.all(
-      applications.map(
-        async (a: { app_id: string, kind: AppRelease['kind'] }) => {
-          const releases = await Promise.all(
-            rows
-              .filter((r) => r.app_id === a.app_id)
-              .map(async (r): Promise<ManagedRelease> => {
-                const release = {
-                  ...json<AppRelease>(r.definition),
-                  kind: a.kind,
-                }
-                return {
-                  release,
-                  status: r.status,
-                  revision: Number(r.revision),
-                  releaseNotes: r.release_notes || '',
-                  createdAt: isoTime(r.created_at),
-                  submittedAt: r.submitted_at ? isoTime(r.submitted_at) : null,
-                  publishedAt: r.published_at ? isoTime(r.published_at) : null,
-                  readiness: await this.readiness(release),
-                }
-              }),
-          )
-          return {
-            appId: a.app_id,
-            kind: a.kind,
-            currentReleaseId:
-              releases.find((r) => r.status === 'published')?.release.releaseId || null,
-            releases,
-          }
-        },
-      ),
-    )
+    const byApplication = new Map<string, ManagedApplication>()
+    for (const app of applications) {
+      byApplication.set(app.app_id, { appId: app.app_id, kind: app.kind, currentReleaseId: null, releases: [] })
+    }
+    for (const row of rows) {
+      const app = byApplication.get(row.app_id)
+      if (!app) {
+        continue
+      }
+      const release = { ...json<AppRelease>(row.definition), kind: app.kind }
+      app.releases.push({
+        release,
+        status: row.status,
+        revision: Number(row.revision),
+        releaseNotes: row.release_notes || '',
+        createdAt: isoTime(row.created_at),
+        submittedAt: row.submitted_at ? isoTime(row.submitted_at) : null,
+        publishedAt: row.published_at ? isoTime(row.published_at) : null,
+        readiness: this.describeReadiness(release),
+      })
+      if (row.status === 'published' && !app.currentReleaseId) {
+        app.currentReleaseId = release.releaseId
+      }
+    }
+    return [...byApplication.values()]
   }
 
   async events(appId: string): Promise<ApplicationPublicationEvent[]> {
