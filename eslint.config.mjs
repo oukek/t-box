@@ -49,6 +49,15 @@ export default antfu(
     },
   },
   {
+    files: ['apps/{todo,shop-tools}/web/src/**/*.vue'],
+    rules: {
+      'vue/no-restricted-html-elements': [
+        'error',
+        { element: ['input', 'textarea', 'select'], message: '使用 @t-box/ui-kit 的共享表单控件。' },
+      ],
+    },
+  },
+  {
     files: ['admin/src/App.vue', 'admin/src/features/**/*.vue'],
     rules: {
       'vue/no-restricted-html-elements': [

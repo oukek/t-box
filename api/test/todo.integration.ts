@@ -126,7 +126,19 @@ try {
   )
   const plan = newItem('plan')
   plan.title = '搬家'
+  const milestone = { id: randomUUID(), title: '交钥匙', milestone: true, done: new Date().toISOString(), date: '2026-11-25' }
+  plan.steps.push(milestone)
   await invoke('save', { item: plan, revision: 0 })
+  const task = newItem('task')
+  task.title = '取钥匙'
+  task.note = '记得带证件'
+  await invoke('save', { item: task, revision: 0 })
+  const stored = (await invoke('list', {}) as { rows: { item: typeof plan }[] }).rows
+  assert.equal(stored.find((r) => r.item.id === task.id)?.item.note, task.note)
+  const savedPlan = stored.find((r) => r.item.id === plan.id)!.item
+  assert.deepEqual(savedPlan.steps, [milestone])
+  assert.equal(savedPlan.done, '')
+  await assert.rejects(invoke('save', { item: { ...task, note: '长'.repeat(4001) }, revision: 1 }), { code: 'TODO_INVALID' })
   await assert.rejects(invoke('list', { version: page.version }), {
     code: 'TODO_CONFLICT',
   })

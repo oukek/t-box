@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue'
 const props = defineProps<{
   modelValue: string
   label: string
+  clearable?: boolean
   disabled?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -47,8 +48,9 @@ function confirm() {
     :aria-expanded="open"
     @click="open = true"
   >
-    <span>{{ modelValue }}</span><AppIcon name="clock" :size="17" />
+    <span>{{ modelValue || '未设置' }}</span><AppIcon name="clock" :size="17" />
   </button><BottomSheet
+    desktop-modal
     :open="open"
     :title="label"
     @close="open = false"
@@ -78,6 +80,12 @@ function confirm() {
       </button>
     </div>
     <template #footer>
+      <button
+        v-if="clearable && modelValue"
+        type="button"
+        class="button button-secondary"
+        @click="emit('update:modelValue', ''); open = false"
+      >清除时间</button>
       <button class="button button-secondary" @click="open = false"> 取消</button><button
         class="button button-primary"
         :disabled="!valid"
@@ -95,11 +103,11 @@ function confirm() {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: 44px;
-  padding: 11px 12px;
+  min-height: 36px;
+  padding: 7px 10px;
   background: white;
-  border: 1px solid #dce5e8;
-  border-radius: 9px;
+  border: 1px solid #dedee3;
+  border-radius: 7px;
   color: #385363;
   font-size: 12px;
 }

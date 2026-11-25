@@ -9,7 +9,7 @@ export const manifest = {
   icon: 'apps',
   iconAsset: applicationIcon,
   color: 'orange',
-  version: '1.3.2',
+  version: '1.3.3',
   skillIds: [],
 } as const satisfies ApplicationManifest
 export const currencies = [

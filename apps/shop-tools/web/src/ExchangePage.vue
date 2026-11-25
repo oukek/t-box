@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { Config, Quote } from '@t-box/shop-tools-contracts'
+
 import { currencies } from '@t-box/shop-tools-contracts'
 import { clone } from '@t-box/shop-tools-core'
+import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { ref } from 'vue'
 import EditDialog from './EditDialog.vue'
 
@@ -69,13 +71,13 @@ function convert(rate: number | undefined) {
     </div>
     <div class="exchange-controls">
       <label class="field">{{ inverse ? '外币金额' : '人民币金额'
-      }}<input
+      }}<FormControl
         v-model="amount"
         type="number"
         min="0"
         step="any"
         placeholder="输入换算金额"
-      ></label>
+      /></label>
       <div
         class="segmented"
         role="group"
@@ -147,13 +149,13 @@ function convert(rate: number | undefined) {
      class="error-text"
      role="alert"
    >{{ error }}</p>
-    <label class="field">预留汇损（%）<input
+    <label class="field">预留汇损（%）<FormControl
       v-model="loss"
       type="number"
       min="0"
       max="99.9999"
       step="any"
-    ></label>
+    /></label>
     <p class="muted">
       默认4%。例如按市场汇率可结汇100元，定价时保守按96元计算。填0表示不预留。保存后对所有站点及三种模式生效，已有计算记录保持原值。
     </p></EditDialog>

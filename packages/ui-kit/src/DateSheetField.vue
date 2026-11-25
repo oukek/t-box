@@ -230,6 +230,7 @@ async function arrows(event: KeyboardEvent) {
   >
     <span>{{ display }}</span><AppIcon name="calendar" :size="17" />
   </button><BottomSheet
+    desktop-modal
     :open="open"
     :title="label"
     @close="open = false"
@@ -382,11 +383,11 @@ async function arrows(event: KeyboardEvent) {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  min-height: 44px;
-  padding: 11px 12px;
+  min-height: 36px;
+  padding: 7px 10px;
   background: #fff;
-  border: 1px solid #dce5e8;
-  border-radius: 9px;
+  border: 1px solid #dedee3;
+  border-radius: 7px;
   color: #385363;
   font: inherit;
   font-size: 12px;

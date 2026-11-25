@@ -13,6 +13,7 @@ export const TodoError = defineApiErrors({
 })
 export type Kind = 'task' | 'list' | 'plan' | 'period'
 export interface Step {
+  milestone?: boolean
   stage?: string
   created?: string
   urgent?: boolean
@@ -29,6 +30,7 @@ export interface Rule {
   zone: string
 }
 export interface Item {
+  note?: string
   reminder?: boolean
   origin?: string
   id: string
@@ -58,6 +60,7 @@ export function newItem(kind: Kind, date = ''): Item {
     id: crypto.randomUUID(),
     kind,
     title: '',
+    note: '',
     date,
     end: '',
     time: '',
@@ -108,6 +111,7 @@ export function validate(v: unknown): Item {
     typeof x.title === 'string' && x.title.trim() && x.title.length <= 200,
     '标题须为 1–200 个字符',
   )
+  check(x.note === undefined || (typeof x.note === 'string' && x.note.length <= 4000), '备注最多 4000 字')
   check(
     [x.date, x.end, x.due, x.scheduled].every(validDate) &&
     (!x.date || !x.end || x.date <= x.end),
@@ -153,6 +157,7 @@ export function validate(v: unknown): Item {
       stamp(step.done),
       '子事项无效',
     )
+    check(step.milestone === undefined || (typeof step.milestone === 'boolean' && x.kind === 'plan'), '里程碑设置无效')
     check(step.stage === undefined || (typeof step.stage === 'string' && step.stage.length <= 80), '阶段名称过长')
     check(step.created === undefined || stamp(step.created), '创建时间无效')
     ids.add(step.id)

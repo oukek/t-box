@@ -106,10 +106,10 @@ function move(event: KeyboardEvent) {
   gap: 12px;
   width: 100%;
   min-width: 0;
-  min-height: 42px;
-  padding: 10px 12px;
-  border: 1px solid #dce5e8;
-  border-radius: 9px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid #dedee3;
+  border-radius: 7px;
   background: #fff;
   color: #385363;
   font: inherit;

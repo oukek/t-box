@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { AppClient } from '@t-box/app-sdk'
+
 import type { ProjectInvite, ProjectMember, ProjectRole, ProjectSummary } from '@t-box/shop-tools-contracts'
 import { Modal, SheetSelect } from '@t-box/ui-kit'
+import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { computed, onMounted, ref } from 'vue'
 import App from './App.vue'
 import EditDialog from './EditDialog.vue'
@@ -146,11 +148,11 @@ onMounted(() => run(list))
       <p v-if="error && !form" role="alert">{{ error }}</p>
       <div v-if="canManage" class="toolbar"><button @click="edit('invite')">生成邀请</button><button @click="edit('rename')">修改项目名称</button></div>
       <button v-if="managing && managing.role !== 'owner'" @click="edit('leave')">退出项目</button>
-      <label v-if="issued" class="field">复制邀请码给对方<input
+      <label v-if="issued" class="field">复制邀请码给对方<FormControl
         readonly
         :value="issued"
         @focus="($event.target as HTMLInputElement).select()"
-      ></label>
+      /></label>
       <div
         v-for="m in members"
         :key="m.subject"
@@ -177,8 +179,8 @@ onMounted(() => run(list))
     @close="form = ''"
   >
     <p v-if="error" role="alert">{{ error }}</p>
-    <label v-if="form === 'join'" class="field">邀请码<input v-model="code"></label>
-    <label v-if="['join', 'rename', 'create'].includes(form)" class="field">{{ form === 'join' ? '在项目中显示的姓名' : '项目名称' }}<input v-model="name" maxlength="80"></label>
+    <label v-if="form === 'join'" class="field">邀请码<FormControl v-model="code" /></label>
+    <label v-if="['join', 'rename', 'create'].includes(form)" class="field">{{ form === 'join' ? '在项目中显示的姓名' : '项目名称' }}<FormControl v-model="name" maxlength="80" /></label>
     <SheetSelect
       v-if="form === 'invite' || form === 'role'"
       v-model="role"
@@ -187,8 +189,18 @@ onMounted(() => run(list))
       :options="options"
     />
     <div v-if="form === 'invite'" class="fields two-columns">
-      <label class="field">有效天数<input v-model.number="days" type="number" min="1" max="7"></label>
-      <label class="field">可加入人数<input v-model.number="maxUses" type="number" min="1" max="20"></label>
+      <label class="field">有效天数<FormControl
+        v-model.number="days"
+        type="number"
+        min="1"
+        max="7"
+      /></label>
+      <label class="field">可加入人数<FormControl
+        v-model.number="maxUses"
+        type="number"
+        min="1"
+        max="20"
+      /></label>
     </div>
     <p v-if="form === 'leave'">退出后需要重新获邀才能访问此项目。</p>
     <p v-if="form === 'remove'">移除 {{ target?.name }} 后，对方将失去该项目的访问权限。</p>

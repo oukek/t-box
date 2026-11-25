@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AppClient } from '@t-box/app-sdk'
 import type { Item, Kind } from '@t-box/todo-contracts'
+
 import {
 
   localDay,
@@ -11,6 +12,8 @@ import {
   shift,
 } from '@t-box/todo-contracts'
 import { AppIcon, Modal } from '@t-box/ui-kit'
+import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
+import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Editor from './Editor.vue'
 import Statistics from './Statistics.vue'
@@ -24,6 +27,7 @@ const tab = ref(0)
 const filter = ref('今天')
 const picked = ref('')
 const detail = ref('')
+const returnTab = ref(0)
 const dateView = ref('')
 const today = ref(localDay())
 const editing = ref<Item | null>(null)
@@ -47,6 +51,9 @@ function go(n: number) {
   window.scrollTo(0, 0)
 }
 function open(x: Item, date = '') {
+  if (!detail.value) {
+    returnTab.value = tab.value
+  }
   detail.value = x.kind === 'period' ? x.series : x.id
   tab.value = x.kind === 'plan' ? 2 : 1
   dateView.value = date || x.scheduled || today.value
@@ -191,7 +198,7 @@ const lines = computed(() => {
             date: s.date,
             done: s.done,
             urgent: !!s.urgent || x.urgent,
-            meta: x.title,
+            meta: s.milestone ? x.title + ' · 里程碑' : x.title,
           })
         }
       }
@@ -241,6 +248,9 @@ const lines = computed(() => {
   )
 })
 const currentDay = computed(() => picked.value || today.value)
+const dayPlans = computed(() => filter.value === '今天'
+  ? plans.value.filter((p) => !p.done && !p.paused && p.date && p.date <= currentDay.value && (!p.end || currentDay.value <= p.end))
+  : [])
 const visible = computed(() =>
   lines.value.filter((l) => {
     if (filter.value === '已完成') {
@@ -254,6 +264,12 @@ const visible = computed(() =>
     }
     if (filter.value === '稍后') {
       return l.date > currentDay.value
+    }
+    if (l.item.kind === 'plan' && dayPlans.value.some((p) => p.id === l.item.id)) {
+      return false
+    }
+    if (l.item.kind === 'period') {
+      return l.date === currentDay.value
     }
     if (picked.value) {
       return l.date === picked.value
@@ -443,8 +459,15 @@ onBeforeUnmount(() => {
 
 <template>
   <header class="shell">
-    <div class="brand"><span class="mark" />待办事项</div>
-    <button class="host" @click="client.navigation.back()">‹ 方舟</button>
+    <div class="brand">
+      <button
+        class="host"
+        aria-label="返回方舟"
+        title="返回方舟"
+        @click="client.navigation.back()"
+      ><AppIcon name="left" :size="19" /></button>
+      待办事项
+    </div>
     <nav aria-label="主导航">
       <button
         v-for="(t, i) in tabs"
@@ -521,7 +544,7 @@ onBeforeUnmount(() => {
               class="check"
               :class="{ done: l.done }"
               :disabled="busy"
-              :aria-label="l.done ? '撤销完成' : '完成事项'"
+              :aria-label="l.item.kind === 'period' ? '查看本期清单' : l.done ? '撤销完成' : '完成事项'"
               @click="
                 l.item.kind === 'period'
                   ? showLine(l)
@@ -534,7 +557,35 @@ onBeforeUnmount(() => {
               <strong>{{ l.title }}</strong><small>{{ l.date && l.date !== today ? l.date + " · " : ""
               }}{{ l.meta }}</small></button><span v-if="l.urgent" class="urgent">紧急</span>
           </div>
-          <p v-if="!visible.length" class="empty">
+          <section v-if="dayPlans.length" class="day-plans">
+            <h2>进行中的计划</h2>
+            <details
+              v-for="plan in dayPlans"
+              :key="plan.id"
+              class="day-plan"
+            >
+              <summary><strong>{{ plan.title }}</strong><span>{{ progress(plan) }}</span><AppIcon name="down" :size="15" /></summary>
+              <label
+                v-for="step in plan.steps"
+                :key="step.id"
+                class="day-step"
+              >
+                <FormControl
+                  type="checkbox"
+                  :checked="!!step.done"
+                  :disabled="busy"
+                  @change="toggleStep(plan, step.id)"
+                />
+                <span class="day-step-copy">
+                  <span :class="{ finished: step.done }">{{ step.title }}</span>
+                  <time v-if="step.date" :datetime="step.date">{{ step.date }}</time>
+                </span>
+                <span v-if="step.milestone" class="milestone-tag"><span aria-hidden="true">◆</span> 里程碑</span>
+              </label>
+              <button class="plain" @click="open(plan)">查看计划</button>
+            </details>
+          </section>
+          <p v-if="!visible.length && !dayPlans.length" class="empty">
             {{ filter === "今天" ? "今天没有安排" : "这里暂时没有事项" }}
           </p></template>
         <template v-else-if="tab < 3"><button
@@ -628,7 +679,7 @@ onBeforeUnmount(() => {
             :today="today"
           /></template>
       </template>
-      <template v-else><button class="back" @click="go(tab)">‹ {{ tabs[tab] }}</button>
+      <template v-else><button class="back" @click="go(returnTab)"><AppIcon name="left" :size="16" />{{ tabs[returnTab] }}</button>
         <div class="heading">
           <div>
             <h1>{{ selected.title }}</h1>
@@ -643,7 +694,7 @@ onBeforeUnmount(() => {
           <button class="plain" @click="edit(selected)">编辑</button>
         </div>
         <div v-if="selected.kind === 'list'" class="tools">
-          <label>查看期次 <input v-model="dateView" type="date"></label><button
+          <label>查看期次 <DateSheetField v-model="dateView" label="查看期次" /></label><button
             class="plain"
             :disabled="busy"
             @click="
@@ -668,12 +719,12 @@ onBeforeUnmount(() => {
               :key="s.id"
               class="step-row"
             >
-              <label :class="{ finished: s.done }"><input
+              <label :class="{ finished: s.done }"><FormControl
                 type="checkbox"
                 :checked="!!s.done"
                 :disabled="busy || detailItem.skipped"
                 @change="toggleStep(detailItem, s.id)"
-              >{{ s.title }} <small>{{ [s.stage, s.date].filter(Boolean).join(' · ') }}</small><span v-if="s.urgent" class="urgent">紧急</span></label><button
+              />{{ s.title }} <small>{{ [s.milestone ? '里程碑' : '', s.stage, s.date].filter(Boolean).join(' · ') }}</small><span v-if="s.urgent" class="urgent">紧急</span></label><button
                 v-if="detailItem.kind === 'period' && !s.done"
                 :disabled="busy"
                 @click="carryStep(detailItem, s.id)"

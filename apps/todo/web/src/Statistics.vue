@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Saved } from '@t-box/todo-contracts'
+
 import {
   localDay,
   occurs,
@@ -9,6 +10,7 @@ import {
   shift,
 } from '@t-box/todo-contracts'
 import { Modal } from '@t-box/ui-kit'
+import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
 import { computed, ref } from 'vue'
 
 const props = defineProps<{ records: Saved[], today: string, forecast: { date: string, count: number }[] }>()
@@ -158,16 +160,8 @@ const sections = [
       </button>
     </div>
     <div v-if="scope === '自选日期'" class="tools">
-      <input
-        v-model="customStart"
-        aria-label="开始日期"
-        type="date"
-      > 至
-      <input
-        v-model="customEnd"
-        aria-label="结束日期"
-        type="date"
-      >
+      <DateSheetField v-model="customStart" label="开始日期" /> 至
+      <DateSheetField v-model="customEnd" label="结束日期" />
     </div>
     <p class="cap">
       {{ valid ? from + " 至 " + end : "请选择一年以内的日期范围" }}

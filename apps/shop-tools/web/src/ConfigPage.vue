@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Config, Coupon, Route } from '@t-box/shop-tools-contracts'
+
 import { clone, validateCoupons } from '@t-box/shop-tools-core'
+import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { computed, ref } from 'vue'
 import EditDialog from './EditDialog.vue'
 
@@ -109,8 +111,9 @@ function saveSite() {
     return
   }
   let coupons: Coupon[]
-  try { coupons = validateCoupons(draft.value.coupons) }
-  catch (e) {
+  try {
+    coupons = validateCoupons(draft.value.coupons)
+  } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
     return
   }
@@ -207,12 +210,12 @@ function setAll(enabled: boolean) {
         v-for="[key, label] in fields"
         :key="key"
       >{{ label
-      }}<input
+      }}<FormControl
         v-model="basic[key]"
         type="number"
         min="0"
         :step="key === 'precision' ? '1' : 'any'"
-      ></label></div></EditDialog>
+      /></label></div></EditDialog>
   <EditDialog
     :open="siteOpen"
     :title="`${sites.find((s) => s.id === site)?.name || site}站点配置`"
@@ -225,26 +228,40 @@ function setAll(enabled: boolean) {
      class="error-text"
    >{{ error }}</p>
     <div class="toolbar">
-      <label><input v-model="draft.enabled" type="checkbox">启用该站点</label>
+      <label><FormControl v-model="draft.enabled" type="checkbox" />启用该站点</label>
       <div class="actions">
         <button @click="setAll(true)">全部开启</button><button @click="setAll(false)">全部关闭</button>
       </div>
     </div>
-    <label class="field">价格小数位（留空继承默认 {{ config.basic.precision }} 位）<input
+    <label class="field">价格小数位（留空继承默认 {{ config.basic.precision }} 位）<FormControl
       v-model="draft.precision"
       type="number"
       min="0"
       max="6"
       step="1"
-    ></label>
+    /></label>
     <div class="toolbar">
       <strong>站点满减券（{{ routes.find(r => r.site === site)?.currency }}）</strong>
       <button @click="draft.coupons?.push({ threshold: 0, reduction: 0 })">添加优惠券</button>
     </div>
     <p class="muted">按单件折后商品价判断门槛，同时满足多张券时使用减免最大的一张。按售价模式保留目标折后价，显示用券后的实际利润。</p>
-    <div v-for="(coupon, index) in draft.coupons" :key="index" class="toolbar">
-      <label class="field">满<input v-model.number="coupon.threshold" type="number" min="0" step="any"></label>
-      <label class="field">减<input v-model.number="coupon.reduction" type="number" min="0" step="any"></label>
+    <div
+      v-for="(coupon, index) in draft.coupons"
+      :key="index"
+      class="toolbar"
+    >
+      <label class="field">满<FormControl
+        v-model.number="coupon.threshold"
+        type="number"
+        min="0"
+        step="any"
+      /></label>
+      <label class="field">减<FormControl
+        v-model.number="coupon.reduction"
+        type="number"
+        min="0"
+        step="any"
+      /></label>
       <button @click="draft.coupons?.splice(index, 1)">移除</button>
     </div>
     <div
@@ -253,11 +270,11 @@ function setAll(enabled: boolean) {
       class="path-row"
       :style="{ paddingLeft: `${p.depth * 20}px` }"
     >
-      <label><input
+      <label><FormControl
         type="checkbox"
         :checked="!draft.disabled.includes(p.id)"
         :disabled="!draft.enabled"
         @change="toggle(p.id, ($event.target as HTMLInputElement).checked)"
-      >{{ p.label }}</label>
+      />{{ p.label }}</label>
     </div></EditDialog>
 </template>

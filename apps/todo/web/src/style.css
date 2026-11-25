@@ -557,3 +557,42 @@ button {
   border-radius: 8px;
   background: var(--wash);
 }
+
+.shell .brand { margin-bottom: 26px; }
+.shell .host, .back { display: inline-flex; align-items: center; justify-content: center; }
+.shell .host { width: 36px; height: 36px; margin: 0; border-radius: 50%; background: #eeedf1; color: var(--ink); }
+.back { gap: 4px; min-height: 36px; }
+.day-plans { margin-top: 24px; }
+.day-plan { border-bottom: 1px solid var(--line); padding: 8px 0; }
+.day-plan summary { display: flex; gap: 8px; align-items: center; min-height: 40px; list-style: none; }
+.day-plan summary::-webkit-details-marker { display: none; }
+.day-plan summary span { margin-left: auto; color: var(--muted); font-size: 12px; }
+.day-plan[open] summary svg { transform: rotate(180deg); }
+.day-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.day-step > input { flex: none; margin: 0; }
+.day-step-copy { display: grid; flex: 1; min-width: 0; gap: 3px; overflow-wrap: anywhere; }
+.day-step time { color: var(--muted); font-size: 12px; }
+.milestone-tag {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--wash);
+  color: #573a8c;
+  font-size: 12px;
+  font-weight: 600;
+}
+.milestone-tag > span { font-size: 9px; }
+.day-step:active { background: #f7f6f9; }
+.day-plan > .plain { margin-top: 8px; }
+@media (max-width: 730px) {
+  .day-step { min-height: 62px; padding: 10px 6px; }
+}
+@media (max-width: 730px) { .shell .brand { margin: 0; } }

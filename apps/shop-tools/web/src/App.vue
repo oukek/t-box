@@ -14,6 +14,7 @@ import type {
   WorkspaceState,
 } from '@t-box/shop-tools-contracts'
 import { inputs, modes, outputs, ShopError } from '@t-box/shop-tools-contracts'
+
 import {
   calculate,
   clone,
@@ -28,9 +29,12 @@ import {
 } from '@t-box/shop-tools-core'
 import { BottomSheet, Modal, SheetSelect } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
+import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
+import FileTrigger from '@t-box/ui-kit/FileTrigger.vue'
+import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import CreativeStudio from './CreativeStudio.vue'
 import ConfigPage from './ConfigPage.vue'
+import CreativeStudio from './CreativeStudio.vue'
 import EditDialog from './EditDialog.vue'
 import { download, exportBook, importBook } from './excel'
 import ExchangePage from './ExchangePage.vue'
@@ -184,7 +188,9 @@ async function run(fn: () => Promise<unknown> | unknown) {
 let timer: ReturnType<typeof setTimeout> | undefined
 let saving = Promise.resolve()
 function scheduleSave() {
-  if (readonly.value) return
+  if (readonly.value) {
+    return
+  }
   if (!ready.value || recovery.value) {
     return
   }
@@ -196,7 +202,9 @@ function scheduleSave() {
 }
 let saveSequence = 0
 async function persist() {
-  if (readonly.value) return true
+  if (readonly.value) {
+    return true
+  }
   clearTimeout(timer)
   if (!ready.value || recovery.value) {
     return false
@@ -414,7 +422,7 @@ async function showLogs() {
     logs.value = response.data?.items || []
   })
 }
-const fileInput = ref<HTMLInputElement>()
+const fileInput = ref<InstanceType<typeof FileTrigger>>()
 const pending = ref<Sheet[]>([])
 const importOpen = ref(false)
 async function importFile(event: Event) {
@@ -439,7 +447,7 @@ async function importFile(event: Event) {
   })
   busy.value = false
   if (fileInput.value) {
-    fileInput.value.value = ''
+    fileInput.value.reset()
   }
 }
 function confirmImport() {
@@ -564,7 +572,11 @@ function refreshAll() {
       title="电商助手"
       back-label="OS"
       @back="goBack"
-    ><template #actions><button class="project-switch" :aria-label="project.name + ' · 项目管理'" @click="emit('projects')"><span>{{ project.name }}</span><span class="project-caption"> · 项目管理</span></button><span
+    ><template #actions><button
+      class="project-switch"
+      :aria-label="project.name + ' · 项目管理'"
+      @click="emit('projects')"
+    ><span>{{ project.name }}</span><span class="project-caption"> · 项目管理</span></button><span
       class="cloud-status"
       :class="{
         'save-warning':
@@ -573,7 +585,8 @@ function refreshAll() {
       :title="saveState"
       role="status"
     >{{ readonly ? '只读' : compactSaveStatus }}</span><button
-      v-if="!readonly" class="save-workspace"
+      v-if="!readonly"
+      class="save-workspace"
       :disabled="!ready || recovery || saveInFlight"
       @click="persist"
     >
@@ -593,8 +606,16 @@ function refreshAll() {
     </button></template></ApplicationHeader>
     <header class="shop-nav">
       <nav aria-label="功能分区">
-        <button :class="{ selected: section === 'operations' }" :aria-pressed="section === 'operations'" @click="section = 'operations'; page = 'home'">运营工具</button>
-        <button :class="{ selected: section === 'assistant' }" :aria-pressed="section === 'assistant'" @click="section = 'assistant'">小助手</button>
+        <button
+          :class="{ selected: section === 'operations' }"
+          :aria-pressed="section === 'operations'"
+          @click="section = 'operations'; page = 'home'"
+        >运营工具</button>
+        <button
+          :class="{ selected: section === 'assistant' }"
+          :aria-pressed="section === 'assistant'"
+          @click="section = 'assistant'"
+        >小助手</button>
       </nav>
       <nav v-if="section === 'operations'" aria-label="运营工具导航">
         <button
@@ -627,7 +648,15 @@ function refreshAll() {
       class="notice"
       role="status"
     >正在读取云端工作区…</p>
-    <CreativeStudio v-if="ready" v-show="section === 'assistant'" :client="client" :project="project" :templates="config.creativeTemplates || []" :visible="section === 'assistant'" @templates="config = { ...config, creativeTemplates: $event }" />
+    <CreativeStudio
+      v-if="ready"
+      v-show="section === 'assistant'"
+      :client="client"
+      :project="project"
+      :templates="config.creativeTemplates || []"
+      :visible="section === 'assistant'"
+      @templates="config = { ...config, creativeTemplates: $event }"
+    />
     <main
       v-if="ready && section === 'operations'"
 
@@ -721,19 +750,23 @@ function refreshAll() {
             <strong>商品定价工作簿</strong><small>{{ summary.ok }} 行已计算 · {{ summary.errors }} 行待处理</small>
           </div>
           <div class="actions">
-            <button :disabled="busy" @click="exportFile(true)">下载模板</button><button v-if="!readonly" :disabled="busy" @click="fileInput?.click()">
+            <button :disabled="busy" @click="exportFile(true)">下载模板</button><button
+              v-if="!readonly"
+              :disabled="busy"
+              @click="fileInput?.click()"
+            >
               导入 Excel</button><button
               class="primary"
               :disabled="busy"
               @click="exportFile()"
             >
-              导出工作簿</button><input
+              导出工作簿</button><FileTrigger
               ref="fileInput"
-              type="file"
+
               accept=".xlsx"
               hidden
               @change="importFile"
-            >
+            />
           </div>
         </div>
         <div
@@ -764,19 +797,23 @@ function refreshAll() {
           </div>
           <div class="toolbar grid-toolbar">
             <div class="actions grid-primary">
-              <button v-if="!readonly" class="add-product" @click="addRows()">＋ 添加商品</button><label class="desktop-fees"><input v-model="moreFees" type="checkbox">费率列</label><button
+              <button
+                v-if="!readonly"
+                class="add-product"
+                @click="addRows()"
+              >＋ 添加商品</button><label class="desktop-fees"><FormControl v-model="moreFees" type="checkbox" />费率列</label><button
                 class="mobile-search-trigger"
                 aria-label="搜索商品"
                 :aria-expanded="searchOpen"
                 @click="searchOpen = !searchOpen"
               >
-                搜索</button><input
+                搜索</button><FormControl
                 v-model="search"
                 class="row-search"
                 :class="{ 'is-open': searchOpen }"
                 placeholder="搜索 SKU / 商品"
                 aria-label="搜索商品"
-              ><button class="table-options" @click="actionsOpen = true">
+              /><button class="table-options" @click="actionsOpen = true">
                 更多
               </button>
             </div>
@@ -836,14 +873,16 @@ function refreshAll() {
                     :key="key"
                     class="input-cell"
                   >
-                    <input
-                      :readonly="readonly" v-model="row[key]"
+                    <FormControl
+                      v-model="row[key]"
+                      flat
+                      :readonly="readonly"
                       :data-cell="`${index}-${ci}`"
                       :aria-label="`第${index + 1}行 ${label}`"
                       :inputmode="ci < 2 ? 'text' : 'decimal'"
                       @paste="!readonly && onPaste($event, index, ci)"
                       @keydown.enter="nextCell($event, index, ci)"
-                    >
+                    />
                   </td>
                   <td
                     v-for="[key] in outputs"
@@ -874,7 +913,8 @@ function refreshAll() {
                     >
                       明细</button><button :disabled="!hasProduct(row)" @click="compare(row)">
                       比较方案</button><button
-                      v-if="!readonly" :aria-label="`删除第${index + 1}行`"
+                      v-if="!readonly"
+                      :aria-label="`删除第${index + 1}行`"
                       @click="active.rows.splice(index, 1)"
                     >
                       ×</button><small
@@ -912,8 +952,9 @@ function refreshAll() {
           </footer>
         </section>
       </template>
-      <ExchangePage :readonly="readonly"
+      <ExchangePage
         v-if="page === 'exchange'"
+        :readonly="readonly"
         :quote="quote"
         :config="config"
         @refresh="refreshRates"
@@ -925,7 +966,11 @@ function refreshAll() {
         :config="config"
         @back="page = 'calculator'"
       />
-      <fieldset v-if="page === 'config'" :disabled="readonly" style="border:0;padding:0;margin:0"><ConfigPage
+      <fieldset
+        v-if="page === 'config'"
+        :disabled="readonly"
+        style="border:0;padding:0;margin:0"
+      ><ConfigPage
         v-if="page === 'config'"
         :config="config"
         :routes="routes(localDate(), true)"
@@ -958,11 +1003,16 @@ function refreshAll() {
       </div>
       <template v-if="page === 'calculator'"><h3>工作簿</h3>
         <div class="menu-actions">
-          <button :disabled="busy" v-if="!readonly" @click="action(() => fileInput?.click())">
+          <button
+            v-if="!readonly"
+            :disabled="busy"
+            @click="action(() => fileInput?.click())"
+          >
             导入 Excel</button><button :disabled="busy" @click="action(() => exportFile())">
             导出工作簿</button><button :disabled="busy" @click="action(() => exportFile(true))">
             下载模板</button><button v-if="!readonly" @click="action(() => addSheet())">新增工作表</button><button v-if="!readonly" @click="action(() => addSheet(true))">复制工作表</button><button
-            v-if="!readonly" :disabled="book.sheets.length === 1"
+            v-if="!readonly"
+            :disabled="book.sheets.length === 1"
             class="danger"
             @click="action(() => (deleteOpen = true))"
           >
@@ -1024,10 +1074,7 @@ function refreshAll() {
        role="alert"
      >{{ error }}</p>
       <div class="fields">
-        <label>工作表名称<input v-model="draft.name" maxlength="100"></label><label>物流费率日期<input
-          v-model="draft.settings.date"
-          type="date"
-        ></label><label>计算模式<SheetSelect
+        <label>工作表名称<FormControl v-model="draft.name" maxlength="100" /></label><label>物流费率日期<DateSheetField v-model="draft.settings.date" label="物流费率日期" /></label><label>计算模式<SheetSelect
           v-model="draft.settings.mode"
           :options="modes"
           label="计算模式"
