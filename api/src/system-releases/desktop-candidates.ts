@@ -52,6 +52,10 @@ export async function registerDesktop(db: DataSource, raw: unknown, store = desk
   next.core = { ...next.core, bytes: coreBytes }
   return db.transaction(async (tx) => {
     await tx.findOneOrFail(SystemVersionCursor, { where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
+    const reservation = await tx.findOneBy(SystemVersionReservation, { build })
+    if (!reservation || (!reservation.ui && !reservation.core)) {
+      throw ErrorCode.SYSTEM_VERSION_CONFLICT('该构建已被同版本的新候选取代')
+    }
     const existing = await tx.findOneBy(SystemDesktopCandidate, { build })
     if (existing) {
       if (existing.base !== base || existing.notes !== notes || existing.ui.digest !== next.ui.digest || existing.core.digest !== next.core.digest) {
@@ -90,7 +94,10 @@ export async function publishDesktop(db: DataSource, build: string, expected: un
     if (live) {
       await tx.update(SystemDesktopCandidate, { build: live.build }, { state: 'archived' })
     }
-    await tx.update(SystemDesktopCandidate, { build }, { state: 'live', actor })
+    const updated = await tx.update(SystemDesktopCandidate, { build, state: 'pending' }, { state: 'live', actor })
+    if (!updated.affected) {
+      throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选已失效，请刷新列表')
+    }
     return { ...row, state: 'live', actor }
   })
 }

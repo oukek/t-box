@@ -19,7 +19,10 @@ export async function registerWebCandidate(source: DataSource, input: unknown, s
   const version = reservation.ui
   const { files, total } = await readCandidate(storage ?? webStorage(), build, digest, version)
   return source.transaction(async (db) => {
-    await db.findOneOrFail(SystemVersionReservation, { where: { build }, lock: { mode: 'pessimistic_write' } })
+    const currentReservation = await db.findOneOrFail(SystemVersionReservation, { where: { build }, lock: { mode: 'pessimistic_write' } })
+    if (currentReservation.ui !== version) {
+      throw ErrorCode.SYSTEM_VERSION_CONFLICT('该构建已被同版本的新候选取代')
+    }
     const existing = await db.findOneBy(SystemWebCandidate, { build })
     if (existing) {
       if (existing.digest !== digest) {
@@ -76,7 +79,10 @@ export async function promoteWebCandidate(source: DataSource, build: string, exp
     }
     const store = storage ?? webStorage()
     const { files } = await readCandidate(store, build, candidate.digest, candidate.version)
-    await db.update(SystemWebCandidate, { build }, { state: 'publishing', actor })
+    const claimed = await db.update(SystemWebCandidate, { build, state: candidate.state }, { state: 'publishing', actor })
+    if (!claimed.affected) {
+      throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选已失效，请刷新列表')
+    }
     try {
       const last = ['index.html', 'tbox-offline-sw.js', 'web-version.json']
       const ordered = [...files.keys()].sort((a, b) => last.indexOf(a) - last.indexOf(b))

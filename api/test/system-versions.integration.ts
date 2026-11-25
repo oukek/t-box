@@ -12,6 +12,7 @@ import { ApplicationPlatform } from '../src/application-platform/service.js'
 import { getConfig } from '../src/config.js'
 import { createDataSource } from '../src/db/data-source.js'
 import { initializeDatabase } from '../src/db/initialize.js'
+import { SystemDesktopCandidate, SystemWebCandidate } from '../src/db/records/system-versions.js'
 import { databaseSchemas } from '../src/db/schema/index.js'
 import { reserveSystemVersions } from '../src/system-releases/reserve.js'
 import { assertDisposableDatabase } from './fixtures.js'
@@ -34,6 +35,8 @@ try {
   const parallel = await Promise.all([reserve(2, { ui: 'patch' }), reserve(3, { ui: 'patch' })])
   assert.deepEqual(parallel.map((r) => r.ui).sort(), ['0.1.2', '0.1.3'])
   await assert.rejects(reserve(1, { ui: 'patch' }), /批次/)
+  const firstCore = await reserveSystemVersions(source, { batch: 'test/repo/20', commit: 'a'.repeat(40), channel: 'desktop', core: '1.0.0' })
+  assert.equal(firstCore.core, '1.0.0')
   const core = await reserve(4, { core: '1.1.15' })
   assert.equal(core.ui, null)
   await assert.rejects(reserve(4, { core: '1.1.16' }), /批次/)
@@ -61,6 +64,46 @@ try {
   } finally {
     await app.close()
   }
+  const rebuild = (id: number) => reserveSystemVersions(source, {
+    batch: 'test/repo/' + id,
+    commit: 'b'.repeat(40),
+    channel: 'desktop',
+    ui: '2.0.0',
+    core: 'patch',
+  })
+  const failed = await rebuild(7)
+  const replacement = await rebuild(8)
+  assert.notEqual(replacement.build, failed.build)
+  assert.equal(replacement.ui, failed.ui)
+  assert.equal(replacement.core, failed.core)
+  await assert.rejects(rebuild(7), /批次/)
+  assert.deepEqual(await rebuild(8), replacement)
+  const pending = {
+    build: replacement.build,
+    version: replacement.ui!,
+    digest: 'a'.repeat(64),
+    files: 1,
+    bytes: 1,
+    state: 'pending' as const,
+    actor: null,
+  }
+  await source.manager.insert(SystemWebCandidate, pending)
+  const artifact = { build: replacement.build, version: replacement.ui!, digest: pending.digest, signature: 'test' }
+  const desktop = { build: replacement.build, kind: 'both' as const, ui: artifact, core: { ...artifact, version: replacement.core! }, base: null, notes: '', state: 'pending' as const, actor: null }
+  await source.manager.insert(SystemDesktopCandidate, desktop)
+  const latest = await rebuild(9)
+  assert.notEqual(latest.build, replacement.build)
+  assert.equal(await source.manager.countBy(SystemWebCandidate, { build: replacement.build }), 0)
+  assert.equal(await source.manager.countBy(SystemDesktopCandidate, { build: replacement.build }), 0)
+  await source.manager.insert(SystemWebCandidate, { ...pending, build: latest.build })
+  for (const state of ['publishing', 'failed', 'live', 'archived'] as const) {
+    await source.manager.update(SystemWebCandidate, { build: latest.build }, { state })
+    await assert.rejects(rebuild(10), /已经开始发布/)
+  }
+  await source.manager.update(SystemWebCandidate, { build: latest.build }, { state: 'pending' })
+  await source.manager.insert(SystemDesktopCandidate, { ...desktop, build: latest.build, state: 'live' })
+  await assert.rejects(rebuild(10), /已经开始发布/)
+  assert.deepEqual(await rebuild(9), latest)
   console.info('MySQL version reservations: concurrent allocation, idempotency, stale retry, independent versions and transaction rollback passed')
 } finally {
   if (source.isInitialized) {

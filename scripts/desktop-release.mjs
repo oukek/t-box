@@ -152,6 +152,21 @@ export async function stageDesktopCandidate(r, files, notes, client, register) {
 async function submit() {
   const r = JSON.parse(await readFile(path.join(work, 'reservation.json')))
   await stageDesktopCandidate(r, { ui: uiFile, core: bundle }, env.RELEASE_NOTES || '', createOssClient(ossClientOptions(env.WEB_OSS_BUCKET, env)), (body) => api('/system-builds/desktop', body))
+  if (env.GITHUB_STEP_SUMMARY && r.core) {
+    const key = 'desktop-candidates/' + r.build + '/' + sha(await readFile(bundle)) + '.app.tar.gz'
+    await appendFile(env.GITHUB_STEP_SUMMARY, [
+      '### macOS 内部体验包',
+      '',
+      '构建编号：`' + r.build + '`',
+      '',
+      '在 OSS 主站桶 `' + env.WEB_OSS_BUCKET + '` 下载本次私有归档：',
+      '',
+      '`' + key + '`',
+      '',
+      '确认发布前可手动解压试用；正式安装入口仍指向当前生效版本。',
+      '',
+    ].join('\n'))
+  }
   console.info('桌面候选已提交。请在系统发布的桌面端列表确认。')
 }
 const commands = { reserve, 'build-ui': buildUi, 'sign-ui': signUi, 'build-core': buildCore, submit }

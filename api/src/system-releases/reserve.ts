@@ -2,7 +2,7 @@ import type { DataSource } from 'typeorm'
 import { createHash, randomUUID } from 'node:crypto'
 import { compareSystemVersions, nextSystemVersion, parseSystemVersion } from '@t-box/app-contracts'
 import { invalid } from '@t-box/server-foundation/errors'
-import { SystemVersionCursor, SystemVersionReservation } from '../db/records/system-versions.js'
+import { SystemDesktopCandidate, SystemVersionCursor, SystemVersionReservation, SystemWebCandidate } from '../db/records/system-versions.js'
 import { ErrorCode } from '../error-codes.js'
 
 function selection(value: unknown, field: string) {
@@ -50,13 +50,43 @@ export async function reserveSystemVersions(source: DataSource, input: unknown) 
       }
       return { build: existing.build, ui: existing.ui, core: existing.core }
     }
+    // An explicit version at the current head requests replacement of its unpublished build.
+    const match = ui?.version === heads.ui ? { ui: heads.ui } : core?.version === heads.core ? { core: heads.core } : null
+    const previous = match && await db.findOne(SystemVersionReservation, { where: match, lock: { mode: 'pessimistic_write' } })
+    if (previous) {
+      const sameRepo = previous.batch.slice(0, previous.batch.lastIndexOf('/')) === batch.slice(0, batch.lastIndexOf('/'))
+      if (!sameRepo || Boolean(ui) !== Boolean(previous.ui) || Boolean(core) !== Boolean(previous.core) ||
+        (previous.ui && previous.ui !== heads.ui) || (previous.core && previous.core !== heads.core)) {
+        throw ErrorCode.SYSTEM_VERSION_CONFLICT('覆盖时请选择原构建的组件和当前预留版本')
+      }
+      const where = { build: previous.build }
+      const web = await db.findOne(SystemWebCandidate, { where, lock: { mode: 'pessimistic_write' } })
+      const client = await db.findOneBy(SystemDesktopCandidate, where)
+      if ((web && web.state !== 'pending') || (client && client.state !== 'pending')) {
+        throw ErrorCode.SYSTEM_VERSION_CONFLICT('该版本已经开始发布，请使用更高版本')
+      }
+      if (web) {
+        await db.delete(SystemWebCandidate, where)
+      }
+      if (client) {
+        await db.delete(SystemDesktopCandidate, where)
+      }
+      // Keep the old batch as a tombstone so a delayed retry cannot reclaim the version.
+      await db.update(SystemVersionReservation, where, { ui: null, core: null })
+    }
     function allocate(field: 'ui' | 'core', request: typeof ui) {
       if (!request) {
         return null
       }
+      if (previous?.[field] && (request.mode !== 'manual' || request.version === previous[field])) {
+        return previous[field]
+      }
+      if (desktop && field === 'core' && request.version && compareSystemVersions(request.version, '1.0.0') < 0) {
+        throw ErrorCode.SYSTEM_VERSION_CONFLICT('桌面核心版本最低为 1.0.0')
+      }
       let next: string
       try {
-        const minimum = desktop && field === 'core' && compareSystemVersions(heads.core, '1.0.0') < 0 ? '1.0.0' : heads[field]
+        const minimum = desktop && field === 'core' && request.mode !== 'manual' && compareSystemVersions(heads.core, '1.0.0') < 0 ? '1.0.0' : heads[field]
         next = nextSystemVersion(minimum, request.mode, request.version)
       } catch {
         throw ErrorCode.SYSTEM_VERSION_CONFLICT('目标版本必须高于该组件已预留的 ' + heads[field])
