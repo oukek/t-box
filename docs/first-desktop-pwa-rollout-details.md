@@ -60,7 +60,7 @@ pnpm --filter @t-box/desktop exec tauri signer generate -w "$HOME/.tbox-release-
 pnpm --filter @t-box/desktop exec tauri signer generate -w "$HOME/.tbox-release-keys/desktop-core.key"
 ```
 
-**服务器。** 编辑现有的 `/www/wwwroot/tbox/shared/api.env`，补入同一对 `TBOX_UI_PUBLIC_KEY`、`TBOX_CORE_PUBLIC_KEY`，核对 `TBOX_DESKTOP_API_BASE=https://api.<现网根域名>/api/v1`。保留现有数据库、业务 OSS 凭证和其他配置。服务端 OSS 身份需要能读取私有候选，并将已批准的网页资源写入主站桶。保留原配置文件，避免用示例模板整份覆盖。[现有 PM2 配置说明](api-pm2-deployment.md)
+**服务器。** 编辑现有的 `/www/wwwroot/tbox/shared/api.env`，补入同一对 `TBOX_UI_PUBLIC_KEY`、`TBOX_CORE_PUBLIC_KEY`，生产 API 为 `https://api.tboxos.cn/api/v1` 时可省略 `TBOX_DESKTOP_API_BASE`；其他域名请配置为实际 HTTPS API 地址，包含 `/api/v1`，末尾不加斜杠。保留现有数据库、业务 OSS 凭证和其他配置。服务端 OSS 身份需要能读取私有候选，并将已批准的网页资源写入主站桶。保留原配置文件，避免用示例模板整份覆盖。[现有 PM2 配置说明](api-pm2-deployment.md)
 
 ### 4. GitHub Actions 第一次操作：升级现网 API
 

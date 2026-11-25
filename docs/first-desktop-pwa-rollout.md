@@ -73,7 +73,7 @@ pnpm --filter @t-box/desktop exec tauri signer generate -w "$HOME/.tbox-release-
 然后做两件事：
 
 - **GitHub 仓库 → Settings → Secrets and variables → Actions**：检查旧站已有的 Variables `DEPLOY_DOMAIN`、`OSS_REGION`，以及 Secrets `APP_IMPORT_TOKEN`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`PM2_SSH_KNOWN_HOSTS` 和原有 SSH 私钥或密码。已有且能用的保持原值。
-- **登录生产服务器**，编辑已有的 `/www/wwwroot/tbox/shared/api.env`。保留其他行，补上 `TBOX_UI_PUBLIC_KEY=界面公钥全文`、`TBOX_CORE_PUBLIC_KEY=核心公钥全文`。核对 `TBOX_DESKTOP_API_BASE=https://api.tboxos.cn/api/v1`（域名按实际生产环境）。保存。
+- **登录生产服务器**，编辑已有的 `/www/wwwroot/tbox/shared/api.env`。保留其他行，补上 `TBOX_UI_PUBLIC_KEY=界面公钥全文`、`TBOX_CORE_PUBLIC_KEY=核心公钥全文`。如果生产 API 是 `https://api.tboxos.cn/api/v1`，这就是后端默认值，可以跳过 `TBOX_DESKTOP_API_BASE`。使用其他生产 API 域名时才需添加此变量，值填完整 HTTPS API 地址，保留 `/api/v1`，末尾不加斜杠。保存。
 
 ### 7. 跑第一个 Actions：后端部署（PM2）
 

@@ -48,6 +48,8 @@ jobs:
       - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       - run: node deploy/settings.mjs
+      - name: 构建版本预留依赖
+        run: pnpm --filter @t-box/errors build
       - name: 获取线上基线并预留版本
         run: node scripts/desktop-release.mjs reserve
         env:
