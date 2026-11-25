@@ -10,6 +10,7 @@ import { applicationBootstrap } from './application-bootstrap.mjs'
 import { sha256 } from './application-builds.mjs'
 import { buildBootstrapApplications } from './build-bootstrap-applications.mjs'
 import { contentType, ossSettings, publishArtifact, publishBootstrap, publishFiles, publishSite } from './oss-static.mjs'
+import { stageWebRelease } from './stage-web-release.mjs'
 import { verifyApiDeployment } from './verify-api-deployment.mjs'
 import { verifiedOffline } from './vite-offline.mjs'
 import { prepareWebVerification } from './web-verification.mjs'
@@ -27,7 +28,7 @@ test('two public settings provide isolated sites and the fixed OSS layout to eve
   assert.equal(generated.OSS_BUCKET, generated.ADMIN_OSS_BUCKET)
   assert.equal(generated.APP_OSS_PREFIX, 'builds')
   assert.equal(generated.OSS_PREFIX, 'docker')
-  for (const name of ['web-oss', 'application-release', 'api-pm2', 'api-image']) {
+  for (const name of ['web-oss', 'application-release', 'api-pm2']) {
     const workflow = await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8')
     assert.deepEqual([...new Set([...workflow.matchAll(/\$\{\{ vars\.(\w+)/g)].map((match) => match[1]))].sort(), ['DEPLOY_DOMAIN', 'OSS_REGION'], name)
     assert.ok(workflow.includes('run: node deploy/settings.mjs'), name)
@@ -207,6 +208,19 @@ test('website dependencies precede HTML and the service worker; metadata control
   assert.equal(remote.calls[0].options.headers['Cache-Control'], 'public,max-age=31536000,immutable')
   assert.equal(remote.calls[2].options.headers['Cache-Control'], 'no-cache')
   assert.equal(remote.calls[2].options.mime, 'text/html; charset=utf-8')
+})
+
+test('website update marker is revalidated and uploaded after the worker', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'tbox-web-marker-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  for (const name of ['index.html', 'manifest.webmanifest', 'web-version.json', 'tbox-offline-sw.js']) {
+    await writeFile(join(root, name), name)
+  }
+  const remote = storage()
+  await publishSite(root, settings(), remote.options)
+  assert.deepEqual(remote.calls.map((c) => c.key), ['manifest.webmanifest', 'index.html', 'tbox-offline-sw.js', 'web-version.json'])
+  assert.equal(remote.calls[0].options.mime, 'application/manifest+json')
+  assert.equal(remote.calls.at(-1).options.headers['Cache-Control'], 'no-cache')
 })
 
 test('temporary public read failures retry verification without reuploading or publishing entrypoints early', async () => {
@@ -464,4 +478,39 @@ test('WeChat AASA publication preserves other applications and requires the fron
   await prepareWebVerification(root, dist, webOrigin)
   const navigationOnly = JSON.parse(await readFile(join(dist, '.well-known/apple-app-site-association'), 'utf8'))
   assert.deepEqual(navigationOnly.applinks.details, [{ appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/open/*'] }])
+})
+
+test('web deployment writes only the immutable private candidate and registers its exact digest', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'tbox-stage-'))
+  const build = 'feef0000-cafe-4555-baaa-000000000001'
+  const version = '1.12.15'
+  const env = { ...environment, TBOX_WEB_BUILD_ID: build, TBOX_UI_VERSION: version }
+  try {
+    await writeFile(join(root, 'index.html'), 'candidate')
+    await writeFile(join(root, 'web-version.json'), JSON.stringify({ build, version }))
+    let submitted = 0
+    let digest
+    const client = { async put(key, bytes, options) {
+      digest = sha256(bytes)
+      assert.equal(key, 'system-candidates/' + build + '/' + digest + '.json')
+      assert.equal(options.headers['x-oss-object-acl'], 'private')
+      assert.equal(options.headers['x-oss-forbid-overwrite'], 'true')
+      if (submitted) {
+        throw Object.assign(new Error('exists'), { code: 'FileAlreadyExists' })
+      }
+    } }
+    const api = new URL('https://api.example.com/api/v1')
+    const submit = async (url, options) => {
+      assert.equal(url, api.href + '/system-builds/submit')
+      assert.deepEqual(JSON.parse(options.body), { build, digest })
+      submitted++
+      return new Response('{}')
+    }
+    await stageWebRelease(root, settings(), api, env, client, submit)
+    await stageWebRelease(root, settings(), api, env, client, submit)
+    assert.equal(submitted, 2)
+    await assert.rejects(stageWebRelease(root, settings(), api, { ...env, TBOX_UI_VERSION: '0.0.0' }, client, submit), /预留/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })

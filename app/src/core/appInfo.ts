@@ -1,6 +1,6 @@
 import { hostBrand } from '@t-box/app-contracts'
 
-/** Version is injected from app/package.json in development and production builds. */
+/** Release builds receive the reserved UI version; local builds use the package version. */
 export const appInfo = {
   ...hostBrand,
   version: __APP_VERSION__,

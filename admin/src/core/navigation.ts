@@ -9,7 +9,7 @@ export const navigationGroups = [
     id: 'applications',
     title: '应用管理',
     symbol: 'grid',
-    pages: ['applications', 'ledger-categories', 'holidays'],
+    pages: ['applications', 'system-releases', 'ledger-categories', 'holidays'],
   },
   {
     id: 'operations',

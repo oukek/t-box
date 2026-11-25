@@ -198,6 +198,10 @@ const apiErrors = defineApiErrors({
     statusCode: 503,
     message: '服务器 OSS 桶地址配置无效',
   },
+  SYSTEM_VERSION_CONFLICT: {
+    statusCode: 409,
+    message: '系统构建批次与已有版本预留冲突',
+  },
   APP_IMPORT_UNAUTHORIZED: {
     statusCode: 401,
     message: '应用构建导入凭证无效',

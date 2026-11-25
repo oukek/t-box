@@ -2,6 +2,7 @@ packages:
   - app
   - admin
   - api
+  - desktop
   - capacitor
   - capacitor-plugins/*
   - shared

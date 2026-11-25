@@ -20,6 +20,7 @@ import { resolveLocalLaunch } from './localLaunch'
 import { createHostTransport } from './sdkHost'
 
 export interface AppConnection {
+  prepareSystemUpdate?(): Promise<unknown>
   readonly appNavigation: boolean
   invoke(name: string, args: unknown): Promise<unknown>
   close(): void
@@ -187,7 +188,19 @@ export function connectFrame(
       }
       ready = true
       clearTimeout(timer)
+      function sendToApp(message: Record<string, unknown>, timeoutMs: number) {
+        return new Promise<unknown>((resolve, reject) => {
+          const id = createApplicationRequestId()
+          const timeout = setTimeout(() => {
+            pending.delete(id)
+            reject(ErrorCode.INTERNAL_APPLICATION_TOOL_TIMEOUT())
+          }, timeoutMs)
+          pending.set(id, { resolve, reject, timer: timeout })
+          channel.port1.postMessage({ ...message, id })
+        })
+      }
       resolveReady({
+        prepareSystemUpdate: data.prepareSystemUpdate === true ? () => sendToApp({ type: 'prepareSystemUpdate' }, 20000) : undefined,
         appNavigation: data.appNavigation === true,
         close: () => close(),
         cancelInteractions: () =>
@@ -212,20 +225,7 @@ export function connectFrame(
           if (!runtime.clientTools.includes(name)) {
             throw ErrorCode.INTERNAL_APPLICATION_TOOL_FORBIDDEN()
           }
-          return new Promise((resolve, reject) => {
-            const id = createApplicationRequestId()
-            const timeout = setTimeout(() => {
-              pending.delete(id)
-              reject(ErrorCode.INTERNAL_APPLICATION_TOOL_TIMEOUT())
-            }, 300_000)
-            pending.set(id, { resolve, reject, timer: timeout })
-            channel.port1.postMessage({
-              type: 'request',
-              id,
-              method: name,
-              args,
-            })
-          })
+          return sendToApp({ type: 'request', method: name, args }, 300000)
         },
       })
       return
@@ -320,6 +320,14 @@ export function connectFrame(
     [channel.port2],
   )
   return { promise, close: () => close() }
+}
+export async function prepareApplicationsForSystemUpdate() {
+  await Promise.all(Array.from(connections.values(), async ({ promise }) => {
+    const client = await promise
+    if (client.prepareSystemUpdate && await client.prepareSystemUpdate() !== true) {
+      throw new Error('应用中的修改尚未保存，请返回应用处理后重试。')
+    }
+  }))
 }
 export async function invokeApplicationTool(
   value: unknown,

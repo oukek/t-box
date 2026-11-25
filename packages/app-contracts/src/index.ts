@@ -1,6 +1,8 @@
 import { ErrorCode } from './error-codes.js'
 import { validApplicationIcon } from './icons.js'
 
+export * from './actions.js'
+
 export interface ApplicationManifest {
   id: string
   name: string
@@ -247,7 +249,6 @@ export interface ApplicationPublicationEvent {
   createdAt: string
 }
 
-export * from './actions.js'
 export * from './backend.js'
 export * from './brand.js'
 export * from './capabilities.js'
@@ -258,9 +259,11 @@ export * from './host-downloads.js'
 export * from './icons.js'
 export * from './identifiers.js'
 export * from './market-settings.js'
-
 export * from './notifications.js'
+
+export { default as publicationColors } from './publication-colors.json' with { type: 'json' }
 export * from './resources.js'
 export * from './sdk.js'
+export * from './system-version.js'
 
 export * from './wallpapers.js'

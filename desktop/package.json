@@ -1,0 +1,12 @@
+{
+  "name": "@t-box/desktop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bundle": "PATH=/usr/bin:$PATH tauri build --bundles app",
+    "bundle:debug": "PATH=/usr/bin:$PATH tauri build --debug --bundles app"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.6"
+  }
+}

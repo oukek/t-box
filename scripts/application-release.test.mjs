@@ -139,6 +139,12 @@ test('packaging resolves the Chinese choice, reads manifest.version and leaves r
     assert.equal(bundle.version, release.manifest.version)
     assert.equal(bundle.releaseNotes, '')
     assert.equal(bundle.publication.updatePrompt, undefined)
+    const configPath = join(app, 'build.config.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8'))
+    config.releaseModule = 'contracts/dist/invalid-color.js'
+    await writeFile(configPath, JSON.stringify(config))
+    await writeFile(join(app, config.releaseModule), `export const release = ${JSON.stringify({ ...release, manifest: { ...release.manifest, color: 'purple' } })}\n`)
+    await assert.rejects(packApplicationRelease(directory, 'example', { ...process.env, PATH: join(directory, 'bin') + ':' + process.env.PATH }), /Invalid application color for example: purple/)
     assert.equal(await readFile(envFile, 'utf8'), exported + 'APPLICATION=example\nVERSION=2.3.4-beta.1\n')
     const rejected = spawnSync(process.execPath, [join(root, 'scripts/pack-application-release.mjs'), 'example', '9.9.9'], { encoding: 'utf8' })
     assert.notEqual(rejected.status, 0)
@@ -164,6 +170,7 @@ for (const scenario of [
   { name: 'a rate-limited import retries the same request', failure: 'rate-limit', attempts: 2 },
   { name: 'an import permission failure with a non-JSON body never retries', failure: 'forbidden', attempts: 1, error: /Server rejected build \(403\)/ },
   { name: 'an import permission failure with a null JSON body never retries', failure: 'forbidden-null', attempts: 1, error: /Server rejected build \(403\)/ },
+  { name: 'a publication validation error includes the API reason without retrying', failure: 'publication', attempts: 1, error: /INVALID_APP_PUBLICATION — 图标或颜色无效/ },
   { name: 'a version conflict never retries or reports a successful submission', failure: 'conflict', attempts: 1, error: /Server rejected build \(409\)/ },
   { name: 'an invalid import response never reports a successful submission', failure: 'invalid-response', attempts: 1, error: /Unexpected import response/ },
   { name: 'a null import response fails immediately as an invalid response', failure: 'null-response', attempts: 1, error: /Unexpected import response/ },
@@ -224,6 +231,7 @@ globalThis.fetch = async (url, options) => {
   const failure = process.env.SUBMISSION_FAILURE
   if (failure === 'forbidden') return new Response('Forbidden', { status: 403 })
   if (failure === 'forbidden-null') return new Response('null', { status: 403 })
+  if (failure === 'publication') return new Response(JSON.stringify({ error: { code: 'INVALID_APP_PUBLICATION', message: '图标或颜色无效' } }), { status: 400 })
   if (failure === 'conflict') return new Response(JSON.stringify({ error: { code: 'APP_VERSION_CONFLICT' } }), { status: 409 })
   if (failure === 'invalid-response') return new Response('{}', { status: 201 })
   if (failure === 'null-response') return new Response('null', { status: 201 })

@@ -1,4 +1,4 @@
-export function verifiedOffline(options?: { application?: boolean }): {
+export function verifiedOffline(options?: { application?: boolean, shellRelease?: string, uiVersion?: string }): {
   name: string
   apply: 'build'
   enforce: 'post'

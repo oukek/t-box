@@ -103,7 +103,7 @@ export async function loadLocalApplications() {
         localApplications.releases = parsePublicLocalCatalog(JSON.parse(raw), allowed, location.origin)
       }
     } catch { /* Corrupt metadata never blocks the login screen or grants access. */ }
-    if (localApplications.releases.length) {
+    if (localApplications.releases.length || window.__TBOX_DESKTOP_KEY__) {
       void refreshLocalApplications()
     } else {
       await refreshLocalApplications()

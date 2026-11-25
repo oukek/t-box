@@ -81,7 +81,7 @@ Repository → Settings → Secrets and variables → Actions，配置 Repositor
 
 其余全部由 [deploy/settings.mjs](../deploy/settings.mjs) 固定或推导：应用桶 `tboxos-app`、构建目录 `builds/`、应用地址 `https://apps.<主域名>`、导入接口 `https://api.<主域名>/api/v1/application-builds`、对应地域的 OSS 公网 endpoint。脚本通过 GitHub 的环境文件传给后续步骤，不需要创建同名 Repository Variables。
 
-四个发布工作流统一使用上述两个普通变量。旧的站点 URL、Bucket、目录和 endpoint Variables 已不再读取，可以删除；当前工作流只使用长期 RAM AccessKey，已移除 `OSS_SESSION_TOKEN`。密钥和受限提交凭证继续放在 Secrets，不能写入公开脚本。
+主站、子应用和 PM2 三个发布工作流统一使用上述两个普通变量。旧的站点 URL、Bucket、目录和 endpoint Variables 已不再读取，可以删除；当前工作流只使用长期 RAM AccessKey，已移除 `OSS_SESSION_TOKEN`。密钥和受限提交凭证继续放在 Secrets，不能写入公开脚本。
 
 Run workflow 只选择应用；版本来自代码，更新说明与提示在后台维护。输出目录与构建来源由 GitHub 自动提供，也不用额外配置。
 

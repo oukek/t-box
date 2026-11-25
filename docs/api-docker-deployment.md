@@ -1,6 +1,6 @@
 # 可选 Docker 部署：文件全部交给 OSS
 
-正式方案使用 [OSS 网站 + PM2 后端](first-deployment.md)。只有需要 Docker 时才使用本文；所有 Actions 仍手动运行。
+正式方案使用 [OSS 网站 + PM2 后端](first-deployment.md)。本文供手动维护已有 Docker 镜像归档的服务器使用。新的后端部署使用 PM2 工作流。
 
 ## 1. GitHub 和 OSS
 
@@ -12,17 +12,13 @@
 | tboxos-admin | 后台、docker/releases/ 下的公开镜像包 |
 | tboxos-app | 子应用静态文件及 builds/ 构建包 |
 
-GitHub 配置 OSS_ACCESS_KEY_ID、OSS_ACCESS_KEY_SECRET（Secrets），以及 DEPLOY_DOMAIN、OSS_REGION（仅这两个 Variables）。`deploy/settings.mjs` 自动生成站点地址，固定使用 tboxos-admin/docker/ 存 Docker 包、tboxos-app 存应用文件，与 PM2 / 前端发布共用设置。首次准备按 [首次部署](first-deployment.md) 执行。
-
-后端镜像发布（Docker / OSS） 工作流构建后端镜像，把子应用静态文件单独导出、上传并逐文件验证 OSS，再上传镜像归档、校验文件，最后发布 release.json。应用文件不会装进运行镜像；镜像只保留后端程序和 bootstrap-applications.json 初始摘要配置。
-
 公开镜像布局为 `oss://tboxos-admin/docker/releases/<RELEASE_ID>/`，含 image.tar.gz、image.tar.gz.sha256、release.json。归档不含生产 env、密钥或用户文件。镜像本地标签为 t-box-api:<RELEASE_ID>，无需镜像仓库、docker login 或 docker pull。
 
 ## 2. 服务器准备
 
 使用 Linux Docker、Compose v2.20+、Node.js 24.15+、bash、jq、gzip、sha256sum 和 flock。OSS 传输统一使用阿里云官方 `ali-oss` Node.js SDK（锁定 6.23.0），不需要单独安装 OSS 命令行工具。
 
-从镜像工作流的 Artifacts 下载 `oss-deployment-tools`，解压 ZIP 后得到 `oss-deployment-tools.tar.gz`。将 tar 包上传服务器并解压到 `/www/server/t-box`；它包含 `api/` 部署脚本和 `oss/` SDK 程序及生产依赖。保持两个目录相邻，勿单独复制 `api/`；tar 会保留依赖软链接，服务器无需安装 pnpm 或克隆源码。
+在已安装工作区依赖的源码目录运行 `node scripts/pack-oss-tools.mjs /tmp/oss-deployment-tools` 生成 `/tmp/oss-deployment-tools.tar.gz`。将 tar 包上传服务器并解压到 `/www/server/t-box`；它包含 `api/` 部署脚本和 `oss/` SDK 程序及生产依赖。保持两个目录相邻，勿单独复制 `api/`；tar 会保留依赖软链接，服务器无需安装 pnpm 或克隆源码。
 
 ```sh
 mkdir -p /www/server/t-box
@@ -47,7 +43,7 @@ Compose 使用宿主机网络，API 监听 127.0.0.1:6868，MySQL / Redis 使用
 
 ## 3. 发布和回滚
 
-先运行 GitHub 的 后端镜像发布（Docker / OSS），再把 Actions 摘要中的真实 ID 用于服务器命令：
+从已有镜像归档的 release.json 确认实际发布 ID，再在服务器运行：
 
 ```sh
 bash deploy-release.sh RELEASE_ID --init

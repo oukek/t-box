@@ -17,9 +17,9 @@ import {
   PrivateFileQuotaEntity,
 } from '@t-box/server-foundation/persistence/private-media'
 import { ResourceEntity } from '@t-box/server-foundation/persistence/resource-entity'
-import { todoEntities } from '@t-box/todo-server'
 import { shopToolsEntities } from '@t-box/shop-tools-server'
 import { TimerEntity } from '@t-box/time-server/entity'
+import { todoEntities } from '@t-box/todo-server'
 import { EntitySchema } from 'typeorm'
 import {
   DesktopAppearanceEntity,
@@ -32,6 +32,7 @@ import { promotionEntities } from '../promotions/entities.js'
 import { SupportSettingsEntity } from '../support/entity.js'
 import { platformEntities } from './platform-entities.js'
 import { platformRecordEntities } from './records/index.js'
+import { SystemDesktopCandidate, SystemVersionCursor, SystemVersionReservation, SystemWebCandidate } from './records/system-versions.js'
 
 export {
   BillEntity,
@@ -252,6 +253,10 @@ export const SettingsEntity = new EntitySchema<{
   ],
 })
 export const entities = [
+  SystemVersionCursor,
+  SystemVersionReservation,
+  SystemWebCandidate,
+  SystemDesktopCandidate,
   ...promotionEntities,
   CheckoutLinkEntity,
   UserProfileEntity,

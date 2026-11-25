@@ -33,6 +33,8 @@ import {
 } from './core/navigation'
 import { identity } from './core/session'
 import { observeViewport } from './core/viewport'
+import InstallDesktop from './core/web-release/InstallDesktop.vue'
+import WebReleaseDialog from './core/web-release/WebReleaseDialog.vue'
 import ApplicationCapabilitiesPage from './features/applications/ApplicationCapabilitiesPage.vue'
 import ApplicationsPage from './features/applications/ApplicationsPage.vue'
 import AssistantHost from './features/assistant/AssistantHost.vue'
@@ -83,6 +85,7 @@ function hostCompatible(appId: string) {
   return entry?.release.runtime.type !== 'shell' || !entry.installation?.version || !!(module && shellVersionCompatible(entry.installation.version, module.manifest.version, module.shellCompatibility?.minimumVersion))
 }
 let stopViewport: (() => void) | undefined
+const productionWeb = import.meta.env.PROD && !window.__TBOX_DESKTOP_KEY__ && !window.Capacitor?.isNativePlatform?.()
 const isWebHost = !window.Capacitor?.isNativePlatform?.()
 function focusWorkspace() {
   document.getElementById('workspace')?.focus()
@@ -160,6 +163,7 @@ onBeforeUnmount(() => {
           @click.prevent="navigateTab('applications')"
         ><BrandMark class="desktop-brand-mark" /><span>T方舟</span></a>
         <div class="desktop-topbar__actions">
+          <InstallDesktop v-if="productionWeb" />
           <NotificationBell v-if="identity.user" />
           <button
             v-if="!identity.user"
@@ -211,6 +215,7 @@ onBeforeUnmount(() => {
         :open-revision="navigation.revision"
       />
     </main>
+    <WebReleaseDialog :enabled="productionWeb" />
     <ReminderHost />
     <NotificationCenter v-if="identity.user" />
     <NotificationToast v-if="identity.user" />

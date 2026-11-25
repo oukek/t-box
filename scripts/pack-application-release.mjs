@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import publicationColors from '../packages/app-contracts/src/publication-colors.json' with { type: 'json' }
 import { collectBuildFiles, discoverApplications, selectApplication, sha256, validVersion } from './application-builds.mjs'
 
 export async function packApplicationRelease(root, selection, environment = process.env) {
@@ -19,8 +20,12 @@ export async function packApplicationRelease(root, selection, environment = proc
   if (!validVersion(version)) {
     throw new Error('Application manifest.version must be a valid release version such as 1.0.1')
   }
+  const color = release.manifest.color || 'blue'
+  if (!publicationColors.includes(color)) {
+    throw new Error(`Invalid application color for ${appId}: ${color}. Supported colors: ${publicationColors.join(', ')}`)
+  }
   const collected = await collectBuildFiles(join(root, 'apps', appId, 'web/dist'))
-  const { name, description, icon, iconAsset, iconVariant, color } = release.manifest
+  const { name, description, icon, iconAsset, iconVariant } = release.manifest
   const bundle = Buffer.from(JSON.stringify({
     protocol: 1,
     appId,

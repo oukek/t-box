@@ -5,8 +5,8 @@ import './style.css'
 
 connectAppClient({})
   .then((connection) => {
-    createApp(App, { client: connection.client }).mount('#app')
-    connection.ready({ appNavigation: true })
+    const page = createApp(App, { client: connection.client }).mount('#app') as InstanceType<typeof App>
+    connection.ready({ appNavigation: true, beforeSystemUpdate: () => page.beforeSystemUpdate() })
     window.addEventListener('pagehide', () => connection.client.dispose(), {
       once: true,
     })

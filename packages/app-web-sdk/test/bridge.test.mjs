@@ -57,6 +57,9 @@ function host(handler, sdkContext = context, referrer = 'https://host.example/ap
   }
   return {
     messages,
+    prepareUpdate(id) {
+      channel.port1.postMessage({ type: 'prepareSystemUpdate', id })
+    },
     async connect(tools = {}) {
       const promise = connectAppClient(tools)
       // Same data from a sibling or a different origin cannot take ownership of the channel.
@@ -238,6 +241,37 @@ test('navigation ownership is an explicit optional ready declaration; legacy app
       assert.ok(ready)
       assert.equal(ready.appNavigation, ownsHeader ? true : undefined)
       assert.equal(ready.nonce, 'nonce')
+    } finally {
+      connection?.client.dispose()
+      h.close()
+    }
+  }
+})
+
+test('system update waits for the app to save; a rejected or cancelled save keeps the user in the app', async () => {
+  for (const result of ['saved', 'rejected', 'cancelled']) {
+    const h = host()
+    let connection
+    try {
+      window.dispatchEvent = () => result !== 'cancelled'
+      connection = await h.connect()
+      let finish
+      let startedSaving
+      const saving = new Promise((resolve) => {
+        startedSaving = resolve
+      })
+      connection.ready({ beforeSystemUpdate: () => new Promise((resolve, reject) => {
+        startedSaving()
+        finish = () => result === 'rejected' ? reject(new Error('save failed')) : resolve(true)
+      }) })
+      h.prepareUpdate('update-test')
+      await saving
+      assert.equal(h.messages.some((m) => m.id === 'update-test'), false)
+      finish()
+      for (let i = 0; i < 100 && !h.messages.some((m) => m.id === 'update-test'); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1))
+      }
+      assert.equal(h.messages.find((m) => m.id === 'update-test')?.data, result === 'saved')
     } finally {
       connection?.client.dispose()
       h.close()

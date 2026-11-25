@@ -3,8 +3,9 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { createOfflineWorker } from './offline-worker.mjs'
 import { createResourceInstaller } from './resource-installer.mjs'
+import { createShellReleaseWorker } from './shell-release-worker.mjs'
 
-export function verifiedOffline({ application = false } = {}) {
+export function verifiedOffline({ application = false, shellRelease, uiVersion } = {}) {
   let outDir
   return {
     name: 'tbox-verified-static-cache',
@@ -24,7 +25,7 @@ export function verifiedOffline({ application = false } = {}) {
         await writeFile(join(outDir, 'tbox-resource.html'), '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'; worker-src \'self\'; connect-src \'self\'; base-uri \'none\'; form-action \'none\'"><script src="./tbox-resource.js" defer></script>')
         await writeFile(join(outDir, 'tbox-resource.js'), createResourceInstaller())
       }
-      const registration = `if ('serviceWorker' in navigator && !window.Capacitor?.isNativePlatform?.() && !new URLSearchParams(location.hash.slice(1)).has('tbox-local')) { const base = new URL('./', import.meta.url); ${application ? 'navigator.serviceWorker.getRegistration(base.href).then(registration => registration?.active || navigator.serviceWorker.register(new URL("tbox-offline-sw.js", base), {scope:base.pathname})).catch(()=>{});' : 'navigator.serviceWorker.register(new URL("tbox-offline-sw.js", base), {scope:base.pathname}).catch(()=>{});'} }\n`
+      const registration = `if ('serviceWorker' in navigator && !window.Capacitor?.isNativePlatform?.() && !new URLSearchParams(location.hash.slice(1)).has('tbox-local')) { const base = new URL('./', import.meta.url); ${application ? 'navigator.serviceWorker.getRegistration(base.href).then(registration => registration?.active || navigator.serviceWorker.register(new URL("tbox-offline-sw.js", base), {scope:base.pathname})).catch(()=>{});' : 'navigator.serviceWorker.register(new URL("tbox-offline-sw.js", base), {scope:base.pathname,updateViaCache:"none"}).catch(()=>{});'} }\n`
       await writeFile(join(outDir, 'tbox-offline.js'), registration)
       const files = []
       const scan = async (folder = '') => {
@@ -32,7 +33,7 @@ export function verifiedOffline({ application = false } = {}) {
           const path = folder ? `${folder}/${item.name}` : item.name
           if (item.isDirectory()) {
             await scan(path)
-          } else if (item.isFile() && path !== 'tbox-offline-sw.js' && !path.endsWith('.map')) {
+          } else if (item.isFile() && path !== 'tbox-offline-sw.js' && path !== 'web-version.json' && !path.endsWith('.map')) {
             files.push({ path, sha256: createHash('sha256').update(await readFile(join(outDir, path))).digest('hex') })
           }
         }
@@ -41,7 +42,12 @@ export function verifiedOffline({ application = false } = {}) {
       files.sort((a, b) => a.path.localeCompare(b.path))
       // A worker-only fix must get a new cache too; failed installation cannot delete an active version's cache.
       const version = createHash('sha256').update(JSON.stringify(files)).update(createOfflineWorker.toString()).digest('hex')
-      await writeFile(join(outDir, 'tbox-offline-sw.js'), createOfflineWorker({ version, files, application }))
+      const worker = createOfflineWorker({ version, files, application })
+      const releaseWorker = shellRelease ? createShellReleaseWorker(version, shellRelease, files.length) : ''
+      await writeFile(join(outDir, 'tbox-offline-sw.js'), releaseWorker + worker)
+      if (shellRelease) {
+        await writeFile(join(outDir, 'web-version.json'), JSON.stringify({ build: shellRelease, version: uiVersion }) + '\n')
+      }
     },
   }
 }

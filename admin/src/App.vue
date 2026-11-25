@@ -22,6 +22,7 @@ import PaymentsPage from './features/PaymentsPage.vue'
 import PromotionsPage from './features/PromotionsPage.vue'
 import ProvidersPage from './features/ProvidersPage.vue'
 import ResourcePackagesPage from './features/ResourcePackagesPage.vue'
+import SystemReleasesPage from './features/SystemReleasesPage.vue'
 import SupportPage from './features/SupportPage.vue'
 import UsersPage from './features/UsersPage.vue'
 import WechatLoginPage from './features/WechatLoginPage.vue'
@@ -50,6 +51,7 @@ const pages = {
     symbol: 'grid',
     component: ApplicationsPage,
   },
+  'system-releases': { title: '系统发布', symbol: 'grid', component: SystemReleasesPage },
   'providers': {
     title: '服务商',
     symbol: 'connection',

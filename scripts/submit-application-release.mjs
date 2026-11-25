@@ -67,7 +67,11 @@ for (let attempt = 1; attempt <= 5; attempt++) {
       return {}
     })
     if (!response.ok) {
-      const error = new Error(`Server rejected build (${response.status}): ${String(result?.error?.code || 'UNKNOWN')}`)
+      const code = /^[A-Z][A-Z0-9_]{0,79}$/.test(result?.error?.code) ? result.error.code : 'UNKNOWN'
+      const reason = result?.error?.message
+      // Display localized validation messages without echoing URLs, headers or arbitrary response bodies.
+      const detail = typeof reason === 'string' && /^[\p{Script=Han}\d ，。；：、（）【】·–—-]{1,180}$/u.test(reason) ? ' — ' + reason : ''
+      const error = new Error(`Server rejected build (${response.status}): ${code}${detail}`)
       error.retryable = response.status >= 500 || response.status === 429
       throw error
     }

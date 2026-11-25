@@ -121,7 +121,7 @@ export class ApplicationBuildImports {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  async authenticate(header: unknown): Promise<ImportCredential> {
+  async authenticate(header: unknown, managedOnly = false): Promise<ImportCredential> {
     const match =
       typeof header === 'string'
         ? /^Bearer ([\w-]{32,128})$/.exec(header)
@@ -137,6 +137,7 @@ export class ApplicationBuildImports {
       .where(
         'c.token_hash=:p0 AND c.revoked_at IS NULL AND (c.expires_at>UTC_TIMESTAMP(3) OR (c.expires_at IS NULL AND c.managed_key=\'github-actions\')) AND a.enabled=1',
       )
+      .andWhere(managedOnly ? 'c.managed_key=\'github-actions\'' : '1=1')
       .setParameters({ p0: bundleHash(match[1]!) })
       .getRawMany()
     if (!row) {

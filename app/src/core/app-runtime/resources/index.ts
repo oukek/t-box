@@ -1,6 +1,7 @@
 import type { AppRelease, DeviceResourceState } from '@t-box/app-contracts'
 import type { ResourceJournal } from './contracts'
 import { reactive } from 'vue'
+import { DesktopResourceAdapter } from './desktop'
 import { applicationPackage, ApplicationResourceManager } from './manager'
 import { NativeResourceAdapter } from './native'
 import { WebResourceAdapter } from './web'
@@ -23,7 +24,7 @@ function validPackage(value: unknown): value is ResourceJournal['prepared'][numb
   }
 }
 export const applicationResources = new ApplicationResourceManager(
-  window.Capacitor?.isNativePlatform?.() ? new NativeResourceAdapter() : new WebResourceAdapter(),
+  window.__TBOX_DESKTOP_KEY__ ? new DesktopResourceAdapter() : window.Capacitor?.isNativePlatform?.() ? new NativeResourceAdapter() : new WebResourceAdapter(),
   {
     read() {
       try {

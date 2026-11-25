@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "T方舟",
+  "short_name": "T方舟",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#f4f6f8",
+  "background_color": "#f4f6f8",
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

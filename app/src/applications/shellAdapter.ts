@@ -28,6 +28,7 @@ import {
 import { request } from '../core/network'
 import { preferences, setPreference } from '../core/preferences'
 import { identity, setSession } from '../core/session'
+import { openSystemVersion } from '../core/web-release/systemVersion'
 import { logout, updateAvatar, updateNickname } from '../features/identity/identityApi'
 
 export function initializeApplicationShell() {
@@ -45,6 +46,7 @@ export function initializeApplicationShell() {
     tabLabel: (id) => tabLabel(id as Parameters<typeof tabLabel>[0]),
     openAccountSettings,
     openDevicePermissions,
+    openSystemVersion,
     openShortcuts,
     openProfile,
     setPreference,

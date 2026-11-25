@@ -33,7 +33,7 @@ export function connectApplication(
     options?: RequestOptions,
   ): Promise<T>
   listen(listener: (event: ApplicationBridgeEvent) => void): () => void
-  ready(options?: { appNavigation?: boolean }): void
+  ready(options?: { appNavigation?: boolean, beforeSystemUpdate?: () => Promise<boolean> | boolean }): void
   close(): void
 }> {
   return new Promise((resolve, reject) => {
@@ -77,6 +77,7 @@ export function connectApplication(
       window.removeEventListener('message', accept)
       clearTimeout(timer)
       const port = event.ports[0]!
+      let beforeSystemUpdate: (() => Promise<boolean> | boolean) | undefined
       const pending = new Map<
         string,
         {
@@ -91,7 +92,7 @@ export function connectApplication(
       port.onmessage = async ({
         data,
       }: MessageEvent<
-        BridgeRequest | BridgeResponse | ApplicationBridgeEvent
+        BridgeRequest | BridgeResponse | ApplicationBridgeEvent | { type: 'prepareSystemUpdate', id: string }
       >) => {
         if (!data || closed) {
           return
@@ -125,6 +126,14 @@ export function connectApplication(
               ),
             )
           }
+        } else if (data.type === 'prepareSystemUpdate') {
+          let saved = false
+          try {
+            saved = (!beforeSystemUpdate || await beforeSystemUpdate()) && window.dispatchEvent(new Event('beforeunload', { cancelable: true }))
+          } catch {
+            saved = false
+          }
+          port.postMessage({ type: 'response', id: data.id, ok: true, data: saved })
         } else if (data.type === 'request') {
           const handler = Object.hasOwn(handlers, data.method)
             ? handlers[data.method]
@@ -158,9 +167,11 @@ export function connectApplication(
           }
         },
         ready(options = {}) {
+          beforeSystemUpdate = options.beforeSystemUpdate
           if (!closed) {
             port.postMessage({
               type: 'ready',
+              prepareSystemUpdate: true,
               ...(options.appNavigation === undefined
                 ? {}
                 : { appNavigation: options.appNavigation }),
@@ -259,8 +270,7 @@ export async function connectAppClient(
     return {
       client,
       context: context as ApplicationContext,
-      ready: (options?: { appNavigation?: boolean }) =>
-        connection.ready(options),
+      ready: connection.ready,
     }
   } catch (error) {
     client.dispose()

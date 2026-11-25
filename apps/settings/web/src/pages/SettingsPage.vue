@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { iconSizeOptions } from '@t-box/app-contracts'
-import { appInfo, backFromApplication, identity, navigation, openAccountSettings, openDevicePermissions, openShortcuts, preferences, setPreference, tabLabel } from '@t-box/app-shell-sdk'
+import { appInfo, backFromApplication, identity, navigation, openAccountSettings, openDevicePermissions, openShortcuts, openSystemVersion, preferences, setPreference, tabLabel } from '@t-box/app-shell-sdk'
 import { AppIcon, Modal, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { ref } from 'vue'
@@ -106,13 +106,18 @@ function sizeKeydown(event: KeyboardEvent) {
     <div class="settings-group">
       <h2>关于</h2>
       <div class="profile-menu">
+        <button class="profile-action" @click="openSystemVersion">
+          <span class="profile-action-icon"><AppIcon name="settings" :size="20" /></span>
+          <span>系统版本<small>查看运行版本与检查更新</small></span>
+          <span class="profile-version">v{{ appInfo.version }}</span>
+          <AppIcon name="right" :size="17" />
+        </button>
         <button class="profile-action" @click="aboutOpen = true">
           <span class="profile-action-icon"><AppIcon
             name="info"
             :size="20"
           /></span>
-          <span>关于 {{ appInfo.name }}<small>应用信息与版本</small></span>
-          <span class="profile-version">v{{ appInfo.version }}</span>
+          <span>关于 {{ appInfo.name }}<small>应用信息</small></span>
           <AppIcon name="right" :size="17" />
         </button>
       </div>

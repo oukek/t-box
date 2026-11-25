@@ -39,6 +39,7 @@ function updateStage(value: LaunchStage) {
 }
 const locationOrigin = location.origin
 const nativeHost = window.Capacitor?.isNativePlatform?.() === true
+const localFrame = nativeHost || !!window.__TBOX_DESKTOP_KEY__
 const frame = ref<HTMLIFrameElement>()
 const runtime = ref<RuntimeDescriptor>()
 const error = ref('')
@@ -261,7 +262,7 @@ async function repairAndLoad() {
       v-if="runtime && !error"
       ref="frame"
       :key="`${runtime.appId}:${persistentNavigation ? runtime.generation : openRevision}`"
-      :src="`${runtime.entryUrl}#tbox-host=${encodeURIComponent(locationOrigin)}${nativeHost ? '&tbox-local=1' : ''}`"
+      :src="`${runtime.entryUrl}#tbox-host=${encodeURIComponent(locationOrigin)}${localFrame ? '&tbox-local=1' : ''}`"
       :title="application?.name || appId"
       :class="{ 'runtime-frame--loading': loading }"
       :aria-hidden="loading"

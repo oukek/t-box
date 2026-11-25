@@ -97,7 +97,7 @@ export function createApp(deps: AppDependencies) {
         (origins.includes('*') ||
           origins.includes(origin) ||
           origin === `${request.protocol}://${request.host}`)
-        : !!origin && (origins.includes('*') || origins.includes(origin))
+        : !!origin && (origin === 'tauri://localhost' || origins.includes('*') || origins.includes(origin))
       callback(null, {
         // Credentialed admin requests need an exact reflected origin, never a literal wildcard.
         origin:
@@ -280,6 +280,7 @@ export function createApp(deps: AppDependencies) {
     if (deps.platform?.applications) {
       registerApplicationBuildImports(
         app,
+        deps.administration.store.source,
         new ApplicationBuildImports(
           deps.administration.store.source,
           new ApplicationPublishing(

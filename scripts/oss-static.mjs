@@ -18,6 +18,7 @@ const types = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -207,5 +208,5 @@ export async function publishBootstrap(root, settings, options = {}) {
 
 export async function publishSite(directory, settings, options) {
   const { files } = await collectBuildFiles(directory)
-  return publishFiles(files, settings, options)
+  return publishFiles(files, settings, { ...options, marker: 'web-version.json' })
 }

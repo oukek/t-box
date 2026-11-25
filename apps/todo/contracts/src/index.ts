@@ -7,7 +7,7 @@ export const manifest = {
   description: '个人待办、循环清单、长期计划与生活统计',
   icon: 'task',
   iconAsset: applicationIcon,
-  color: 'purple',
+  color: 'violet',
   version: '1.1.2',
   skillIds: [],
 } as const satisfies ApplicationManifest

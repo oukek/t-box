@@ -8,6 +8,7 @@ import type { DataSource, EntityManager } from 'typeorm'
 import type { ApplicationPlatform } from './service.js'
 import { createHash, randomUUID } from 'node:crypto'
 import {
+  publicationColors,
   validApplicationIcon,
   validateRelease,
   validateUpdatePrompt,
@@ -408,16 +409,7 @@ export class ApplicationPublishing {
     const color = text(b.color || 'blue', '图标颜色', 30)
     if (
       !/^[\w-]+$/.test(icon) ||
-      ![
-        'blue',
-        'green',
-        'violet',
-        'orange',
-        'rose',
-        'amber',
-        'cyan',
-        'teal',
-      ].includes(color)
+      !publicationColors.includes(color)
     ) {
       fail('图标或颜色无效')
     }

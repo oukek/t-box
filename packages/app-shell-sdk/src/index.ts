@@ -42,6 +42,7 @@ export interface ShellServices {
   backFromApplication(): void
   tabLabel(id: string): string
   openDevicePermissions(): void
+  openSystemVersion(): void
   openShortcuts(): void
   openAccountSettings(): void
   openProfile(): Promise<unknown>
@@ -130,6 +131,7 @@ export const openApplication = (value: unknown) => host().openApplication(value)
 export const backFromApplication = () => host().backFromApplication()
 export const tabLabel = (id: string) => host().tabLabel(id)
 export const openDevicePermissions = () => host().openDevicePermissions()
+export const openSystemVersion = () => host().openSystemVersion()
 export const openShortcuts = () => host().openShortcuts()
 export const openAccountSettings = () => host().openAccountSettings()
 export const openProfile = () => host().openProfile()

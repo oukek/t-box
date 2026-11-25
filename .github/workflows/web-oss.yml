@@ -8,6 +8,15 @@ on:
         type: choice
         default: all
         options: [all, app, admin]
+      ui_change:
+        description: 主界面版本递增方式（仅发布后台时保持默认）
+        type: choice
+        default: patch
+        options: [patch, minor, major, manual]
+      ui_version:
+        description: 手动目标版本（选 manual 时填写，如 1.1.15）
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -40,8 +49,17 @@ jobs:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
         run: node scripts/deploy-web-oss.mjs "$TARGET" --check
-      - name: Build, upload and verify websites
+      - name: Build shared error definitions
+        run: pnpm --filter @t-box/errors build
+      - name: Reserve main interface version
         env:
+          UI_CHANGE: ${{ inputs.ui_change }}
+          UI_VERSION: ${{ inputs.ui_version }}
+          APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
+        run: node scripts/reserve-web-version.mjs
+      - name: 提交主界面候选并部署选中的管理后台
+        env:
+          APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
         run: node scripts/deploy-web-oss.mjs "$TARGET"

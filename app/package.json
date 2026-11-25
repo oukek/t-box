@@ -32,13 +32,14 @@
     "@t-box/settings-contracts": "workspace:*",
     "@t-box/settings-web": "workspace:*",
     "@t-box/shared": "workspace:*",
+    "@t-box/shop-tools-shell": "workspace:*",
     "@t-box/time-shell": "workspace:*",
     "@t-box/ui-kit": "workspace:*",
+    "@tauri-apps/api": "^2.12.5",
     "dompurify": "^3.4.16",
     "marked": "^18.1.0",
     "qrcode": "^1.5.4",
-    "vue": "3.5.43",
-    "@t-box/shop-tools-shell": "workspace:*"
+    "vue": "3.5.43"
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",

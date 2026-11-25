@@ -1,0 +1,110 @@
+name: 桌面系统候选（macOS）
+on:
+  workflow_dispatch:
+    inputs:
+      components:
+        description: 构建组件（ui 界面，core 核心，both 联合）
+        type: choice
+        options: [both, ui, core]
+        required: true
+      ui_change:
+        description: 界面版本（patch、minor、major 或完整版本号）
+        default: patch
+      core_change:
+        description: 核心版本（patch、minor、major 或完整版本号）
+        default: patch
+      include_web:
+        description: 同时登记同版本网页 / PWA 候选（按渠道独立审核）
+        type: boolean
+        default: false
+      notes:
+        description: 给用户看的更新说明
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: desktop-system-candidates
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: desktop-release
+    env:
+      DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+      OSS_REGION: ${{ vars.OSS_REGION }}
+      INCLUDE_WEB: ${{ inputs.include_web }}
+      DESKTOP_MODE: ${{ inputs.components }}
+      TBOX_CORE_PUBLIC_KEY: ${{ vars.TBOX_CORE_PUBLIC_KEY }}
+      TBOX_UI_PUBLIC_KEY: ${{ vars.TBOX_UI_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - uses: pnpm/action-setup@v6
+      - run: pnpm install --frozen-lockfile
+      - run: node deploy/settings.mjs
+      - name: 获取线上基线并预留版本
+        run: node scripts/desktop-release.mjs reserve
+        env:
+          APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+          UI_CHANGE: ${{ inputs.ui_change }}
+          CORE_CHANGE: ${{ inputs.core_change }}
+      - name: 构建桌面界面
+        if: inputs.components != 'core' && env.DESKTOP_SUBMITTED != 'true'
+        run: VITE_API_BASE_URL="$API_BASE_URL" node scripts/desktop-release.mjs build-ui
+      - name: 签名界面包
+        if: inputs.components != 'core' && env.DESKTOP_SUBMITTED != 'true'
+        run: node scripts/desktop-release.mjs sign-ui
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TBOX_UI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TBOX_UI_KEY_PASSWORD }}
+      - name: 构建并签名桌面核心
+        if: inputs.components != 'ui' && env.DESKTOP_SUBMITTED != 'true'
+        run: node scripts/desktop-release.mjs build-core
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TBOX_CORE_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TBOX_CORE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      - name: 验证归档中的 Developer ID 签名与公证票据
+        if: inputs.components != 'ui' && env.DESKTOP_SUBMITTED != 'true'
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          verify_dir="$(mktemp -d)"
+          trap 'rm -rf "$verify_dir"' EXIT
+          tar -xzf 'desktop/src-tauri/target/release/bundle/macos/T方舟.app.tar.gz' -C "$verify_dir"
+          app="$verify_dir/T方舟.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          identity="$(codesign -dv --verbose=4 "$app" 2>&1)"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<< "$identity"
+          grep -q '^Authority=Developer ID Application:' <<< "$identity"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=4 "$app"
+      - name: 上传私有制品并登记待审核版本
+        if: env.DESKTOP_SUBMITTED != 'true'
+        run: node scripts/desktop-release.mjs submit
+        env:
+          RELEASE_NOTES: ${{ inputs.notes }}
+          APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+
+      - name: 登记同版本网页与 PWA 候选
+        if: inputs.include_web && env.WEB_SUBMITTED != 'true'
+        run: node scripts/deploy-web-oss.mjs app
+        env:
+          APP_IMPORT_TOKEN: ${{ secrets.APP_IMPORT_TOKEN }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}

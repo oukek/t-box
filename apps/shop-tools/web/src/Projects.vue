@@ -12,6 +12,12 @@ const props = defineProps<{ client: AppClient }>()
 const projects = ref<ProjectSummary[]>([])
 const current = ref<ProjectSummary>()
 const workspace = ref<InstanceType<typeof App>>()
+defineExpose({ beforeSystemUpdate: async () => {
+  if (document.querySelector('dialog[open] :is(input, textarea, [contenteditable=true])')) {
+    return false
+  }
+  return !workspace.value || await workspace.value.flushProject()
+} })
 const opened = ref(false)
 const managing = ref<ProjectSummary>()
 const form = ref('')

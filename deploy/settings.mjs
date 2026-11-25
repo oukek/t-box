@@ -32,7 +32,7 @@ export function deploymentEnvironment(input = process.env) {
     APP_IMPORT_API_URL: `${apiBase}/application-builds`,
     APP_OSS_PREFIX: applicationPrefix,
     APP_ARTIFACT_DELIVERY: 'oss',
-    // The optional Docker workflow uses the administration bucket's docker/ directory.
+    // Manual Docker release tools use the administration bucket's docker/ directory.
     OSS_BUCKET: buckets.admin,
     OSS_PREFIX: dockerPrefix,
   }

@@ -39,7 +39,7 @@ app.setErrorHandler((error, _r, reply) => {
   }
   return reply.code(500).send({ error: { code: 'INTERNAL_ERROR' } })
 })
-registerApplicationBuildImports(app, imports)
+registerApplicationBuildImports(app, source, imports)
 let admin = ''
 const credentialIds: string[] = []
 const files = [{ path: 'index.html', content: Buffer.from('<html>CI fixture</html>').toString('base64') }]
@@ -76,6 +76,13 @@ try {
   admin = await new AdminStore(source).createUser(username, await hashPassword('test123'))
   const credential = await createImportCredential(source, username, [appId], 1)
   credentialIds.push(credential.id)
+  const reserved = await app.inject({
+    method: 'POST',
+    url: '/api/v1/system-builds/reserve',
+    headers: { authorization: 'Bearer ' + credential.token },
+    payload: { batch: 'test/repo/1', commit: 'a'.repeat(40), ui: 'patch' },
+  })
+  assert.equal(reserved.statusCode, 401, 'per-application credentials cannot allocate system versions')
   const wrongScope = await createImportCredential(source, username, ['calculator'], 1)
   credentialIds.push(wrongScope.id)
   assert.equal((await call('invalid')).statusCode, 401)

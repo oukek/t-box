@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { ossSettings, publishSite } from './oss-static.mjs'
+import { stageWebRelease } from './stage-web-release.mjs'
 import { prepareWebVerification } from './web-verification.mjs'
 
 const target = process.argv[2] || 'all'
@@ -42,6 +43,8 @@ for (const { site, settings } of targets) {
   const directory = fileURLToPath(new URL('../' + site + '/dist/', import.meta.url))
   if (site === 'app') {
     await prepareWebVerification(cwd, directory, settings.origin)
+    await stageWebRelease(directory, settings, api)
+    continue
   }
   const verification = { ossOnly: false }
   await publishSite(directory, settings, { verification })

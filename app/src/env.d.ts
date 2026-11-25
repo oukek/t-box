@@ -11,5 +11,8 @@ interface ImportMetaEnv {
 }
 
 interface Window {
+  readonly __TBOX_DESKTOP_KEY__?: string
   Capacitor?: { isNativePlatform(): boolean, getPlatform?(): string }
 }
+
+declare const __WEB_BUILD_ID__: string

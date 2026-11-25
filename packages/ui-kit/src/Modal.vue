@@ -2,7 +2,7 @@
 import { handleDialogCancel } from './dialogCancel'
 import { useDialog } from './useDialog'
 
-const props = defineProps<{ open: boolean, title: string, busy?: boolean }>()
+const props = defineProps<{ open: boolean, title: string, busy?: boolean, hideClose?: boolean }>()
 const emit = defineEmits<{ close: [], opened: [] }>()
 const { dialog, closed } = useDialog(() => props.open, { opened: () => emit('opened') })
 </script>
@@ -22,6 +22,7 @@ const { dialog, closed } = useDialog(() => props.open, { opened: () => emit('ope
       <header class="dialog-heading">
         <h2 tabindex="-1" data-dialog-initial-focus>{{ title }}</h2>
         <button
+          v-if="!hideClose"
           type="button"
           class="icon-button"
           aria-label="关闭窗口"
