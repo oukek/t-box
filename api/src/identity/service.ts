@@ -14,6 +14,7 @@ import { LessThan } from 'typeorm'
 import { digest, hashPassword, verifyPassword } from '../admin/crypto.js'
 import { password } from '../admin/validation.js'
 import { ErrorCode } from '../error-codes.js'
+import { renewalExpiry, sessionDays } from './session-policy.js'
 
 export class IdentityService {
   private readonly touched = new Map<string, number>()
@@ -55,7 +56,7 @@ export class IdentityService {
     await db.getRepository(UserSessionEntity).insert({
       tokenHash: digest(token),
       userId: user.id,
-      expiresAt: () => 'DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 7 DAY)',
+      expiresAt: () => `DATE_ADD(UTC_TIMESTAMP(3),INTERVAL ${sessionDays(device)} DAY)`,
       device,
       lastSeenAt: () => 'UTC_TIMESTAMP(3)',
       sessionId: randomUUID(),
@@ -216,22 +217,31 @@ export class IdentityService {
       if (this.touched.size >= 5000) {
         this.touched.delete(this.touched.keys().next().value!)
       }
-      this.touched.set(sessionHash, now)
       await db
         .createQueryBuilder()
         .update('user_sessions')
-        .set({ lastSeenAt: () => 'UTC_TIMESTAMP(3)' })
+        .set({ lastSeenAt: () => 'UTC_TIMESTAMP(3)', expiresAt: () => renewalExpiry })
         .updateEntity(false)
         .where(
-          'token_hash=:p0 AND (last_seen_at IS NULL OR last_seen_at<DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 5 MINUTE))',
+          'token_hash=:p0 AND expires_at>UTC_TIMESTAMP(3) AND (last_seen_at IS NULL OR last_seen_at<DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 5 MINUTE))',
         )
         .setParameters({ p0: sessionHash })
         .execute()
+      this.touched.set(sessionHash, now)
     }
     return {
       user: { ...user, createdAt: isoTime(user.createdAt) },
       sessionHash,
     }
+  }
+
+  /** Upgrade valid legacy Mac logins after the updated client identifies itself. */
+  async current(token: string, client?: unknown) {
+    const actor = await this.authenticate(token)
+    if (client === 'mac') {
+      await this.source.manager.createQueryBuilder().update('user_sessions').set({ device: () => 'CONCAT(\'Mac 版 · \',device)', expiresAt: () => 'GREATEST(expires_at,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 30 DAY))' }).where('token_hash=:hash AND expires_at>UTC_TIMESTAMP(3) AND device NOT LIKE \'Mac 版 · %\' AND device NOT LIKE \'T方舟采集插件%\' AND device<>\'T方舟 快捷指令\'', { hash: actor.sessionHash }).execute()
+    }
+    return actor.user
   }
 
   async logout(principal: Principal) {

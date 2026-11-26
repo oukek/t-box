@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { listenForInstall } from './core/web-release/installPrompt'
 import { installCollectorBridge } from './features/identity/collectorBridge'
+import { installDesktopIdentity } from './features/identity/desktopIdentity'
 import { capturePromotionLink } from './features/promotions/attribution'
 import '@t-box/ui-kit/base.css'
 import './style.css'
@@ -26,6 +27,7 @@ if (openPath || location.pathname === '/open.html') {
   if (!window.__TBOX_DESKTOP_KEY__ && !window.Capacitor?.isNativePlatform?.()) {
     listenForInstall()
   }
+  installDesktopIdentity()
   installCollectorBridge()
   void Promise.all([import('./App.vue'), import('./applications/shellAdapter'), import('./core/app-runtime/localApplications'), window.__TBOX_DESKTOP_KEY__ && import('./core/web-release/desktopTransfer').then(({ readStartupTransfer }) => readStartupTransfer())]).then(([{ default: App }, { initializeApplicationShell }, { loadLocalApplications }]) => {
     void loadLocalApplications().finally(() => {

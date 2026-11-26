@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { AppIcon, BrandMark } from '@t-box/ui-kit'
 import { navigateTab, openApplication } from '../../core/navigation'
-import { showPasswordLogin, showWechatLogin, wechatLogin } from './wechatLogin'
+import { showWechatLogin, wechatLogin } from './wechatLogin'
 
 defineProps<{ title: string, description: string }>()
 </script>
@@ -31,7 +31,6 @@ defineProps<{ title: string, description: string }>()
         :disabled="wechatLogin.busy"
         @click="showWechatLogin"
       ><AppIcon name="chat" :size="19" />微信登录<AppIcon name="right" :size="16" /></button>
-      <button class="button button-secondary" @click="showPasswordLogin">账号密码登录</button>
       <span class="login-gate-note"><AppIcon name="lock" :size="13" />仅云端功能需要登录</span>
     </section>
   </div>

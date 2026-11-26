@@ -9,6 +9,9 @@ test('extension authentication isolates credentials and binds callbacks to its a
   let trusted = false
   let redeemCount = 0
   let revoked = 0
+  let wechatDisabled = false
+  let handoffRedeems = 0
+  const macUser = '11111111-1111-1111-1111-111111111111'
   const storage = (data: Record<string, unknown>) => ({
     async get(key: string) {
       return { [key]: data[key] }
@@ -38,6 +41,19 @@ test('extension authentication isolates credentials and binds callbacks to its a
   } })
   globalThis.fetch = async (url, options) => {
     const path = String(url)
+    if (path.endsWith('/collector/start') && wechatDisabled) {
+      return Response.json({ error: { message: 'disabled' } }, { status: 503 })
+    }
+    if (path.endsWith('/handoff/start')) {
+      return Response.json({ data: { id: '22222222-2222-2222-2222-222222222222' } })
+    }
+    if (path.endsWith('/handoff/redeem')) {
+      handoffRedeems++
+      const body = JSON.parse(String(options?.body))
+      assert.equal(body.target, 'collector')
+      assert.equal(body.userId, macUser)
+      return Response.json({ data: { token: 'mac-derived-token', user: { id: macUser, nickname: 'Mac 账号' } } })
+    }
     if (path.endsWith('/collector/start')) {
       return Response.json({ data: { id: 'b'.repeat(36), qrUrl: 'https://tboxos.cn/?wechatScan=fixture', expiresAt: new Date(Date.now() + 60_000).toISOString() } })
     }
@@ -75,6 +91,27 @@ test('extension authentication isolates credentials and binds callbacks to its a
     assert.equal(await authAction('account', {}), null)
     assert.equal(revoked, 1)
     assert.equal(local['collector.account.v1'], undefined)
+    wechatDisabled = true
+    await authAction('account-login', { mode: 'quick' })
+    const next = session['collector.authorization.v1'] as { nonce: string }
+    const nativeSend = (action: string, source = sender) => new Promise<{ ok: boolean, data?: unknown }>((resolve) => external({ action, nonce: next.nonce, userId: macUser }, source, resolve))
+    assert.equal((await nativeSend('collector-connect')).ok, true, 'Mac login must work even when QR configuration is unavailable')
+    assert.equal((await nativeSend('collector-desktop-complete')).ok, false)
+    assert.equal((await nativeSend('collector-desktop-start', { ...sender, tab: { id: 10 } })).ok, false)
+    assert.equal((await nativeSend('collector-desktop-start')).ok, true)
+    assert.equal((await nativeSend('collector-complete')).ok, false, 'Old QR cannot replace a Mac handoff')
+    assert.equal((await nativeSend('collector-desktop-complete')).ok, true)
+    assert.equal((await nativeSend('collector-desktop-complete')).ok, false)
+    assert.equal(handoffRedeems, 1)
+    assert.equal((local['collector.account.v1'] as unknown as { token: string }).token, 'mac-derived-token')
+    wechatDisabled = false
+    await authAction('account-login', { mode: 'quick' })
+    const retry = session['collector.authorization.v1'] as { nonce: string }
+    const retrySend = (action: string) => new Promise<{ ok: boolean, data?: unknown }>((resolve) => external({ action, nonce: retry.nonce, userId: macUser }, sender, resolve))
+    assert.equal((await retrySend('collector-desktop-start')).ok, true)
+    assert.equal((await retrySend('collector-qr-start')).ok, true, 'Switching away from Mac creates a fresh QR proof')
+    assert.equal((await retrySend('collector-desktop-complete')).ok, false, 'Stale Mac handoff cannot replace the selected QR login')
+    assert.equal((await retrySend('collector-complete')).ok, true)
   } finally {
     globalThis.fetch = previousFetch
     globalThis.chrome = previousChrome

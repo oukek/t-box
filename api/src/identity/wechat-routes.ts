@@ -3,6 +3,7 @@ import type { PlatformService } from '../platform/service.js'
 import { ErrorCode } from '../error-codes.js'
 import { deviceLabel } from './security.js'
 import { bearer } from './service.js'
+import { sessionDevice } from './session-policy.js'
 import { collectorDevice } from './wechat-login.js'
 
 export function registerWechatLogin(app: FastifyInstance, platform: PlatformService) {
@@ -17,7 +18,7 @@ export function registerWechatLogin(app: FastifyInstance, platform: PlatformServ
       reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer')
     })
     scope.get('/configuration', async () => ({ data: { enabled: (await service().configuration.view()).enabled } }))
-    scope.post('/start', async (request) => ({ data: await service().start(request.body, request.ip, deviceLabel(request.headers['user-agent'])) }))
+    scope.post('/start', async (request) => ({ data: await service().start(request.body, request.ip, sessionDevice(deviceLabel(request.headers['user-agent']), request.headers['x-tbox-client'])) }))
     scope.post('/collector/start', async (request) => {
       const body = request.body as { secret?: unknown } | null
       return { data: await service().start({ kind: 'qr', secret: body?.secret }, request.ip, collectorDevice) }

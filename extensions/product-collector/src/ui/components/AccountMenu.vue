@@ -5,7 +5,6 @@ import { extension, request } from '../api'
 
 interface User { id: string, nickname: string, avatarUrl?: string }
 const user = ref<User | null>(null)
-const candidate = ref<User | null>(null)
 const open = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -27,7 +26,6 @@ async function show() {
   busy.value = true
   try {
     await refresh()
-    candidate.value = extension ? await request<User | null>('account-candidate') : null
   } catch (cause) {
     error.value = String(cause)
   } finally {
@@ -113,10 +111,10 @@ onBeforeUnmount(() => {
       </template>
       <template v-else>
         <p>
-          登录方舟账号，继续使用采集插件。
+          优先使用 Mac 版账号，其次使用浏览器账号，也可微信扫码登录。
         </p>
         <button :disabled="busy" @click="login('quick')">
-          {{ candidate ? `以 ${candidate.nickname} 登录` : '登录 / 使用浏览器账号' }}
+          登录 / 使用本机账号
         </button>
         <button :disabled="busy" @click="login('other')">
           微信扫码登录其他账号

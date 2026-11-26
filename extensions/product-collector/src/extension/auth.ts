@@ -4,7 +4,7 @@ const KEY = 'collector.account.v1'
 const PENDING = 'collector.authorization.v1'
 interface User { id: string, nickname: string, avatarUrl?: string }
 interface Account { token: string, user: User }
-interface Attempt { id: string, secret: string, qrUrl: string, expiresAt: string, nonce: string, mode: string, tabId?: number, windowId?: number }
+interface Attempt { id?: string, secret: string, qrUrl?: string, qrError?: string, desktop?: { id: string, secret: string, userId: string }, expiresAt: string, nonce: string, mode: string, tabId?: number, windowId?: number }
 const storageReady = chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })
 let queue = Promise.resolve<unknown>(undefined)
 function serialize<T>(job: () => Promise<T>): Promise<T> {
@@ -33,7 +33,9 @@ async function cancel() {
     return
   }
   await chrome.storage.session.remove(PENDING)
-  await api('/auth/wechat/cancel', { id: attempt.id, secret: attempt.secret }).catch(() => {})
+  if (attempt.id) {
+    await api('/auth/wechat/cancel', { id: attempt.id, secret: attempt.secret }).catch(() => {})
+  }
   if (attempt.windowId !== undefined) {
     await chrome.windows.remove(attempt.windowId).catch(() => {})
   }
@@ -75,7 +77,13 @@ export async function authAction(action: string, message: Record<string, unknown
     if (action === 'account-login') {
       await cancel()
       const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)), (n) => n.toString(16).padStart(2, '0')).join('')
-      const flow = await api<Pick<Attempt, 'id' | 'qrUrl' | 'expiresAt'>>('/auth/wechat/collector/start', { secret })
+      let flow: Pick<Attempt, 'id' | 'qrUrl' | 'expiresAt' | 'qrError'>
+      try {
+        flow = await api('/auth/wechat/collector/start', { secret })
+      } catch {
+        // Mac handoff works independently of WeChat configuration.
+        flow = { expiresAt: new Date(Date.now() + 300_000).toISOString(), qrError: '微信扫码暂不可用，可使用 Mac 版快捷登录。' }
+      }
       const attempt: Attempt = { ...flow, secret, nonce: crypto.randomUUID(), mode: message.mode === 'other' ? 'other' : 'quick' }
       await chrome.storage.session.set({ [PENDING]: attempt })
       try {
@@ -114,11 +122,40 @@ chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
       throw new Error('授权窗口已失效，请从采集插件重新登录')
     }
     if (message.action === 'collector-connect') {
-      const { id, secret, qrUrl, expiresAt, mode } = attempt
-      return { id, secret, qrUrl, expiresAt, mode }
+      const { id, secret, qrUrl, expiresAt, mode, qrError } = attempt
+      return { id, secret, qrUrl, expiresAt, mode, qrError }
     }
-    if (message.action === 'collector-complete') {
-      const next = await api<Account>('/auth/wechat/collector/redeem', { id: attempt.id, secret: attempt.secret })
+    if (message.action === 'collector-qr-start') {
+      const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)), (n) => n.toString(16).padStart(2, '0')).join('')
+      const flow = await api<{ id: string, qrUrl: string, expiresAt: string }>('/auth/wechat/collector/start', { secret })
+      if (attempt.id) {
+        await api('/auth/wechat/cancel', { id: attempt.id, secret: attempt.secret }).catch(() => {})
+      }
+      const next = { ...attempt, ...flow, secret, desktop: undefined, qrError: undefined }
+      await chrome.storage.session.set({ [PENDING]: next })
+      return { ...flow, secret, mode: 'other' }
+    }
+    if (message.action === 'collector-desktop-start') {
+      if (typeof message.userId !== 'string' || !/^[a-f0-9-]{36}$/.test(message.userId)) {
+        throw new Error('Mac 版账号无效')
+      }
+      const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)), (n) => n.toString(16).padStart(2, '0')).join('')
+      const flow = await api<{ id: string }>('/auth/handoff/start', { secret, target: 'collector' })
+      if (attempt.id) {
+        await api('/auth/wechat/cancel', { id: attempt.id, secret: attempt.secret }).catch(() => {})
+      }
+      attempt.desktop = { id: flow.id, secret, userId: message.userId }
+      await chrome.storage.session.set({ [PENDING]: attempt })
+      return { id: flow.id, secret, target: 'collector' }
+    }
+    if (message.action === 'collector-complete' || message.action === 'collector-desktop-complete') {
+      const desktop = message.action === 'collector-desktop-complete'
+      if (desktop !== !!attempt.desktop || (!desktop && !attempt.id)) {
+        throw new Error('登录方式已变化，请重新登录')
+      }
+      const next = desktop
+        ? await api<Account>('/auth/handoff/redeem', { ...attempt.desktop, target: 'collector' })
+        : await api<Account>('/auth/wechat/collector/redeem', { id: attempt.id, secret: attempt.secret })
       const previous = await account()
       await chrome.storage.local.set({ [KEY]: next })
       await chrome.storage.session.remove(PENDING)

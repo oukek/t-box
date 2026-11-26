@@ -2,5 +2,5 @@
   "identifier": "main",
   "description": "本地桌面主界面读取版本并管理已校验的子应用资源",
   "windows": ["main"],
-  "permissions": ["allow-check-system","allow-desktop-transfer","allow-apply-system","allow-system-ready","allow-desktop-version", "allow-prepare-package", "allow-open-package", "allow-remove-package"]
+  "permissions": ["allow-desktop-login-identity","allow-check-system","allow-desktop-transfer","allow-apply-system","allow-system-ready","allow-desktop-version", "allow-prepare-package", "allow-open-package", "allow-remove-package"]
 }

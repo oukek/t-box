@@ -25,6 +25,7 @@ import {
   DesktopAppearanceEntity,
   DesktopLayoutEntity,
 } from '../desktop/entity.js'
+import { LoginHandoff } from '../identity/login-handoff.js'
 import { PasswordAccount } from '../identity/password-accounts.js'
 import { UserProfileEntity } from '../identity/profile-entity.js'
 import { wechatIdentityEntities } from '../identity/wechat-entities.js'
@@ -263,6 +264,7 @@ export const entities = [
   SystemDesktopCandidate,
   ...promotionEntities,
   CheckoutLinkEntity,
+  LoginHandoff,
   PasswordAccount,
   WechatUnionIdentity,
   UserProfileEntity,

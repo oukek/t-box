@@ -1,4 +1,3 @@
-import { shopCreativeModel } from '../applications/shop-creative.js'
 import type { DataSource } from 'typeorm'
 import type { ConfigurationService } from '../admin/service.js'
 import type { WechatAccountConfiguration } from '../identity/wechat-configuration.js'
@@ -15,9 +14,9 @@ import { LedgerAccess } from '@t-box/ledger-server/ledgers/access'
 import { createLedgerRows } from '@t-box/ledger-server/ledgers/create'
 import { LedgerService } from '@t-box/ledger-server/ledgers/service'
 import { StatisticsService } from '@t-box/ledger-server/statistics/service'
-import { TodoService } from '@t-box/todo-server'
 import { ShopToolsService } from '@t-box/shop-tools-server'
 import { TimeService } from '@t-box/time-server/service'
+import { TodoService } from '@t-box/todo-server'
 import { ResourceAccessRegistry } from '../agent/access.js'
 import { ApplicationCatalogMonitor } from '../application-platform/catalog-monitor.js'
 import {
@@ -29,12 +28,14 @@ import { HostDownloadConfiguration } from '../application-platform/download-sett
 import { ApplicationPlatform } from '../application-platform/service.js'
 import { ApplicationMarketPolicy } from '../application-platform/settings.js'
 import { createApplicationResourceAdapters } from '../applications/registry.js'
+import { shopCreativeModel } from '../applications/shop-creative.js'
 import { ProviderConcurrency } from '../billing/concurrency.js'
 import { BillingPricingService } from '../billing/pricing.js'
 import { BillingService } from '../billing/service.js'
 import { ConversationArchive } from '../chat/archive.js'
 import { DesktopService } from '../desktop/service.js'
 import { AvatarService } from '../identity/avatars.js'
+import { LoginHandoffService } from '../identity/login-handoff.js'
 import { AccountSecurityService } from '../identity/security.js'
 import { IdentityService } from '../identity/service.js'
 import { WechatLoginService } from '../identity/wechat-login.js'
@@ -72,6 +73,7 @@ export class PlatformService {
   readonly tasks: TaskStore
   readonly notifications: NotificationService
   readonly operations: OperationsService
+  readonly loginHandoff: LoginHandoffService
   readonly identity: IdentityService
   readonly promotions: PromotionService
   readonly wechatLogin?: WechatLoginService
@@ -117,7 +119,7 @@ export class PlatformService {
     this.applications.bind('calculator', calculatorBackend)
     this.applications.bind('converter', converterBackend)
     this.applications.bind('todo', new TodoService(source).backend())
-    this.applications.bind('shop-tools', new ShopToolsService(source, r => shopCreativeModel(this, configuration, r)).backend())
+    this.applications.bind('shop-tools', new ShopToolsService(source, (r) => shopCreativeModel(this, configuration, r)).backend())
     this.desktop = new DesktopService(source, this.applications)
     this.calendar = new CalendarService(source, configuration?.cache)
     this.time = new TimeService(source)
@@ -155,6 +157,7 @@ export class PlatformService {
     // fixtures can construct the platform without an external identity provider.
     this.identity = new IdentityService(source, (db, userId) =>
       createLedgerRows(db, userId, { name: '我的账本', template: 'daily' }), wechatAccount ? 'wechat' : 'internal')
+    this.loginHandoff = new LoginHandoffService(source, this.identity)
     this.resources = resources ?? new ResourceService(source)
     this.promotions = new PromotionService(source, wechatAccount, new PromotionCreativeService(source, this.resources.storage))
     if (wechatAccount) {

@@ -1,6 +1,6 @@
 import type { WechatLoginFlow, WechatLoginResult } from '@t-box/shared'
 import QRCode from 'qrcode'
-import { reactive, readonly, ref } from 'vue'
+import { reactive, readonly } from 'vue'
 import { request } from '../../core/network'
 import { watchQrState } from '../../core/qrSocket'
 import { setSession } from '../../core/session'
@@ -287,6 +287,20 @@ export async function copyWechatLink() {
     state.error = '无法自动复制，请长按下方链接手动复制。'
   }
 }
+export function pauseForDesktopLogin() {
+  stopWechatUpdates()
+  if (current?.kind === 'qr') {
+    void call('cancel', proof()).catch(() => {})
+  }
+  current = null
+  state.phase = 'idle'
+  state.busy = false
+  state.error = ''
+  state.qr = ''
+  state.qrUrl = ''
+  state.result = null
+  forget()
+}
 export function closeWechatLogin() {
   authorizationReturnHash = undefined
   authorizationCheckoutTicket = undefined
@@ -303,11 +317,6 @@ export function closeWechatLogin() {
   current = null
   scanId = undefined
   forget()
-}
-export const passwordLoginOpen = ref(false)
-export function showPasswordLogin() {
-  closeWechatLogin()
-  passwordLoginOpen.value = true
 }
 export async function showWechatLogin() {
   state.purpose = 'login'

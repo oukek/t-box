@@ -1,6 +1,7 @@
 import { SdkErrorCode } from '@t-box/app-sdk'
 import { RequestError } from '@t-box/app-shell-sdk'
 import { ErrorCode } from '../error-codes.js'
+import { clientKind } from './clientKind'
 import { createRequestId } from './identifiers'
 import { identity, setSession } from './session'
 
@@ -60,6 +61,7 @@ export async function request<T>(
       ...fetchOptions,
       signal: controller.signal,
       headers: {
+        'X-Tbox-Client': clientKind(),
         ...(token
           ? { Authorization: `Bearer ${token}` }
           : {}),

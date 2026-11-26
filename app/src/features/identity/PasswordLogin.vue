@@ -5,14 +5,16 @@ import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { ref } from 'vue'
 import { request } from '../../core/network'
 import { setSession } from '../../core/session'
+import DesktopQuickLogin from './DesktopQuickLogin.vue'
 
 const emit = defineEmits<{ close: [] }>()
 const username = ref('')
 const password = ref('')
 const busy = ref(false)
+const desktopBusy = ref(false)
 const error = ref('')
 async function submit() {
-  if (busy.value) {
+  if (busy.value || desktopBusy.value) {
     return
   }
   busy.value = true
@@ -36,9 +38,14 @@ async function submit() {
   <Modal
     open
     title="账号密码登录"
-    :busy="busy"
-    @close="!busy && emit('close')"
+    :busy="busy || desktopBusy"
+    @close="!busy && !desktopBusy && emit('close')"
   >
+    <DesktopQuickLogin
+      :disabled="busy"
+      @busy="desktopBusy = $event"
+      @login="(session) => { setSession(session); emit('close') }"
+    />
     <form class="password-login" @submit.prevent="submit">
       <label>账号<FormControl
         v-model="username"
@@ -62,7 +69,7 @@ async function submit() {
       <button
         type="submit"
         class="button button-primary"
-        :disabled="busy"
+        :disabled="busy || desktopBusy"
       >{{ busy ? '正在登录…' : '登录' }}</button>
     </form>
   </Modal>

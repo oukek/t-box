@@ -1,3 +1,5 @@
+mod login_bridge;
+use login_bridge::{desktop_login_identity, LoginBridge};
 mod packages;
 mod server;
 mod system_ui;
@@ -147,6 +149,7 @@ fn main() {
             let system_dir = app.path().app_local_data_dir()?.join("system");
             app.manage(Updates::new(system_dir, active));
             app.state::<Updates>().boot(app.handle());
+            app.manage(LoginBridge::start());
             let key = Uuid::new_v4().to_string();
             let root = app.path().app_local_data_dir()?.join("applications");
             app.manage(Arc::new(Desktop {
@@ -168,6 +171,7 @@ fn main() {
             apply_system,
             desktop_transfer,
             system_ready,
+            desktop_login_identity,
             desktop_version,
             prepare_package,
             open_package,

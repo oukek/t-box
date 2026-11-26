@@ -4,6 +4,7 @@ import { registerLedger } from '@t-box/ledger-server'
 import { ErrorCode } from '../error-codes.js'
 import { deviceLabel } from '../identity/security.js'
 import { bearer } from '../identity/service.js'
+import { sessionDevice } from '../identity/session-policy.js'
 import { registerWechatLogin } from '../identity/wechat-routes.js'
 import { registerPromotions } from '../promotions/routes.js'
 
@@ -37,12 +38,23 @@ export function registerPlatform(app: FastifyInstance, p: PlatformService) {
   })
   app.post('/api/v1/auth/password/login', async (req, reply) => {
     reply.header('Cache-Control', 'no-store')
-    return { data: await p.identity.login(req.body, req.ip, deviceLabel(req.headers['user-agent']), true) }
+    return { data: await p.identity.login(req.body, req.ip, sessionDevice(deviceLabel(req.headers['user-agent']), req.headers['x-tbox-client']), true) }
   })
+  app.register(async (scope) => {
+    scope.addHook('onRequest', async (_request, reply) => {
+      reply.header('Cache-Control', 'no-store')
+    })
+    scope.post('/start', async (req) => ({ data: await p.loginHandoff.start(req.body, req.ip) }))
+    scope.post('/approve', async (req, reply) => {
+      await p.loginHandoff.approve(req.body, bearer(req.headers.authorization))
+      return reply.code(204).send()
+    })
+    scope.post('/redeem', async (req) => ({ data: await p.loginHandoff.redeem(req.body, req.headers['x-tbox-client']) }))
+  }, { prefix: '/api/v1/auth/handoff' })
   registerWechatLogin(app, p)
   registerPromotions(app, p)
   app.get('/api/v1/auth/me', async (req) => ({
-    data: (await principal(req)).user,
+    data: await p.identity.current(bearer(req.headers.authorization), req.headers['x-tbox-client']),
   }))
   app.patch('/api/v1/auth/me', async (req) => ({
     data: await p.identity.updateProfile(await principal(req), req.body),

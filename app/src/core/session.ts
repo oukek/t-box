@@ -1,8 +1,9 @@
 import type { AppUser, UserSession } from '@t-box/shared'
 import { reactive, readonly } from 'vue'
+import { clientKind } from './clientKind'
 import { clearLocalAccount, readLocalProfile, saveLocalProfile } from './localAccount'
 
-const storageKey = 'tbox.identity.wechat.v1'
+const storageKey = clientKind() === 'pwa' ? 'tbox.identity.pwa.v1' : 'tbox.identity.wechat.v1'
 const state = reactive({
   token: '',
   user: null as AppUser | null,

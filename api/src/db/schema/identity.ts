@@ -1,4 +1,5 @@
 import type { DatabaseSchema } from '@t-box/server-foundation/persistence/schema'
+import { loginHandoffExtension } from '../../identity/login-handoff.js'
 import { passwordAccountsExtension } from '../../identity/password-accounts.js'
 import { userProfileExtension } from '../../identity/profile-entity.js'
 import { wechatAuthorizationExtension, wechatIdentityExtension } from '../../identity/wechat-schema.js'
@@ -7,7 +8,7 @@ import { promotionCreativeExtension, promotionExtension } from './promotions.js'
 
 export const identitySchema: DatabaseSchema = {
   id: 'identity',
-  extensions: [wechatIdentityExtension, userProfileExtension, wechatAuthorizationExtension, promotionExtension, promotionCreativeExtension, passwordAccountsExtension, wechatUnionExtension],
+  extensions: [loginHandoffExtension, wechatIdentityExtension, userProfileExtension, wechatAuthorizationExtension, promotionExtension, promotionCreativeExtension, passwordAccountsExtension, wechatUnionExtension],
   tables: [
     `CREATE TABLE admin_sessions (
       token_hash char(64) NOT NULL,
