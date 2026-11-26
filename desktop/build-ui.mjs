@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { releaseVersions } from '../scripts/release-versions.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const api = new URL(process.env.VITE_API_BASE_URL || 'https://api.tboxos.cn/api/v1')
@@ -12,7 +13,7 @@ for (const args of [
   ['--filter', '@t-box/app', 'typecheck'],
   ['--filter', '@t-box/app', 'exec', 'vite', 'build', '--mode', 'desktop', '--outDir', '../desktop/dist', '--emptyOutDir'],
 ]) {
-  const result = spawnSync('pnpm', args, { cwd: root, stdio: 'inherit', env: { ...process.env, VITE_API_BASE_URL: api.href } })
+  const result = spawnSync('pnpm', args, { cwd: root, stdio: 'inherit', env: { ...process.env, TBOX_UI_VERSION: process.env.TBOX_UI_VERSION ?? releaseVersions.ui, VITE_API_BASE_URL: api.href } })
   if (result.status !== 0) {
     process.exit(result.status || 1)
   }

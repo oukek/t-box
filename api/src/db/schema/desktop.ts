@@ -46,6 +46,18 @@ export const desktopSchema: DatabaseSchema = {
       build char(36) NOT NULL PRIMARY KEY,
       notes text NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`],
+  }, {
+    id: '2026-11-26.independent-release-channels',
+    tables: [`CREATE TABLE channel_version_reservations (
+      batch varchar(160) NOT NULL PRIMARY KEY,
+      request_hash char(64) NOT NULL,
+      build char(36) NOT NULL UNIQUE,
+      channel varchar(8) NOT NULL,
+      ui varchar(96) DEFAULT NULL,
+      core varchar(96) DEFAULT NULL,
+      UNIQUE KEY channel_ui_version (channel,ui),
+      UNIQUE KEY channel_core_version (channel,core)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`],
   }],
   tables: [
     `CREATE TABLE user_desktop_appearance (

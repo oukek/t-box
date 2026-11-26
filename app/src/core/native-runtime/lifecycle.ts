@@ -16,6 +16,8 @@ export function startNativeRuntime() {
   }
   let disposed = false
   const lifetime = new AbortController()
+  let promptedLogin = ''
+  let shownDetails = ''
   let processing = false
   let syncing: Promise<void> | undefined
   let dirty = false
@@ -34,6 +36,21 @@ export function startNativeRuntime() {
           return
         }
         if (item.subject && item.subject !== identity.user?.id) {
+          continue
+        }
+        if (item.catalogLink && !isInstalled(item.appId)) {
+          if (!identity.user) {
+            if (promptedLogin !== item.id) {
+              promptedLogin = item.id
+              await openApplication({ appId: 'profile' })
+            }
+            break
+          }
+          const entry = appCatalog.entries.find((entry) => entry.release.appId === item.appId)
+          if (entry && !appCatalog.marketHidden && shownDetails !== item.id) {
+            shownDetails = item.id
+            await openApplication({ appId: 'market', params: { appId: item.appId } })
+          }
           continue
         }
         if (!isInstalled(item.appId) || !applicationModules.some((module) => module.manifest.id === item.appId)) {

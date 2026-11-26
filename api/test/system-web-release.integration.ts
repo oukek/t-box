@@ -31,7 +31,7 @@ const storage = {
   },
 }
 async function prepare(id: number, extra = 'asset.js') {
-  const { build, ui: version } = await reserveSystemVersions(source, { batch: 'fixture/repo/' + id, commit: 'a'.repeat(40), ui: 'patch' })
+  const { build, ui: version } = await reserveSystemVersions(source, { batch: 'fixture/repo/' + id, commit: 'a'.repeat(40), channel: 'web', ui: 'patch' })
   const files = [
     { path: 'web-version.json', value: JSON.stringify({ build, version }) },
     { path: 'index.html', value: '<html>fixture</html>' },

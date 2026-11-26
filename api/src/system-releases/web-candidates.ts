@@ -2,9 +2,12 @@ import type { DataSource } from 'typeorm'
 import type { WebStorage } from './web-storage.js'
 import { compareSystemVersions } from '@t-box/app-contracts'
 import { In } from 'typeorm'
-import { SystemVersionReservation, SystemWebCandidate, SystemWebReleaseNotes } from '../db/records/system-versions.js'
+import { ChannelVersionReservation, SystemDesktopCandidate, SystemVersionCursor, SystemWebCandidate, SystemWebReleaseNotes } from '../db/records/system-versions.js'
 import { ErrorCode } from '../error-codes.js'
+import { desktopStorage } from './desktop-artifacts.js'
+import { activateDesktop, verifyPair } from './desktop-candidates.js'
 import { publicationNotes } from './release-notes.js'
+import { findChannelReservation } from './reserve.js'
 
 import { readCandidate, webStorage } from './web-storage.js'
 
@@ -14,15 +17,15 @@ export async function registerWebCandidate(source: DataSource, input: unknown, s
   if (typeof build !== 'string' || !uuid.test(build) || typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) {
     throw ErrorCode.INVALID_APP_BUILD('候选构建编号或摘要无效')
   }
-  const reservation = await source.manager.findOneBy(SystemVersionReservation, { build })
+  const reservation = await findChannelReservation(source.manager, build, 'web')
   if (!reservation?.ui) {
     throw ErrorCode.INVALID_APP_BUILD('需要已预留的主界面版本')
   }
   const version = reservation.ui
   const { files, total } = await readCandidate(storage ?? webStorage(), build, digest, version)
   return source.transaction(async (db) => {
-    const currentReservation = await db.findOneOrFail(SystemVersionReservation, { where: { build }, lock: { mode: 'pessimistic_write' } })
-    if (currentReservation.ui !== version) {
+    const currentReservation = await findChannelReservation(db, build, 'web', true)
+    if (currentReservation?.ui !== version) {
       throw ErrorCode.SYSTEM_VERSION_CONFLICT('该构建已被同版本的新候选取代')
     }
     const existing = await db.findOneBy(SystemWebCandidate, { build })
@@ -53,10 +56,12 @@ export async function listWebCandidates(source: DataSource) {
       Object.assign(row, { notes: details.notes })
     }
   }
-  return { current, interrupted, candidates }
+  const reservations = await source.manager.findBy(ChannelVersionReservation, { channel: 'shared', build: In(candidates.map((row) => row.build)) })
+  const shared = new Map(reservations.map((row) => [row.build, row.core]))
+  return { current, interrupted, candidates: candidates.map((row) => ({ ...row, shared: shared.has(row.build), coreVersion: shared.get(row.build) ?? null })) }
 }
 
-export async function promoteWebCandidate(source: DataSource, build: string, expected: unknown, actor: string, notesInput: unknown, storage?: WebStorage) {
+export async function promoteWebCandidate(source: DataSource, build: string, expected: unknown, actor: string, notesInput: unknown, storage?: WebStorage, desktopStore?: ReturnType<typeof desktopStorage>) {
   if (!uuid.test(build) || (expected !== null && (typeof expected !== 'string' || !uuid.test(expected)))) {
     throw ErrorCode.INVALID_APP_BUILD('请刷新列表并重新核对线上版本')
   }
@@ -90,7 +95,25 @@ export async function promoteWebCandidate(source: DataSource, build: string, exp
     const { files } = await readCandidate(store, build, candidate.digest, candidate.version)
     const previous = candidate.state !== 'pending' && await db.findOneBy(SystemWebReleaseNotes, { build })
     const notes = previous ? previous.notes : publicationNotes(notesInput)
+    const reservation = await findChannelReservation(db, build, 'web')
+    const shared = reservation?.channel === 'shared'
+    const desktop = shared ? await db.findOneBy(SystemDesktopCandidate, { build, state: 'pending' }) : null
+    if (shared) {
+      if (!desktop || desktop.ui.build !== build || desktop.ui.version !== candidate.version) {
+        throw ErrorCode.SYSTEM_VERSION_CONFLICT('同批次 Mac 界面尚未就绪，请先完成构建')
+      }
+      await verifyPair(source, desktop, desktopStore ?? desktopStorage())
+    }
     await db.transaction(async (tx) => {
+      await tx.findOneOrFail(SystemVersionCursor, { where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
+      if (desktop) {
+        const live = await tx.findOneBy(SystemDesktopCandidate, { state: 'live' })
+        if ((live?.build ?? null) !== desktop.base) {
+          throw ErrorCode.SYSTEM_VERSION_CONFLICT('Mac 基线已变化，请使用当前核心重新构建主界面')
+        }
+      } else if (candidate.state === 'pending' && await tx.existsBy(ChannelVersionReservation, { channel: 'shared' })) {
+        throw ErrorCode.SYSTEM_VERSION_CONFLICT('请重新运行主界面构建工作流')
+      }
       const claimed = await tx.update(SystemWebCandidate, { build, state: candidate.state }, { state: 'publishing', actor })
       if (!claimed.affected) {
         throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选已失效，请刷新列表')
@@ -105,6 +128,10 @@ export async function promoteWebCandidate(source: DataSource, build: string, exp
         await store.write(path, files.get(path)!)
       }
       await db.transaction(async (tx) => {
+        if (desktop) {
+          await tx.findOneOrFail(SystemVersionCursor, { where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
+          await activateDesktop(tx, desktop, actor, notes)
+        }
         if (current) {
           await tx.update(SystemWebCandidate, { build: current.build }, { state: 'archived' })
         }

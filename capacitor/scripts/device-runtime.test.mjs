@@ -13,7 +13,7 @@ test('navigation configuration validates origins and preserves payment URL schem
   assert.equal(info.CFBundleURLTypes.length, 2)
   assert.equal(navigationInfo(info, config).CFBundleURLTypes.length, 2)
   const association = navigationAssociation(config, 'com.tbox.app', { applinks: { details: [{ appID: 'ABCDE12345.com.tbox.app', paths: ['/wechat/*'] }] } })
-  assert.deepEqual(association.applinks.details[0].paths, ['/wechat/*', '/open/*'])
+  assert.deepEqual(association.applinks.details[0].paths, ['/wechat/*', '/open/*', '/open.html'])
   for (const origin of ['http://tbox.example.com', 'https://tbox.example.com/path', 'https://tbox.example.com/?token=x', 'https://user:password@tbox.example.com']) {
     assert.throws(() => validateNavigationConfig({ universalLinkOrigin: origin, iosTeamId: 'ABCDE12345' }))
   }

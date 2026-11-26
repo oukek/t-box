@@ -28,7 +28,7 @@ test('two public settings provide isolated sites and the fixed OSS layout to eve
   assert.equal(generated.OSS_BUCKET, generated.ADMIN_OSS_BUCKET)
   assert.equal(generated.APP_OSS_PREFIX, 'builds')
   assert.equal(generated.OSS_PREFIX, 'docker')
-  for (const name of ['web-oss', 'application-release', 'api-pm2']) {
+  for (const name of ['admin-oss', 'application-release', 'api-pm2']) {
     const workflow = await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8')
     assert.deepEqual([...new Set([...workflow.matchAll(/\$\{\{ vars\.(\w+)/g)].map((match) => match[1]))].sort(), ['DEPLOY_DOMAIN', 'OSS_REGION'], name)
     assert.ok(workflow.includes('run: node deploy/settings.mjs'), name)
@@ -470,14 +470,14 @@ test('WeChat AASA publication preserves other applications and requires the fron
   await prepareWebVerification(root, dist, webOrigin)
   await prepareWebVerification(root, dist, webOrigin)
   const result = JSON.parse(await readFile(join(dist, '.well-known/apple-app-site-association'), 'utf8'))
-  assert.deepEqual(result.applinks.details, [{ appID: 'OTHER.app', paths: ['/other/*'] }, { appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/existing/*', '/open/*', '/wechat/*'] }])
+  assert.deepEqual(result.applinks.details, [{ appID: 'OTHER.app', paths: ['/other/*'] }, { appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/existing/*', '/open/*', '/wechat/*', '/open.html'] }])
   await assert.rejects(prepareWebVerification(root, dist, 'https://box.tboxos.cn'), /WEB_ORIGIN/)
   await assert.rejects(prepareWebVerification(root, dist, 'https://other.example.com'), /WEB_ORIGIN/)
   await writeFile(join(root, 'capacitor/wechat.config.json'), JSON.stringify({ enabled: false, appId: '', iosTeamId: '', universalLink: '' }))
   await rm(join(dist, '.well-known/apple-app-site-association'))
   await prepareWebVerification(root, dist, webOrigin)
   const navigationOnly = JSON.parse(await readFile(join(dist, '.well-known/apple-app-site-association'), 'utf8'))
-  assert.deepEqual(navigationOnly.applinks.details, [{ appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/open/*'] }])
+  assert.deepEqual(navigationOnly.applinks.details, [{ appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/open/*', '/open.html'] }])
 })
 
 test('web deployment writes only the immutable private candidate and registers its exact digest', async () => {

@@ -14,11 +14,13 @@ import './workspace.css'
 // Universal Link fallback when the native app is not installed.
 capturePromotionLink()
 const openPath = /^\/open\/([a-z][a-z0-9_-]{0,63})\/?$/.exec(location.pathname)
-if (openPath) {
-  history.replaceState(null, '', `/#/applications/${openPath[1]}${location.search}`)
-}
-
-if (location.hash.startsWith('#collector-login=')) {
+if (openPath || location.pathname === '/open.html') {
+  const id = openPath?.[1] ?? new URLSearchParams(location.search).get('app') ?? ''
+  const appId = /^[a-z][a-z0-9_-]{0,63}$/.test(id) ? id : ''
+  void import('./core/native-runtime/ApplicationLink.vue').then(({ default: ApplicationLink }) => {
+    createApp(ApplicationLink, { appId }).mount('#app')
+  })
+} else if (location.hash.startsWith('#collector-login=')) {
   void import('./features/identity/CollectorLogin.vue').then(({ default: CollectorLogin }) => createApp(CollectorLogin).mount('#app'))
 } else {
   if (import.meta.env.PROD && !window.__TBOX_DESKTOP_KEY__ && !window.Capacitor?.isNativePlatform?.()) {

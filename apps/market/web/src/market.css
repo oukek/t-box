@@ -157,6 +157,7 @@
   border-color: #dbe8e1;
 }
 .market-card-identity {
+  text-decoration: none;
   min-width: 0;
   display: flex;
   align-items: center;

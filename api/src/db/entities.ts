@@ -32,7 +32,7 @@ import { promotionEntities } from '../promotions/entities.js'
 import { SupportSettingsEntity } from '../support/entity.js'
 import { platformEntities } from './platform-entities.js'
 import { platformRecordEntities } from './records/index.js'
-import { SystemDesktopCandidate, SystemVersionCursor, SystemVersionReservation, SystemWebCandidate, SystemWebReleaseNotes } from './records/system-versions.js'
+import { ChannelVersionReservation, SystemDesktopCandidate, SystemVersionCursor, SystemVersionReservation, SystemWebCandidate, SystemWebReleaseNotes } from './records/system-versions.js'
 
 export {
   BillEntity,
@@ -255,6 +255,7 @@ export const SettingsEntity = new EntitySchema<{
 export const entities = [
   SystemVersionCursor,
   SystemVersionReservation,
+  ChannelVersionReservation,
   SystemWebCandidate,
   SystemWebReleaseNotes,
   SystemDesktopCandidate,

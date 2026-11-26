@@ -17,6 +17,7 @@ public struct DeviceOpenRequest: Codable, Sendable {
   public let id: String
   public let appId: String
   public let params: [String: String]
+  public let catalogLink: Bool?
   public let createdAt: Double
   public let subject: String?
 }
@@ -94,16 +95,17 @@ public final class DeviceRuntimeStore: @unchecked Sendable {
     state.grants[scope] = current.sorted()
     try save()
   }
-  @discardableResult public func enqueue(appId: String, params: [String: String] = [:]) throws -> String {
+  @discardableResult public func enqueue(appId: String, params: [String: String] = [:], catalogLink: Bool = false) throws -> String {
     lock.lock(); defer { lock.unlock() }
-    guard state.applications.contains(where: { $0.appId == appId }), params.count <= 20,
+    guard Self.validAppId(appId), (catalogLink || state.applications.contains(where: { $0.appId == appId })), params.count <= 20,
       params.allSatisfy({ $0.key.count <= 40 && $0.value.count <= 2000 && $0.key.range(of: "^\\w+$", options: .regularExpression) != nil }) else {
       throw DeviceRuntimeFailure("APP_NOT_INSTALLED", "应用尚未安装或参数无效，请先打开 T方舟")
     }
     state.requests.removeAll { Date().timeIntervalSince1970 * 1000 - $0.createdAt > 86400_000 }
+    if catalogLink { state.requests.removeAll { $0.catalogLink == true } }
     guard state.requests.count < 32 else { throw DeviceRuntimeFailure("DEVICE_BUSY", "待处理的快捷指令过多，请先打开应用处理") }
     let id = UUID().uuidString
-    state.requests.append(DeviceOpenRequest(id: id, appId: appId, params: params, createdAt: Date().timeIntervalSince1970 * 1000, subject: session()?["subject"]))
+    state.requests.append(DeviceOpenRequest(id: id, appId: appId, params: params, catalogLink: catalogLink, createdAt: Date().timeIntervalSince1970 * 1000, subject: session()?["subject"]))
     try save()
     NotificationCenter.default.post(name: NSNotification.Name("TBoxOpenRequest"), object: nil)
     return id
@@ -191,17 +193,22 @@ public final class DeviceRuntimeStore: @unchecked Sendable {
   }
   /** Only navigation links are accepted; links never execute arbitrary native or cloud writes. */
   @discardableResult public func handle(_ url: URL) -> Bool {
+    let landing = url.scheme == "tbox" && url.host == "link"
     let custom = url.scheme == "tbox" && url.host == "open"
     let configured = Bundle.main.object(forInfoDictionaryKey: "TBoxNavigationOrigin") as? String ?? ""
     let expected = URL(string: configured)
-    let universal = url.scheme == "https" && expected != nil && url.host == expected?.host && url.port == expected?.port && url.path.hasPrefix("/open/")
-    guard custom || universal, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), url.user == nil, url.password == nil else { return false }
-    let appId = (universal ? String(url.path.dropFirst(6)) : url.path).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    let universal = url.scheme == "https" && expected != nil && url.host == expected?.host && url.port == expected?.port && (url.path.hasPrefix("/open/") || url.path == "/open.html")
+    guard custom || landing || universal, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), url.user == nil, url.password == nil else { return false }
+    let sharedPage = universal && url.path == "/open.html"
+    let targets = (parts.queryItems ?? []).filter { $0.name == "app" }
+    if sharedPage && targets.count != 1 { return false }
+    let appId = sharedPage ? (targets.first?.value ?? "") : (universal ? String(url.path.dropFirst(6)) : url.path).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     var params: [String: String] = [:]
     for item in parts.queryItems ?? [] {
+      if sharedPage && item.name == "app" { continue }
       guard !["token", "password", "authorization"].contains(item.name.lowercased()), params[item.name] == nil else { return false }
       params[item.name] = item.value ?? ""
     }
-    return (try? enqueue(appId: appId, params: params)) != nil
+    return (try? enqueue(appId: appId, params: params, catalogLink: universal || landing)) != nil
   }
 }

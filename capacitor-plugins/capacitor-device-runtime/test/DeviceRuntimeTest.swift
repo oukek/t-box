@@ -19,6 +19,9 @@ precondition(restored.handle(URL(string: "tbox://open/calculator?expression=2%2B
 precondition(!restored.handle(URL(string: "tbox://open/calculator?token=private")!))
 precondition(!restored.handle(URL(string: "tbox://invoke/calculator?expression=2")!))
 precondition(!restored.handle(URL(string: "tbox://open/uninstalled")!))
+precondition(restored.handle(URL(string: "tbox://link/todo")!))
+precondition(restored.pending().last?.catalogLink == true)
+precondition(!restored.handle(URL(string: "tbox://link/todo?token=private")!))
 let initialReceipt = try restored.begin(scope: "guest:calculator", requestId: "write-1", capability: "calendar.create", arguments: ["title": "事件"])
 precondition(initialReceipt == nil)
 do {

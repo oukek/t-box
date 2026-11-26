@@ -20,9 +20,9 @@ export function navigationAssociation(config, bundleId, previous = {}) {
     const appID = `${config.iosTeamId}.${bundleId}`
     const existing = details.find((entry) => entry.appID === appID)
     if (existing) {
-      existing.paths = [...new Set([...(existing.paths || []), '/open/*'])]
+      existing.paths = [...new Set([...(existing.paths || []), '/open/*', '/open.html'])]
     } else {
-      details.push({ appID, paths: ['/open/*'] })
+      details.push({ appID, paths: ['/open/*', '/open.html'] })
     }
   }
   return { applinks: { apps: [], details } }

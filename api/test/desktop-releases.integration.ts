@@ -36,6 +36,7 @@ import {
 import { registerDesktopUpdates } from '../src/system-releases/desktop-routes.js'
 import { desktopUiTrial } from '../src/system-releases/desktop-ui-trial.js'
 import { reserveSystemVersions } from '../src/system-releases/reserve.js'
+import { promoteWebCandidate, registerWebCandidate } from '../src/system-releases/web-candidates.js'
 import { assertDisposableDatabase } from './fixtures.js'
 
 const config = getConfig().mysql
@@ -98,6 +99,7 @@ const reserve = (choices: Record<string, string>) =>
   reserveSystemVersions(db, {
     batch: 'fixture/tbox/' + ++batch,
     commit: 'a'.repeat(40),
+    channel: 'macos',
     ...choices,
   })
 function makeUi(build: string, version: string, protocol = 1) {
@@ -267,6 +269,44 @@ try {
   assert.equal(await plan(winner.ui!, h.core!), null)
   assert.equal(await plan('20.1.0', '1.0.0'), null)
   assert.equal(await plan('1.0.0', '20.1.0'), null)
+  const shared = await reserve({ channel: 'shared', ui: '2.1.15' })
+  const files = ['index.html', 'tbox-offline-sw.js', 'web-version.json'].map((path) => ({
+    path,
+    content: Buffer.from(path === 'web-version.json' ? JSON.stringify({ build: shared.build, version: shared.ui }) : 'fixture').toString('base64'),
+  }))
+  const bytes = Buffer.from(JSON.stringify(files))
+  const digest = sha(bytes)
+  objects.set('system-candidates/' + shared.build + '/' + digest + '.json', bytes)
+  let interrupt = true
+  const webStore = {
+    async read(key: string) {
+      return objects.get(key)!
+    },
+    async write(key: string, value: Buffer) {
+      if (key === 'web-version.json' && interrupt) {
+        throw new Error('interrupted')
+      }
+      objects.set(key, value)
+    },
+  }
+  await registerWebCandidate(db, { build: shared.build, digest }, webStore)
+  const approve = () => promoteWebCandidate(db, shared.build, null, 'tester', '统一发布', webStore, store)
+  await assert.rejects(approve(), /尚未就绪/)
+  await register({ build: shared.build, base: winner.build, ui: makeUi(shared.build, shared.ui!) })
+  await assert.rejects(publish(shared.build, winner.build), /统一发布/)
+  await assert.rejects(approve(), /发布中断/)
+  assert.equal(objects.has('web-version.json'), false)
+  assert.equal(await plan(winner.ui!, h.core!), null)
+  interrupt = false
+  await approve()
+  await approve()
+  const marker = JSON.parse(objects.get('web-version.json')!.toString())
+  const update = await plan(winner.ui!, h.core!)
+  assert.equal(marker.build, shared.build)
+  assert.equal(update?.id, marker.build)
+  assert.equal(update?.ui?.version, marker.version)
+  assert.equal(update?.notes, marker.notes)
+  assert.equal(update?.core, null)
   console.info(
     '通过：联合、仅界面、仅核心，缺包、签名、错误架构、并发基线和发布前隔离',
   )

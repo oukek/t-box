@@ -14,7 +14,8 @@ function fixture(t) {
     writeFileSync(target, value)
   }
   cpSync(new URL('./', import.meta.url), join(root, 'capacitor/scripts'), { recursive: true })
-  put('capacitor/package.json', JSON.stringify({ version: '2.3.4' }))
+  put('scripts/release-versions.mjs', readFileSync(new URL('../../scripts/release-versions.mjs', import.meta.url)))
+  put('release-versions.json', JSON.stringify({ ui: '1.0.15', macos: { core: '1.0.0' }, ios: '2.3.14', android: '2.3.4' }))
   put('capacitor/android/app/build.gradle', 'versionCode 42\nversionName "1.0"\n')
   put('capacitor/ios/App/App.xcodeproj/project.pbxproj', 'CURRENT_PROJECT_VERSION = 42;\nMARKETING_VERSION = 1.0;\nCURRENT_PROJECT_VERSION = 42;\nMARKETING_VERSION = 1.0;\n')
   const read = (path) => readFileSync(join(root, path), 'utf8')
@@ -35,7 +36,7 @@ test('version sync preserves local build numbers and updates all iOS configurati
   assert.equal(f.run('sync-native-version.mjs').status, 0)
   assert.match(f.read('capacitor/android/app/build.gradle'), /versionCode 42\nversionName "2.3.4"/)
   const ios = f.read('capacitor/ios/App/App.xcodeproj/project.pbxproj')
-  assert.equal(ios.match(/MARKETING_VERSION = 2.3.4;/g).length, 2)
+  assert.equal(ios.match(/MARKETING_VERSION = 2\.3\.14;/g).length, 2)
   assert.equal(ios.match(/CURRENT_PROJECT_VERSION = 42;/g).length, 2)
 })
 
@@ -52,7 +53,7 @@ test('explicit build number wins over CI; invalid inputs leave both native files
     assert.equal(f.read('capacitor/android/app/build.gradle'), android)
     assert.equal(f.read('capacitor/ios/App/App.xcodeproj/project.pbxproj'), ios)
   }
-  f.put('capacitor/package.json', JSON.stringify({ version: '1.0.0-beta' }))
+  f.put('release-versions.json', JSON.stringify({ ...JSON.parse(f.read('release-versions.json')), ios: '1.0.0-beta' }))
   assert.notEqual(f.run('sync-native-version.mjs').status, 0)
   assert.equal(f.read('capacitor/android/app/build.gradle'), android)
   assert.equal(f.read('capacitor/ios/App/App.xcodeproj/project.pbxproj'), ios)
@@ -97,7 +98,7 @@ test('bundled sync clears both live reload variables; dev keeps an explicit URL'
   f.put('bin/pnpm', `#!${process.execPath}
 import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.TBOX_TEST_COMMAND_LOG, JSON.stringify({ args: process.argv.slice(2),
-  live: process.env.CAP_LIVE_RELOAD_URL, server: process.env.CAP_SERVER_URL, fallback: process.env.VITE_NATIVE_DEV_SERVER, api: process.env.VITE_API_BASE_URL }) + '\\n');
+  version: process.env.TBOX_UI_VERSION, live: process.env.CAP_LIVE_RELOAD_URL, server: process.env.CAP_SERVER_URL, fallback: process.env.VITE_NATIVE_DEV_SERVER, api: process.env.VITE_API_BASE_URL }) + '\\n');
 `)
   chmodSync(join(f.root, 'bin/pnpm'), 0o755)
   f.put('bin/xcrun', `#!${process.execPath}\nconsole.log('{"devices":{}}')\n`)
@@ -113,6 +114,7 @@ appendFileSync(process.env.TBOX_TEST_COMMAND_LOG, JSON.stringify({ args: process
   assert.equal(commands[2].args.at(-1), 'build:web')
   assert.equal(commands[3].args.at(-1), 'copy:web')
   assert.deepEqual(commands[4].args.slice(-2), ['cap', 'sync'])
+  assert.equal(commands[2].version, '1.0.15')
   for (const command of commands) {
     assert.equal(command.live, undefined)
     assert.equal(command.server, undefined)

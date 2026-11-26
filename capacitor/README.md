@@ -18,7 +18,7 @@ pnpm native:run:android
 
 ## 版本
 
-原生发行版本以 `capacitor/package.json` 的 `version` 为准，格式为 `1.2.3`。同步到 Android `versionName` 和 iOS `MARKETING_VERSION`。网页“关于”版本仍来自 `app/package.json`；发行时应同时调整这两个文件。
+原生发行版本在仓库根目录的 `release-versions.json` 设置。`android` 同步到 Android versionName，`ios` 同步到 iOS MARKETING_VERSION，原生内置界面使用同一提交的 ui 版本，已安装的原生 App 随新安装包升级。
 
 ```bash
 APP_BUILD_NUMBER=123 pnpm native:sync

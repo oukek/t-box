@@ -2,6 +2,7 @@
 declare const __APP_VERSION__: string
 declare module 'virtual:tbox-local-applications' {
   const releases: import('@t-box/app-contracts').AppRelease[]
+  export const applicationNames: Record<string, string>
   export default releases
 }
 

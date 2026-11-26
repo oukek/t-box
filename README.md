@@ -64,7 +64,7 @@ OSS 文件均公开读，前端拼接 OSS 域名和相对路径直接访问，�
 
 ## 首页、应用与记账
 
-默认进入应用桌面，常驻侧栏与底部导航已移除；账号和分享位于桌面右上角。**方舟 AI** 通过可拖动、吸边的浮动入口打开，大屏为可移动、缩放和最大化的助手窗口，小屏为完整页面。收起保留会话、草稿和后台任务；从 AI 打开的应用统一进入主工作区。顶部「AI 中心」仍提供余额、AI 费用说明、我的资源和任务记录。「设置」（保留原 profile 应用 ID）提供个人账号、安全、当前设备的使用偏好和关于/版本信息。修改密码与退出登录放在账号信息内，退出前需要确认。长按图标或点击「整理」可拖动排序，后端按账号分别保存移动端和 PC 桌面；也支持方向键及按钮移动。记账为可卸载用户应用，其他现有应用为可升级、不可卸载的系统应用；应用不必提供 AI 工具。版本号从 `app/package.json` 读取。详细接口与扩展说明见 [OS 桌面](docs/desktop.md)。应用安装后的网页/原生本地资源、后台预取、校验与失败回退见 [应用资源架构](docs/application-local-resources.md)。
+默认进入应用桌面，常驻侧栏与底部导航已移除；账号和分享位于桌面右上角。**方舟 AI** 通过可拖动、吸边的浮动入口打开，大屏为可移动、缩放和最大化的助手窗口，小屏为完整页面。收起保留会话、草稿和后台任务；从 AI 打开的应用统一进入主工作区。顶部「AI 中心」仍提供余额、AI 费用说明、我的资源和任务记录。「设置」（保留原 profile 应用 ID）提供个人账号、安全、当前设备的使用偏好和关于/版本信息。修改密码与退出登录放在账号信息内，退出前需要确认。长按图标或点击「整理」可拖动排序，后端按账号分别保存移动端和 PC 桌面；也支持方向键及按钮移动。记账为可卸载用户应用，其他现有应用为可升级、不可卸载的系统应用；应用不必提供 AI 工具。各端发布版本在根目录 [release-versions.json](release-versions.json) 中设置。详细接口与扩展说明见 [OS 桌面](docs/desktop.md)。应用安装后的网页/原生本地资源、后台预取、校验与失败回退见 [应用资源架构](docs/application-local-resources.md)。
 
 未配置并启用普通会话模型时，首页提示尚未接入 AI，不识别文本、不调用工具、不自动记账。后端已经拆分模型适配、技能注册、工具注册与多轮调度；前端工具通过 WebSocket 执行并回传结果。任务状态、执行检查点和工具结果已入 MySQL；主助手可委派具有独立上下文与工具范围的专业 Agent，断线后可从任务记录继续。实现与恢复边界见 [持久任务与专业 Agent](docs/tasks-and-agents.md)。首次会话支持自动标题及手动改名，公开思考摘要、分析与工具按时间线显示，完成后自动折叠过程，见 [会话展示与通讯协议](docs/conversation-presentation.md)。详细边界、调用时序、扩展方法和当前持久化范围见 [架构说明](docs/architecture.md)。
 
@@ -139,7 +139,9 @@ pnpm test:chat       # 隔离测试服务的真实 WebSocket 集成测试
 
 请使用 **`pnpm run pack`**；`pnpm pack` 是 pnpm 自带的 npm 包压缩命令。
 
-生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**前端与后台部署（OSS）** 发布主前端和后台，构建时写入生成的 API 地址；普通 API 跨域默认开放，后台限定管理域名并通过跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包内全部独立子应用静态种子（含宝宝日记）上传 OSS，再上传、初始化数据库并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
+生产使用 [OSS 网站与 PM2 后端](docs/first-deployment.md)：GitHub 普通变量只填 `DEPLOY_DOMAIN`、`OSS_REGION`，主站直接使用 `https://<DEPLOY_DOMAIN>`（当前为 `https://tboxos.cn`），后台、子应用和 API 分别使用 `admin/apps/api` 子域名；站点地址、三个 Bucket 和发布目录由 `deploy/settings.mjs` 统一生成。**主界面构建（网页、PWA、Mac）** 和 **管理后台部署** 分别负责主站和后台，构建时写入生成的 API 地址；普通 API 跨域默认开放，后台限定管理域名并通过跨来源 Cookie 和管理请求头登录，后台与 API 使用同一主域名下的 HTTPS 子域名。**后端部署（PM2）** 先将当前包内全部独立子应用静态种子（含宝宝日记）上传 OSS，再上传、初始化数据库并启动 API 和恢复 worker（APP_ARTIFACT_DELIVERY=oss）。**子应用发布（OSS）** 发布子应用静态版本并提交后台审核。全部 Actions 手动触发，首次配置、GitHub Secrets 和微信设置按操作手册执行。PM2 细节见 [后端发布](docs/api-pm2-deployment.md)，可选 Docker 方案见 [镜像部署](docs/api-docker-deployment.md)。
+
+iOS 正式发包请跟随 [GitHub Actions 打包与 App Store 上架步骤](docs/ios-app-store-release.md)。
 
 ## iOS / Android 开发热更新
 
@@ -206,7 +208,7 @@ pnpm native:android    # 重新构建 / 同步，再打开 Android Studio
 
 未配置地址时，浏览器构建继续使用同源 `/api/v1`；原生内置资源模式会显示配置提示，避免把请求误发到 WebView 本地服务器。开发热更新模式通过 Vite 代理访问 API，不需要此生产配置。
 
-原生构建链路和版本规则见 [Capacitor 说明](capacitor/README.md)。`capacitor/package.json` 的 `version` 自动同步到两端；通过 `APP_BUILD_NUMBER` 指定构建号，未指定时保留现有构建号。
+原生构建链路和版本规则见 [Capacitor 说明](capacitor/README.md)。`release-versions.json` 的 `ios` 与 `android` 分别同步到对应平台；通过 `APP_BUILD_NUMBER` 指定构建号，未指定时保留现有构建号。
 
 当前应用标识为 `com.tbox.app`，名称为 `T方舟`。iOS 使用 Xcode 的 Archive / Signing & Capabilities 配置签名，Android 使用 Android Studio 的 Build / Generate Signed Bundle or APK 配置发布签名。发布前请同时调整 Capacitor 配置及已生成原生工程中的 Bundle Identifier / applicationId。
 

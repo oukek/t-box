@@ -5,6 +5,7 @@ import { homedir, networkInterfaces } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runIosSimulator } from './ios-simulator.mjs'
+import { releaseVersions } from './release-versions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const [command, ...arguments_] = process.argv.slice(2).filter((value) => value !== '--')
@@ -111,8 +112,6 @@ if (command === 'dev') {
 
 execute(['--filter', '@t-box/capacitor', 'sync:version'])
 execute(['--filter', '@t-box/capacitor', 'sync:wechat'])
-execute(['--filter', '@t-box/capacitor', 'build:web'])
-execute(['--filter', '@t-box/capacitor', 'copy:web'])
 
 if (platform === 'android') {
   // Use the local SDK when installed in the standard macOS location. These
@@ -136,6 +135,9 @@ if (platform === 'android') {
   }
 }
 
+environment.TBOX_UI_VERSION = releaseVersions.ui
+execute(['--filter', '@t-box/capacitor', 'build:web'])
+execute(['--filter', '@t-box/capacitor', 'copy:web'])
 cap('sync', ...(platform ? [platform] : []))
 if (command === 'open' || (command === 'dev' && !runInDevice)) {
   cap('open', platform)

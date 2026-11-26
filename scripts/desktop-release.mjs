@@ -4,7 +4,7 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createOssClient, ossClientOptions } from '../deploy/oss/client.mjs'
-import { parseSystemVersion } from '../packages/app-contracts/src/system-version.ts'
+import { releaseVersions } from './release-versions.mjs'
 
 const env = process.env
 const root = fileURLToPath(new URL('../', import.meta.url))
@@ -43,31 +43,15 @@ async function reserve() {
   if (!['ui', 'core', 'both'].includes(mode)) {
     throw new Error('构建类型无效')
   }
-  if (mode === 'core' && env.INCLUDE_WEB === 'true') {
-    throw new Error('仅构建核心时不能发布网页界面')
-  }
   const base = await api('/system-builds/desktop/base')
   if (!base && mode !== 'both') {
     throw new Error('首次发布请使用联合构建')
   }
-  const choices = {}
-  for (const k of ['ui', 'core']) {
-    if (mode !== 'both' && mode !== k) {
-      if ((env[k.toUpperCase() + '_CHANGE'] || 'patch') !== 'patch') {
-        throw new Error('未参与构建的组件请保留默认版本选项')
-      }
-      continue
-    }
-    const selection = env[k.toUpperCase() + '_CHANGE']?.trim()
-    if (!selection) {
-      throw new Error('请填写 ' + k + ' 目标版本，内测重建请沿用原版本号')
-    }
-    if (!['minor', 'patch', 'major'].includes(selection)) {
-      parseSystemVersion(selection)
-    }
-    choices[k] = selection
+  const choices = { ...(mode !== 'core' && { ui: releaseVersions.ui }), ...(mode !== 'ui' && { core: releaseVersions.macos.core }) }
+  const r = await api('/system-builds/reserve', { batch: env.GITHUB_REPOSITORY.toLowerCase() + '/' + env.GITHUB_RUN_ID, commit: env.GITHUB_SHA, channel: mode === 'core' ? 'macos' : 'shared', ...choices })
+  if (r.ui !== (choices.ui ?? null) || r.core !== (choices.core ?? null)) {
+    throw new Error('预留版本与 release-versions.json 不一致')
   }
-  const r = await api('/system-builds/reserve', { batch: env.GITHUB_REPOSITORY.toLowerCase() + '/' + env.GITHUB_RUN_ID, commit: env.GITHUB_SHA, channel: 'desktop', ...choices })
   await mkdir(work, { recursive: true })
   await writeFile(path.join(work, 'reservation.json'), JSON.stringify({ ...r, base: base?.build ?? null }))
   const status = await api('/system-builds/desktop/' + r.build + '/status')
@@ -171,7 +155,7 @@ async function submit() {
       '',
     ].join('\n'))
   }
-  console.info('桌面候选已提交。请在系统发布的桌面端列表确认。')
+  console.info(r.ui ? '桌面候选已登记，网页就绪后请在系统发布的主界面页确认。' : '核心候选已登记，请在系统发布的桌面端页确认。')
 }
 const commands = { reserve, 'build-ui': buildUi, 'sign-ui': signUi, 'build-core': buildCore, submit }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

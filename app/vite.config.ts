@@ -1,19 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
-import { parseSystemVersion } from '../packages/app-contracts/src/system-version'
+import { parseSystemVersion } from '../packages/app-contracts/src/system-version.ts'
+import releaseVersions from '../release-versions.json' with { type: 'json' }
 import { developmentApplicationStatus } from '../scripts/vite-development-apps.mjs'
 import { localApplicationDeclarations } from '../scripts/vite-local-applications.mjs'
 import { verifiedOffline } from '../scripts/vite-offline.mjs'
 import { workspaceSources } from '../scripts/vite-workspace.mjs'
 
-const { version: packageVersion } = JSON.parse(
-  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
-)
-
-const version = process.env.TBOX_UI_VERSION ?? packageVersion
+const version = process.env.TBOX_UI_VERSION ?? releaseVersions.ui
 parseSystemVersion(version)
 
 const shellRelease = process.env.TBOX_WEB_BUILD_ID ?? randomUUID()
@@ -45,6 +41,7 @@ export default defineConfig(({ mode }) => ({
     proxy: { '/api': { target: 'http://127.0.0.1:6868', ws: true } },
   },
   build: {
+    rollupOptions: { input: mode === 'desktop' ? 'index.html' : ['index.html', 'open.html'] },
     outDir: 'dist',
     emptyOutDir: true,
     target: 'es2022',

@@ -3,6 +3,7 @@ import type { MarketApp } from './presentation'
 import { AppIcon } from '@t-box/ui-kit'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { computed } from 'vue'
+import navigationConfig from '../../../../capacitor/navigation.config.json'
 import { actionLabel, displayApp, hasUpdate, isInstalled, isProcessing, stateLabel } from './presentation'
 
 const props = defineProps<{ entry: MarketApp, busy: boolean }>()
@@ -16,10 +17,11 @@ const app = computed(() => displayApp(props.entry))
     :class="{ 'market-card--optional': entry.release.kind === 'user' }"
     :aria-label="app.name"
   >
-    <button
+    <a
+      :href="navigationConfig.universalLinkOrigin + '/open.html?app=' + encodeURIComponent(entry.release.appId)"
       class="market-card-identity"
       :aria-label="`查看${app.name}详情`"
-      @click="$emit('inspect', entry)"
+      @click.exact.prevent="$emit('inspect', entry)"
     >
       <LauncherIcon
         :app-id="entry.release.appId"
@@ -28,7 +30,7 @@ const app = computed(() => displayApp(props.entry))
         :icon-variant="app.iconVariant"
       />
       <span class="market-card-copy"><strong>{{ app.name }}</strong><span class="market-card-description">{{ app.description }}</span></span>
-    </button>
+    </a>
     <button
       class="market-action"
       :class="{ 'market-action--open': isInstalled(entry) && !hasUpdate(entry) }"

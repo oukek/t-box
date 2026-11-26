@@ -14,7 +14,7 @@ import { createDataSource } from '../src/db/data-source.js'
 import { initializeDatabase } from '../src/db/initialize.js'
 import { SystemDesktopCandidate, SystemWebCandidate } from '../src/db/records/system-versions.js'
 import { databaseSchemas } from '../src/db/schema/index.js'
-import { reserveSystemVersions } from '../src/system-releases/reserve.js'
+import { findChannelReservation, reserveSystemVersions } from '../src/system-releases/reserve.js'
 import { assertDisposableDatabase } from './fixtures.js'
 
 const config = getConfig().mysql
@@ -104,6 +104,23 @@ try {
   await source.manager.insert(SystemDesktopCandidate, { ...desktop, build: latest.build, state: 'live' })
   await assert.rejects(rebuild(10), /已经开始发布/)
   assert.deepEqual(await rebuild(9), latest)
+  const scoped = (id: number, channel: 'web' | 'macos', ui: string) => reserveSystemVersions(source, {
+    batch: 'test/repo/' + id,
+    commit: 'c'.repeat(40),
+    channel,
+    ui,
+  })
+  const [web, mac] = await Promise.all([scoped(30, 'web', '2.1.0'), scoped(31, 'macos', '2.1.0')])
+  assert.notEqual(web.build, mac.build)
+  await source.manager.insert(SystemWebCandidate, { ...pending, build: web.build, version: web.ui! })
+  const retryMac = await scoped(32, 'macos', '2.1.0')
+  assert.notEqual(retryMac.build, mac.build)
+  assert.equal(await source.manager.countBy(SystemWebCandidate, { build: web.build }), 1)
+  assert.equal(await findChannelReservation(source.manager, retryMac.build, 'web'), null)
+  assert.equal(await findChannelReservation(source.manager, web.build, 'macos'), null)
+  assert.deepEqual(await scoped(30, 'web', '2.1.0'), web)
+  assert.equal((await scoped(33, 'web', 'minor')).ui, '2.2.0')
+  assert.equal((await scoped(34, 'macos', 'patch')).ui, '2.1.1')
   console.info('MySQL version reservations: concurrent allocation, idempotency, stale retry, independent versions and transaction rollback passed')
 } finally {
   if (source.isInitialized) {

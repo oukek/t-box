@@ -1,11 +1,13 @@
-import type { DataSource } from 'typeorm'
+import type { DataSource, EntityManager } from 'typeorm'
 import type { DesktopArtifact, DesktopCandidate } from '../db/records/system-versions.js'
 import { compareSystemVersions, parseSystemVersion } from '@t-box/app-contracts'
-import { SystemDesktopCandidate, SystemVersionCursor, SystemVersionReservation } from '../db/records/system-versions.js'
+import { In } from 'typeorm'
+import { ChannelVersionReservation, SystemDesktopCandidate, SystemVersionCursor, SystemWebCandidate } from '../db/records/system-versions.js'
 import { ErrorCode } from '../error-codes.js'
 import { checkArtifact, desktopStorage } from './desktop-artifacts.js'
 
 import { publicationNotes } from './release-notes.js'
+import { findChannelReservation } from './reserve.js'
 
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
 const invalid = () => ErrorCode.INVALID_APP_BUILD('桌面候选信息无效，首次发布需要同时构建界面和核心')
@@ -29,7 +31,9 @@ function artifact(build: string, version: string | null, raw: unknown, previous?
 export async function listDesktopCandidates(db: DataSource) {
   const repo = db.getRepository(SystemDesktopCandidate)
   const [current, candidates] = await Promise.all([repo.findOneBy({ state: 'live' }), repo.find({ order: { createdAt: 'DESC', build: 'ASC' }, take: 100 })])
-  return { current, candidates }
+  const reservations = await db.manager.findBy(ChannelVersionReservation, { channel: 'shared', build: In(candidates.map((row) => row.build)) })
+  const shared = new Set(reservations.map((row) => row.build))
+  return { current, candidates: candidates.map((row) => ({ ...row, shared: shared.has(row.build) })) }
 }
 export async function desktopTrialUrl(db: DataSource, build: string, store?: ReturnType<typeof desktopStorage>) {
   const candidate = uuid.test(build) && await db.manager.findOneBy(SystemDesktopCandidate, { build, state: 'pending' })
@@ -39,7 +43,7 @@ export async function desktopTrialUrl(db: DataSource, build: string, store?: Ret
   const filename = `Tbox-trial-core-${candidate.core.version}-ui-${candidate.ui.version}-${build.slice(0, 8)}.app.tar.gz`
   return (store ?? desktopStorage()).url('core', candidate.core, filename)
 }
-async function verifyPair(db: DataSource, row: Pick<DesktopCandidate, 'build' | 'ui' | 'core'>, store: ReturnType<typeof desktopStorage>) {
+export async function verifyPair(db: DataSource, row: Pick<DesktopCandidate, 'build' | 'ui' | 'core'>, store: ReturnType<typeof desktopStorage>) {
   const embedded = row.core.build === row.build ? row.ui : (await db.manager.findOneByOrFail(SystemDesktopCandidate, { build: row.core.build })).ui
   return Promise.all([checkArtifact(store, 'ui', row.ui, row.ui), checkArtifact(store, 'core', row.core, embedded)])
 }
@@ -48,7 +52,7 @@ export async function registerDesktop(db: DataSource, raw: unknown, store = desk
   if (typeof build !== 'string' || !uuid.test(build) || (base !== null && (typeof base !== 'string' || !uuid.test(base))) || typeof notes !== 'string' || notes.length > 1000) {
     throw invalid()
   }
-  const r = await db.manager.findOneBy(SystemVersionReservation, { build })
+  const r = await findChannelReservation(db.manager, build, 'macos')
   if (!r) {
     throw invalid()
   }
@@ -62,7 +66,7 @@ export async function registerDesktop(db: DataSource, raw: unknown, store = desk
   next.core = { ...next.core, bytes: coreBytes }
   return db.transaction(async (tx) => {
     await tx.findOneOrFail(SystemVersionCursor, { where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
-    const reservation = await tx.findOneBy(SystemVersionReservation, { build })
+    const reservation = await findChannelReservation(tx, build, 'macos')
     if (!reservation || (!reservation.ui && !reservation.core)) {
       throw ErrorCode.SYSTEM_VERSION_CONFLICT('该构建已被同版本的新候选取代')
     }
@@ -95,22 +99,33 @@ export async function publishDesktop(db: DataSource, build: string, expected: un
   await verifyPair(db, row, store)
   return db.transaction(async (tx) => {
     await tx.findOneOrFail(SystemVersionCursor, { where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
-    const live = await tx.findOneBy(SystemDesktopCandidate, { state: 'live' })
-    if (live?.build === build) {
-      return live
+    if (await tx.existsBy(SystemWebCandidate, { state: In(['publishing', 'failed']) })) {
+      throw ErrorCode.SYSTEM_VERSION_CONFLICT('请先恢复正在发布的主界面')
     }
-    if ((live?.build ?? null) !== expected) {
-      throw ErrorCode.SYSTEM_VERSION_CONFLICT('线上版本已变化，请刷新列表')
+    const reservation = await findChannelReservation(tx, build, 'macos')
+    if (reservation?.channel === 'shared' || (row.kind !== 'core' && await tx.existsBy(ChannelVersionReservation, { channel: 'shared' }))) {
+      throw ErrorCode.SYSTEM_VERSION_CONFLICT('请在主界面页统一发布网页、PWA 和 Mac')
     }
-    if (live) {
-      await tx.update(SystemDesktopCandidate, { build: live.build }, { state: 'archived' })
-    }
-    const updated = await tx.update(SystemDesktopCandidate, { build, state: 'pending' }, { state: 'live', actor, notes })
-    if (!updated.affected) {
-      throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选已失效，请刷新列表')
-    }
-    return { ...row, state: 'live', actor, notes }
+    return activateDesktop(tx, row, actor, notes)
   })
+}
+export async function activateDesktop(tx: EntityManager, row: DesktopCandidate, actor: string, notes: string) {
+  const { build, base: expected } = row
+  const live = await tx.findOneBy(SystemDesktopCandidate, { state: 'live' })
+  if (live?.build === build) {
+    return live
+  }
+  if ((live?.build ?? null) !== expected) {
+    throw ErrorCode.SYSTEM_VERSION_CONFLICT('线上版本已变化，请刷新列表')
+  }
+  if (live) {
+    await tx.update(SystemDesktopCandidate, { build: live.build }, { state: 'archived' })
+  }
+  const updated = await tx.update(SystemDesktopCandidate, { build, state: 'pending' }, { state: 'live', actor, notes })
+  if (!updated.affected) {
+    throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选已失效，请刷新列表')
+  }
+  return { ...row, state: 'live', actor, notes }
 }
 export async function desktopPlan(db: DataSource, query: Record<string, unknown>, store?: ReturnType<typeof desktopStorage>) {
   if (query.platform !== 'macos' || query.arch !== 'aarch64') {

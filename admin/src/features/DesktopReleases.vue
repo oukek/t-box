@@ -8,6 +8,7 @@ import SystemReleaseNotes from './SystemReleaseNotes.vue'
 interface Row {
   build: string
   base: string | null
+  shared?: boolean
   kind: 'core' | 'ui' | 'both'
   state: 'pending' | 'live' | 'archived'
   notes: string
@@ -118,10 +119,11 @@ onMounted(refresh)
         @click="downloadTrial(row)"
       >{{ downloading === row.build ? '准备下载…' : '下载体验版' }}</AdminButton>
       <AdminButton
-        v-if="row.state === 'pending' && row.base === (data?.current?.build ?? null)"
+        v-if="!row.shared && row.state === 'pending' && row.base === (data?.current?.build ?? null)"
         :disabled="busy || loading"
         @click="review(row)"
       >审核发布</AdminButton>
+      <small v-if="row.shared && row.state === 'pending'">在「主界面」确认发布</small>
     </article>
     <AdminDialog
       :open="!!selected"

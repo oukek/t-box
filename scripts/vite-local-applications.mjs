@@ -19,6 +19,7 @@ export function localApplicationDeclarations(root) {
         return null
       }
       const releases = []
+      const names = {}
       for (const config of await discoverApplications(root)) {
         const compiled = join(root, 'apps', config.appId, config.releaseModule)
         const source = compiled.replace('/dist/', '/src/').replace(/\.js$/, '.ts')
@@ -29,11 +30,14 @@ export function localApplicationDeclarations(root) {
           ? await developmentServer.ssrLoadModule(source)
           : await import(pathToFileURL(compiled).href)
         const release = module[config.releaseExport]
+        if (release?.manifest?.name) {
+          names[config.appId] = release.manifest.name
+        }
         if (release?.guestAccess === 'local' && release.kind === 'system' && release.defaultInstalled && release.runtime.type === 'web') {
           releases.push(release)
         }
       }
-      return `export default ${JSON.stringify(releases)};`
+      return `export const applicationNames = ${JSON.stringify(names)}; export default ${JSON.stringify(releases)};`
     },
   }
 }

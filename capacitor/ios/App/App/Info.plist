@@ -101,6 +101,6 @@
       <string>weixinURLParamsAPI</string>
     </array>
     <key>TBoxNavigationOrigin</key>
-    <string/>
+    <string>https://tboxos.cn</string>
   </dict>
 </plist>

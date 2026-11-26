@@ -1,5 +1,5 @@
 export interface NativeApplication { appId: string, name: string, guest: boolean }
-export interface NativeRequest { id: string, appId: string, params: Record<string, string>, createdAt: number, subject?: string | null }
+export interface NativeRequest { id: string, appId: string, params: Record<string, string>, createdAt: number, catalogLink?: boolean, subject?: string | null }
 export interface NativeGrant { scope: string, capabilities: string[] }
 export interface NativeShortcutTemplate { id: string, appId: string, actionId: string, actionVersion: number, title: string, releaseId: string, generation: number, subject: string, argumentsJSON: string, bindingsJSON?: string }
 export interface DeviceRuntimePlugin {

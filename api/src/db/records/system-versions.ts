@@ -10,7 +10,9 @@ export const SystemVersionCursor = new EntitySchema<{ id: number, ui: string, co
   },
 })
 
+export type ReleaseChannel = 'web' | 'macos' | 'shared'
 interface Reservation {
+  channel?: ReleaseChannel
   batch: string
   request_hash: string
   build: string
@@ -28,6 +30,18 @@ export const SystemVersionReservation = new EntitySchema<Reservation>({
     ui: { type: 'varchar', length: 96, nullable: true, unique: true },
     core: { type: 'varchar', length: 96, nullable: true, unique: true },
   },
+})
+
+export const ChannelVersionReservation = new EntitySchema<Reservation>({
+  name: 'ChannelVersionReservation',
+  tableName: 'channel_version_reservations',
+  columns: {
+    ...SystemVersionReservation.options.columns,
+    ui: { type: 'varchar', length: 96, nullable: true },
+    core: { type: 'varchar', length: 96, nullable: true },
+    channel: { type: 'varchar', length: 8 },
+  },
+  uniques: [{ columns: ['channel', 'ui'] }, { columns: ['channel', 'core'] }],
 })
 
 export interface WebCandidate {

@@ -11,6 +11,8 @@ import SystemReleaseNotes from './SystemReleaseNotes.vue'
 const channel = ref<'web' | 'desktop'>('web')
 const labels = { pending: '待确认', publishing: '发布中', failed: '发布中断', live: '当前生效', archived: '历史版本' }
 interface Candidate {
+  coreVersion?: string | null
+  shared?: boolean
   build: string
   version: string
   notes?: string
@@ -81,7 +83,7 @@ onMounted(refresh)
       :aria-pressed="channel === 'web'"
       :disabled="busy"
       @click="channel = 'web'"
-    >网页 / PWA</AdminButton>
+    >主界面</AdminButton>
     <AdminButton
       :aria-pressed="channel === 'desktop'"
       :disabled="busy"
@@ -127,7 +129,8 @@ onMounted(refresh)
       @close="selected = undefined"
     >
       <template v-if="selected">
-        <p>发布后，网页版和 PWA 将提示更新到 <strong>v{{ selected.version }}</strong>。</p>
+        <p>发布后，{{ selected.shared ? '网页、PWA 和 Mac' : '网页和 PWA' }} 将提示更新到 <strong>v{{ selected.version }}</strong>。</p>
+        <p v-if="selected.coreVersion">本次同时发布 Mac 核心 <strong>v{{ selected.coreVersion }}</strong>，桌面更新完成后会重启。</p>
         <dl><dt>当前发布记录</dt><dd>{{ listing?.current?.version ?? '首次发布' }}</dd><dt>候选资源</dt><dd>{{ selected.files }} 个文件 · {{ (selected.bytes / 1048576).toFixed(1) }} MB</dd><dt>SHA-256</dt><dd class="digest">{{ selected.digest }}</dd></dl>
         <SystemReleaseNotes v-model="notes" :readonly="!!selected.notes" />
       </template>

@@ -1,12 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
+import { releaseVersions } from '../../scripts/release-versions.mjs'
 
 const root = new URL('../', import.meta.url)
-const { version } = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'))
-// Native stores require a numeric release version, not semver prerelease tags.
-if (!/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(version)) {
-  throw new Error(`Invalid native version: ${version}. Use a numeric version such as 1.2.3.`)
-}
-
 const androidPath = new URL('android/app/build.gradle', root)
 const iosPath = new URL('ios/App/App.xcodeproj/project.pbxproj', root)
 const android = readFileSync(androidPath, 'utf8')
@@ -21,12 +16,12 @@ if (requested !== undefined && (!/^[1-9]\d*$/.test(requested) || Number(requeste
   throw new Error('Build number must be an integer between 1 and 2100000000.')
 }
 // Keep existing build numbers on local sync; never silently reset a release to 1.
-const nextAndroid = android.replace(/versionName\s+"[^"]+"/, `versionName "${version}"`)
-const nextIos = ios.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${version};`)
+const nextAndroid = android.replace(/versionName\s+"[^"]+"/, `versionName "${releaseVersions.android}"`)
+const nextIos = ios.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${releaseVersions.ios};`)
 writeFileSync(androidPath, requested === undefined
   ? nextAndroid
   : nextAndroid.replace(/versionCode\s+\d+/, `versionCode ${requested}`))
 writeFileSync(iosPath, requested === undefined
   ? nextIos
   : nextIos.replace(/CURRENT_PROJECT_VERSION = [^;]+;/g, `CURRENT_PROJECT_VERSION = ${requested};`))
-console.log(`Synced native version ${version}; build number ${requested ?? 'preserved'}.`)
+console.log(`Synced iOS ${releaseVersions.ios}, Android ${releaseVersions.android}; build number ${requested ?? 'preserved'}.`)
