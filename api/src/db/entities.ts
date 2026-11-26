@@ -32,7 +32,7 @@ import { promotionEntities } from '../promotions/entities.js'
 import { SupportSettingsEntity } from '../support/entity.js'
 import { platformEntities } from './platform-entities.js'
 import { platformRecordEntities } from './records/index.js'
-import { SystemDesktopCandidate, SystemVersionCursor, SystemVersionReservation, SystemWebCandidate } from './records/system-versions.js'
+import { SystemDesktopCandidate, SystemVersionCursor, SystemVersionReservation, SystemWebCandidate, SystemWebReleaseNotes } from './records/system-versions.js'
 
 export {
   BillEntity,
@@ -256,6 +256,7 @@ export const entities = [
   SystemVersionCursor,
   SystemVersionReservation,
   SystemWebCandidate,
+  SystemWebReleaseNotes,
   SystemDesktopCandidate,
   ...promotionEntities,
   CheckoutLinkEntity,

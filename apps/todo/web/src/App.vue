@@ -466,7 +466,7 @@ onBeforeUnmount(() => {
         aria-label="返回方舟"
         title="返回方舟"
         @click="client.navigation.back()"
-      ><AppIcon name="left" :size="19" /></button>
+      ><AppIcon name="left" :size="17" /><span>返回方舟</span></button>
       待办事项
     </div>
     <nav aria-label="主导航">
@@ -670,10 +670,20 @@ onBeforeUnmount(() => {
             :today="today"
           /></template>
       </template>
-      <template v-else><button class="back" @click="go(returnTab)"><AppIcon name="left" :size="16" />{{ tabs[returnTab] }}</button>
+      <template v-else>
         <div class="heading">
           <div>
-            <h1>{{ selected.title }}</h1>
+            <div class="detail-title">
+              <button
+                class="back"
+                :aria-label="'返回' + tabs[returnTab]"
+                :title="'返回' + tabs[returnTab]"
+                @click="go(returnTab)"
+              >
+                <AppIcon name="left" :size="20" />
+              </button>
+              <h1>{{ selected.title }}</h1>
+            </div>
             <p>
               {{
                 selected.kind === "list"

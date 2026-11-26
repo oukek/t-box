@@ -37,7 +37,7 @@ node --test scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs scripts/ope
 
 ### 05 本地复验
 
-在安装 Xcode 命令行工具、Rust 和工作区依赖的 Mac 上，运行 `TBOX_UI_VERSION=1.1.16 pnpm desktop:build` 可生成本机架构的 `desktop/src-tauri/target/release/bundle/macos/T方舟.app`。示例版本用于本地验收；发布流水线应传后端预留的界面版本。核心版本在 `desktop/src-tauri/Cargo.toml` 的 `package.version` 填写。本地构建使用 ad-hoc 签名，对外分发的签名、公证及更新流程见后续步骤。
+在安装 Xcode 命令行工具、Rust 和工作区依赖的 Mac 上，运行 `TBOX_UI_VERSION=1.1.16 pnpm desktop:build` 可生成本机架构的 `desktop/src-tauri/target/release/bundle/macos/T方舟开发版.app`。开发包使用独立应用标识及存储目录。示例版本用于本地验收；发布流水线应传后端预留的界面版本。核心版本在 `desktop/src-tauri/Cargo.toml` 的 `package.version` 填写。本地构建使用 ad-hoc 签名，对外分发的签名、公证及更新流程见后续步骤。
 
 主界面随安装包提供。桌面壳默认从 `https://apps.tboxos.cn` 读取已安装子应用的制品；其他部署可在编译时设置 `TBOX_ARTIFACT_ORIGIN`、`VITE_API_BASE_URL`。首次下载逐文件验证 SHA-256 后启用，文件位于 `~/Library/Application Support/cn.tboxos.desktop/applications/<appId>/<digest>/`。各版本从独立的本机回环地址运行。资源离线可用范围取决于此前下载的版本；账号下的待办数据读写仍需要后端。
 
@@ -75,8 +75,8 @@ node --test scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs scripts/ope
 
 1. 先部署本次 API、迁移与管理后台。在后端配置 `TBOX_UI_PUBLIC_KEY`、`TBOX_CORE_PUBLIC_KEY` 为两套 Tauri signer 公钥文件的完整内容。自定义域名同步设置 `TBOX_DESKTOP_API_BASE`（含 `/api/v1`）。后端使用现有主站 OSS 凭证；私有下载通过一小时有效的 OSS V4 签名地址分发。
 2. GitHub 的 `desktop-release` Environment 使用已有的 `DEPLOY_DOMAIN`、`OSS_REGION`、`APP_IMPORT_TOKEN`、OSS 访问凭证。将同一对公钥分别写入同名 Variables，将两个私钥文件内容分别保存为 Secrets `TBOX_UI_PRIVATE_KEY`、`TBOX_CORE_PRIVATE_KEY`，对应口令为 `TBOX_UI_KEY_PASSWORD`、`TBOX_CORE_KEY_PASSWORD`。正式向外分发 macOS 应用时配置 Apple Developer ID 签名与公证：Variable `APPLE_SIGNING_IDENTITY`、`APPLE_TEAM_ID`，Secrets `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_PASSWORD`。生产核心工作流要求 Developer ID 身份，上传前验证归档内应用的签名、团队及公证票据。本地开发构建仍使用 ad-hoc 签名。
-3. 首次选 **both** 建立基线。**ui** 仅上传新的界面包；**core** 获取已批准界面的原始包，核对摘要后嵌入安装包；**both** 构建同一批次的两份制品。包含界面时可勾选「同时登记同版本网页 / PWA 候选」，两渠道由管理员分别批准。版本支持 `patch`、`minor`、`major` 或直接填写目标版本（例如 `1.1.15`）。自动分配的首个桌面核心以已实现的 1.0.0 为最低起点。填写 1–1000 字更新说明。
-4. 在「应用管理 → 系统发布 → 桌面端」检查组合和更新说明并确认。后端复核 OSS 中的实际字节、两套签名、内置界面摘要、核心版本和 Mach-O 架构，然后在一个事务内切换生效记录。基线已变化的候选需要按新基线重建。「下载安装包」提供当前获批的核心归档，解压得到 `T方舟.app`；同一份归档也用于 Tauri Updater。渠道首次启用时需安装已内置正确公钥与检查地址的客户端。
+3. 首次选 **both** 建立基线。**ui** 仅上传新的界面包；**core** 获取已批准界面的原始包，核对摘要后嵌入安装包；**both** 构建同一批次的两份制品。包含界面时可勾选「同时登记同版本网页 / PWA 候选」，两渠道由管理员分别批准。版本支持 `patch`、`minor`、`major` 或直接填写目标版本（例如 `1.1.15`）。自动分配的首个桌面核心以已实现的 1.0.0 为最低起点。参与构建的组件版本需显式填写。桌面与网页更新内容在各自的后台确认弹窗填写，每行一项，末项自动补「优化修复 bug」。
+4. 在「应用管理 → 系统发布 → 桌面端」检查组合，逐行填写更新内容并确认。后端复核 OSS 中的实际字节、两套签名、内置界面摘要、核心版本和 Mach-O 架构，然后在一个事务内切换生效记录。基线已变化的候选需要按新基线重建。「下载安装包」提供当前获批的核心归档，解压得到 `T方舟.app`；同一份归档也用于 Tauri Updater。渠道首次启用时需安装已内置正确公钥与检查地址的客户端。
 5. 实际客户端用 `GET /api/v1/system-updates?platform=macos&arch=aarch64&ui=…&core=…` 检查。无更新或不支持的架构返回 204。已批准的安装包入口为 `GET /api/v1/system-updates/macos/aarch64/installer`。首次安装包和更新包都在主站桶的私有 `desktop-candidates/<build>/<sha256>.*` 下，后台审核控制下载入口和版本可见性。
 
 本地复验命令为 `MYSQL_DATABASE=t_box_test_desktop pnpm --filter @t-box/api exec tsx test/desktop-releases.integration.ts`，需可创建临时数据库的 MySQL 账号。另用两套临时密钥和真实 macOS 构建，经上传代码与后端完成三组发布：联合 1.1.17 / 1.0.2，仅界面 1.1.18，仅核心 1.0.3。最后一组直接使用前一组已批准的界面包。GitHub 和生产 OSS 验收由部署环境执行。
@@ -140,7 +140,7 @@ CI 将预留的界面版本和构建 ID 一起写入界面包与版本文件。�
 | 阶段 | 操作入口 | 怎么填 |
 | --- | --- | --- |
 | 目前发布主界面 | GitHub Actions → 前端与后台部署（OSS）→ Run workflow | 选择 app 或 all，在「主界面版本递增方式」选择 patch、minor、major 或 manual。仅 manual 填写「手动目标版本」。仅发 admin 不分配版本。首次使用先部署含预留接口的后端，使用现有托管 APP_IMPORT_TOKEN。 |
-| 桌面构建 | GitHub Actions → 桌面系统候选（macOS）→ Run workflow | 选 both、ui 或 core。在参与的组件版本栏填 patch、minor、major，或直接填完整目标版本。未参与组件留默认值。 |
+| 桌面构建 | GitHub Actions → 桌面系统候选（macOS）→ Run workflow | 选 both、ui 或 core。在参与的组件版本栏填 patch、minor、major，或直接填完整目标版本。未参与组件留空。 |
 | 审核与查看 | 管理后台 → 系统发布；客户端 → 设置 → 系统版本 | 管理员核对候选组件版本后确认发布。客户端展示实际运行版本。两处均只读。 |
 
 手动指定仅适用于本次构建包含的组件。工作流应在开始打包前拒绝填错组件、自动模式下又填写目标、手动目标缺失、格式错误或目标已占用，并提示对应字段。桌面打包阶段另行校验目标平台的安装包版本限制。

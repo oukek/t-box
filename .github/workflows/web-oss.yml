@@ -11,8 +11,8 @@ on:
       ui_change:
         description: 主界面版本递增方式（仅发布后台时保持默认）
         type: choice
-        default: patch
-        options: [patch, minor, major, manual]
+        default: manual
+        options: [manual, patch, minor, major]
       ui_version:
         description: 手动目标版本（选 manual 时填写，如 1.1.15）
         type: string

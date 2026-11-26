@@ -20,6 +20,7 @@ const target = ref(initial?.offer?.id || '')
 if (initial) {
   systemVersionOpen.value = true
 }
+const webNotes = ref('')
 const targetVersion = ref('')
 const busy = ref(!!initial)
 const checking = ref(false)
@@ -172,6 +173,7 @@ async function check(manual = false) {
     // Older markers only identify their build. Versioned releases must advance numerically.
     const newer = marker.version === undefined || compareSystemVersions(marker.version, runningVersion) > 0
     target.value = newer && marker.build !== __WEB_BUILD_ID__ ? marker.build : ''
+    webNotes.value = target.value && typeof marker.notes === 'string' ? marker.notes : ''
     targetVersion.value = target.value ? marker.version || '' : ''
     lastChecked.value = new Date().toISOString()
     try {
@@ -325,6 +327,7 @@ onBeforeUnmount(() => {
     <template v-if="enabled">
       <p>上次成功检查：{{ lastChecked ? new Date(lastChecked).toLocaleString() : '暂无记录' }}</p>
       <p role="status">{{ checking ? '正在检查更新…' : message }} <strong v-if="target && targetVersion">{{ targetVersion }}</strong></p>
+      <p v-if="target && webNotes && !busy" class="update-notes">{{ webNotes }}</p>
       <p v-if="target && !busy">更新后会刷新页面，请先保存正在编辑的内容。</p>
     </template>
     <template v-else-if="desktop">
@@ -334,7 +337,7 @@ onBeforeUnmount(() => {
       <template v-if="offer">
         <p v-if="offer.ui && !busy">新版界面 <strong>{{ offer.ui }}</strong></p>
         <p v-if="offer.core && !busy">新版核心 <strong>{{ offer.core }}</strong></p>
-        <p v-if="offer.notes && !busy">{{ offer.notes }}</p>
+        <p v-if="offer.notes && !busy" class="update-notes">{{ offer.notes }}</p>
         <p v-if="!busy">请先保存正在编辑的内容。更新期间暂时无法使用方舟，{{ offer.core ? '完成后将自动重启。' : '完成后将刷新界面。' }}</p>
       </template>
     </template>
@@ -381,6 +384,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.update-notes {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 .progress-heading,
 .component-progress {
   display: flex;

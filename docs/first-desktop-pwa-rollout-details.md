@@ -87,9 +87,8 @@ curl -fsS 'https://api.tboxos.cn/api/v1/health' | jq '.data'
 | --- | --- |
 | `components` | **both**。首次桌面发布要同时建立界面与核心基线 |
 | `ui_change` | 如果线上已有正式界面版本，首次接入时建议直接填高于现网及已预留版本的完整 `x.y.z`。如果版本分配系统已接管并正确记录线上历史，可用 `patch` |
-| `core_change` | 首次可保留 `patch`，以候选实际分配值为准 |
+| `core_change` | 填本次核心版本，如 `1.2.0`，内测重建沿用该值 |
 | `include_web` | **勾选**「同时登记同版本网页 / PWA 候选」；这次主站候选由它生成，无需另跑 `target=app/all` |
-| `notes` | 填用户能看懂的本次更新说明，例如「新增 macOS 桌面版，网页版支持添加到手机主屏幕」 |
 
 点 **Run workflow**，进入 **candidate** 作业。依次核对预留版本、构建界面、界面签名、构建并签名核心、归档内签名及公证验证、桌面候选登记，以及最后的**登记同版本网页与 PWA 候选**。记录运行链接、commit、界面版本、核心版本、构建 UUID。可在主站桶私有桌面候选路径 `desktop-candidates/<UUID>/` 核对编号。
 

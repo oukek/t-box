@@ -5,7 +5,7 @@ const env = process.env
 const change = env.UI_CHANGE || 'patch'
 const manual = env.UI_VERSION || ''
 if (env.TARGET === 'admin') {
-  if (manual || change !== 'patch') {
+  if (manual || !['manual', 'patch'].includes(change)) {
     throw new Error('仅发布后台时，请保留默认版本选项并清空主界面版本')
   }
   process.exit(0)

@@ -88,3 +88,12 @@ export const SystemDesktopCandidate = new EntitySchema<DesktopCandidate>({
     actor: { type: 'varchar', length: 64, nullable: true },
   },
 })
+
+export const SystemWebReleaseNotes = new EntitySchema<{ build: string, notes: string }>({
+  name: 'SystemWebReleaseNotes',
+  tableName: 'system_web_release_notes',
+  columns: {
+    build: { type: 'char', length: 36, primary: true },
+    notes: { type: 'text' },
+  },
+})

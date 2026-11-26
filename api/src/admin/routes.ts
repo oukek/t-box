@@ -13,7 +13,8 @@ import { requestKey } from '../payments/service.js'
 import { MAX_PROMOTION_IMAGE_SIZE } from '../promotions/creatives.js'
 import { PromotionPoster } from '../promotions/poster.js'
 import { emptyPromotionMetrics } from '../promotions/service.js'
-import { listDesktopCandidates, publishDesktop } from '../system-releases/desktop-candidates.js'
+import { desktopTrialUrl, listDesktopCandidates, publishDesktop } from '../system-releases/desktop-candidates.js'
+import { desktopUiTrial } from '../system-releases/desktop-ui-trial.js'
 import { listWebCandidates, promoteWebCandidate } from '../system-releases/web-candidates.js'
 import { AdminAuth, cookie, sessionToken } from './auth.js'
 import { hashPassword } from './crypto.js'
@@ -73,14 +74,21 @@ export function registerAdmin(
           await auth.authenticate(sessionToken(request))
         })
         secure.get('/desktop-releases', async () => ({ data: await listDesktopCandidates(service.store.source) }))
-        secure.post<{ Params: { build: string }, Body: { expected: string | null } }>('/desktop-releases/:build/publish', async (r) => {
+        secure.get<{ Params: { build: string } }>('/desktop-releases/:build/ui-trial', async (r, reply) => {
+          const archive = await desktopUiTrial(service.store.source, r.params.build)
+          return reply.type('application/zip').header('Content-Disposition', 'attachment; filename="Tbox-ui-trial.zip"').send(archive)
+        })
+        secure.get<{ Params: { build: string } }>('/desktop-releases/:build/trial', async (r) => ({
+          data: { url: await desktopTrialUrl(service.store.source, r.params.build) },
+        }))
+        secure.post<{ Params: { build: string }, Body: { expected: string | null, notes?: string } }>('/desktop-releases/:build/publish', async (r) => {
           const actor = await auth.authenticate(sessionToken(r))
-          return { data: await publishDesktop(service.store.source, r.params.build, r.body?.expected, actor.id) }
+          return { data: await publishDesktop(service.store.source, r.params.build, r.body?.expected, actor.id, r.body?.notes) }
         })
         secure.get('/system-releases', async () => ({ data: await listWebCandidates(service.store.source) }))
-        secure.post<{ Params: { build: string }, Body: { expected: string | null } }>('/system-releases/:build/publish', async (r) => {
+        secure.post<{ Params: { build: string }, Body: { expected: string | null, notes?: string } }>('/system-releases/:build/publish', async (r) => {
           const actor = await auth.authenticate(sessionToken(r))
-          return { data: await promoteWebCandidate(service.store.source, r.params.build, r.body?.expected, actor.id) }
+          return { data: await promoteWebCandidate(service.store.source, r.params.build, r.body?.expected, actor.id, r.body?.notes) }
         })
         secure.get('/session', async (request) => ({
           data: await auth.authenticate(sessionToken(request)),

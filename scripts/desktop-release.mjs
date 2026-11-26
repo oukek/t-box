@@ -39,9 +39,6 @@ async function api(route, body) {
   return result.data
 }
 async function reserve() {
-  if (!env.RELEASE_NOTES?.trim() || env.RELEASE_NOTES.length > 1000) {
-    throw new Error('更新说明必须为 1–1000 字')
-  }
   const mode = env.DESKTOP_MODE
   if (!['ui', 'core', 'both'].includes(mode)) {
     throw new Error('构建类型无效')
@@ -61,7 +58,10 @@ async function reserve() {
       }
       continue
     }
-    const selection = env[k.toUpperCase() + '_CHANGE'] || 'patch'
+    const selection = env[k.toUpperCase() + '_CHANGE']?.trim()
+    if (!selection) {
+      throw new Error('请填写 ' + k + ' 目标版本，内测重建请沿用原版本号')
+    }
     if (!['minor', 'patch', 'major'].includes(selection)) {
       parseSystemVersion(selection)
     }
@@ -101,6 +101,10 @@ async function reserve() {
 }
 async function buildUi() {
   run('node', ['desktop/build-ui.mjs'])
+  const marker = JSON.parse(await readFile(path.join(dist, 'desktop-ui-version.json'), 'utf8'))
+  if (marker.version !== env.TBOX_UI_VERSION || marker.build !== env.TBOX_WEB_BUILD_ID) {
+    throw new Error('桌面内置界面与本次预留版本或构建编号不一致')
+  }
   run('node', ['desktop/pack-ui.mjs', dist, env.TBOX_UI_VERSION, uiFile])
 }
 async function signUi() {
@@ -125,11 +129,11 @@ async function buildCore() {
   if (process.platform !== 'darwin' || process.arch !== 'arm64' || !env.TBOX_CORE_PUBLIC_KEY || !env.TBOX_UI_PUBLIC_KEY || !env.TAURI_SIGNING_PRIVATE_KEY) {
     throw new Error('核心构建需要 Apple Silicon macOS 和签名配置')
   }
-  await writeFile(config, JSON.stringify({ version: r.core, build: { beforeBuildCommand: '', frontendDist: r.ui ? dist : path.join(work, 'embedded') }, plugins: { updater: { pubkey: env.TBOX_CORE_PUBLIC_KEY } }, bundle: { createUpdaterArtifacts: true, resources: { [metadata]: 'desktop-release.json' }, macOS: { signingIdentity: env.APPLE_SIGNING_IDENTITY } } }))
+  await writeFile(config, JSON.stringify({ productName: 'T方舟', identifier: 'cn.tboxos.desktop', version: r.core, build: { beforeBuildCommand: '', frontendDist: r.ui ? dist : path.join(work, 'embedded') }, plugins: { updater: { pubkey: env.TBOX_CORE_PUBLIC_KEY } }, bundle: { createUpdaterArtifacts: true, resources: { [metadata]: 'desktop-release.json' }, macOS: { signingIdentity: env.APPLE_SIGNING_IDENTITY } } }))
   run('pnpm', ['--filter', '@t-box/desktop', 'exec', 'tauri', 'build', '--bundles', 'app', '--config', config], { PATH: '/usr/bin:' + env.PATH, TBOX_UPDATE_ENDPOINT: env.API_BASE_URL + '/system-updates', TBOX_ARTIFACT_ORIGIN: env.APP_ARTIFACT_ORIGIN })
 }
-export async function stageDesktopCandidate(r, files, notes, client, register) {
-  const body = { build: r.build, base: r.base, notes }
+export async function stageDesktopCandidate(r, files, client, register) {
+  const body = { build: r.build, base: r.base }
   for (const [kind, file, ext] of [['ui', files.ui, 'json'], ['core', files.core, 'app.tar.gz']]) {
     if (!r[kind]) {
       continue
@@ -151,7 +155,7 @@ export async function stageDesktopCandidate(r, files, notes, client, register) {
 }
 async function submit() {
   const r = JSON.parse(await readFile(path.join(work, 'reservation.json')))
-  await stageDesktopCandidate(r, { ui: uiFile, core: bundle }, env.RELEASE_NOTES || '', createOssClient(ossClientOptions(env.WEB_OSS_BUCKET, env)), (body) => api('/system-builds/desktop', body))
+  await stageDesktopCandidate(r, { ui: uiFile, core: bundle }, createOssClient(ossClientOptions(env.WEB_OSS_BUCKET, env)), (body) => api('/system-builds/desktop', body))
   if (env.GITHUB_STEP_SUMMARY && r.core) {
     const key = 'desktop-candidates/' + r.build + '/' + sha(await readFile(bundle)) + '.app.tar.gz'
     await appendFile(env.GITHUB_STEP_SUMMARY, [

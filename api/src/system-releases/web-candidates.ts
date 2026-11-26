@@ -2,8 +2,10 @@ import type { DataSource } from 'typeorm'
 import type { WebStorage } from './web-storage.js'
 import { compareSystemVersions } from '@t-box/app-contracts'
 import { In } from 'typeorm'
-import { SystemVersionReservation, SystemWebCandidate } from '../db/records/system-versions.js'
+import { SystemVersionReservation, SystemWebCandidate, SystemWebReleaseNotes } from '../db/records/system-versions.js'
 import { ErrorCode } from '../error-codes.js'
+import { publicationNotes } from './release-notes.js'
+
 import { readCandidate, webStorage } from './web-storage.js'
 
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/
@@ -44,10 +46,17 @@ export async function listWebCandidates(source: DataSource) {
   if (interrupted && !candidates.some((row) => row.build === interrupted.build)) {
     candidates.unshift(interrupted)
   }
+  if (interrupted) {
+    const details = await source.manager.findOneBy(SystemWebReleaseNotes, { build: interrupted.build })
+    const row = candidates.find((item) => item.build === interrupted.build)
+    if (row && details) {
+      Object.assign(row, { notes: details.notes })
+    }
+  }
   return { current, interrupted, candidates }
 }
 
-export async function promoteWebCandidate(source: DataSource, build: string, expected: unknown, actor: string, storage?: WebStorage) {
+export async function promoteWebCandidate(source: DataSource, build: string, expected: unknown, actor: string, notesInput: unknown, storage?: WebStorage) {
   if (!uuid.test(build) || (expected !== null && (typeof expected !== 'string' || !uuid.test(expected)))) {
     throw ErrorCode.INVALID_APP_BUILD('请刷新列表并重新核对线上版本')
   }
@@ -79,10 +88,16 @@ export async function promoteWebCandidate(source: DataSource, build: string, exp
     }
     const store = storage ?? webStorage()
     const { files } = await readCandidate(store, build, candidate.digest, candidate.version)
-    const claimed = await db.update(SystemWebCandidate, { build, state: candidate.state }, { state: 'publishing', actor })
-    if (!claimed.affected) {
-      throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选已失效，请刷新列表')
-    }
+    const previous = candidate.state !== 'pending' && await db.findOneBy(SystemWebReleaseNotes, { build })
+    const notes = previous ? previous.notes : publicationNotes(notesInput)
+    await db.transaction(async (tx) => {
+      const claimed = await tx.update(SystemWebCandidate, { build, state: candidate.state }, { state: 'publishing', actor })
+      if (!claimed.affected) {
+        throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选已失效，请刷新列表')
+      }
+      await tx.save(SystemWebReleaseNotes, { build, notes })
+    })
+    files.set('web-version.json', Buffer.from(JSON.stringify({ build, version: candidate.version, notes }) + '\n'))
     try {
       const last = ['index.html', 'tbox-offline-sw.js', 'web-version.json']
       const ordered = [...files.keys()].sort((a, b) => last.indexOf(a) - last.indexOf(b))

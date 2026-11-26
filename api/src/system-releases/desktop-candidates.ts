@@ -5,6 +5,8 @@ import { SystemDesktopCandidate, SystemVersionCursor, SystemVersionReservation }
 import { ErrorCode } from '../error-codes.js'
 import { checkArtifact, desktopStorage } from './desktop-artifacts.js'
 
+import { publicationNotes } from './release-notes.js'
+
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
 const invalid = () => ErrorCode.INVALID_APP_BUILD('桌面候选信息无效，首次发布需要同时构建界面和核心')
 function artifact(build: string, version: string | null, raw: unknown, previous?: DesktopArtifact): DesktopArtifact {
@@ -29,12 +31,20 @@ export async function listDesktopCandidates(db: DataSource) {
   const [current, candidates] = await Promise.all([repo.findOneBy({ state: 'live' }), repo.find({ order: { createdAt: 'DESC', build: 'ASC' }, take: 100 })])
   return { current, candidates }
 }
+export async function desktopTrialUrl(db: DataSource, build: string, store?: ReturnType<typeof desktopStorage>) {
+  const candidate = uuid.test(build) && await db.manager.findOneBy(SystemDesktopCandidate, { build, state: 'pending' })
+  if (!candidate || candidate.core.build !== build) {
+    throw ErrorCode.INVALID_APP_BUILD('该构建没有可下载的待确认桌面安装包，请刷新列表')
+  }
+  const filename = `Tbox-trial-core-${candidate.core.version}-ui-${candidate.ui.version}-${build.slice(0, 8)}.app.tar.gz`
+  return (store ?? desktopStorage()).url('core', candidate.core, filename)
+}
 async function verifyPair(db: DataSource, row: Pick<DesktopCandidate, 'build' | 'ui' | 'core'>, store: ReturnType<typeof desktopStorage>) {
   const embedded = row.core.build === row.build ? row.ui : (await db.manager.findOneByOrFail(SystemDesktopCandidate, { build: row.core.build })).ui
   return Promise.all([checkArtifact(store, 'ui', row.ui, row.ui), checkArtifact(store, 'core', row.core, embedded)])
 }
 export async function registerDesktop(db: DataSource, raw: unknown, store = desktopStorage()) {
-  const { build, base, notes, ui, core } = (raw ?? {}) as Record<string, unknown>
+  const { build, base, notes = '', ui, core } = (raw ?? {}) as Record<string, unknown>
   if (typeof build !== 'string' || !uuid.test(build) || (base !== null && (typeof base !== 'string' || !uuid.test(base))) || typeof notes !== 'string' || notes.length > 1000) {
     throw invalid()
   }
@@ -58,7 +68,7 @@ export async function registerDesktop(db: DataSource, raw: unknown, store = desk
     }
     const existing = await tx.findOneBy(SystemDesktopCandidate, { build })
     if (existing) {
-      if (existing.base !== base || existing.notes !== notes || existing.ui.digest !== next.ui.digest || existing.core.digest !== next.core.digest) {
+      if (existing.base !== base || (existing.state === 'pending' && existing.notes !== notes) || existing.ui.digest !== next.ui.digest || existing.core.digest !== next.core.digest) {
         throw ErrorCode.SYSTEM_VERSION_CONFLICT('该版本已绑定其他候选')
       }
       return existing
@@ -70,7 +80,7 @@ export async function registerDesktop(db: DataSource, raw: unknown, store = desk
     return tx.save(SystemDesktopCandidate, { ...next, actor: null, state: 'pending' })
   })
 }
-export async function publishDesktop(db: DataSource, build: string, expected: unknown, actor: string, store = desktopStorage()) {
+export async function publishDesktop(db: DataSource, build: string, expected: unknown, actor: string, notesInput: unknown, store = desktopStorage()) {
   const row = uuid.test(build) && await db.manager.findOneBy(SystemDesktopCandidate, { build })
   if (!row) {
     throw invalid()
@@ -81,6 +91,7 @@ export async function publishDesktop(db: DataSource, build: string, expected: un
   if (row.base !== expected || row.state !== 'pending') {
     throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选基线不匹配')
   }
+  const notes = publicationNotes(notesInput)
   await verifyPair(db, row, store)
   return db.transaction(async (tx) => {
     await tx.findOneOrFail(SystemVersionCursor, { where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
@@ -94,11 +105,11 @@ export async function publishDesktop(db: DataSource, build: string, expected: un
     if (live) {
       await tx.update(SystemDesktopCandidate, { build: live.build }, { state: 'archived' })
     }
-    const updated = await tx.update(SystemDesktopCandidate, { build, state: 'pending' }, { state: 'live', actor })
+    const updated = await tx.update(SystemDesktopCandidate, { build, state: 'pending' }, { state: 'live', actor, notes })
     if (!updated.affected) {
       throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选已失效，请刷新列表')
     }
-    return { ...row, state: 'live', actor }
+    return { ...row, state: 'live', actor, notes }
   })
 }
 export async function desktopPlan(db: DataSource, query: Record<string, unknown>, store?: ReturnType<typeof desktopStorage>) {

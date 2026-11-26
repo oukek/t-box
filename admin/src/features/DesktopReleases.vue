@@ -2,7 +2,8 @@
 import { onMounted, ref } from 'vue'
 import AdminButton from '../components/AdminButton.vue'
 import AdminDialog from '../components/AdminDialog.vue'
-import { apiBase, errorMessage, request } from '../core/api'
+import { apiBase, errorMessage, request, requestBlob } from '../core/api'
+import SystemReleaseNotes from './SystemReleaseNotes.vue'
 
 interface Row {
   build: string
@@ -18,6 +19,7 @@ const kinds = { core: '仅核心', ui: '仅界面', both: '联合更新' }
 const states = { pending: '待确认', live: '当前生效', archived: '历史版本' }
 const data = ref<{ current: Row | null, candidates: Row[] }>()
 const selected = ref<Row>()
+const notes = ref('')
 const busy = ref(false)
 const loading = ref(false)
 const error = ref('')
@@ -33,6 +35,33 @@ async function refresh() {
     loading.value = false
   }
 }
+const downloading = ref('')
+async function downloadTrial(row: Row) {
+  downloading.value = row.build
+  error.value = ''
+  try {
+    if (row.kind === 'ui') {
+      const blob = await requestBlob('/desktop-releases/' + row.build + '/ui-trial', { signal: AbortSignal.timeout(180000) })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `Tbox-trial-core-${row.core.version}-ui-${row.ui.version}-${row.build.slice(0, 8)}.zip`
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(link.href), 60000)
+      notice.value = '请先退出方舟，解压后双击「启动体验版.command」。'
+      return
+    }
+    const { url } = await request<{ url: string }>('/desktop-releases/' + row.build + '/trial')
+    window.location.assign(url)
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    downloading.value = ''
+  }
+}
+function review(row: Row) {
+  notes.value = [row.notes, '优化修复 bug'].filter(Boolean).join('\n')
+  selected.value = row
+}
 async function publish() {
   if (!selected.value || busy.value) {
     return
@@ -41,7 +70,7 @@ async function publish() {
   notice.value = ''
   let failed = ''
   try {
-    await request('/desktop-releases/' + selected.value.build + '/publish', { method: 'POST', body: JSON.stringify({ expected: selected.value.base }), signal: AbortSignal.timeout(180000) })
+    await request('/desktop-releases/' + selected.value.build + '/publish', { method: 'POST', body: JSON.stringify({ expected: selected.value.base, notes: notes.value }), signal: AbortSignal.timeout(180000) })
     notice.value = '桌面版本已发布'
   } catch (e) {
     failed = errorMessage(e)
@@ -84,9 +113,14 @@ onMounted(refresh)
       <div><strong>{{ kinds[row.kind] }}</strong><small>界面 {{ row.ui.version }} · 核心 {{ row.core.version }}</small><small>{{ new Date(row.createdAt).toLocaleString() }}</small></div>
       <span>{{ row.state === 'pending' && row.base !== (data?.current?.build ?? null) ? '基线已变化' : states[row.state] }}</span>
       <AdminButton
+        v-if="row.state === 'pending' && (row.kind !== 'ui' || row.base === data?.current?.build)"
+        :disabled="!!downloading || busy"
+        @click="downloadTrial(row)"
+      >{{ downloading === row.build ? '准备下载…' : '下载体验版' }}</AdminButton>
+      <AdminButton
         v-if="row.state === 'pending' && row.base === (data?.current?.build ?? null)"
         :disabled="busy || loading"
-        @click="selected = row"
+        @click="review(row)"
       >审核发布</AdminButton>
     </article>
     <AdminDialog
@@ -102,14 +136,15 @@ onMounted(refresh)
           <dt>方舟界面</dt><dd>{{ data?.current?.ui.version ?? '首次发布' }} → {{ selected.ui.version }}</dd>
           <dt>桌面核心</dt><dd>{{ data?.current?.core.version ?? '首次发布' }} → {{ selected.core.version }}</dd>
           <dt>生效方式</dt><dd>{{ selected.kind === 'ui' ? '下载后刷新界面' : '安装核心后自动重启' }}</dd>
-          <dt>更新说明</dt><dd>{{ selected.notes || '无' }}</dd>
+
         </dl>
+        <SystemReleaseNotes v-model="notes" />
       </template>
       <template #footer>
         <AdminButton :disabled="busy" @click="selected = undefined">取消</AdminButton>
         <AdminButton
           class="primary"
-          :disabled="busy"
+          :disabled="busy || !notes.trim()"
           @click="publish"
         >{{ busy ? '正在校验并发布…' : '确认发布' }}</AdminButton>
       </template>

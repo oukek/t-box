@@ -25,8 +25,9 @@ export function desktopStorage() {
       }
       return Buffer.from((await client.get(key)).content)
     },
-    url(kind: Component, item: DesktopArtifact) {
-      return client.signatureUrlV4('GET', 3600, {}, artifactKey(kind, item))
+    url(kind: Component, item: DesktopArtifact, filename?: string) {
+      const request = filename ? { queries: { 'response-content-disposition': 'attachment; filename="' + filename + '"' } } : {}
+      return client.signatureUrlV4('GET', filename ? 300 : 3600, request, artifactKey(kind, item))
     },
   }
 }

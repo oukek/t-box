@@ -40,6 +40,12 @@ export const desktopSchema: DatabaseSchema = {
       created_at datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       KEY system_desktop_state (state,created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`],
+  }, {
+    id: '2026-11-26.system-web-release-notes',
+    tables: [`CREATE TABLE system_web_release_notes (
+      build char(36) NOT NULL PRIMARY KEY,
+      notes text NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`],
   }],
   tables: [
     `CREATE TABLE user_desktop_appearance (

@@ -22,7 +22,12 @@ if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(shellRelease)) {
 }
 
 export default defineConfig(({ mode }) => ({
-  plugins: [workspaceSources(), vue(), mode !== 'desktop' && verifiedOffline({ shellRelease, uiVersion: version }), developmentApplicationStatus(fileURLToPath(new URL('..', import.meta.url))), localApplicationDeclarations(fileURLToPath(new URL('..', import.meta.url)))],
+  plugins: [mode === 'desktop' && {
+    name: 'desktop-ui-version',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'desktop-ui-version.json', source: JSON.stringify({ version, build: shellRelease }) })
+    },
+  }, workspaceSources(), vue(), mode !== 'desktop' && verifiedOffline({ shellRelease, uiVersion: version }), developmentApplicationStatus(fileURLToPath(new URL('..', import.meta.url))), localApplicationDeclarations(fileURLToPath(new URL('..', import.meta.url)))],
   define: { __WEB_BUILD_ID__: JSON.stringify(shellRelease), __APP_VERSION__: JSON.stringify(version) },
   server: {
     fs: {

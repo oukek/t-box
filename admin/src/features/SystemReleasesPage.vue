@@ -6,12 +6,14 @@ import AdminDialog from '../components/AdminDialog.vue'
 import { errorMessage, request } from '../core/api'
 
 import DesktopReleases from './DesktopReleases.vue'
+import SystemReleaseNotes from './SystemReleaseNotes.vue'
 
 const channel = ref<'web' | 'desktop'>('web')
 const labels = { pending: '待确认', publishing: '发布中', failed: '发布中断', live: '当前生效', archived: '历史版本' }
 interface Candidate {
   build: string
   version: string
+  notes?: string
   digest: string
   state: keyof typeof labels
   files: number
@@ -22,6 +24,7 @@ interface Listing { current: Candidate | null, interrupted: Candidate | null, ca
 const listing = ref<Listing>()
 const selected = ref<Candidate>()
 const expected = ref<string | null>(null)
+const notes = ref('')
 const busy = ref(false)
 const loading = ref(false)
 const error = ref('')
@@ -37,6 +40,7 @@ async function refresh() {
   }
 }
 function review(row: Candidate) {
+  notes.value = row.notes || '优化修复 bug'
   selected.value = row
   expected.value = listing.value?.current?.build ?? null
   error.value = ''
@@ -55,7 +59,7 @@ async function publish() {
   try {
     await request('/system-releases/' + selected.value.build + '/publish', {
       method: 'POST',
-      body: JSON.stringify({ expected: expected.value }),
+      body: JSON.stringify({ expected: expected.value, notes: notes.value }),
       signal: AbortSignal.timeout(180000),
     })
     notice.value = '主界面 ' + selected.value.version + ' 已发布'
@@ -125,12 +129,13 @@ onMounted(refresh)
       <template v-if="selected">
         <p>发布后，网页版和 PWA 将提示更新到 <strong>v{{ selected.version }}</strong>。</p>
         <dl><dt>当前发布记录</dt><dd>{{ listing?.current?.version ?? '首次发布' }}</dd><dt>候选资源</dt><dd>{{ selected.files }} 个文件 · {{ (selected.bytes / 1048576).toFixed(1) }} MB</dd><dt>SHA-256</dt><dd class="digest">{{ selected.digest }}</dd></dl>
+        <SystemReleaseNotes v-model="notes" :readonly="!!selected.notes" />
       </template>
       <template #footer>
         <AdminButton :disabled="busy" @click="selected = undefined">取消</AdminButton>
         <AdminButton
           class="primary"
-          :disabled="busy"
+          :disabled="busy || !notes.trim()"
           @click="publish"
         >{{ busy ? '正在发布…' : '确认发布' }}</AdminButton>
       </template>
