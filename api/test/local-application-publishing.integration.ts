@@ -118,6 +118,32 @@ try {
   assert.equal(installed.generation, 7)
   assert.deepEqual(installed.grants, staged.release.permissions)
   assert.equal((await source.getRepository(ApplicationReleaseEntity).findOneByOrFail({ release_id: deployed.releaseId })).definition.runtime.type === 'web', true, 'original preview remains intact')
+  // Production-style release IDs include the artifact hash. Repacking the
+  // same version on another worker must never enqueue another candidate.
+  const seed = (version: string, digit: string): AppRelease => ({
+    ...preview,
+    appId: 'seeded',
+    releaseId: 'seeded-' + version + '-' + digit.repeat(20),
+    manifest: { ...preview.manifest, id: 'seeded', version },
+    runtime: { type: 'web', integrity: 'sha256-' + digit.repeat(64), entryUrl: 'https://apps.example.com/seeded/' + digit.repeat(64) + '/' },
+  })
+  const deploy = (version: string, digit: string) => new ApplicationPlatform(source, [seed(version, digit)]).initialize()
+  await deploy('1.0.0', 'a')
+  await deploy('1.0.0', 'b')
+  await Promise.all([deploy('1.0.1', 'c'), deploy('1.0.1', 'd')])
+  const repo = source.getRepository(ApplicationReleaseEntity)
+  assert.equal(await repo.countBy({ app_id: 'seeded' }), 2)
+  // Simulate old rows still present after the backend upgrade.
+  const existingSeed = await repo.findOneByOrFail({ app_id: 'seeded', status: 'submitted' })
+  for (const version of ['1.0.0', '1.0.1']) {
+    const legacy = seed(version, 'e')
+    await repo.insert({ ...existingSeed, release_id: legacy.releaseId, definition: legacy })
+  }
+  const seededList = (await publishing.list()).find((item) => item.appId === 'seeded')!
+  assert.equal(seededList.releases.length, 2)
+  assert.equal(seededList.currentReleaseId, seed('1.0.0', 'a').releaseId)
+  assert.equal(seededList.releases.find((r) => r.status === 'submitted')?.release.manifest.version, '1.0.1')
+  assert.equal(await repo.countBy({ app_id: 'seeded' }), 4)
   process.env.NODE_ENV = 'production'
   await assert.rejects(publishing.submitLocalBuild('fixture', '1.2.0', artifact.digest), /仅支持开发环境/)
   console.info('Local publishing passed: preview isolation, concurrent idempotency, trusted capabilities, manual publication, pinned grants, metadata preservation, digest/origin checks and immutable versions.')

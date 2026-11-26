@@ -4,6 +4,15 @@
 
 实施方案 · 2026-11-25。范围是方舟网页/PWA 主界面和 Tauri 桌面客户端。待办、电商助手等子应用沿用应用市场的发布流程。
 
+## 发布 Intel 和 Apple 芯片 Mac 版
+
+1. 在根目录 `release-versions.json` 填写高于线上版本的 `macos.core`。两种芯片共用这个版本。要一起发布网页里的下载入口，`ui` 也要高于当前线上 UI。
+2. 把代码推到 GitHub，先运行[后端部署](https://github.com/oukek/t-box/actions/workflows/api-pm2.yml)，再运行[管理后台部署](https://github.com/oukek/t-box/actions/workflows/admin-oss.yml)。
+3. 运行一次 [macOS 整包发布](https://github.com/oukek/t-box/actions/workflows/desktop-release.yml)。沿用已有的 Developer ID、Apple 公证账号及更新签名密钥。工作流逐个编译原生 arm64 和 x86_64，验证 DMG 中有 Applications 快捷方式、镜像与更新包中的应用签名一致，再将两份安装镜像与两份更新归档放入私有 OSS。全部成功后登记同一个候选。
+4. 在管理后台「系统发布 → 桌面端」选 Apple 芯片或 Intel 下载待确认的体验版。打开 DMG，将 T方舟拖到 Applications，推出磁盘镜像，再从「应用程序」打开。仅 UI 的内部体验仍是带启动器的独立 ZIP，可按芯片下载。
+5. 这次同时更新 UI 和核心时，在「系统发布 → 主界面」确认；仅更新核心时，在「桌面端」确认。正式用户可在网页「设置 → 系统版本」选择芯片下载。浏览器提供可靠的架构信息时标出推荐项；不确定时可在 Mac 的「关于本机」查看芯片或处理器。
+6. 用已安装在「应用程序」的旧版本检查更新。确认「更新并重启」后，客户端按自身运行架构下载签名更新包，校验、安装并重启。仅 UI 更新沿用刷新流程。在 Intel 和 Apple 芯片真机分别核对版本和账号数据；历史单架构版本仍只提供原 Apple 芯片归档。无需运行 iOS 工作流。
+
 ## 实施进度
 
 最近核对：2026-11-25。当前下一项是 **10 生产发布验收**。表中的本地验证与生产发布分别记录。
@@ -77,7 +86,7 @@ node --test scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs scripts/ope
 2. GitHub 的 `desktop-release` Environment 使用已有的 `DEPLOY_DOMAIN`、`OSS_REGION`、`APP_IMPORT_TOKEN`、OSS 访问凭证。将同一对公钥分别写入同名 Variables，将两个私钥文件内容分别保存为 Secrets `TBOX_UI_PRIVATE_KEY`、`TBOX_CORE_PRIVATE_KEY`，对应口令为 `TBOX_UI_KEY_PASSWORD`、`TBOX_CORE_KEY_PASSWORD`。正式向外分发 macOS 应用时配置 Apple Developer ID 签名与公证：Variable `APPLE_SIGNING_IDENTITY`、`APPLE_TEAM_ID`，Secrets `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_PASSWORD`。生产核心工作流要求 Developer ID 身份，上传前验证归档内应用的签名、团队及公证票据。本地开发构建仍使用 ad-hoc 签名。
 3. 首次用 macOS 整包建立基线。日常主界面构建同时登记网页与 Mac 签名包，后台填写一次更新内容。整包工作流在 UI 与线上同号时复用线上已批准的签名界面。
 4. 在「应用管理 → 系统发布 → 主界面」（仅核心构建进入「桌面端」）检查组合，逐行填写更新内容并确认。后端复核 OSS 中的实际字节、两套签名、内置界面摘要、核心版本和 Mach-O 架构，然后在一个事务内切换生效记录。基线已变化的候选需要按新基线重建。「下载安装包」提供当前获批的核心归档，解压得到 `T方舟.app`；同一份归档也用于 Tauri Updater。渠道首次启用时需安装已内置正确公钥与检查地址的客户端。
-5. 实际客户端用 `GET /api/v1/system-updates?platform=macos&arch=aarch64&ui=…&core=…` 检查。无更新或不支持的架构返回 204。已批准的安装包入口为 `GET /api/v1/system-updates/macos/aarch64/installer`。首次安装包和更新包都在主站桶的私有 `desktop-candidates/<build>/<sha256>.*` 下，后台审核控制下载入口和版本可见性。
+5. 实际客户端用 `GET /api/v1/system-updates?platform=macos&arch=aarch64&ui=…&core=…` 检查。无更新或不支持的架构返回 204。已批准的安装包入口为 `GET /api/v1/system-updates/macos/<arch>/installer`。检测更新与安装入口均使用实际架构 `aarch64` 或 `x86_64`。首次安装包和更新包都在主站桶的私有 `desktop-candidates/<build>/<sha256>.*` 下，后台审核控制下载入口和版本可见性。
 
 本地复验命令为 `MYSQL_DATABASE=t_box_test_desktop pnpm --filter @t-box/api exec tsx test/desktop-releases.integration.ts`，需可创建临时数据库的 MySQL 账号。另用两套临时密钥和真实 macOS 构建，经上传代码与后端完成三组发布：联合 1.1.17 / 1.0.2，仅界面 1.1.18，仅核心 1.0.3。最后一组直接使用前一组已批准的界面包。GitHub 和生产 OSS 验收由部署环境执行。
 

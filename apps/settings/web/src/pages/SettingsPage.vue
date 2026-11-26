@@ -136,6 +136,7 @@ function sizeKeydown(event: KeyboardEvent) {
         <p class="profile-english-name" lang="en">{{ appInfo.englishName }}</p>
         <p>{{ appInfo.description }}</p>
         <span class="profile-version">版本 {{ appInfo.version }}</span>
+        <p><a href="https://tboxos.cn/privacy.html" target="_blank" rel="noopener noreferrer">隐私政策</a> · <a href="https://tboxos.cn/support.html" target="_blank" rel="noopener noreferrer">使用支持</a></p>
       </div>
     </Modal>
   </section>

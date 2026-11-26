@@ -78,8 +78,10 @@ export function createOfflineWorker(manifest) {
       const key = url(path || 'index.html')
       event.respondWith((async () => {
         const cache = await caches.open(name)
-        // Application URLs contain immutable digests. A prepared version never waits for the network.
-        // The mutable host shell retains network-first navigation so shell deployments can update.
+        // Launch the installed shell immediately. The running UI checks web-version.json separately.
+        if (!manifest.application && file.path === 'index.html') {
+          return await cache.match(key) || fetch(request)
+        }
         if (request.mode === 'navigate' && !manifest.application) {
           const controller = new AbortController()
           const timer = setTimeout(() => controller.abort(), 2000)

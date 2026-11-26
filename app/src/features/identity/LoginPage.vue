@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { AppIcon, BrandMark, Modal, UserAvatar } from '@t-box/ui-kit'
 import { computed, onBeforeUnmount } from 'vue'
-import { authorizeWechatProfile, closeWechatLogin, confirmWechatLogin, copyWechatLink, inWechat, retryWechatLogin, startWechatLogin, stopWechatUpdates, wechatLogin } from './wechatLogin'
+import PasswordLogin from './PasswordLogin.vue'
+import { authorizeWechatProfile, closeWechatLogin, confirmWechatLogin, copyWechatLink, inWechat, passwordLoginOpen, retryWechatLogin, showPasswordLogin, startWechatLogin, stopWechatUpdates, wechatLogin } from './wechatLogin'
 
 const title = computed(() => wechatLogin.phase === 'profile' ? '确认微信登录' : wechatLogin.phase === 'confirm' ? '确认登录设备' : wechatLogin.phase === 'done' ? '登录已确认' : wechatLogin.purpose === 'payment' ? '核对微信身份' : '微信登录')
 onBeforeUnmount(stopWechatUpdates)
@@ -95,7 +96,8 @@ onBeforeUnmount(stopWechatUpdates)
         class="wechat-login-link"
         :href="wechatLogin.qrUrl"
       >{{ wechatLogin.qrUrl }}</a>
-      <div class="wechat-login-footer"><button @click="closeWechatLogin">{{ wechatLogin.phase === 'done' ? '返回 T方舟' : '暂不登录' }}</button></div>
+      <div class="wechat-login-footer"><button v-if="wechatLogin.purpose === 'login' && !['confirm', 'done'].includes(wechatLogin.phase)" @click="showPasswordLogin">账号密码登录</button><button @click="closeWechatLogin">{{ wechatLogin.phase === 'done' ? '返回 T方舟' : '暂不登录' }}</button></div>
     </div>
   </Modal>
+  <PasswordLogin v-if="passwordLoginOpen" @close="passwordLoginOpen = false" />
 </template>

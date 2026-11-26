@@ -25,8 +25,10 @@ import {
   DesktopAppearanceEntity,
   DesktopLayoutEntity,
 } from '../desktop/entity.js'
+import { PasswordAccount } from '../identity/password-accounts.js'
 import { UserProfileEntity } from '../identity/profile-entity.js'
 import { wechatIdentityEntities } from '../identity/wechat-entities.js'
+import { WechatUnionIdentity } from '../identity/wechat-union.js'
 import { CheckoutLinkEntity } from '../payments/checkout-link-entity.js'
 import { promotionEntities } from '../promotions/entities.js'
 import { SupportSettingsEntity } from '../support/entity.js'
@@ -261,6 +263,8 @@ export const entities = [
   SystemDesktopCandidate,
   ...promotionEntities,
   CheckoutLinkEntity,
+  PasswordAccount,
+  WechatUnionIdentity,
   UserProfileEntity,
   ...wechatIdentityEntities,
   ...babyDiaryEntities,

@@ -1,6 +1,6 @@
 import type { WechatLoginFlow, WechatLoginResult } from '@t-box/shared'
 import QRCode from 'qrcode'
-import { reactive, readonly } from 'vue'
+import { reactive, readonly, ref } from 'vue'
 import { request } from '../../core/network'
 import { watchQrState } from '../../core/qrSocket'
 import { setSession } from '../../core/session'
@@ -303,6 +303,11 @@ export function closeWechatLogin() {
   current = null
   scanId = undefined
   forget()
+}
+export const passwordLoginOpen = ref(false)
+export function showPasswordLogin() {
+  closeWechatLogin()
+  passwordLoginOpen.value = true
 }
 export async function showWechatLogin() {
   state.purpose = 'login'

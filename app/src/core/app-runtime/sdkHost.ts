@@ -717,6 +717,9 @@ export function createHostTransport(options: HostOptions): AppTransport {
           })
         }
       } else if (method === 'api.invoke') {
+        if (platform() === 'ios' && options.appId === 'shop-tools' && a.method === 'creative') {
+          throw SdkErrorCode.PERMISSION_DENIED('此平台不提供商品创作功能', 403)
+        }
         if (typeof a.method !== 'string') {
           throw SdkErrorCode.INVALID_ARGUMENTS('应用方法无效')
         }

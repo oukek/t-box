@@ -27,6 +27,7 @@ import {
 import { ErrorCode } from '../error-codes.js'
 import { HostDownloadConfiguration } from './download-settings.js'
 import { publicLocalReleases } from './public-local.js'
+import { isDevelopmentRelease } from './release-source.js'
 import { ApplicationMarketPolicy } from './settings.js'
 
 const json = <T>(value: unknown): T =>
@@ -154,6 +155,22 @@ export class ApplicationPlatform {
               select: { release_id: true },
               where: { app_id: release.appId },
             })
+          if (known && !old && release.runtime.type === 'web' && !isDevelopmentRelease(release)) {
+            // A seed digest may change on every deployment. A version already bound
+            // to a web artifact must keep its original bytes and publication state.
+            const sameVersion = await db.getRepository(ApplicationReleaseEntity)
+              .createQueryBuilder('r')
+              .select(['r.definition'])
+              .where('r.app_id = :appId', { appId: release.appId })
+              .andWhere('JSON_UNQUOTE(JSON_EXTRACT(r.definition, \'$.manifest.version\')) = :version', { version: release.manifest.version })
+              .getMany()
+            if (sameVersion.some(({ definition }) => {
+              const registered = json<AppRelease>(definition)
+              return registered.runtime.type === 'web' && !isDevelopmentRelease(registered)
+            })) {
+              return
+            }
+          }
           // Only trusted code/deployment can register executable bindings. User installation never registers services.
           await db
             .createQueryBuilder()

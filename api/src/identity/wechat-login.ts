@@ -18,7 +18,9 @@ import { PromotionService } from '../promotions/service.js'
 import { qrChanged } from '../realtime/qr-signals.js'
 import { UserProfileEntity } from './profile-entity.js'
 import { WechatAccountEntity, WechatAuthorizationEntity, WechatFlowEntity, WechatIdentityEntity } from './wechat-entities.js'
-import { fetchWechatOpenid, fetchWechatProfile } from './wechat-profile.js'
+import { fetchWechatIdentity, fetchWechatProfile } from './wechat-profile.js'
+
+import { resolveWechatUser } from './wechat-union.js'
 
 export const collectorDevice = 'T方舟采集插件 · Chrome'
 
@@ -193,9 +195,9 @@ export class WechatLoginService {
       throw ErrorCode.WECHAT_LOGIN_DISABLED()
     }
     const openidHash = digest(profile.openid)
-    const mapping = await db.getRepository(WechatIdentityEntity).findOneBy({ appId, openidHash })
-    const user = mapping ? await this.user(db, mapping.userId, appId) : await this.identity.createExternal(db, profile.nickname)
-    if (!mapping) {
+    const userId = await resolveWechatUser(db, appId, openidHash, profile.unionid, (v) => this.configuration.vault.encrypt(v))
+    const user = userId ? await this.user(db, userId, appId) : await this.identity.createExternal(db, profile.nickname)
+    if (!userId) {
       await this.promotions.registerNewUser(db, user.id, flowId)
     }
     // The account update also serializes against a concurrent custom avatar upload.
@@ -239,7 +241,7 @@ export class WechatLoginService {
       const account = await this.account(row.appId)
       const silent = authorization?.scope === 'snsapi_base'
       const profile = silent ? null : await fetchWechatProfile(account.appId, account.appSecret, input.code, this.transport)
-      const openid = profile?.openid ?? await fetchWechatOpenid(account.appId, account.appSecret, input.code, this.transport)
+      const { openid, unionid } = profile ?? await fetchWechatIdentity(account.appId, account.appSecret, input.code, this.transport)
       const openidHash = digest(openid)
       if (profile && authorization && authorization.openidHash !== openidHash) {
         throw ErrorCode.WECHAT_LOGIN_FAILED('两次微信授权的账号不一致，请使用同一个微信重新登录')
@@ -264,6 +266,7 @@ export class WechatLoginService {
           if (!configured?.enabled || configured.appId !== row.appId) {
             throw ErrorCode.WECHAT_LOGIN_DISABLED()
           }
+          await resolveWechatUser(db, row.appId, openidHash, unionid, (v) => this.configuration.vault.encrypt(v))
           const mapping = await db.getRepository(WechatIdentityEntity).findOneBy({ appId: row.appId, openidHash })
           if (!mapping) {
             await db.getRepository(WechatAuthorizationEntity).update({ flowId: row.id }, { openidHash })

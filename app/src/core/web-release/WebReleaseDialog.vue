@@ -7,6 +7,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { activateRelease } from './activate'
 import { desktopChecks } from './desktopCheck'
 import { readTransfer, startupTransfer } from './desktopTransfer'
+import MacDownloads from './MacDownloads.vue'
 import { systemVersionOpen } from './systemVersion'
 
 const props = defineProps<{ enabled: boolean }>()
@@ -360,6 +361,7 @@ onBeforeUnmount(() => {
         :value="switching ? progress?.total || 1 : progress?.completed"
       />
     </div>
+    <MacDownloads v-if="enabled && !busy && systemVersionOpen" />
     <p v-if="error" role="alert">{{ error }}</p>
     <template v-if="(enabled || desktop) && !busy" #footer>
       <button

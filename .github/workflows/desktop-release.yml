@@ -14,7 +14,7 @@ concurrency:
 jobs:
   candidate:
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 150
     environment: desktop-release
     env:
       DEPLOY_DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
@@ -47,7 +47,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TBOX_UI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TBOX_UI_KEY_PASSWORD }}
-      - name: 构建并签名桌面核心
+      - name: 构建、签名并验证 Apple 芯片和 Intel 安装包
         if: env.DESKTOP_MODE != 'ui' && env.DESKTOP_SUBMITTED != 'true'
         run: node scripts/desktop-release.mjs build-core
         env:
@@ -59,22 +59,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-      - name: 验证归档中的 Developer ID 签名与公证票据
-        if: env.DESKTOP_MODE != 'ui' && env.DESKTOP_SUBMITTED != 'true'
-        env:
-          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          verify_dir="$(mktemp -d)"
-          trap 'rm -rf "$verify_dir"' EXIT
-          tar -xzf 'desktop/src-tauri/target/release/bundle/macos/T方舟.app.tar.gz' -C "$verify_dir"
-          app="$verify_dir/T方舟.app"
-          codesign --verify --deep --strict --verbose=2 "$app"
-          identity="$(codesign -dv --verbose=4 "$app" 2>&1)"
-          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<< "$identity"
-          grep -q '^Authority=Developer ID Application:' <<< "$identity"
-          xcrun stapler validate "$app"
-          spctl --assess --type execute --verbose=4 "$app"
       - name: 上传私有制品并登记待审核版本
         if: env.DESKTOP_SUBMITTED != 'true'
         run: node scripts/desktop-release.mjs submit

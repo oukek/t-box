@@ -1,10 +1,10 @@
 import type { DataSource, EntityManager } from 'typeorm'
-import type { DesktopArtifact, DesktopCandidate } from '../db/records/system-versions.js'
+import type { DesktopArtifact, DesktopCandidate, DesktopCore } from '../db/records/system-versions.js'
 import { compareSystemVersions, parseSystemVersion } from '@t-box/app-contracts'
 import { In } from 'typeorm'
 import { ChannelVersionReservation, SystemDesktopCandidate, SystemVersionCursor, SystemWebCandidate } from '../db/records/system-versions.js'
 import { ErrorCode } from '../error-codes.js'
-import { checkArtifact, desktopStorage } from './desktop-artifacts.js'
+import { checkArtifact, desktopStorage, installer, isMacArch, updateArchive } from './desktop-artifacts.js'
 
 import { publicationNotes } from './release-notes.js'
 import { findChannelReservation } from './reserve.js'
@@ -28,6 +28,13 @@ function artifact(build: string, version: string | null, raw: unknown, previous?
   return { build, version, digest, signature }
 }
 
+function sameCore(a: DesktopCore, b: DesktopCore) {
+  return a.digest === b.digest &&
+    a.distribution?.intel.digest === b.distribution?.intel.digest &&
+    a.distribution?.installers.aarch64.digest === b.distribution?.installers.aarch64.digest &&
+    a.distribution?.installers.x86_64.digest === b.distribution?.installers.x86_64.digest
+}
+
 export async function listDesktopCandidates(db: DataSource) {
   const repo = db.getRepository(SystemDesktopCandidate)
   const [current, candidates] = await Promise.all([repo.findOneBy({ state: 'live' }), repo.find({ order: { createdAt: 'DESC', build: 'ASC' }, take: 100 })])
@@ -35,16 +42,27 @@ export async function listDesktopCandidates(db: DataSource) {
   const shared = new Set(reservations.map((row) => row.build))
   return { current, candidates: candidates.map((row) => ({ ...row, shared: shared.has(row.build) })) }
 }
-export async function desktopTrialUrl(db: DataSource, build: string, store?: ReturnType<typeof desktopStorage>) {
+export async function desktopTrialUrl(db: DataSource, build: string, store?: ReturnType<typeof desktopStorage>, arch: unknown = 'aarch64') {
   const candidate = uuid.test(build) && await db.manager.findOneBy(SystemDesktopCandidate, { build, state: 'pending' })
   if (!candidate || candidate.core.build !== build) {
     throw ErrorCode.INVALID_APP_BUILD('该构建没有可下载的待确认桌面安装包，请刷新列表')
   }
-  const filename = `Tbox-trial-core-${candidate.core.version}-ui-${candidate.ui.version}-${build.slice(0, 8)}.app.tar.gz`
-  return (store ?? desktopStorage()).url('core', candidate.core, filename)
+  const file = isMacArch(arch) && installer(candidate.core, arch)
+  if (!file) {
+    throw invalid()
+  }
+  const filename = `Tbox-trial-core-${candidate.core.version}-ui-${candidate.ui.version}-${build.slice(0, 8)}-${arch}.${file.extension}`
+  return (store ?? desktopStorage()).url(file.kind, file.item, filename)
 }
 export async function verifyPair(db: DataSource, row: Pick<DesktopCandidate, 'build' | 'ui' | 'core'>, store: ReturnType<typeof desktopStorage>) {
   const embedded = row.core.build === row.build ? row.ui : (await db.manager.findOneByOrFail(SystemDesktopCandidate, { build: row.core.build })).ui
+  const distribution = row.core.distribution
+  if (distribution) {
+    distribution.intel.bytes = await checkArtifact(store, 'core', distribution.intel, embedded, 'x86_64')
+    for (const arch of ['aarch64', 'x86_64'] as const) {
+      await checkArtifact(store, 'dmg', distribution.installers[arch], embedded, arch)
+    }
+  }
   return Promise.all([checkArtifact(store, 'ui', row.ui, row.ui), checkArtifact(store, 'core', row.core, embedded)])
 }
 export async function registerDesktop(db: DataSource, raw: unknown, store = desktopStorage()) {
@@ -60,7 +78,22 @@ export async function registerDesktop(db: DataSource, raw: unknown, store = desk
   if (base && !previous) {
     throw invalid()
   }
-  const next = { build, base, notes, ui: artifact(build, r.ui, ui, previous ? previous.ui : undefined), core: artifact(build, r.core, core, previous ? previous.core : undefined), kind: r.ui && r.core ? 'both' as const : r.ui ? 'ui' as const : 'core' as const }
+  const next: Pick<DesktopCandidate, 'build' | 'base' | 'notes' | 'ui' | 'core' | 'kind'> = { build, base, notes, ui: artifact(build, r.ui, ui, previous ? previous.ui : undefined), core: artifact(build, r.core, core, previous ? previous.core : undefined), kind: r.ui && r.core ? 'both' as const : r.ui ? 'ui' as const : 'core' as const }
+  const distribution = (core as Partial<DesktopCore> | undefined)?.distribution
+  if (r.core && previous && previous.core.distribution && !distribution) {
+    throw ErrorCode.INVALID_APP_BUILD('该核心版本需要同时提供两种芯片的更新包和安装镜像')
+  }
+  if (distribution !== undefined) {
+    if (!r.core || !distribution?.installers) {
+      throw invalid()
+    }
+    const intel = artifact(build, r.core, distribution.intel)
+    const installers = { aarch64: artifact(build, r.core, distribution.installers.aarch64), x86_64: artifact(build, r.core, distribution.installers.x86_64) }
+    if (installers.aarch64.digest === installers.x86_64.digest) {
+      throw invalid()
+    }
+    next.core.distribution = { intel, installers }
+  }
   const [uiBytes, coreBytes] = await verifyPair(db, next, store)
   next.ui = { ...next.ui, bytes: uiBytes }
   next.core = { ...next.core, bytes: coreBytes }
@@ -72,7 +105,7 @@ export async function registerDesktop(db: DataSource, raw: unknown, store = desk
     }
     const existing = await tx.findOneBy(SystemDesktopCandidate, { build })
     if (existing) {
-      if (existing.base !== base || (existing.state === 'pending' && existing.notes !== notes) || existing.ui.digest !== next.ui.digest || existing.core.digest !== next.core.digest) {
+      if (existing.base !== base || (existing.state === 'pending' && existing.notes !== notes) || existing.ui.digest !== next.ui.digest || !sameCore(existing.core, next.core)) {
         throw ErrorCode.SYSTEM_VERSION_CONFLICT('该版本已绑定其他候选')
       }
       return existing
@@ -128,7 +161,7 @@ export async function activateDesktop(tx: EntityManager, row: DesktopCandidate, 
   return { ...row, state: 'live', actor, notes }
 }
 export async function desktopPlan(db: DataSource, query: Record<string, unknown>, store?: ReturnType<typeof desktopStorage>) {
-  if (query.platform !== 'macos' || query.arch !== 'aarch64') {
+  if (query.platform !== 'macos' || !isMacArch(query.arch)) {
     return null
   }
   const { ui, core } = query
@@ -142,7 +175,8 @@ export async function desktopPlan(db: DataSource, query: Record<string, unknown>
     throw invalid()
   }
   const row = await db.manager.findOneBy(SystemDesktopCandidate, { state: 'live' })
-  if (!row) {
+  const archive = row && updateArchive(row.core, query.arch)
+  if (!row || !archive) {
     return null
   }
   const u = compareSystemVersions(row.ui.version, ui)
@@ -155,6 +189,6 @@ export async function desktopPlan(db: DataSource, query: Record<string, unknown>
     id: row.build,
     notes: row.notes,
     ui: u ? { bytes: row.ui.bytes, version: row.ui.version, digest: row.ui.digest, signature: row.ui.signature, url: await (store ?? desktopStorage()).url('ui', row.ui) } : null,
-    core: c ? { bytes: row.core.bytes, version: row.core.version, endpoint: base + '/system-updates/' + row.build + '/core' } : null,
+    core: c ? { bytes: archive.bytes, version: row.core.version, endpoint: base + '/system-updates/' + row.build + '/core?arch=' + query.arch } : null,
   }
 }

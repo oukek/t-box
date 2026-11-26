@@ -1,5 +1,5 @@
 /* global caches */
-// Install this listener before the general offline handler, for the versioned host entry only.
+// The release protocol reports preparation progress and activates the requested build.
 export function createShellReleaseWorker(version, build, total) {
   function shell(version, build, total) {
     const scope = new URL(globalThis.registration.scope)
@@ -20,19 +20,6 @@ export function createShellReleaseWorker(version, build, total) {
           event.waitUntil(globalThis.skipWaiting())
         }
       }
-    })
-    globalThis.addEventListener('fetch', (event) => {
-      const request = event.request
-      const url = new URL(request.url)
-      if (request.method !== 'GET' || request.mode !== 'navigate' || url.origin !== scope.origin ||
-        (url.pathname !== scope.pathname && url.pathname !== scope.pathname + 'index.html')) {
-        return
-      }
-      event.stopImmediatePropagation()
-      event.respondWith((async () => {
-        const cache = await caches.open('tbox-static-v1:' + scope.pathname + ':' + version)
-        return await cache.match(new URL('index.html', scope).href) || fetch(request)
-      })())
     })
   }
   return `(${shell.toString()})(${JSON.stringify(version)},${JSON.stringify(build)},${JSON.stringify(total)});\n`

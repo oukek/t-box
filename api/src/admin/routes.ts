@@ -74,12 +74,12 @@ export function registerAdmin(
           await auth.authenticate(sessionToken(request))
         })
         secure.get('/desktop-releases', async () => ({ data: await listDesktopCandidates(service.store.source) }))
-        secure.get<{ Params: { build: string } }>('/desktop-releases/:build/ui-trial', async (r, reply) => {
-          const archive = await desktopUiTrial(service.store.source, r.params.build)
+        secure.get<{ Params: { build: string }, Querystring: { arch?: string } }>('/desktop-releases/:build/ui-trial', async (r, reply) => {
+          const archive = await desktopUiTrial(service.store.source, r.params.build, undefined, r.query.arch)
           return reply.type('application/zip').header('Content-Disposition', 'attachment; filename="Tbox-ui-trial.zip"').send(archive)
         })
-        secure.get<{ Params: { build: string } }>('/desktop-releases/:build/trial', async (r) => ({
-          data: { url: await desktopTrialUrl(service.store.source, r.params.build) },
+        secure.get<{ Params: { build: string }, Querystring: { arch?: string } }>('/desktop-releases/:build/trial', async (r) => ({
+          data: { url: await desktopTrialUrl(service.store.source, r.params.build, undefined, r.query.arch) },
         }))
         secure.post<{ Params: { build: string }, Body: { expected: string | null, notes?: string } }>('/desktop-releases/:build/publish', async (r) => {
           const actor = await auth.authenticate(sessionToken(r))

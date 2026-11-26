@@ -6,7 +6,7 @@ import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { applicationModules } from './applications/registry'
 import ApplicationSurface from './core/app-runtime/ApplicationSurface.vue'
-import { closeApplicationRuntimes } from './core/app-runtime/bridge'
+import { closeApplicationRuntimes, prepareApplicationsForSystemUpdate } from './core/app-runtime/bridge'
 import {
   appCatalog,
   isInstalled,
@@ -63,6 +63,31 @@ const currentApplication = computed(() =>
     ? getApplication(navigation.application.appId)
     : undefined,
 )
+const returning = ref(false)
+const returnError = ref('')
+watch(() => navigation.revision, () => {
+  returnError.value = ''
+})
+async function returnToDesktop() {
+  if (returning.value) {
+    return
+  }
+  const revision = navigation.revision
+  returning.value = true
+  returnError.value = ''
+  try {
+    await prepareApplicationsForSystemUpdate()
+    if (navigation.revision === revision) {
+      navigateTab('applications')
+    }
+  } catch {
+    if (navigation.revision === revision) {
+      returnError.value = '请先保存或结束当前编辑，再返回桌面。'
+    }
+  } finally {
+    returning.value = false
+  }
+}
 const assistantFullscreen = ref(false)
 const loginRequired = computed(() => !identity.user && !['devicePermissions', 'shortcuts', 'paymentHandoff'].includes(navigation.screen) && (navigation.screen !== 'applications' && (navigation.screen !== 'application' || !localApplications.releases.some((release) => release.appId === navigation.application?.appId))))
 const loginPrompt = computed(() => {
@@ -86,11 +111,12 @@ function hostCompatible(appId: string) {
   return entry?.release.runtime.type !== 'shell' || !entry.installation?.version || !!(module && shellVersionCompatible(entry.installation.version, module.manifest.version, module.shellCompatibility?.minimumVersion))
 }
 let stopViewport: (() => void) | undefined
+const desktopShell = !!window.__TBOX_DESKTOP_KEY__
 const productionWeb = import.meta.env.PROD && !window.__TBOX_DESKTOP_KEY__ && !window.Capacitor?.isNativePlatform?.()
 const isWebHost = !window.Capacitor?.isNativePlatform?.()
 const assistantPlatform = isNativeIos() ? 'ios' : isWebHost && !window.__TBOX_DESKTOP_KEY__ ? 'web' : undefined
 const assistantHidden = computed(() => {
-  return assistantPlatform === 'ios' ? appCatalog.assistantHiddenIos : assistantPlatform === 'web' && appCatalog.assistantHiddenWeb
+  return assistantPlatform === 'ios' || (assistantPlatform === 'web' && appCatalog.assistantHiddenWeb)
 })
 watch([assistantHidden, () => navigation.assistantOpen], ([hidden, open]) => {
   if (hidden) {
@@ -100,6 +126,16 @@ watch([assistantHidden, () => navigation.assistantOpen], ([hidden, open]) => {
     }
   }
 }, { immediate: true })
+function desktopContextMenu(event: MouseEvent) {
+  if (navigation.screen !== 'applications' || (!isWebHost && !desktopShell) || (event.target instanceof Element && event.target.closest('dialog'))) {
+    return
+  }
+  event.preventDefault()
+  // Touch long-press and the keyboard menu key still enter icon arrangement.
+  if (event.button === 2 && (event as PointerEvent).pointerType !== 'touch') {
+    event.stopPropagation()
+  }
+}
 function focusWorkspace() {
   document.getElementById('workspace')?.focus()
 }
@@ -168,6 +204,7 @@ onBeforeUnmount(() => {
         ),
       }"
       tabindex="-1"
+      @contextmenu.capture="desktopContextMenu"
     >
       <header v-if="navigation.screen === 'applications'" class="desktop-topbar">
         <a
@@ -176,7 +213,7 @@ onBeforeUnmount(() => {
           @click.prevent="navigateTab('applications')"
         ><BrandMark class="desktop-brand-mark" /><span>T方舟</span></a>
         <div class="desktop-topbar__actions">
-          <InstallDesktop v-if="productionWeb" />
+          <InstallDesktop v-if="isWebHost && !desktopShell" />
           <NotificationBell v-if="identity.user" />
           <button
             v-if="!identity.user"
@@ -193,7 +230,7 @@ onBeforeUnmount(() => {
           ><AppIcon name="share" :size="19" /></button>
           <button
             class="desktop-account"
-            :aria-label="identity.user ? '打开账号设置' : '微信登录'"
+            :aria-label="identity.user ? '打开账号设置' : '登录'"
             @click="identity.user ? openProfile() : showWechatLogin()"
           ><UserAvatar :src="identity.user?.avatarUrl" :size="28" /><span>{{ identity.user?.nickname || '登录' }}</span></button>
         </div>
@@ -222,6 +259,18 @@ onBeforeUnmount(() => {
       <ResourcesPage v-if="identity.user && navigation.screen === 'resources'" />
       <MemoryPage v-if="identity.user && navigation.screen === 'memory'" :key="identity.user.id" />
       <AccountSettingsPage v-if="identity.user && navigation.screen === 'account'" />
+      <nav
+        v-if="navigation.screen === 'application'"
+        class="app-return-bar"
+        aria-label="方舟导航"
+      >
+        <small v-if="returnError" role="alert">{{ returnError }}</small>
+        <button
+          type="button"
+          :disabled="returning"
+          @click="returnToDesktop"
+        ><AppIcon name="apps" :size="15" />{{ returning ? '正在返回…' : '返回桌面' }}</button>
+      </nav>
       <ApplicationSurface
         v-if="navigation.screen === 'application' && navigation.application"
         :destination="navigation.application"

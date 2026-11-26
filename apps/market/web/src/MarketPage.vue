@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { MarketApp, MarketFilter } from './presentation'
-import { appCatalog, backFromApplication, changeInstallation, navigation, openApplication, refreshCatalog, tabLabel } from '@t-box/app-shell-sdk'
+import { appCatalog, backFromApplication, changeInstallation, identity, navigation, openApplication, refreshCatalog, tabLabel } from '@t-box/app-shell-sdk'
 import { AppIcon, Modal } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import MarketAppCard from './MarketAppCard.vue'
 import { displayApp, hasUpdate, installAction, isInstalled, isProcessing, matchesFilter, permissionItems, stateLabel } from './presentation'
 import './market.css'
@@ -22,6 +22,74 @@ const operationKey = ref(crypto.randomUUID())
 const resourceStatus = computed(() => selected.value ? appCatalog.resources?.[selected.value.installation?.releaseId || selected.value.release.releaseId] : undefined)
 const targetResources = computed(() => selected.value ? appCatalog.resources?.[selected.value.release.releaseId] : undefined)
 const resourceLabel = computed(() => resourceStatus.value?.status === 'ready' ? '本地资源已就绪' : resourceStatus.value?.status === 'preparing' ? `正在准备${resourceStatus.value.total ? ` ${resourceStatus.value.completed || 0}/${resourceStatus.value.total}` : ''}` : resourceStatus.value?.status === 'failed' ? '资源准备失败，打开时可重试修复' : resourceStatus.value?.status === 'unsupported' ? '当前环境使用在线加载' : selected.value?.release.runtime.type === 'shell' ? '随宿主提供' : '首次打开时准备资源')
+const updatable = computed(() => appCatalog.entries.filter((entry) => hasUpdate(entry) && !isProcessing(entry)))
+const batch = ref<{ appId: string, releaseId: string, name: string, version: string, permissions: string[], key: string }[]>([])
+const batchOwner = ref('')
+const progress = ref('')
+let active = true
+onBeforeUnmount(() => {
+  active = false
+})
+function reviewUpdates() {
+  if (busy.value || !identity.user) {
+    return
+  }
+  notice.value = ''
+  error.value = ''
+  batchOwner.value = identity.user.id
+  batch.value = updatable.value.map((entry) => ({
+    appId: entry.release.appId,
+    releaseId: entry.release.releaseId,
+    name: displayApp(entry).name,
+    version: entry.release.manifest.version,
+    permissions: permissionItems(entry),
+    key: crypto.randomUUID(),
+  }))
+}
+watch(() => identity.user?.id, () => {
+  batch.value = []
+})
+async function updateAll() {
+  if (busy.value || !batch.value.length || identity.user?.id !== batchOwner.value) {
+    return
+  }
+  busy.value = true
+  const items = batch.value
+  const owner = batchOwner.value
+  const failures: string[] = []
+  let submitted = 0
+  let skipped = 0
+  try {
+    for (const [index, item] of items.entries()) {
+      if (!active || identity.user?.id !== owner) {
+        return
+      }
+      progress.value = `正在处理 ${index + 1}/${items.length} · ${item.name}`
+      const entry = appCatalog.entries.find((entry) => entry.release.appId === item.appId)
+      if (!entry || !hasUpdate(entry) || isProcessing(entry) || entry.release.releaseId !== item.releaseId) {
+        skipped++
+        continue
+      }
+      try {
+        const operation = await changeInstallation(entry, 'update', item.key)
+        if (operation && typeof operation === 'object' && 'status' in operation && operation.status === 'failed') {
+          throw new Error('error' in operation && typeof operation.error === 'string' ? operation.error : '更新失败，请重试')
+        }
+        submitted++
+      } catch (cause) {
+        failures.push(item.name + '（' + (cause instanceof Error ? cause.message : '请重试') + '）')
+      }
+    }
+    if (active && identity.user?.id === owner) {
+      notice.value = `已提交 ${submitted} 个更新` + (skipped ? `，${skipped} 个应用状态已变化，已跳过` : '')
+      error.value = failures.length ? '更新失败：' + failures.join('、') : ''
+    }
+  } finally {
+    progress.value = ''
+    busy.value = false
+    batch.value = []
+  }
+}
 const filters = computed(() => [
   { id: 'all' as const, label: '全部', count: appCatalog.entries.length },
   { id: 'installed' as const, label: '已安装', count: appCatalog.entries.filter(isInstalled).length },
@@ -136,17 +204,24 @@ watch(() => [props.focusAppId, props.openRevision, appCatalog.revision] as const
       :back-label="tabLabel(navigation.backTo)"
       @back="backFromApplication"
     >
-      <template #actions><button
-        class="market-refresh"
-        :disabled="appCatalog.loading || busy"
-        aria-label="刷新应用列表"
-        title="刷新应用列表"
-        @click="refreshCatalog()"
-      ><AppIcon
-        name="refresh"
-        :size="18"
-        :class="{ 'market-spinning': appCatalog.loading }"
-      /></button></template>
+      <template #actions>
+        <button
+          v-if="updatable.length"
+          class="market-detail-primary"
+          :disabled="busy || appCatalog.loading"
+          @click="reviewUpdates"
+        >全部更新（{{ updatable.length }}）</button>
+        <button
+          class="market-refresh"
+          :disabled="appCatalog.loading || busy"
+          aria-label="刷新应用列表"
+          title="刷新应用列表"
+          @click="refreshCatalog()"
+        ><AppIcon
+          name="refresh"
+          :size="18"
+          :class="{ 'market-spinning': appCatalog.loading }"
+        /></button></template>
     </ApplicationHeader>
     <div class="market-toolbar">
       <div class="market-search"><AppIcon name="search" :size="18" /><input
@@ -221,6 +296,32 @@ watch(() => [props.focusAppId, props.openRevision, appCatalog.revision] as const
         ><span class="market-empty-icon"><AppIcon :name="filter === 'updates' && !query.trim() ? 'check' : 'search'" :size="26" /></span><h2>{{ emptyTitle }}</h2><p>{{ emptyDescription }}</p><button v-if="query || filter !== 'all'" @click="resetFilters">查看全部应用<AppIcon name="right" :size="15" /></button></div>
       </template>
     </div>
+    <Modal
+      :open="batch.length > 0"
+      title="全部更新"
+      :busy="busy"
+      @close="!busy && (batch = [])"
+    >
+      <ul class="market-batch-list">
+        <li v-for="item in batch" :key="item.appId">
+          <strong>{{ item.name }}</strong> <small>v{{ item.version }}</small>
+          <p>{{ item.permissions.length ? item.permissions.join('、') : '无需额外权限' }}</p>
+        </li>
+      </ul>
+      <p v-if="progress" role="status">{{ progress }}</p>
+      <template #footer>
+        <button
+          class="button button-secondary"
+          :disabled="busy"
+          @click="batch = []"
+        >取消</button>
+        <button
+          class="market-detail-primary"
+          :disabled="busy"
+          @click="updateAll"
+        >{{ busy ? '正在提交…' : '同意权限并全部更新' }}</button>
+      </template>
+    </Modal>
     <Modal
       :open="Boolean(selected) && !uninstallOpen"
       title="应用详情"

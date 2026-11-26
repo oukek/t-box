@@ -5,7 +5,7 @@ import './style.css'
 
 connectAppClient({})
   .then((connection) => {
-    const page = createApp(App, { client: connection.client }).mount('#app') as InstanceType<typeof App>
+    const page = createApp(App, { client: connection.client, showCreative: connection.context.platform !== 'ios' }).mount('#app') as InstanceType<typeof App>
     connection.ready({ appNavigation: true, beforeSystemUpdate: () => page.beforeSystemUpdate() })
     window.addEventListener('pagehide', () => connection.client.dispose(), {
       once: true,

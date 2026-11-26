@@ -1,13 +1,29 @@
-import type { DesktopArtifact } from '../db/records/system-versions.js'
+import type { DesktopArtifact, DesktopCore } from '../db/records/system-versions.js'
 import { createHash, createPublicKey, verify } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
 import OSS from 'ali-oss'
 import { resourceStorageSettings } from '../config.js'
 import { ErrorCode } from '../error-codes.js'
 
-export type Component = 'ui' | 'core'
+export type Component = 'ui' | 'core' | 'dmg'
+export type MacArch = 'aarch64' | 'x86_64'
+export function isMacArch(value: unknown): value is MacArch {
+  return value === 'aarch64' || value === 'x86_64'
+}
+export function updateArchive(core: DesktopCore, arch: MacArch) {
+  return arch === 'aarch64' ? core : core.distribution?.intel
+}
+export function installer(core: DesktopCore, arch: MacArch) {
+  const dmg = core.distribution?.installers[arch]
+  if (dmg) {
+    return { kind: 'dmg' as const, item: dmg, extension: 'dmg' }
+  }
+  if (arch === 'aarch64') {
+    return { kind: 'core' as const, item: core, extension: 'app.tar.gz' }
+  }
+}
 export function artifactKey(kind: Component, artifact: DesktopArtifact) {
-  return `desktop-candidates/${artifact.build}/${artifact.digest}.${kind === 'ui' ? 'json' : 'app.tar.gz'}`
+  return `desktop-candidates/${artifact.build}/${artifact.digest}.${kind === 'ui' ? 'json' : kind === 'dmg' ? 'dmg' : 'app.tar.gz'}`
 }
 export function desktopStorage() {
   const options = resourceStorageSettings()
@@ -49,7 +65,7 @@ function verifySignature(bytes: Buffer, item: DesktopArtifact, pubkey: string) {
   return trusted
 }
 
-function checkCore(bytes: Buffer, item: DesktopArtifact, ui: DesktopArtifact) {
+function checkCore(bytes: Buffer, item: DesktopArtifact, ui: DesktopArtifact, arch: MacArch) {
   const tar = gunzipSync(bytes, { maxOutputLength: 256 * 1024 ** 2 })
   const files = new Map<string, Buffer>()
   const root = 'T方舟.app/Contents/'
@@ -71,12 +87,12 @@ function checkCore(bytes: Buffer, item: DesktopArtifact, ui: DesktopArtifact) {
   const binary = files.get('MacOS/tbox-desktop')
   const plist = files.get('Info.plist')?.toString() ?? ''
   const contract = JSON.parse(files.get('Resources/desktop-release.json')?.toString() ?? '{}')
-  if (binary?.readUInt32LE(0) !== 0xFEEDFACF || binary.readUInt32LE(4) !== 0x0100000C || !/<key>CFBundleIdentifier<\/key>\s*<string>cn\.tboxos\.desktop<\/string>/.test(plist) || /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)/.exec(plist)?.[1] !== item.version ||
+  if (binary?.readUInt32LE(0) !== 0xFEEDFACF || binary.readUInt32LE(4) !== (arch === 'aarch64' ? 0x0100000C : 0x01000007) || !/<key>CFBundleIdentifier<\/key>\s*<string>cn\.tboxos\.desktop<\/string>/.test(plist) || /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)/.exec(plist)?.[1] !== item.version ||
     contract.protocol !== 1 || contract.uiDigest !== ui.digest || contract.uiVersion !== ui.version) {
     throw new Error('核心架构、版本或内置界面不兼容')
   }
 }
-export async function checkArtifact(store: ReturnType<typeof desktopStorage>, kind: Component, item: DesktopArtifact, ui: DesktopArtifact) {
+export async function checkArtifact(store: ReturnType<typeof desktopStorage>, kind: Component, item: DesktopArtifact, ui: DesktopArtifact, arch: MacArch = 'aarch64') {
   const key = process.env[kind === 'ui' ? 'TBOX_UI_PUBLIC_KEY' : 'TBOX_CORE_PUBLIC_KEY']
   if (!key) {
     throw ErrorCode.RESOURCE_STORAGE_UNAVAILABLE('请配置桌面制品签名公钥')
@@ -87,11 +103,15 @@ export async function checkArtifact(store: ReturnType<typeof desktopStorage>, ki
       throw new Error('摘要不匹配')
     }
     const comment = verifySignature(bytes, item, key)
-    if (kind === 'core') {
-      if (!comment.split('\t').includes('version:' + item.version)) {
+    if (kind !== 'ui') {
+      // The release runner mounts and checks the final image before signing its architecture tag.
+      const tag = kind === 'core' ? item.version : item.version + (arch === 'aarch64' ? '-dmg.arm64' : '-dmg.intel')
+      if (!comment.split('\t').includes('version:' + tag)) {
         throw new Error('签名目标版本不匹配')
       }
-      checkCore(bytes, item, ui)
+      if (kind === 'core') {
+        checkCore(bytes, item, ui, arch)
+      }
     } else {
       const bundle = JSON.parse(bytes.toString())
       if (bundle.version !== item.version || bundle.protocol !== 1 || !bundle.files?.['index.html'] || Object.keys(bundle.files).length > 4096 ||

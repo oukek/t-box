@@ -220,7 +220,21 @@ try {
   assert.equal((await plan('1.1.17', '1.0.2'))?.core, null)
   const h = await reserve({ core: 'patch' })
   const core = makeCore(h.build, h.core!, nextUi)
-  await register({ build: h.build, base: b.build, notes: '核心', core })
+  const intel = makeCore(h.build, h.core!, nextUi, 0x01000007)
+  function diskImage(arch: string) {
+    const bytes = Buffer.concat([Buffer.from(arch), Buffer.alloc(512)])
+    bytes.write('koly', bytes.length - 512)
+    const item = { build: h.build, version: h.core!, digest: sha(bytes), signature: coreSign(bytes, h.core! + '-dmg.' + arch) }
+    objects.set(artifactKey('dmg', item), bytes)
+    return item
+  }
+  const installers = { aarch64: diskImage('arm64'), x86_64: diskImage('intel') }
+  const dual = { build: h.build, base: b.build, notes: '核心', core: { ...core, distribution: { intel, installers } } }
+  await assert.rejects(register({ ...dual, core: { ...core, distribution: { intel: core, installers } } }))
+  await assert.rejects(register({ ...dual, core: { ...core, distribution: { intel, installers: { aarch64: installers.x86_64, x86_64: installers.aarch64 } } } }))
+  await register(dual)
+  assert.equal(await desktopTrialUrl(db, h.build, store, 'x86_64'), await store.url('dmg', installers.x86_64))
+
   const key = artifactKey('core', core)
   const good = objects.get(key)!
   objects.delete(key)
@@ -246,8 +260,16 @@ try {
     assert.equal((await server.inject(base + '/' + a.build + '/core')).statusCode, 404)
     const installer = await server.inject(base + '/macos/aarch64/installer')
     assert.equal(installer.statusCode, 302)
-    assert.equal(installer.headers.location, manifest.json().url)
-    assert.equal((await server.inject(base + '?platform=macos&arch=x86_64&ui=1.0.0&core=1.0.0')).statusCode, 204)
+    assert.equal(installer.headers.location, await store.url('dmg', installers.aarch64))
+    const intelPlan = (await server.inject(base + '?platform=macos&arch=x86_64&ui=1.0.0&core=1.0.0')).json()
+    const intelEndpoint = new URL(intelPlan.core.endpoint)
+    const intelManifest = (await server.inject(intelEndpoint.pathname + intelEndpoint.search)).json()
+    assert.equal(intelManifest.signature, intel.signature)
+    assert.equal(intelManifest.url, await store.url('core', intel))
+    assert.equal((await server.inject(base + '/macos/x86_64/installer')).headers.location, await store.url('dmg', installers.x86_64))
+    assert.equal((await server.inject(base + '/macos/unknown/installer')).statusCode, 404)
+    assert.deepEqual((await server.inject(base + '/macos/installers')).json().architectures, ['aarch64', 'x86_64'])
+    assert.equal((await server.inject(base + '?platform=macos&arch=unknown&ui=1.0.0&core=1.0.0')).statusCode, 204)
   } finally {
     await server.close()
   }

@@ -108,7 +108,7 @@ export class IdentityService {
     })
   }
 
-  async login(value: unknown, ip: string, device?: string) {
+  async login(value: unknown, ip: string, device?: string, provisionedOnly = false) {
     this.limit(`login:${ip}`)
     const input = object(value, ['username', 'password'])
     const username = text(input.username, '账号', 64)
@@ -121,7 +121,7 @@ export class IdentityService {
     }
     const secret = input.password
     const result = await this.source.transaction(async (db) => {
-      const [row] = await db
+      const query = db
         .createQueryBuilder()
         .select(
           'id,username,nickname,created_at AS createdAt,password_hash,enabled,(locked_until>UTC_TIMESTAMP(3)) AS locked',
@@ -130,7 +130,10 @@ export class IdentityService {
         .where('username=:p0')
         .setLock('pessimistic_write')
         .setParameters({ p0: username })
-        .getRawMany()
+      if (provisionedOnly || this.authentication === 'wechat') {
+        query.innerJoin('password_login_accounts', 'pa', 'pa.user_id=app_users.id')
+      }
+      const [row] = await query.getRawMany()
       const valid = await verifyPassword(
         secret,
         row?.password_hash ?? (await this.dummy),
@@ -199,16 +202,14 @@ export class IdentityService {
       )
       .setParameters({ p0: sessionHash })
     if (this.authentication === 'wechat') {
-      // A valid legacy password token is not a WeChat login. The runtime always
-      // supplies this policy, including HTTP, Socket and native action requests.
-      query
-        .innerJoin('wechat_identities', 'wx', 'wx.user_id=u.id')
-        .innerJoin('wechat_account_settings', 'wa', 'wa.id=1 AND wa.app_id=wx.app_id')
-        .andWhere('u.password_hash=:wechatOnly', { wechatOnly: '!wechat-only' })
+      query.andWhere(
+        '(EXISTS (SELECT 1 FROM password_login_accounts pa WHERE pa.user_id=u.id) OR (u.password_hash=:wechatOnly AND EXISTS (SELECT 1 FROM wechat_identities wx JOIN wechat_account_settings wa ON wa.id=1 AND wa.app_id=wx.app_id WHERE wx.user_id=u.id)))',
+        { wechatOnly: '!wechat-only' },
+      )
     }
     const [user] = await query.getRawMany()
     if (!user) {
-      throw ErrorCode.UNAUTHENTICATED(this.authentication === 'wechat' ? '请使用微信重新登录' : '登录已失效，请重新登录')
+      throw ErrorCode.UNAUTHENTICATED('登录已失效，请重新登录')
     }
     const now = Date.now()
     if (now - (this.touched.get(sessionHash) || 0) > 300000) {

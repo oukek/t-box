@@ -105,3 +105,68 @@
     right: 20px;
   }
 }
+
+/* Keep page scrolling inside open applications. The launcher owns one viewport. */
+.super-app .workspace-plane--desktop {
+  height: var(--visible-height, 100dvh);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.super-app .os-desktop {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: max(78px, calc(70px + env(safe-area-inset-top))) max(20px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+.super-app .desktop-clock {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  margin: clamp(12px, 11vh, 120px) 0 clamp(18px, 5vh, 48px);
+}
+.super-app .desktop-clock time { font-size: clamp(54px, 6vw, 84px); gap: 0; font-weight: 350; }
+.super-app .desktop-clock .desktop-clock-seconds { font-size: .5em; }
+.super-app .desktop-clock p { margin: 5px 0 0; }
+.desktop-shelf { flex: 1; min-height: 0; width: min(820px, 100%); margin-inline: auto; touch-action: pan-y; }
+.os-desktop.is-editing .desktop-shelf { overflow-y: auto; }
+.super-app .desktop-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.super-app .desktop-app-launch { padding: 1px; gap: 5px; }
+.desktop-bottom { flex: none; min-height: 36px; text-align: center; }
+.desktop-bottom nav { display:flex; justify-content:center; align-items:center; font-size:12px; gap:8px; font-variant-numeric:tabular-nums; }
+.desktop-bottom nav button { min-width:44px; height:36px; background:none; border:0; color:white; font-size:22px; }
+.desktop-bottom nav button:disabled { opacity:.35; }
+.desktop-dock { --icon-size: 44px; display:flex; justify-content:space-evenly; border-top:1px solid #ffffff40; width:min(100%,335px); margin:auto; padding:10px 0 0; }
+.desktop-dock button { max-width:90px; }
+@media(max-width:620px){
+  .super-app .desktop-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .super-app .desktop-clock { align-items:flex-start; margin:clamp(10px,3vh,35px) 5px clamp(18px,4.5vh,40px); }
+  .super-app .desktop-clock time { font-size:clamp(52px,16vw,70px); }
+  .desktop-topbar { left:12px;right:12px;gap:5px; }
+  .desktop-brand { gap:4px; font-size:14px; }
+  .desktop-topbar__actions { gap:3px; }
+  .desktop-action,.desktop-account { min-width:32px; padding:4px; min-height:36px; }
+  .desktop-account > span:last-child { display:none; }
+}
+@media(max-height:550px){
+  .desktop-topbar {height:42px}
+  .super-app .os-desktop {padding-top:calc(46px + env(safe-area-inset-top))}
+  .super-app .desktop-clock {margin:2px 0 8px}
+  .super-app .desktop-clock time {font-size:34px}
+}
+.app-return-bar {
+  position: sticky; top: 0; z-index: 3;
+  display:flex; align-items:center; justify-content:flex-end; gap:8px;
+  min-height:calc(38px + env(safe-area-inset-top));
+  padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 12px;
+  background:var(--app-background,#f4f6f8);
+}
+.app-return-bar button {
+  display:inline-flex; align-items:center; gap:5px; border:1px solid #d8dfe5; border-radius:16px;
+  color:#465665; background:white; padding:5px 11px; font-size:12px; cursor:pointer;
+}
+.app-return-bar + .application-workspace:has(> .web-application) {height:calc(var(--visible-height,100dvh) - 38px - env(safe-area-inset-top));}

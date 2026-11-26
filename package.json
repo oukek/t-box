@@ -11,7 +11,7 @@
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0",
     "check": "pnpm lint && pnpm check:apps && pnpm check:business && pnpm typecheck",
-    "test:unit": "pnpm test && pnpm test:ui-components && pnpm test:admin-controls && pnpm test:app-sdk && pnpm test:native && pnpm test:application-release && node --test scripts/business-code.test.mjs scripts/system-version.test.mjs scripts/desktop-check.test.mjs scripts/dev*.test.mjs",
+    "test:unit": "pnpm test && pnpm test:ui-components && pnpm test:admin-controls && pnpm test:app-sdk && pnpm test:native && pnpm test:application-release && node --test scripts/business-code.test.mjs scripts/system-version.test.mjs scripts/desktop-check.test.mjs scripts/desktop-artifact-staging.test.mjs scripts/dev*.test.mjs",
     "dev": "node scripts/dev.mjs",
     "desktop:build": "pnpm --filter @t-box/desktop bundle",
     "dev:ios": "node scripts/dev-ios.mjs",

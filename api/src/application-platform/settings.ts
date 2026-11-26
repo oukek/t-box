@@ -5,7 +5,7 @@ import { PlatformConfigurationEntity, PlatformConfigurationHistoryEntity, Platfo
 import { ErrorCode } from '../error-codes.js'
 
 export const APPLICATION_MARKET_KEY = 'host.applicationMarket'
-const defaults: ApplicationMarketSettings = { hidden: false, assistantHiddenIos: false, assistantHiddenWeb: false }
+const defaults: ApplicationMarketSettings = { hidden: false, assistantHiddenIos: true, assistantHiddenWeb: false }
 
 /** Host policy, deliberately independent of AI and individual app configuration. */
 export class ApplicationMarketPolicy {
@@ -45,9 +45,9 @@ export class ApplicationMarketPolicy {
       if (!value || typeof value.hidden !== 'boolean') {
         throw ErrorCode.SCHEMA_REQUIRED('应用市场配置缺失或无效，请管理员检查')
       }
-      return { hidden: value.hidden, assistantHiddenIos: value.assistantHiddenIos === true, assistantHiddenWeb: value.assistantHiddenWeb === true }
+      return { hidden: value.hidden, assistantHiddenIos: true, assistantHiddenWeb: value.assistantHiddenWeb === true }
     }
-    return !db && this.cache ? this.cache.current(this.source, 'host.applicationMarket.v2', load) : load()
+    return !db && this.cache ? this.cache.current(this.source, 'host.applicationMarket.v3', load) : load()
   }
 
   async save(value: unknown, administratorId: string) {
@@ -61,7 +61,7 @@ export class ApplicationMarketPolicy {
         throw ErrorCode.SCHEMA_REQUIRED()
       }
       const patch = value as Partial<ApplicationMarketSettings>
-      const next = { ...await this.read(db), ...patch }
+      const next = { ...await this.read(db), ...patch, assistantHiddenIos: true }
       await db.getRepository(PlatformConfigurationEntity).update({ config_key: APPLICATION_MARKET_KEY }, { value_json: next, updated_at: new Date().toISOString() })
       const revision = Number(state.revision) + 1
       await db.getRepository(PlatformConfigurationStateEntity).update({ id: 1 }, { revision })

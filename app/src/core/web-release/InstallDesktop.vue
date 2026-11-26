@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { AppIcon, Modal } from '@t-box/ui-kit'
+import { AppIcon, BottomSheet } from '@t-box/ui-kit'
 import { ref } from 'vue'
 import { installed, installPrompt } from './installPrompt'
+import MacDownloads from './MacDownloads.vue'
 
 const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 const mac = !ios && /Mac/.test(navigator.platform)
-const installLabel = mac ? '添加到 Dock' : '添加到桌面'
+const wechat = /MicroMessenger/i.test(navigator.userAgent)
 const mobile = ios || /Android/.test(navigator.userAgent)
+const installLabel = mobile ? '添加到主屏幕' : '添加到电脑'
+const safariOnMac = mac && /Version.*Safari/.test(navigator.userAgent)
 const chromeOnMac = mac && /Chrome\//.test(navigator.userAgent) && !/Edg\/|OPR\//.test(navigator.userAgent)
 const help = ref(false)
 async function install() {
@@ -29,26 +32,49 @@ async function install() {
 
 <template>
   <button
-    v-if="!installed && (mac || mobile || installPrompt)"
-    class="desktop-action"
-    :aria-label="installLabel"
-    :title="installLabel"
-    @click="install"
+    v-if="!installed"
+    class="desktop-action install-entry"
+    @click="help = true"
   >
-    <AppIcon name="apps" :size="19" />
+    <AppIcon name="apps" :size="16" />安装方舟
   </button>
-  <Modal
+  <BottomSheet
+    compact
+    desktop-modal
     :open="help"
-    :title="installLabel"
+    title="安装方舟"
     @close="help = false"
   >
-    <template v-if="chromeOnMac">
-      <p>点 Chrome 地址栏右侧的安装图标，或打开右上角「⋮」→「投放、保存和分享」→「将网页安装为应用」。</p>
-      <p>安装后独立打开放舟，右键点击 Dock 中的方舟图标，选择「选项」→「在程序坞中保留」。</p>
-    </template>
-    <p v-else-if="ios">用 Safari 打开方舟，轻点「分享」，选择「添加到主屏幕」，再轻点「添加」。</p>
-    <p v-else-if="mac">在 macOS Sonoma 14 或更高版本，用 Safari 打开方舟，选择菜单栏「文件」→「添加到程序坞」，再点「添加」。</p>
-    <p v-else>用 Chrome 打开方舟，在浏览器菜单中选择「安装应用」或「添加到主屏幕」。</p>
-    <template #footer><button class="button button-primary" @click="help = false">知道了</button></template>
-  </Modal>
+    <section class="install-help">
+      <h3>{{ installLabel }}</h3>
+      <button
+        v-if="installPrompt"
+        class="button button-primary"
+        @click="install"
+      >{{ installLabel }}</button>
+      <p v-else-if="wechat">从右上角菜单选择在系统浏览器打开，再添加方舟。</p>
+      <p v-else-if="ios">用 Safari 打开方舟，轻点「分享」→「添加到主屏幕」。</p>
+      <p v-else-if="chromeOnMac">在 Chrome 菜单选择「投放、保存和分享」→「将网页安装为应用」。</p>
+      <p v-else-if="safariOnMac">在 Safari 的「文件」菜单中选择「添加到程序坞」。</p>
+      <p v-else-if="mobile">在浏览器菜单中选择「安装应用」或「添加到主屏幕」。</p>
+      <p v-else>可在 Chrome 或 Edge 的地址栏或菜单中选择安装此网站。</p>
+      <MacDownloads v-if="help" show-status />
+    </section>
+  </BottomSheet>
 </template>
+
+<style scoped>
+.install-entry {
+  border-radius: 20px;
+  padding-inline: 11px;
+  white-space: nowrap;
+}
+.install-help h3 {
+  font-size: 15px;
+  margin: 4px 0;
+}
+.install-help p {
+  color: var(--muted);
+  margin: 4px 0 16px;
+}
+</style>

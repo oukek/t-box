@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createOssClient, ossClientOptions } from '../deploy/oss/client.mjs'
@@ -12,7 +12,21 @@ const work = path.join(root, 'output/desktop-release', env.GITHUB_RUN_ID || 'loc
 const dist = path.join(root, 'desktop/dist')
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const config = path.join(work, 'tauri.json')
-const bundle = path.join(root, 'desktop/src-tauri/target/release/bundle/macos/T方舟.app.tar.gz')
+const architectures = ['aarch64', 'x86_64']
+function bundleDir(arch) {
+  return path.join(root, 'desktop/src-tauri/target', arch + '-apple-darwin/release/bundle')
+}
+function updateFile(arch) {
+  return path.join(bundleDir(arch), 'macos/T方舟.app.tar.gz')
+}
+async function installerFile(arch) {
+  const dir = path.join(bundleDir(arch), 'dmg')
+  const images = (await readdir(dir)).filter((name) => name.endsWith('.dmg'))
+  if (images.length !== 1) {
+    throw new Error('缺少唯一的 ' + arch + ' 安装镜像')
+  }
+  return path.join(dir, images[0])
+}
 const uiFile = path.join(work, 'ui.json')
 function run(exe, args, extra = {}) {
   const childEnv = { ...env, ...extra }
@@ -57,6 +71,9 @@ async function reserve() {
   await mkdir(work, { recursive: true })
   await writeFile(path.join(work, 'reservation.json'), JSON.stringify({ ...r, base: base?.build ?? null }))
   const status = await api('/system-builds/desktop/' + r.build + '/status')
+  if (r.core && !status.dualMacInstallers) {
+    throw new Error('请先部署支持 Intel 和 DMG 的方舟后端，再构建 Mac 整包')
+  }
   await appendFile(env.GITHUB_ENV, 'BUILD_NEW_UI=' + Boolean(r.ui) + '\nDESKTOP_SUBMITTED=' + status.desktop + '\nWEB_SUBMITTED=' + status.web + '\n')
   if (!r.ui && !status.desktop) {
     // Use the exact approved bytes for the bundled fallback when only the core is rebuilt.
@@ -116,14 +133,18 @@ async function buildCore() {
     throw new Error('核心构建需要 Apple Silicon macOS 和签名配置')
   }
   await writeFile(config, JSON.stringify({ productName: 'T方舟', identifier: 'cn.tboxos.desktop', version: r.core, build: { beforeBuildCommand: '', frontendDist: r.ui ? dist : path.join(work, 'embedded') }, plugins: { updater: { pubkey: env.TBOX_CORE_PUBLIC_KEY } }, bundle: { createUpdaterArtifacts: true, resources: { [metadata]: 'desktop-release.json' }, macOS: { signingIdentity: env.APPLE_SIGNING_IDENTITY } } }))
-  run('pnpm', ['--filter', '@t-box/desktop', 'exec', 'tauri', 'build', '--bundles', 'app', '--config', config], { PATH: '/usr/bin:' + env.PATH, TBOX_UPDATE_ENDPOINT: env.API_BASE_URL + '/system-updates', TBOX_ARTIFACT_ORIGIN: env.APP_ARTIFACT_ORIGIN })
+  for (const arch of architectures) {
+    const target = arch + '-apple-darwin'
+    run('rustup', ['target', 'add', target])
+    run('pnpm', ['--filter', '@t-box/desktop', 'exec', 'tauri', 'build', '--target', target, '--bundles', 'app,dmg', '--config', config], { PATH: '/usr/bin:' + env.PATH, TBOX_UPDATE_ENDPOINT: env.API_BASE_URL + '/system-updates', TBOX_ARTIFACT_ORIGIN: env.APP_ARTIFACT_ORIGIN })
+    const dmg = await installerFile(arch)
+    run('bash', ['scripts/verify-macos-bundle.sh', arch, updateFile(arch), dmg])
+    const installerTag = r.core + (arch === 'aarch64' ? '-dmg.arm64' : '-dmg.intel')
+    run('pnpm', ['--filter', '@t-box/desktop', 'exec', 'tauri', 'signer', 'sign', '--app-version', installerTag, dmg])
+  }
 }
 export async function stageDesktopCandidate(r, files, client, register) {
-  const body = { build: r.build, base: r.base }
-  for (const [kind, file, ext] of [['ui', files.ui, 'json'], ['core', files.core, 'app.tar.gz']]) {
-    if (!r[kind]) {
-      continue
-    }
+  async function upload(file, ext) {
     const bytes = await readFile(file)
     const digest = sha(bytes)
     const signature = (await readFile(file + '.sig', 'utf8')).trim()
@@ -135,27 +156,33 @@ export async function stageDesktopCandidate(r, files, client, register) {
         throw e
       }
     }
-    body[kind] = { digest, signature }
+    return { digest, signature }
+  }
+  const body = { build: r.build, base: r.base }
+  if (r.ui) {
+    body.ui = await upload(files.ui, 'json')
+  }
+  if (r.core) {
+    body.core = await upload(files.core, 'app.tar.gz')
+    body.core.distribution = {
+      intel: await upload(files.intel, 'app.tar.gz'),
+      installers: {
+        aarch64: await upload(files.armDmg, 'dmg'),
+        x86_64: await upload(files.intelDmg, 'dmg'),
+      },
+    }
   }
   await register(body)
 }
 async function submit() {
   const r = JSON.parse(await readFile(path.join(work, 'reservation.json')))
-  await stageDesktopCandidate(r, { ui: uiFile, core: bundle }, createOssClient(ossClientOptions(env.WEB_OSS_BUCKET, env)), (body) => api('/system-builds/desktop', body))
+  const files = { ui: uiFile }
+  if (r.core) {
+    Object.assign(files, { core: updateFile('aarch64'), intel: updateFile('x86_64'), armDmg: await installerFile('aarch64'), intelDmg: await installerFile('x86_64') })
+  }
+  await stageDesktopCandidate(r, files, createOssClient(ossClientOptions(env.WEB_OSS_BUCKET, env)), (body) => api('/system-builds/desktop', body))
   if (env.GITHUB_STEP_SUMMARY && r.core) {
-    const key = 'desktop-candidates/' + r.build + '/' + sha(await readFile(bundle)) + '.app.tar.gz'
-    await appendFile(env.GITHUB_STEP_SUMMARY, [
-      '### macOS 内部体验包',
-      '',
-      '构建编号：`' + r.build + '`',
-      '',
-      '在 OSS 主站桶 `' + env.WEB_OSS_BUCKET + '` 下载本次私有归档：',
-      '',
-      '`' + key + '`',
-      '',
-      '确认发布前可手动解压试用；正式安装入口仍指向当前生效版本。',
-      '',
-    ].join('\n'))
+    await appendFile(env.GITHUB_STEP_SUMMARY, 'Apple 芯片与 Intel 安装镜像、自动更新归档已登记。可在后台「系统发布 → 桌面端」选择芯片下载体验版。\n')
   }
   console.info(r.ui ? '桌面候选已登记，网页就绪后请在系统发布的主界面页确认。' : '核心候选已登记，请在系统发布的桌面端页确认。')
 }

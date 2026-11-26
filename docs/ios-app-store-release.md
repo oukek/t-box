@@ -1,6 +1,8 @@
 # 方舟发版操作单 · 网页和 Mac 切换新流程，iOS 首次发包
 
-本次目标为网页、PWA 和 Mac 主界面 **1.3.0**，Mac 核心 **1.0.2**，iOS 商店版本 **1.0.0**。iOS 包内置同一提交的 UI **1.3.0**。版本已写入仓库根目录的 [release-versions.json](../release-versions.json)。
+服务号与 iOS 移动应用使用同一微信身份，按 [UnionID 配置与验收步骤](wechat-unionid-setup.md) 操作。
+
+本次目标为网页、PWA 和 Mac 主界面 **1.3.1**，Mac 核心 **1.0.2**，iOS 商店版本 **1.0.0**。iOS 包内置同一提交的 UI **1.3.1**。版本已写入仓库根目录的 [release-versions.json](../release-versions.json)。
 
 网页和 Mac 已经完成本次发布的话，直接从 **第 2 步** 开始。iOS 的目标是一次运行完成签名、打包和上传，在 Apple 后台看到 `1.0.0`。
 
@@ -35,7 +37,7 @@ git commit -m "统一主界面发布并接入 iOS 发包"
 git push origin main
 ```
 
-3. 打开 [GitHub 上 main 分支的版本文件](https://github.com/oukek/t-box/blob/main/release-versions.json)，核对 `ui` 是 `1.3.0`、`macos.core` 是 `1.0.2`、`ios` 是 `1.0.0`。后续每个 Action 的 **Branch** 都选 `main`，核对运行页的提交号一致。
+3. 打开 [GitHub 上 main 分支的版本文件](https://github.com/oukek/t-box/blob/main/release-versions.json)，核对 `ui` 是 `1.3.1`、`macos.core` 是 `1.0.2`、`ios` 是 `1.0.0`。后续每个 Action 的 **Branch** 都选 `main`，核对运行页的提交号一致。
 
 ### 1B. 网页和 Mac 按顺序操作
 
@@ -46,16 +48,16 @@ git push origin main
 
 | 两个 UI 的线上版本 | 线上 Mac 核心 | 本次只跑哪个 Action | 在后台哪个页签确认 |
 | --- | --- | --- | --- |
-| 都低于 `1.3.0` | 低于 `1.0.2` | [macOS 整包发布（内置本次界面）](https://github.com/oukek/t-box/actions/workflows/desktop-release.yml)，生成网页、Mac 签名 UI 和完整安装包 | **主界面** |
-| 都低于 `1.3.0` | 已是 `1.0.2` | [主界面构建（网页、PWA、Mac）](https://github.com/oukek/t-box/actions/workflows/web-oss.yml)，复用已上线的核心 | **主界面** |
-| 都是 `1.3.0` | 低于 `1.0.2` | [macOS 整包发布（内置本次界面）](https://github.com/oukek/t-box/actions/workflows/desktop-release.yml)，自动复用已批准的 UI，生成新安装包 | **桌面端** |
-| 都是 `1.3.0` | 已是 `1.0.2` | 目标已上线，跳过本次构建和确认，继续配置 iOS | — |
+| 都低于 `1.3.1` | 低于 `1.0.2` | [macOS 整包发布（内置本次界面）](https://github.com/oukek/t-box/actions/workflows/desktop-release.yml)，生成网页、Mac 签名 UI 和完整安装包 | **主界面** |
+| 都低于 `1.3.1` | 已是 `1.0.2` | [主界面构建（网页、PWA、Mac）](https://github.com/oukek/t-box/actions/workflows/web-oss.yml)，复用已上线的核心 | **主界面** |
+| 都是 `1.3.1` | 低于 `1.0.2` | [macOS 整包发布（内置本次界面）](https://github.com/oukek/t-box/actions/workflows/desktop-release.yml)，自动复用已批准的 UI，生成新安装包 | **桌面端** |
+| 都是 `1.3.1` | 已是 `1.0.2` | 目标已上线，跳过本次构建和确认，继续配置 iOS | — |
 
-若两个 UI 中只有一个已上线 `1.3.0`，首次统一发布应选高于两边预留基线的新 UI 版本。若线上核心已高于 `1.0.2`，只发 UI 可以保留现有核心；要调整本次目标时先核对版本记录。
+若两个 UI 中只有一个已上线 `1.3.1`，首次统一发布应选高于两边预留基线的新 UI 版本。若线上核心已高于 `1.0.2`，只发 UI 可以保留现有核心；要调整本次目标时先核对版本记录。
 
-5. **先体验。** 等 Action 变绿，打开 [方舟管理后台](https://admin.tboxos.cn) → **应用管理 → 系统发布 → 桌面端 → 本次待确认记录 → 下载体验版**。打开体验版，在 **设置 → 系统版本** 确认 UI `1.3.0`、核心 `1.0.2`。
+5. **先体验。** 等 Action 变绿，打开 [方舟管理后台](https://admin.tboxos.cn) → **应用管理 → 系统发布 → 桌面端 → 本次待确认记录 → 下载体验版**。打开体验版，在 **设置 → 系统版本** 确认 UI `1.3.1`、核心 `1.0.2`。
 6. **再上线。** 到表格最后一列的页签，找到刚体验的同一构建，点 **审核发布**，逐行填写更新内容，点一次 **确认发布**。
-7. **核对结果。** 本次包含新 UI 时，打开 [主站版本标记](https://tboxos.cn/web-version.json)，确认 `version` 是 `1.3.0`、`build` 对应本次候选。仅更新核心时，网页保留原构建编号。最后用旧版正式 Mac 打开 **设置 → 系统版本 → 检查更新**，按提示更新并核对两个版本。
+7. **核对结果。** 本次包含新 UI 时，打开 [主站版本标记](https://tboxos.cn/web-version.json)，确认 `version` 是 `1.3.1`、`build` 对应本次候选。仅更新核心时，网页保留原构建编号。最后用旧版正式 Mac 打开 **设置 → 系统版本 → 检查更新**，按提示更新并核对两个版本。
 
 ## 2. 在 Apple 开发者后台确认已注册的 App ID
 
@@ -202,11 +204,25 @@ ls -1
 
 ## 9. 自己确认送审，再手动上线
 
+本次简体中文文案、公开网址、分设备截图及填写顺序见 [iOS 1.0.0 上架资料](app-store/1.0.0/README.md)。
+
 1. 打开 [App Store Connect 的 App 列表](https://appstoreconnect.apple.com/apps)，点 **方舟 → 分发**，进入对应的 iOS 版本。新建 App 默认版本若是 `1.0`，先把版本页改为本次实际版本（本次为 `1.0.0`）；已有正式版时，点 **＋版本** 创建下一版。
 2. 填写描述、关键词、支持网址、隐私政策网址，按页面要求上传 iPhone / iPad 截图。在 **App 信息、App 隐私、定价与销售范围** 完成年龄分级、隐私收集说明、价格和地区设置。选择中国大陆时，在 **App 信息** 核对 Apple 显示的备案及相关资质要求。[Apple 应用信息字段](https://developer.apple.com/help/app-store-connect/reference/app-information/app-information/)
 3. 在 **构建版本** 选刚处理完成的构建。在 **App 审核信息** 填联系人、可实际使用的审核账号和登录步骤。审核备注写明如何打开子应用、哪些资源随包内置、哪些通过后台加载、如何触发原生权限。按包内真实功能填写。[Apple 审核指南](https://developer.apple.com/app-store/review/guidelines/)
 4. 在 **版本发布方式** 选 **手动发布此版本**，点 **保存 → 添加以供审核 → 提交审核**。这一步才正式送审。
 5. 审核通过后状态为 **Pending Developer Release / 等待开发者发布**。确认准备上线，再点 **发布此版本 → 确认**。最后在所选地区用 iPhone 打开商店页面验证下载。[Apple 手动发布](https://developer.apple.com/help/app-store-connect/manage-your-apps-availability/select-an-app-store-version-release-option)
+
+### 为审核准备普通账号
+
+1. 部署本次「后端部署（PM2）」并确认健康检查通过，再部署管理后台、打包并在后台确认发布电商助手 1.3.5，最后重新构建 iOS 1.0.0。网页和 PWA 要同步登录入口时，运行「主界面构建（网页、PWA、Mac）」并在后台确认 UI 1.3.1。若之前的构建已上传，选择新的构建号。
+2. 在生产服务器交互终端运行下面两行。账号名可自选，重复使用已有名字会失败。命令创建普通用户和一本个人账本，在当前终端显示随机密码，妥善保存。
+
+   ```bash
+   cd /www/wwwroot/tbox/current/api
+   node --env-file=/www/wwwroot/tbox/shared/api.env dist/identity/create-password-account.js ark_demo
+   ```
+
+3. 在上传的 iOS 构建点「登录 → 账号密码登录」，用新账号验证登录、退出及重新打开，安装送审涉及的子应用，准备示例数据。把普通账号和密码填入 App Store Connect「App 审核信息」。此账号与其他普通用户使用相同的 iOS 功能范围。客户端没有密码注册入口。
 
 ## 下次修复怎么跑
 

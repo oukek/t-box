@@ -141,10 +141,7 @@ async function signOut() {
             </button>
           </dd>
         </div>
-        <div>
-          <dt>登录方式</dt>
-          <dd>微信授权登录</dd>
-        </div>
+
         <div>
           <dt>注册时间</dt>
           <dd>{{ registeredAt }}</dd>

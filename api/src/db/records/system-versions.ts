@@ -76,12 +76,15 @@ export interface DesktopArtifact {
   digest: string
   signature: string
 }
+export interface DesktopCore extends DesktopArtifact {
+  distribution?: { intel: DesktopArtifact, installers: { aarch64: DesktopArtifact, x86_64: DesktopArtifact } }
+}
 export interface DesktopCandidate {
   build: string
   base: string | null
   kind: 'ui' | 'core' | 'both'
   ui: DesktopArtifact
-  core: DesktopArtifact
+  core: DesktopCore
   notes: string
   state: 'pending' | 'live' | 'archived'
   createdAt: Date

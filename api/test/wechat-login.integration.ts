@@ -24,6 +24,7 @@ const wxNickname = '微信昵称 🍀'
 const wxAvatar = 'https://wx.qlogo.cn/fixture/avatar/132'
 let exchanges = 0
 let profileRequests = 0
+let unionid: string | undefined
 const transport: typeof fetch = async (input) => {
   const url = new URL(String(input))
   if (url.pathname === '/sns/oauth2/access_token') {
@@ -33,7 +34,7 @@ const transport: typeof fetch = async (input) => {
     if (code === 'denied') {
       return Response.json({ errcode: 40029 })
     }
-    return Response.json({ openid: `openid_${code?.split('_')[1] ?? (code === 'other' ? 'other' : 'fixture')}_123456789`, access_token: `access_${code}`, scope: code?.startsWith('silent') ? 'snsapi_base' : 'snsapi_userinfo' })
+    return Response.json({ openid: `openid_${code?.split('_')[1] ?? (code === 'other' ? 'other' : 'fixture')}_123456789`, access_token: `access_${code}`, unionid, scope: code?.startsWith('silent') ? 'snsapi_base' : 'snsapi_userinfo' })
   }
   assert.equal(url.pathname, '/sns/userinfo')
   profileRequests++
@@ -68,7 +69,7 @@ try {
   users.add(legacy.user.id)
   const rejected = await app.inject({ url: '/api/v1/auth/me', headers: { authorization: `Bearer ${legacy.token}` } })
   assert.equal(rejected.statusCode, 401, 'A previously valid password login must be rejected by the production WeChat policy')
-  await assert.rejects(platform.identity.authenticateHash(digest(legacy.token)), /微信重新登录/, 'Socket and native callers must enforce the same policy')
+  await assert.rejects(platform.identity.authenticateHash(digest(legacy.token)), /重新登录/, 'Socket and native callers must enforce the same policy')
   await assert.rejects(service.start({ kind: { toString: 'login' }, secret: secret() }, randomUUID(), 'fixture'), /无效/)
   assert.equal(saved.hasAppSecret, true)
   assert.equal('appSecret' in saved, false)
@@ -205,7 +206,14 @@ try {
   await assert.rejects(service.authorizeProfile(silentProof), /无效/, 'Profile authorization cannot skip the silent identity check')
   const usersBeforeSilent = await source.getRepository(AppUserEntity).count()
   const profilesBeforeSilent = profileRequests
+  unionid = 'union_fixture_existing'
   const identified = await exchange(silent, 'silent')
+  const [link] = await source.query('SELECT unionid_hash,unionid_cipher FROM wechat_union_identities WHERE app_id=? AND openid_hash=?', [account.appId, digest('openid_fixture_123456789')])
+  assert.equal(link.unionid_hash, digest(unionid))
+  assert.equal(vault.decrypt(link.unionid_cipher), unionid)
+  unionid = 'union_fixture_conflict'
+  await assert.rejects(exchange(await start('login', undefined, true), 'silent'), /关联冲突/)
+  unionid = undefined
   assert.ok(identified.session)
   assert.equal(identified.requiresProfileAuthorization, undefined)
   assert.equal(identified.user!.id, direct.user!.id)
@@ -252,12 +260,21 @@ try {
   await exchange(silentExpired, 'silent_unknown')
   await source.getRepository(WechatFlowEntity).update({ id: silentExpired.id }, { expiresAt: new Date(Date.now() - 1) })
   await assert.rejects(service.authorizeProfile({ id: silentExpired.id, secret: silentExpired.secret }), /失效/)
+  // Simulate another verified AppID returning the same UnionID and a different OpenID.
+  const alternateId = 'wxabcdef1234567890'
+  await configuration.save({ ...account, appId: alternateId, revision: saved.revision }, randomUUID())
+  unionid = 'union_fixture_existing'
+  const linked = await exchange(await start('login'), 'fixture_another')
+  assert.equal(linked.user?.id, direct.user!.id)
+  assert.equal(await source.getRepository(AppUserEntity).count(), usersBeforeSilent + 1)
+  await configuration.save({ ...account, revision: (await configuration.view()).revision }, randomUUID())
   await source.getRepository(AppUserEntity).update({ id: direct.user!.id }, { enabled: false })
   await assert.rejects(poll(qr), /停用/)
   console.log('Wechat login integration passed: silent identification, explicit profile consent, same-account verification, browser proof/state, QR confirmation, concurrent claims, idempotent delivery, expiry/revocation and payment OpenID reuse.')
 } finally {
   sockets.forEach((socket) => socket.terminate())
   await app.close()
+  await source.query('DELETE FROM wechat_union_identities WHERE app_id IN (?,?)', [account.appId, 'wxabcdef1234567890'])
   await source.query('DELETE FROM wechat_login_flows')
   await cleanupUsers(source, [...users])
   await source.getRepository(WechatAccountEntity).clear()

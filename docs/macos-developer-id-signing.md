@@ -2,7 +2,7 @@
 
 已有生产网页版、首次上线桌面与 PWA，请从[按顺序部署的操作手册](first-desktop-pwa-rollout.md)开始。
 
-适用于从方舟官网或 OSS 分发的 Apple Silicon 桌面版。第一次由团队在 Apple 创建签名身份，在 GitHub 保存凭证。以后发布含核心的版本时，GitHub Actions 自动签名、提交 Apple 公证、验证最终归档，再登记方舟候选。最后由管理员在方舟后台确认上线。此流程无需在 App Store Connect 创建商店应用、准备商店素材或提交上架审核。[Apple 站外分发说明](https://developer.apple.com/developer-id/) · [方舟桌面工作流](../.github/workflows/desktop-release.yml)
+适用于从方舟官网或 OSS 分发的 Apple 芯片与 Intel 桌面版。第一次由团队在 Apple 创建签名身份，在 GitHub 保存凭证。以后发布含核心的版本时，GitHub Actions 自动签名、提交 Apple 公证、验证最终归档，再登记方舟候选。最后由管理员在方舟后台确认上线。此流程无需在 App Store Connect 创建商店应用、准备商店素材或提交上架审核。[Apple 站外分发说明](https://developer.apple.com/developer-id/) · [方舟桌面工作流](../.github/workflows/desktop-release.yml)
 
 ## 1. 在 Apple Developer 确认团队和权限
 
@@ -73,8 +73,8 @@
 ## 7. 跑第一次 Actions，看哪一步代表成功
 
 1. 确认含签名校验的代码已进入要发布的分支。打开 **Actions → macOS 整包发布（内置本次界面）→ Run workflow**，选分支。首次发布用联合发包；工作流读取该分支 `release-versions.json` 中的组件版本。整包同时登记网页和桌面候选。
-2. 打开该次运行的 **candidate** 作业。查看 **构建并签名桌面核心**：Tauri 使用导入的签名身份签署应用，使用公证账号提交 Apple 公证并装订票据。Apple 接受后，继续看下一步。
-3. 查看 **验证归档中的 Developer ID 签名与公证票据**：工作流解压最终发给用户的归档，验证应用签名、Developer ID 身份和 Team ID，再运行 `xcrun stapler validate` 及 Gatekeeper 检查。**此步骤通过**才继续上传。以后只发布桌面界面时选 `ui`，Apple 核心构建和公证步骤会跳过。
+2. 打开本次运行的 **candidate** 作业，查看 **构建、签名并验证 Apple 芯片和 Intel 安装包**。同一组发布凭证用于两个架构。
+3. 这一步分别验证每个 DMG 的公证票据、Applications 快捷方式、磁盘镜像和更新归档内的应用签名、Team ID、Gatekeeper 结果和处理器架构。两个架构全部通过才上传。只运行主界面构建时会跳过苹果签名和公证。
 4. **上传私有制品并登记待审核版本**通过后，方舟后台 **应用管理 → 系统发布 → 桌面端**应出现对应的「待确认」记录。此时记下 Actions 链接和 commit。管理员按验收单核对候选，再确认发布、验证安装入口并在旧 Mac 上实际升级。[工作流源码](../.github/workflows/desktop-release.yml) · [生产确认与验收单](production-system-release-acceptance.md)
 
 ## 常见卡点

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { fetchWechatOpenid, fetchWechatProfile, wechatAvatar } from '../src/identity/wechat-profile.js'
+import { fetchWechatIdentity, fetchWechatProfile, wechatAvatar } from '../src/identity/wechat-profile.js'
 
 test('Wechat silent authorization validates the OpenID without fetching profile data', async () => {
   let requests = 0
@@ -9,10 +9,10 @@ test('Wechat silent authorization validates the OpenID without fetching profile 
     assert.equal(new URL(String(input)).pathname, '/sns/oauth2/access_token')
     return Response.json({ openid: 'openid_silent_12345', access_token: 'secret_token', scope: 'snsapi_base' })
   }
-  assert.equal(await fetchWechatOpenid('wx_fixture', 'secret_app_secret', 'code', transport), 'openid_silent_12345')
+  assert.deepEqual(await fetchWechatIdentity('wx_fixture', 'secret_app_secret', 'code', transport), { openid: 'openid_silent_12345', unionid: undefined })
   assert.equal(requests, 1)
   for (const token of [{ errcode: 40029 }, { openid: 'short', access_token: 'token', scope: 'snsapi_base' }, { openid: 'openid_fixture_12345', access_token: 'token', scope: 'invalid' }]) {
-    await assert.rejects(fetchWechatOpenid('wx_fixture', 'secret_app_secret', 'code', async () => Response.json(token)), /微信授权未完成/)
+    await assert.rejects(fetchWechatIdentity('wx_fixture', 'secret_app_secret', 'code', async () => Response.json(token)), /微信授权未完成/)
   }
 })
 
@@ -23,9 +23,10 @@ test('Wechat userinfo requires the authorized OpenID and hides upstream credenti
     calls.push(url)
     return Response.json(url.pathname.endsWith('access_token')
       ? { access_token: 'secret_access_token', openid: 'openid_fixture_12345', scope: 'snsapi_userinfo' }
-      : { openid: 'openid_fixture_12345', nickname: '🍀'.repeat(50), headimgurl: 'http://wx.qlogo.cn/fixture/132' })
+      : { openid: 'openid_fixture_12345', nickname: '🍀'.repeat(50), headimgurl: 'http://wx.qlogo.cn/fixture/132', unionid: 'union_from_userinfo' })
   }
   const profile = await fetchWechatProfile('wx_fixture', 'secret_app_secret', 'code_fixture', transport)
+  assert.equal(profile.unionid, 'union_from_userinfo')
   assert.equal([...profile.nickname].length, 40)
   assert.equal(profile.avatarUrl, 'https://wx.qlogo.cn/fixture/132')
   assert.equal(calls[1]!.searchParams.get('access_token'), 'secret_access_token')

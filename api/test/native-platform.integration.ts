@@ -18,6 +18,8 @@ import { initializeDatabase } from '../src/db/initialize.js'
 import { PlatformConfigurationStateEntity } from '../src/db/records/configuration-entities.js'
 import { databaseSchemas } from '../src/db/schema/index.js'
 import { NativeActionSessions } from '../src/identity/native-sessions.js'
+import { PasswordAccount } from '../src/identity/password-accounts.js'
+import { IdentityService } from '../src/identity/service.js'
 import { PlatformService } from '../src/platform/service.js'
 
 const config = getConfig().mysql
@@ -37,7 +39,7 @@ try {
     cached.set(key, value)
   } }, database)
   const policy = new ApplicationMarketPolicy(source, cache)
-  const visible = { assistantHiddenIos: false, assistantHiddenWeb: false }
+  const visible = { assistantHiddenIos: true, assistantHiddenWeb: false }
   assert.deepEqual(await policy.read(), { hidden: false, ...visible })
   const administrator = randomUUID()
   const state = await source.getRepository(PlatformConfigurationStateEntity).findOneByOrFail({ id: 1 })
@@ -109,6 +111,16 @@ try {
   const administration = new ConfigurationService(adminStore, createVault(randomBytes(32)))
   const app = createApp({ platform, administration, taskWorker: false, bills: createBillRepository(source), health: async () => ({ mysql: 'up', redis: 'disabled' }) })
   close = () => app.close()
+  const passwordLogin = () => app.inject({ method: 'POST', url: '/api/v1/auth/password/login', payload: { username: 'native_fixture', password: 'test123' } })
+  assert.equal((await passwordLogin()).statusCode, 401)
+  const publicIdentity = new IdentityService(source)
+  await assert.rejects(publicIdentity.authenticate(user.token), { code: 'UNAUTHENTICATED' })
+  await source.getRepository(PasswordAccount).insert({ userId: user.user.id })
+  const passwordResponse = await passwordLogin()
+  assert.equal(passwordResponse.statusCode, 200)
+  assert.equal((await publicIdentity.authenticate(passwordResponse.json().data.token)).user.id, user.user.id)
+  await source.getRepository(PasswordAccount).delete({ userId: user.user.id })
+  await assert.rejects(publicIdentity.authenticate(passwordResponse.json().data.token), { code: 'UNAUTHENTICATED' })
   const actions = await app.inject({ method: 'GET', url: '/api/v1/native/actions', headers: { authorization: `Bearer ${user.token}` } })
   assert.equal(actions.statusCode, 200)
   const action = actions.json<{ data: InstalledApplicationAction[] }>().data.find((entry) => entry.appId === 'native-system' && entry.id === 'write')!
@@ -137,7 +149,7 @@ try {
   const adminHeaders = { 'cookie': `${cookie.name}=${cookie.value}`, 'x-admin-request': '1' }
   const policyUpdate = await app.inject({ method: 'PATCH', url: '/api/v1/admin/application-market/settings', headers: adminHeaders, payload: { assistantHiddenWeb: true, assistantHiddenIos: false } })
   assert.equal(policyUpdate.statusCode, 200, policyUpdate.body)
-  assert.deepEqual((await app.inject('/api/v1/app-market/settings')).json().data, { hidden: true, assistantHiddenIos: false, assistantHiddenWeb: true })
+  assert.deepEqual((await app.inject('/api/v1/app-market/settings')).json().data, { hidden: true, assistantHiddenIos: true, assistantHiddenWeb: true })
   const updateDownloads = await app.inject({ method: 'PATCH', url: adminUrl, headers: adminHeaders, payload: { ...downloadConfig, displayName: '更新后的提示名称' } })
   assert.equal(updateDownloads.statusCode, 200, updateDownloads.body)
   assert.equal((await app.inject({ method: 'GET', url: '/api/v1/host/downloads' })).json().data.displayName, '更新后的提示名称')

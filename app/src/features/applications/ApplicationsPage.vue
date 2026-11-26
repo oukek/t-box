@@ -5,7 +5,7 @@ import { moveDesktopApp } from '@t-box/shared'
 import { AppIcon, Modal } from '@t-box/ui-kit'
 import { useLauncherClock } from '@t-box/ui-kit/launcherClock'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { appCatalog, repairInstallation } from '../../core/app-runtime/catalog'
 import { getApplication, presentApplication } from '../../core/applications'
 import {
@@ -69,6 +69,62 @@ const apps = computed(() =>
       : []
   }),
 )
+const viewport = ref({ width: innerWidth, height: innerHeight })
+const shelf = ref<HTMLElement>()
+const shelfHeight = ref(0)
+let observer: ResizeObserver | undefined
+const measure = () => {
+  viewport.value = { width: innerWidth, height: innerHeight }
+  shelfHeight.value = shelf.value?.clientHeight ?? 0
+}
+onMounted(() => {
+  observer = new ResizeObserver(measure)
+  if (shelf.value) {
+    observer.observe(shelf.value)
+  }
+  window.addEventListener('resize', measure)
+  measure()
+})
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  window.removeEventListener('resize', measure)
+})
+const narrow = computed(() => viewport.value.width <= 620)
+const dock = computed(() => narrow.value && viewport.value.height >= 550 && !editing.value
+  ? ['todo', 'ledger', 'calendar'].flatMap((id) => apps.value.filter((app) => app.manifest.id === id))
+  : [])
+const gridApps = computed(() => apps.value.filter((app) => !dock.value.includes(app)))
+const capacity = computed(() => {
+  const size = desktopIconSizes[preferences.iconSize].pixels
+  const rows = Math.max(1, Math.min(narrow.value ? 4 : 2, Math.floor((shelfHeight.value + 12) / (size + 42))))
+  return (narrow.value ? 4 : 5) * rows
+})
+const page = ref(0)
+const pages = computed(() => Math.max(1, Math.ceil(gridApps.value.length / capacity.value)))
+const visibleApps = computed(() => editing.value ? gridApps.value : gridApps.value.slice(page.value * capacity.value, (page.value + 1) * capacity.value))
+watch(pages, (count) => {
+  page.value = Math.min(page.value, count - 1)
+})
+function turn(delta: number) {
+  if (!editing.value) {
+    page.value = Math.max(0, Math.min(pages.value - 1, page.value + delta))
+  }
+}
+let touch: Touch | undefined
+let swipeEnded = -Infinity
+function startSwipe(event: TouchEvent) {
+  touch = event.touches.length === 1 ? event.touches[0] : undefined
+}
+function endSwipe(event: TouchEvent) {
+  if (touch && !editing.value && event.changedTouches[0]?.identifier === touch.identifier) {
+    const dx = event.changedTouches[0].clientX - touch.clientX
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(event.changedTouches[0].clientY - touch.clientY)) {
+      swipeEnded = performance.now()
+      turn(dx < 0 ? 1 : -1)
+    }
+  }
+  touch = undefined
+}
 const sort = useAppDrag(
   order,
   editing,
@@ -94,7 +150,7 @@ const draggedApp = computed(() =>
   apps.value.find((x) => x.manifest.id === sort.drag.appId),
 )
 function launch(app: DesktopApplication) {
-  if (sort.consumeClick()) {
+  if (sort.consumeClick() || performance.now() - swipeEnded < 350) {
     return
   }
   if (editing.value || (app.installation.status && app.installation.status !== 'active')) {
@@ -179,35 +235,92 @@ const status = computed(() =>
       <AppIcon name="warning" :size="16" /><span>{{ desktop.state.error }}</span><button @click="desktop.retry">重试</button>
     </div>
     <div
-      class="desktop-grid"
-      role="list"
-      aria-label="已安装应用"
-      @pointermove="sort.move"
-      @pointerup="sort.end"
-      @pointercancel="sort.cancel"
-      @lostpointercapture="sort.lost"
-      @pointerleave="sort.leave"
-      @touchmove="sort.touchMove"
+      ref="shelf"
+      class="desktop-shelf"
+      @touchstart.passive="startSwipe"
+      @touchend.passive="endSwipe"
+      @touchcancel="touch = undefined"
+      @keydown.left="turn(-1)"
+      @keydown.right="turn(1)"
     >
-      <article
-        v-for="app in apps"
-        :key="app.manifest.id"
-        role="listitem"
-        class="desktop-app"
-        :class="{ 'is-dragging': sort.drag.appId === app.manifest.id }"
-        :data-app-id="app.manifest.id"
+      <div
+        class="desktop-grid"
+        role="list"
+        aria-label="已安装应用"
+        @pointermove="sort.move"
+        @pointerup="sort.end"
+        @pointercancel="sort.cancel"
+        @lostpointercapture="sort.lost"
+        @pointerleave="sort.leave"
+        @touchmove="sort.touchMove"
+      >
+        <article
+          v-for="app in visibleApps"
+          :key="app.manifest.id"
+          role="listitem"
+          class="desktop-app"
+          :class="{ 'is-dragging': sort.drag.appId === app.manifest.id }"
+          :data-app-id="app.manifest.id"
+        >
+          <button
+            class="desktop-app-launch"
+            :aria-label="
+              editing
+                ? `整理${app.manifest.name}，左右方向键移动`
+                : `打开${app.manifest.name}`
+            "
+            :aria-describedby="editing ? 'desktop-sort-help' : 'desktop-launch-help'"
+            @pointerdown="sort.start($event, app.manifest.id)"
+            @keydown="keyboard($event, app.manifest.id)"
+            @click="launch(app)"
+            @contextmenu.prevent="beginEditing"
+          >
+            <LauncherIcon
+              :app-id="app.manifest.id"
+              :icon="app.manifest.icon"
+              :icon-asset="app.manifest.iconAsset"
+              :icon-variant="app.manifest.iconVariant"
+            />
+            <span class="desktop-app-name">{{ app.manifest.name }}</span>
+            <small v-if="app.installation.status && app.installation.status !== 'active'" class="desktop-app-state">{{ app.installation.status === 'installing' ? '准备中…' : '暂不可用' }}</small>
+          </button>
+          <button
+            v-if="editing"
+            class="desktop-app-info"
+            :aria-label="`${app.manifest.name}应用信息`"
+            @click.stop="info = app"
+          >
+            <AppIcon name="info" :size="13" />
+          </button>
+        </article>
+      </div>
+    </div>
+    <footer class="desktop-bottom">
+      <nav v-if="pages > 1 && !editing" aria-label="桌面分页">
+        <button
+          :disabled="page === 0"
+          aria-label="上一页"
+          @click="turn(-1)"
+        >‹</button>
+        <span aria-live="polite">{{ page + 1 }} / {{ pages }}</span>
+        <button
+          :disabled="page === pages - 1"
+          aria-label="下一页"
+          @click="turn(1)"
+        >›</button>
+      </nav>
+      <div
+        v-if="dock.length"
+        class="desktop-dock"
+        aria-label="常用应用"
       >
         <button
+          v-for="app in dock"
+          :key="app.manifest.id"
           class="desktop-app-launch"
-          :aria-label="
-            editing
-              ? `整理${app.manifest.name}，左右方向键移动`
-              : `打开${app.manifest.name}`
-          "
-          :aria-describedby="editing ? 'desktop-sort-help' : 'desktop-launch-help'"
-          @pointerdown="sort.start($event, app.manifest.id)"
-          @keydown="keyboard($event, app.manifest.id)"
+          :aria-label="'打开' + app.manifest.name"
           @click="launch(app)"
+          @keydown="keyboard($event, app.manifest.id)"
           @contextmenu.prevent="beginEditing"
         >
           <LauncherIcon
@@ -217,18 +330,9 @@ const status = computed(() =>
             :icon-variant="app.manifest.iconVariant"
           />
           <span class="desktop-app-name">{{ app.manifest.name }}</span>
-          <small v-if="app.installation.status && app.installation.status !== 'active'" class="desktop-app-state">{{ app.installation.status === 'installing' ? '准备中…' : '暂不可用' }}</small>
         </button>
-        <button
-          v-if="editing"
-          class="desktop-app-info"
-          :aria-label="`${app.manifest.name}应用信息`"
-          @click.stop="info = app"
-        >
-          <AppIcon name="info" :size="13" />
-        </button>
-      </article>
-    </div>
+      </div>
+    </footer>
     <p
       v-if="status || editing"
       class="desktop-sort-hint"

@@ -196,6 +196,7 @@ export class ApplicationPublishing {
           revision: true,
           release_notes: true,
           submitted_at: true,
+          submitted_by: true,
           published_at: true,
         },
         order: { created_at: 'DESC', release_id: 'DESC' },
@@ -204,9 +205,33 @@ export class ApplicationPublishing {
     for (const app of applications) {
       byApplication.set(app.app_id, { appId: app.app_id, kind: app.kind, currentReleaseId: null, releases: [] })
     }
+    // Older deployments registered an untouched candidate per artifact digest.
+    // Keep explicit submissions and history; show the newest seed only when it
+    // is the sole source for that app/version.
+    const preferred = new Map<string, { id: string, seed: boolean }>()
+    const redundantSeeds = new Set<string>()
+    for (const row of rows) {
+      const release = json<AppRelease>(row.definition)
+      if (release.runtime.type !== 'web' || isDevelopmentRelease(release)) {
+        continue
+      }
+      const key = release.appId + '/' + release.manifest.version
+      const prefix = release.appId + '-' + release.manifest.version + '-'
+      const seed = row.status === 'submitted' && row.revision === 1 && !row.submitted_by && !row.submitted_at &&
+        row.release_id.startsWith(prefix) && /^[a-f0-9]{20}$/.test(row.release_id.slice(prefix.length))
+      const previous = preferred.get(key)
+      if (previous && seed) {
+        redundantSeeds.add(row.release_id)
+      } else {
+        if (previous?.seed) {
+          redundantSeeds.add(previous.id)
+        }
+        preferred.set(key, { id: row.release_id, seed })
+      }
+    }
     for (const row of rows) {
       const app = byApplication.get(row.app_id)
-      if (!app) {
+      if (!app || redundantSeeds.has(row.release_id)) {
         continue
       }
       const release = { ...json<AppRelease>(row.definition), kind: app.kind }

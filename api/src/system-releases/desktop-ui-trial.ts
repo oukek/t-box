@@ -4,7 +4,7 @@ import { Readable } from 'node:stream'
 import JSZip from 'jszip'
 import { SystemDesktopCandidate } from '../db/records/system-versions.js'
 import { ErrorCode } from '../error-codes.js'
-import { desktopStorage } from './desktop-artifacts.js'
+import { desktopStorage, isMacArch, updateArchive } from './desktop-artifacts.js'
 
 const launcher = `#!/bin/zsh
 set -eu
@@ -25,16 +25,20 @@ digest=$(/usr/bin/shasum -a 256 resources/ui.json | /usr/bin/cut -d ' ' -f 1)
 /usr/bin/open -n -W --env "HOME=$trial_profile" "$trial_dir/T方舟.app"
 `
 
-export async function desktopUiTrial(db: DataSource, build: string, storage?: ReturnType<typeof desktopStorage>) {
+export async function desktopUiTrial(db: DataSource, build: string, storage?: ReturnType<typeof desktopStorage>, arch: unknown = 'aarch64') {
   const candidate = await db.manager.findOneBy(SystemDesktopCandidate, { build, kind: 'ui', state: 'pending' })
   const live = await db.manager.findOneBy(SystemDesktopCandidate, { state: 'live' })
   if (!candidate || !live || candidate.base !== live.build || candidate.core.digest !== live.core.digest) {
     throw ErrorCode.SYSTEM_VERSION_CONFLICT('候选或线上基线已变化，请刷新列表并核对构建')
   }
+  const archiveItem = isMacArch(arch) && updateArchive(live.core, arch)
+  if (!archiveItem) {
+    throw ErrorCode.INVALID_APP_BUILD('该版本没有对应芯片的体验包')
+  }
   const store = storage ?? desktopStorage()
-  const [core, ui] = await Promise.all([store.read('core', live.core), store.read('ui', candidate.ui)])
+  const [core, ui] = await Promise.all([store.read('core', archiveItem), store.read('ui', candidate.ui)])
   // Registration authenticated both immutable artifacts. Bind the download to those exact bytes.
-  if (createHash('sha256').update(core).digest('hex') !== live.core.digest ||
+  if (createHash('sha256').update(core).digest('hex') !== archiveItem.digest ||
     createHash('sha256').update(ui).digest('hex') !== candidate.ui.digest) {
     throw ErrorCode.INVALID_APP_BUILD('体验包制品摘要不匹配')
   }

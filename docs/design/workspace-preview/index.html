@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>T方舟 · 布局预览</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#262c38;background:#fafbfc}button,a{font:inherit;color:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible{outline:3px solid #7997fb;outline-offset:3px}button{border:0;background:none}a{text-decoration:none}h1,h2,h3,p{margin:0}#home{height:100dvh;overflow:hidden;display:flex;flex-direction:column;color:white;background:linear-gradient(180deg,#17243d66,#17233830 55%,#18283fa6),url(../../../app/public/wallpapers/lake-dusk.jpg) center/cover}.bar{height:68px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,64px);border-bottom:1px solid #ffffff28}.brand,.actions,.label,.crumb,.apphead,.subhead{display:flex;align-items:center;gap:10px}.brand{font-weight:650;letter-spacing:.03em}.brand img,.crumb img{border-radius:8px;width:30px;height:30px}.pill,.avatar{border:1px solid #ffffff57;background:#14223644;border-radius:20px;color:white;padding:6px 14px;font-size:13px}.avatar{border-radius:50%;padding:5px 9px}.desk{width:min(980px,92%);margin:auto;display:flex;flex-direction:column;align-items:center;min-height:0}.clock{font-size:clamp(54px,6vw,84px);font-weight:320;letter-spacing:-.065em;line-height:1.1;font-variant-numeric:tabular-nums}.date{font-size:14px;letter-spacing:.09em;margin:8px 0 clamp(20px,5vh,50px)}.shelf{width:min(820px,100%);padding:18px 0}.icons{display:grid;grid-template-columns:repeat(5,1fr);gap:22px 12px}.tile{display:flex;align-items:center;flex-direction:column;gap:7px;font-size:13px;color:white;text-shadow:0 1px 4px #102039,0 0 9px #10203985}.tile img{width:54px;border-radius:14px;box-shadow:0 4px 10px #13213335}.tile[href]:hover img{transform:translateY(-2px)}.foot{display:flex;justify-content:center;align-items:center;gap:7px;height:44px}.dot{width:16px;height:4px;border-radius:3px;background:white}.foot button{color:white}.sheet{margin:auto;border:0;border-radius:22px;padding:24px;width:min(390px,calc(100% - 28px));color:#292f3b;box-shadow:0 16px 70px #17253433}.sheet::backdrop{background:#0c162d60;backdrop-filter:blur(5px)}.subhead{justify-content:space-between}.sheet h2{font-size:21px}.sheet h3{font-size:14px;margin:20px 0 6px}.sheet p,.muted{color:#657183;font-size:13px}.sheet button{min-height:38px}.chips{display:flex;gap:8px}.chip,.new{border-radius:9px;border:1px solid #d8deea;background:white;padding:6px 13px;font-size:14px}.new{background:#323e68;color:white;border-color:#323e68}.window{height:100dvh;display:flex;flex-direction:column}.crumb{height:54px;padding:0 24px;border-bottom:1px solid #dfe3eb;background:white;font-size:14px}.crumb a{color:#56637a}.crumb span{color:#a5adbb}.layout{display:grid;grid-template-columns:192px minmax(0,1fr);flex:1;min-height:0}.rail{background:#f1f3f8;border-right:1px solid #dfe3eb;padding:27px 12px}.rail h2{font-size:16px;padding:0 12px;margin-bottom:18px}.nav{display:block;border-radius:8px;padding:10px 13px;color:#5d6677;font-size:14px;margin-bottom:3px}.nav.on{background:#e0e5f2;color:#303e68;font-weight:650}.content{min-width:0;overflow:auto;padding:28px clamp(20px,2.5vw,38px)}.apphead{justify-content:space-between;margin-bottom:22px}.apphead h1{font-size:28px;letter-spacing:-.04em}.apphead p{color:#6b7383;font-size:13px}.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,29%);gap:20px;align-items:start}.box{background:white;border:1px solid #dce1e9;border-radius:12px;overflow:hidden}.box h2{font-size:15px;padding:14px 18px;border-bottom:1px solid #e7eaf0}.row{display:flex;gap:12px;align-items:center;padding:15px 18px;border-bottom:1px solid #edf0f4}.row:last-child{border:0}.check{width:18px;height:18px;flex:none;border:1.4px solid #9ca6b9;border-radius:6px}.row small,.plan small{display:block;color:#747e90;font-size:12px;margin-top:4px}.tag{margin-left:auto;white-space:nowrap;font-size:11px;color:#814a32;background:#fff0e5;padding:2px 7px;border-radius:5px}.plan{padding:16px}.track{height:5px;border-radius:5px;background:#e8ebf2;margin:13px 0}.track i{display:block;width:50%;height:100%;background:#8392b8;border-radius:5px}.week{padding:12px 16px;color:#515d74;font-size:13px}.wide{overflow-x:auto}table{border-collapse:collapse;width:100%;text-align:left;font-size:14px;white-space:nowrap}th,td{padding:13px 16px;border-bottom:1px solid #e7eaf0}th{background:#f1f4f9;font-size:12px;color:#647188}td:not(:first-child){font-variant-numeric:tabular-nums}.tabs{display:flex;gap:18px;font-size:14px;margin-bottom:14px}.tabs b{color:#354879;border-bottom:2px solid;padding-bottom:6px}.tools{display:none}
+@media(max-width:1000px){.layout{grid-template-columns:146px minmax(0,1fr)}.content{padding:22px 18px}.cols{gap:12px;grid-template-columns:minmax(0,1fr) minmax(185px,30%)}.shelf{max-width:720px}}
+@media(max-width:620px){.bar{height:58px}.desk{width:calc(100% - 32px)}.date{margin-bottom:26px}.shelf{padding:15px 0 20px}.icons{grid-template-columns:repeat(4,1fr);gap:18px 6px}.tile img{width:44px;border-radius:11px}.tile{font-size:12px}.sheet{margin:auto auto 10px}.crumb{height:46px;padding:0 15px}.layout{display:flex;flex-direction:column}.rail{display:flex;padding:6px 10px;border-right:0;overflow-x:auto;flex:none}.rail h2{display:none}.nav{padding:7px 9px;white-space:nowrap;font-size:12px;margin:0}.content{padding:18px 14px}.cols{grid-template-columns:1fr}.apphead{margin-bottom:14px}.apphead h1{font-size:25px}.row{padding:12px}.tools{display:block}.sheet h3{margin-top:16px}}
+@media(max-height:550px){.bar{height:40px}.clock{font-size:32px}.date{margin:2px 0 6px}.shelf{padding:8px 14px}.tile img{width:32px}.icons{gap:6px}.tile{gap:0}.foot{height:25px}}
+
+.clock small{font-size:.50em;letter-spacing:-.045em;margin-left:.04em;opacity:.84}
+.tile i{width:54px;aspect-ratio:1;border-radius:14px;display:grid;place-items:center;font:500 22px "PingFang SC",sans-serif;color:white}
+.foot{flex:none}.foot nav{display:flex;align-items:center;gap:8px;font-size:13px;font-variant-numeric:tabular-nums}.foot nav button{min-width:40px;min-height:36px;font-size:20px}.foot nav button:disabled{opacity:.35}.dock{display:none}
+@media(max-width:620px) and (min-height:550px){
+ #home{padding:max(0px,env(safe-area-inset-top)) 0 max(0px,env(safe-area-inset-bottom));background-position:47% center}
+ .bar{border:0;height:58px;padding-inline:22px}.bar .avatar{font-size:12px}
+ .desk{flex:1;align-items:stretch;width:auto;margin:0;padding:clamp(16px,4.7dvh,44px) 20px 0}
+ .clock,.date{margin-inline:6px}.clock{font-size:clamp(56px,16vw,70px);font-weight:350}.date{font-size:13px;margin-top:4px;margin-bottom:clamp(20px,4.6dvh,42px)}
+ .shelf{flex:1;min-height:0;padding:0;touch-action:pan-y}
+ .icons{gap:12px 6px;grid-auto-rows:77px;align-content:start}
+ .tile{gap:5px;font-size:12px}.tile img,.tile i{width:50px;border-radius:13px}.tile span{line-height:18px}
+ .foot{display:flex;flex-direction:column;gap:0;height:116px;margin:0 20px 8px}.foot nav{height:34px}
+ .dock{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:min(100%,335px);padding:10px 10px 0;border-top:1px solid #ffffff3a}
+ .dock .tile img{width:44px}
+}
+@media(max-height:549px){.tile i{width:32px;font-size:17px}}
+</style>
+<main id="root"></main><dialog class="sheet" id="install"><div class="subhead"><h2 tabindex="-1" autofocus>安装方舟</h2><button aria-label="关闭" onclick="install.close()">✕</button></div><h3 id="pwatitle"></h3><p id="pwainfo"></p><button id="pwaAction" class="new" style="margin-top:10px" hidden>添加到电脑</button><h3>下载 Mac 版</h3><div class="chips"><span class="chip">Apple 芯片</span><span class="chip">Intel 芯片</span></div><p style="margin-top:8px">适用于 Mac 电脑</p></dialog>
+<script>
+const apps=[['todo','待办事项'],['ledger','记账'],['calendar','日历'],['shop-tools','电商助手'],['baby-diary','宝宝日记'],['calculator','计算器'],['converter','单位换算'],['time','时间'],['market','应用市场'],['settings','设置']]
+const params=new URLSearchParams(location.search),view=params.get('view'),root=document.querySelector('#root'),dialog=document.querySelector('dialog')
+const isShop=view==='shop',icon=id=>'../../../apps/'+id+'/icon.svg'
+function home() {
+  const samples = [
+    ['书单','阅'],['旅行清单','行'],['备忘录','记'],['相册','影'],['阅读计时','时'],['电影清单','映'],
+    ['购物清单','购'],['文件夹','档'],['收藏夹','藏'],['课程表','课'],['家庭菜单','食'],['纪念日','日'],
+    ['运动记录','动'],['日记','叙'],['衣物清单','衣'],['物品收纳','物'],['植物养护','叶'],['快递记录','寄'],
+    ['音乐收藏','音'],['票据夹','票'],['旅行地图','图']
+  ]
+  const inventory = [...apps]
+  if (params.has('many')) samples.forEach(([name, glyph], i) => inventory.push(['demo', name, glyph, ['#476a88','#91674e','#76668e','#456d74'][i % 4]]))
+  root.innerHTML = `<section id="home"><header class="bar"><div class="brand"><img src="../../../assets/brand/app-icon.png">T方舟</div><div class="actions"><button class="pill" onclick="openInstall()">↓　安装方舟</button><span class="avatar">林</span></div></header>
+    <section class="desk"><time class="clock"><span></span><small></small></time><p class="date"></p><div class="shelf"><div class="icons"></div></div></section>
+    <footer class="foot"><nav aria-label="桌面分页"></nav><div class="dock" aria-label="常用应用"></div></footer></section>`
+  const clock = root.querySelector('time')
+  function tick() {
+    const now = new Date(), num = n => String(n).padStart(2,'0')
+    clock.dateTime = now.toISOString()
+    clock.firstElementChild.textContent = num(now.getHours()) + ':' + num(now.getMinutes())
+    clock.lastElementChild.textContent = ':' + num(now.getSeconds())
+    root.querySelector('.date').textContent = (now.getMonth()+1) + ' 月 ' + now.getDate() + ' 日　星期' + '日一二三四五六'[now.getDay()]
+  }
+  tick()
+  setInterval(tick, 1000)
+  const grid = root.querySelector('.icons'), shelf = root.querySelector('.shelf'), nav = root.querySelector('nav')
+  let current = 0, total = 1
+  function tile([id, name, glyph, color]) {
+    const link = id === 'todo' || id === 'shop-tools' ? ' href="?view=' + (id === 'todo' ? 'todo' : 'shop') + '"' : ''
+    const image = glyph ? `<i style="background:${color}">${glyph}</i>` : `<img src="${icon(id)}" alt="">`
+    return `<a class="tile"${link}>${image}<span>${name}</span></a>`
+  }
+  function draw() {
+    const mobile = matchMedia('(max-width:620px)').matches
+    const short = innerHeight < 550
+    const dock = mobile && !short ? apps.slice(0,3) : []
+    root.querySelector('.dock').innerHTML = dock.map(tile).join('')
+    const list = inventory.filter(x => !dock.includes(x))
+    const rows = mobile && !short ? Math.max(1, Math.min(4, Math.floor((shelf.clientHeight + 12) / 89))) : short ? 1 : 2
+    const capacity = (mobile ? 4 : 5) * rows
+    total = Math.ceil(list.length/capacity)
+    current = Math.min(current, total-1)
+    grid.innerHTML = list.slice(current*capacity,(current+1)*capacity).map(tile).join('')
+    nav.innerHTML = total > 1 ? `<button aria-label="上一页" ${current===0?'disabled':''}>‹</button><span aria-live="polite">${current+1} / ${total}</span><button aria-label="下一页" ${current===total-1?'disabled':''}>›</button>` : ''
+  }
+  function turn(step) {current=Math.min(total-1,Math.max(0,current+step));draw()}
+  nav.onclick=e=>{if(e.target.tagName==='BUTTON') turn(e.target.ariaLabel==='下一页'?1:-1)}
+  let start
+  shelf.ontouchstart=e=>{start=e.touches[0]}
+  shelf.ontouchend=e=>{if(!start)return;const end=e.changedTouches[0],dx=end.clientX-start.clientX;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(end.clientY-start.clientY))turn(dx<0?1:-1);start=null}
+  onkeydown=e=>{if(dialog.open)return;if(e.key==='ArrowLeft')turn(-1);if(e.key==='ArrowRight')turn(1)}
+  onresize=draw
+  draw()
+}
+function openInstall(){let small=innerWidth<620,tablet=innerWidth>=620&&innerWidth<=1024;document.querySelector('#pwatitle').textContent=small||tablet?'添加到主屏幕':'安装到这台电脑';document.querySelector('#pwainfo').textContent=small||tablet?'在 Safari 的分享菜单中选择「添加到主屏幕」。':'在支持安装的浏览器中，确认安装后即可从桌面独立打开。';document.querySelector("#pwaAction").hidden=small||tablet;dialog.showModal()}
+function app(){const sections=isShop?['商品计价','物流方案','站点优惠券','小助手']:['今天','全部待办','循环清单','长期计划','统计'];let title=isShop?'商品计价':'今天',name=isShop?'电商助手':'待办事项';root.innerHTML='<section class="window"><header class="crumb"><a href="?">‹　返回桌面</a><span>/</span><img src="'+icon(isShop?'shop-tools':'todo')+'">'+name+'</header><div class="layout"><aside class="rail"><h2>'+name+'</h2>'+sections.map((n,i)=>'<span class="nav '+(!i?'on':'')+'">'+n+'</span>').join('')+'</aside><section class="content"><div class="apphead"><div><h1>'+title+'</h1><p>'+(isShop?'日常选品项目 · 美国站':'11 月 26 日　星期四')+'</p></div><button class="new">'+(isShop?'保存定价':'＋ 新建待办')+'</button></div>'+(isShop?shop():todo())+'</section></div></section>'}
+function todo(){return '<div class="cols"><div class="box"><h2>待处理 · 4</h2>'+[['预约洗牙','今天 12:00','紧急'],['取干洗的冬衣','今天 18:30',''],['整理这周的收据','循环清单 · 每周四',''],['确认搬家日期','长期计划 · 搬家准备','里程碑']].map(([n,t,l])=>'<div class="row"><i class="check"></i><div>'+n+'<small>'+t+'</small></div>'+(l?'<span class="tag">'+l+'</span>':'')+'</div>').join('')+'</div><aside class="box"><h2>进行中的计划</h2><div class="plan"><b>搬家准备</b><small>11 月 20 日 — 12 月 6 日</small><div class="track"><i></i></div><small>已完成 3 / 6 项</small></div><div class="week">下一里程碑 · 确认搬家日期</div></aside></div>'}
+function shop(){const rows=[['帆布收纳袋','12.80','120','8.50','18.90'],['真空保温杯','28.00','360','16.20','29.90'],['折叠购物袋','8.50','80','6.40','12.90'],['旅行洗漱包','18.60','210','11.80','22.90'],['桌面收纳盒','16.00','280','13.50','21.90']];return '<div class="tabs"><b>商品清单</b><span>站点设置</span></div><div class="box wide"><table><thead><tr>'+['商品名称','采购价（¥）','重量（g）','运费（¥）','售价（$）'].map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(x=>'<td>'+x+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
+if(view==='todo'||isShop)app();else home();if(params.has('install'))openInstall()
+</script></html>

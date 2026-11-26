@@ -8,7 +8,7 @@ import { computed, onMounted, ref } from 'vue'
 import App from './App.vue'
 import EditDialog from './EditDialog.vue'
 
-const props = defineProps<{ client: AppClient }>()
+const props = defineProps<{ client: AppClient, showCreative: boolean }>()
 const projects = ref<ProjectSummary[]>([])
 const current = ref<ProjectSummary>()
 const workspace = ref<InstanceType<typeof App>>()
@@ -123,6 +123,7 @@ onMounted(() => run(list))
     ref="workspace"
     :client="client"
     :project="current"
+    :show-creative="showCreative"
     @projects="show"
   />
   <main v-else class="panel"><p>{{ error || '正在读取项目…' }}</p><button v-if="error" @click="run(list)">重试</button></main>

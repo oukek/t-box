@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { PlatformService } from './service.js'
 import { registerLedger } from '@t-box/ledger-server'
 import { ErrorCode } from '../error-codes.js'
+import { deviceLabel } from '../identity/security.js'
 import { bearer } from '../identity/service.js'
 import { registerWechatLogin } from '../identity/wechat-routes.js'
 import { registerPromotions } from '../promotions/routes.js'
@@ -33,6 +34,10 @@ export function registerPlatform(app: FastifyInstance, p: PlatformService) {
     }
     await p.notifications.read(await principal(req), req.params.id, req.body?.read !== false)
     return reply.code(204).send()
+  })
+  app.post('/api/v1/auth/password/login', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store')
+    return { data: await p.identity.login(req.body, req.ip, deviceLabel(req.headers['user-agent']), true) }
   })
   registerWechatLogin(app, p)
   registerPromotions(app, p)

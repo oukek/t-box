@@ -23,7 +23,7 @@ if (openPath || location.pathname === '/open.html') {
 } else if (location.hash.startsWith('#collector-login=')) {
   void import('./features/identity/CollectorLogin.vue').then(({ default: CollectorLogin }) => createApp(CollectorLogin).mount('#app'))
 } else {
-  if (import.meta.env.PROD && !window.__TBOX_DESKTOP_KEY__ && !window.Capacitor?.isNativePlatform?.()) {
+  if (!window.__TBOX_DESKTOP_KEY__ && !window.Capacitor?.isNativePlatform?.()) {
     listenForInstall()
   }
   installCollectorBridge()

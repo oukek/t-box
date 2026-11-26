@@ -21,7 +21,7 @@ export function registerApplicationBuildImports(app: FastifyInstance, source: Da
   app.get<{ Params: { build: string } }>('/api/v1/system-builds/desktop/:build/status', ci, async (r, reply) => {
     const where = { build: r.params.build }
     const [desktop, web] = await Promise.all([source.manager.existsBy(SystemDesktopCandidate, where), source.manager.existsBy(SystemWebCandidate, where)])
-    return reply.header('Cache-Control', 'no-store').send({ data: { desktop, web } })
+    return reply.header('Cache-Control', 'no-store').send({ data: { desktop, web, dualMacInstallers: true } })
   })
   app.post('/api/v1/system-builds/desktop', ci, async (r, reply) => reply.header('Cache-Control', 'no-store').send({ data: await registerDesktop(source, r.body) }))
   registerDesktopUpdates(app, source)

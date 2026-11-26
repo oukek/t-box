@@ -431,7 +431,6 @@ onMounted(() => {
   </p>
   <div class="panel market-policy-panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:16px">
     <label style="display:flex;align-items:center;gap:8px"><AdminCheckbox v-model="policy.hidden" :disabled="policySaving || !policyReady" />隐藏应用市场</label>
-    <label style="display:flex;align-items:center;gap:8px"><AdminCheckbox v-model="policy.assistantHiddenIos" :disabled="policySaving || !policyReady" />隐藏 iOS 方舟 AI 悬浮窗</label>
     <label style="display:flex;align-items:center;gap:8px"><AdminCheckbox v-model="policy.assistantHiddenWeb" :disabled="policySaving || !policyReady" />隐藏网页方舟 AI 悬浮窗（含 PWA）</label>
     <AdminButton :disabled="policySaving || !policyReady || !Object.keys(policyChanges).length" @click="saveMarketPolicy">{{ policySaving ? "保存中…" : "保存设置" }}</AdminButton>
   </div>

@@ -27,9 +27,18 @@ if required_domains and '*' not in permitted_domains and any(domain not in permi
 
 identities = (work / 'identities').read_text()
 fingerprints = [hashlib.sha1(cert).hexdigest().upper() for cert in profile['DeveloperCertificates']]
-identity = next((fp for fp in fingerprints if re.search(fp + r' "Apple Distribution:', identities)), None)
+valid_identities = {
+    fingerprint.upper(): name
+    for fingerprint, name in re.findall(r'^\s*\d+\)\s+([0-9a-fA-F]{40})\s+"([^"]+)"', identities, re.MULTILINE)
+}
+identity = next((fp for fp in fingerprints if valid_identities.get(fp, '').startswith('Apple Distribution:')), None)
 if not identity:
-    sys.exit('描述文件与 P12 不匹配，请导出该描述文件选中的 Apple Distribution 证书及私钥')
+    print('描述文件允许的证书 SHA-1：' + ', '.join(fingerprints), file=sys.stderr)
+    if not valid_identities:
+        sys.exit('P12 已导入，但钥匙串没有可用的代码签名身份。请检查证书有效期、配对私钥和签名证书信任链。')
+    for fingerprint, name in valid_identities.items():
+        print(f'P12 中可用于签名的证书：{fingerprint} "{name}"', file=sys.stderr)
+    sys.exit('需要与描述文件指纹相同的 Apple Distribution 证书。请核对 ios-release 的 IOS_P12_BASE64 和 IOS_PROFILE_BASE64。')
 
 settings = project.read_text()
 if 'CODE_SIGN_STYLE = Automatic;' not in settings:

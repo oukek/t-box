@@ -32,9 +32,8 @@ import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import DateSheetField from '@t-box/ui-kit/DateSheetField.vue'
 import FileTrigger from '@t-box/ui-kit/FileTrigger.vue'
 import FormControl from '@t-box/ui-kit/FormControl.vue'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ConfigPage from './ConfigPage.vue'
-import CreativeStudio from './CreativeStudio.vue'
 import EditDialog from './EditDialog.vue'
 import { download, exportBook, importBook } from './excel'
 import ExchangePage from './ExchangePage.vue'
@@ -44,7 +43,8 @@ import RoutePicker from './RoutePicker.vue'
 import TableViewport from './TableViewport.vue'
 import { createWorkspaceStore } from './workspace'
 
-const props = defineProps<{ client: AppClient, project: ProjectSummary }>()
+const CreativeStudio = defineAsyncComponent(() => import('./CreativeStudio.vue'))
+const props = defineProps<{ client: AppClient, project: ProjectSummary, showCreative: boolean }>()
 const emit = defineEmits<{ projects: [] }>()
 const readonly = computed(() => props.project.role === 'viewer')
 const workspaceStore = createWorkspaceStore(props.client, props.project.id)
@@ -605,7 +605,7 @@ function refreshAll() {
       •••
     </button></template></ApplicationHeader>
     <header class="shop-nav">
-      <nav aria-label="功能分区">
+      <nav v-if="showCreative" aria-label="功能分区">
         <button
           :class="{ selected: section === 'operations' }"
           :aria-pressed="section === 'operations'"
@@ -649,7 +649,7 @@ function refreshAll() {
       role="status"
     >正在读取云端工作区…</p>
     <CreativeStudio
-      v-if="ready"
+      v-if="showCreative && ready"
       v-show="section === 'assistant'"
       :client="client"
       :project="project"

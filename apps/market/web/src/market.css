@@ -632,3 +632,13 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.market-batch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 48dvh;
+  overflow-y: auto;
+}
+.market-batch-list li { padding: 10px 0; border-bottom: 1px solid #e5e9ed; }
+.market-batch-list p, .market-batch-list small { margin: 3px 0; color: #63717d; font-size: 13px; }

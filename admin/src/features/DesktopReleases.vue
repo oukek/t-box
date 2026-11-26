@@ -13,7 +13,7 @@ interface Row {
   state: 'pending' | 'live' | 'archived'
   notes: string
   ui: { version: string }
-  core: { version: string }
+  core: { version: string, distribution?: unknown }
   createdAt: string
 }
 const kinds = { core: '仅核心', ui: '仅界面', both: '联合更新' }
@@ -37,21 +37,25 @@ async function refresh() {
   }
 }
 const downloading = ref('')
-async function downloadTrial(row: Row) {
+const chips = [{ id: 'aarch64', label: 'Apple 芯片' }, { id: 'x86_64', label: 'Intel' }]
+function availableChips(row: Row) {
+  return row.core.distribution ? chips : chips.slice(0, 1)
+}
+async function downloadTrial(row: Row, arch: string) {
   downloading.value = row.build
   error.value = ''
   try {
     if (row.kind === 'ui') {
-      const blob = await requestBlob('/desktop-releases/' + row.build + '/ui-trial', { signal: AbortSignal.timeout(180000) })
+      const blob = await requestBlob('/desktop-releases/' + row.build + '/ui-trial?arch=' + arch, { signal: AbortSignal.timeout(180000) })
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
-      link.download = `Tbox-trial-core-${row.core.version}-ui-${row.ui.version}-${row.build.slice(0, 8)}.zip`
+      link.download = `Tbox-trial-core-${row.core.version}-ui-${row.ui.version}-${row.build.slice(0, 8)}-${arch}.zip`
       link.click()
       setTimeout(() => URL.revokeObjectURL(link.href), 60000)
       notice.value = '请先退出方舟，解压后双击「启动体验版.command」。'
       return
     }
-    const { url } = await request<{ url: string }>('/desktop-releases/' + row.build + '/trial')
+    const { url } = await request<{ url: string }>('/desktop-releases/' + row.build + '/trial?arch=' + arch)
     window.location.assign(url)
   } catch (e) {
     error.value = errorMessage(e)
@@ -90,12 +94,13 @@ onMounted(refresh)
 <template>
   <section class="desktop-releases" aria-label="桌面发布">
     <div class="desktop-summary">
-      <div><small>当前桌面版本 · macOS Apple Silicon</small><strong>{{ data?.current ? '界面 ' + data.current.ui.version + ' · 核心 ' + data.current.core.version : loading ? '加载中…' : '暂无发布记录' }}</strong></div>
+      <div><small>当前桌面版本 · macOS</small><strong>{{ data?.current ? '界面 ' + data.current.ui.version + ' · 核心 ' + data.current.core.version : loading ? '加载中…' : '暂无发布记录' }}</strong></div>
       <a
-        v-if="data?.current"
+        v-for="chip in data?.current ? availableChips(data.current) : []"
+        :key="chip.id"
         class="installer"
-        :href="apiBase + '/system-updates/macos/aarch64/installer'"
-      >下载安装包</a>
+        :href="apiBase + '/system-updates/macos/' + chip.id + '/installer'"
+      >{{ chip.label }} 安装包</a>
       <AdminButton :disabled="busy || loading" @click="refresh">刷新</AdminButton>
     </div>
     <p
@@ -113,11 +118,14 @@ onMounted(refresh)
     >
       <div><strong>{{ kinds[row.kind] }}</strong><small>界面 {{ row.ui.version }} · 核心 {{ row.core.version }}</small><small>{{ new Date(row.createdAt).toLocaleString() }}</small></div>
       <span>{{ row.state === 'pending' && row.base !== (data?.current?.build ?? null) ? '基线已变化' : states[row.state] }}</span>
-      <AdminButton
-        v-if="row.state === 'pending' && (row.kind !== 'ui' || row.base === data?.current?.build)"
-        :disabled="!!downloading || busy"
-        @click="downloadTrial(row)"
-      >{{ downloading === row.build ? '准备下载…' : '下载体验版' }}</AdminButton>
+      <template v-if="row.state === 'pending' && (row.kind !== 'ui' || row.base === data?.current?.build)">
+        <AdminButton
+          v-for="chip in availableChips(row)"
+          :key="chip.id"
+          :disabled="!!downloading || busy"
+          @click="downloadTrial(row, chip.id)"
+        >{{ downloading === row.build ? '准备下载…' : chip.label + ' 体验版' }}</AdminButton>
+      </template>
       <AdminButton
         v-if="!row.shared && row.state === 'pending' && row.base === (data?.current?.build ?? null)"
         :disabled="busy || loading"
@@ -133,7 +141,7 @@ onMounted(refresh)
       @close="selected = undefined"
     >
       <template v-if="selected">
-        <p>{{ kinds[selected.kind] }} · macOS Apple Silicon</p>
+        <p>{{ kinds[selected.kind] }} · macOS</p>
         <dl>
           <dt>方舟界面</dt><dd>{{ data?.current?.ui.version ?? '首次发布' }} → {{ selected.ui.version }}</dd>
           <dt>桌面核心</dt><dd>{{ data?.current?.core.version ?? '首次发布' }} → {{ selected.core.version }}</dd>
