@@ -7,7 +7,7 @@ permissions:
 
 jobs:
   candidate:
-    uses: ./.github/workflows/build-macos.yml
+    uses: ./.github/workflows/desktop-release.yml
     secrets: inherit
     with:
       components: ui

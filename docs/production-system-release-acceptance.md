@@ -59,7 +59,7 @@ plan "$OLD_UI" "$OLD_CORE"
 | --- | --- | --- |
 | 首发或同时更新界面、核心 | macOS 整包发布（内置本次界面） | `ui` 和 `macos.core` |
 | 只更新桌面界面 | 主界面构建（网页、PWA、Mac） | `ui` |
-| 只更新核心 | macOS 仅更新核心 | `macos.core` |
+| 只更新核心 | macOS 整包发布（内置本次界面） | `macos.core` |
 
 **通过条件**
 

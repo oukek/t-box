@@ -39,14 +39,16 @@ async function api(route, body) {
   return result.data
 }
 async function reserve() {
-  const mode = env.DESKTOP_MODE
-  if (!['ui', 'core', 'both'].includes(mode)) {
+  const requested = env.DESKTOP_MODE
+  if (!['ui', 'both'].includes(requested)) {
     throw new Error('构建类型无效')
   }
   const base = await api('/system-builds/desktop/base')
-  if (!base && mode !== 'both') {
+  if (!base && requested !== 'both') {
     throw new Error('首次发布请使用联合构建')
   }
+  // A full installer can embed the approved UI unchanged when only the binary advances.
+  const mode = requested === 'both' && base?.ui.version === releaseVersions.ui ? 'core' : requested
   const choices = { ...(mode !== 'core' && { ui: releaseVersions.ui }), ...(mode !== 'ui' && { core: releaseVersions.macos.core }) }
   const r = await api('/system-builds/reserve', { batch: env.GITHUB_REPOSITORY.toLowerCase() + '/' + env.GITHUB_RUN_ID, commit: env.GITHUB_SHA, channel: mode === 'core' ? 'macos' : 'shared', ...choices })
   if (r.ui !== (choices.ui ?? null) || r.core !== (choices.core ?? null)) {
@@ -55,7 +57,7 @@ async function reserve() {
   await mkdir(work, { recursive: true })
   await writeFile(path.join(work, 'reservation.json'), JSON.stringify({ ...r, base: base?.build ?? null }))
   const status = await api('/system-builds/desktop/' + r.build + '/status')
-  await appendFile(env.GITHUB_ENV, 'DESKTOP_SUBMITTED=' + status.desktop + '\nWEB_SUBMITTED=' + status.web + '\n')
+  await appendFile(env.GITHUB_ENV, 'BUILD_NEW_UI=' + Boolean(r.ui) + '\nDESKTOP_SUBMITTED=' + status.desktop + '\nWEB_SUBMITTED=' + status.web + '\n')
   if (!r.ui && !status.desktop) {
     // Use the exact approved bytes for the bundled fallback when only the core is rebuilt.
     const response = await fetch(base.url, { redirect: 'error', signal: AbortSignal.timeout(90000) })

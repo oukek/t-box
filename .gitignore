@@ -56,3 +56,6 @@ output/application-releases/
 apps/*/deployment.local.json
 
 output/
+
+# pnpm / npm pack archives
+*.tgz

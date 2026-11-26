@@ -2,17 +2,18 @@
 
 本次目标为网页、PWA 和 Mac 主界面 **1.2.0**，Mac 核心 **1.0.2**，iOS 商店版本 **1.0.0**。iOS 包内置同一提交的 UI **1.2.0**。版本已写入仓库根目录的 [release-versions.json](../release-versions.json)。
 
-- [ ] **第 1 步** 提交代码，部署后端和管理后台，构建网页与 Mac，再到方舟后台确认。Mac 沿用现有证书、签名密钥和 GitHub 配置。
-- [ ] **第 2～6 步** 首次配置 iOS 签名，跑出可下载的 IPA。只想试打包，做到第 6 步即可。
-- [ ] **第 7～9 步** 创建 Apple 商店记录，配置上传密钥，上传构建，再自行决定何时送审和上线。
+## 这次照着勾
 
-| 你要的结果 | 去哪里操作 | 成功标志 |
-| --- | --- | --- |
-| 下载签名 IPA | GitHub Actions，关闭 `upload` | 运行页底部出现含 `Tbox.ipa` 的 Artifact |
-| Apple 收到构建 | GitHub Actions，勾选 `upload` | App Store Connect 处理完成，版本页可以选中构建 |
-| 用户从 App Store 下载 | App Store Connect 手动送审、手动发布 | 对应地区的商店页面可下载 |
+- [ ] **提交**：把本次代码推到 GitHub 的 `main`，核对上面的三个版本。
+- [ ] **第一个 Action**：跑 **后端部署（PM2）**，勾选 `start_services`，等变绿。
+- [ ] **第二个 Action**：跑 **管理后台部署**，等变绿。
+- [ ] **第三个 Action**：如果线上界面低于 `1.2.0`、Mac 核心也低于 `1.0.2`，只跑一次 **macOS 整包发布（内置本次界面）**。它会一并构建网页、PWA 和签名 Mac UI。其他版本组合见第 1B 步。
+- [ ] **方舟后台**：在「系统发布 → 桌面端」下载体验版；本次界面和核心一起升级时，在「系统发布 → 主界面」确认一次。
+- [ ] **iOS 签名**：按第 2～5 步配置 Apple App ID、证书、描述文件和 GitHub 的 `ios-release` 环境。
+- [ ] **选择首次发包方式**：只想拿 IPA，做第 6 步，关闭 `upload`。想一次打包并上传 Apple，先完成第 7 步，然后直接做第 8 步，勾选 `upload`。
+- [ ] **iOS 上架**：Apple 处理完构建后，按第 9 步在 App Store Connect 选择构建、送审，审核通过后手动发布。
 
-工程用现有 Capacitor iOS 宿主，Bundle ID 为 `com.tbox.app`，支持 iPhone 和 iPad。本次提交的生产前端和已配置为内置的子应用随 IPA 打包；其余子应用沿用现有加载逻辑。iOS 包用 Apple Distribution 签名，由 App Store Connect 管理审核和分发。Mac 的 Developer ID、Mac 公证和方舟后台的「桌面端 → 确认发布」都属于另一条流程。
+现有 Mac 签名和公证配置继续使用。iOS 使用 `com.tbox.app`、团队 `8BQ285B3J2` 和 Apple Distribution 证书。下文的 Apple 和 GitHub 配置都集中在 iOS 步骤里。
 
 ## 1. 提交代码并切换已上线的网页和 Mac
 
@@ -37,20 +38,23 @@ git push origin main
 
 ### 1B. 网页和 Mac 按顺序操作
 
-1. 打开现有方舟后台 → **应用管理 → 系统发布**，记下网页 UI、Mac UI、Mac 核心的当前生效版本。首个统一 UI `1.2.0` 需高于旧网页和 Mac 的预留基线。若已有任一 UI 发布到 `1.2.0` 或更高，先核对版本记录再构建。
-2. 打开 GitHub → **Actions → 后端部署（PM2）→ Run workflow**。选 `main`，勾选 **start_services**，点绿色 **Run workflow**。等整次运行变绿，再打开原网页验证能登录和读取数据。
-3. **Actions → 管理后台部署 → Run workflow**。选 `main`，直接运行。变绿后刷新方舟后台，确认 **应用管理 → 系统发布** 里有 **主界面** 和 **桌面端** 两个页签。
-4. 按刚才记下的 **Mac 核心** 选择下表中的一个 Action。选 `main`，直接运行，等桌面和网页候选登记均成功。
+1. 方舟后台 → **应用管理 → 系统发布**。分别记下三个「当前生效」值：网页 UI ______、Mac UI ______、Mac 核心 ______。表里的「两个 UI」指网页和 Mac 各自的线上界面。
+2. GitHub → **Actions → 后端部署（PM2）→ Run workflow**。Branch 选 `main`，勾选 **start_services**，点绿色 **Run workflow**。等整次变绿，用原网页登录并打开一个已有应用。
+3. GitHub → **Actions → 管理后台部署 → Run workflow**。选 `main`，直接运行。变绿后刷新方舟后台，看到 **应用管理 → 系统发布 → 主界面 / 桌面端** 两个页签。
+4. 对照下表，选一行执行。构建时选 `main`，版本由仓库读取。首次从旧流程切换时，若提示目标版本已被预留，请核对旧渠道的预留记录；重跑相同参数不会解除版本占用。
 
-| 当前线上 Mac 核心 | 本次点哪个 Action |
-| --- | --- |
-| 低于 `1.0.2`，本次升到 `1.0.2` | **macOS 整包发布（内置本次界面）**。一次生成网页、签名 UI 和 Mac 安装包 |
-| 已经是 `1.0.2` | **主界面构建（网页、PWA、Mac）**。更新 UI，复用线上核心 |
-| 高于 `1.0.2` | 若接受保留线上较高核心，选 **主界面构建（网页、PWA、Mac）**。如必须使用 `1.0.2`，先核对发布记录，当前升级流程只支持向上更新 |
+| 两个 UI 的线上版本 | 线上 Mac 核心 | 本次只跑哪个 Action | 在后台哪个页签确认 |
+| --- | --- | --- | --- |
+| 都低于 `1.2.0` | 低于 `1.0.2` | **macOS 整包发布（内置本次界面）**，生成网页、Mac 签名 UI 和完整安装包 | **主界面** |
+| 都低于 `1.2.0` | 已是 `1.0.2` | **主界面构建（网页、PWA、Mac）**，复用已上线的核心 | **主界面** |
+| 都是 `1.2.0` | 低于 `1.0.2` | **macOS 整包发布（内置本次界面）**，自动复用已批准的 UI，生成新安装包 | **桌面端** |
+| 都是 `1.2.0` | 已是 `1.0.2` | 目标已上线，跳过本次构建和确认，继续配置 iOS | — |
 
-5. 方舟后台 → **应用管理 → 系统发布 → 桌面端 → 本次待确认记录 → 下载体验版**。打开体验版，在 **设置 → 系统版本** 核对界面和核心。此时正式用户仍运行旧版。
-6. 体验通过后进入 **应用管理 → 系统发布 → 主界面 → 1.2.0 → 审核发布**，逐行填更新内容，点 **确认发布** 一次。
-7. 等页面显示 **当前生效**。打开 [生产版本标记](https://tboxos.cn/web-version.json)，核对 `version` 为 `1.2.0`、`build` 对应刚才的构建。用旧版正式 Mac 打开 **设置 → 系统版本 → 检查更新**，核对能收到新版。网页和 Mac 到这里完成。
+若两个 UI 中只有一个已上线 `1.2.0`，首次统一发布应选高于两边预留基线的新 UI 版本。若线上核心已高于 `1.0.2`，只发 UI 可以保留现有核心；要调整本次目标时先核对版本记录。
+
+5. **先体验。** 等 Action 变绿，到 **应用管理 → 系统发布 → 桌面端 → 本次待确认记录 → 下载体验版**。打开体验版，在 **设置 → 系统版本** 确认 UI `1.2.0`、核心 `1.0.2`。
+6. **再上线。** 到表格最后一列的页签，找到刚体验的同一构建，点 **审核发布**，逐行填写更新内容，点一次 **确认发布**。
+7. **核对结果。** 本次包含新 UI 时，打开 [主站版本标记](https://tboxos.cn/web-version.json)，确认 `version` 是 `1.2.0`、`build` 对应本次候选。仅更新核心时，网页保留原构建编号。最后用旧版正式 Mac 打开 **设置 → 系统版本 → 检查更新**，按提示更新并核对两个版本。
 
 ## 2. 在 Apple 开发者后台登记方舟的 App ID
 
@@ -59,14 +63,14 @@ git push origin main
 1. 用开发者账号登录 **Apple Developer → Account → Certificates, Identifiers & Profiles → Identifiers**。确认选中已加入 Apple Developer Program 的团队，在 Account → Membership details 核对 Team ID 为 `8BQ285B3J2`。创建分发描述文件需要 Account Holder 或 Admin 权限。
 2. 搜索精确标识 **com.tbox.app**。如果已经在这个团队里，直接复用；没有则点 **＋ → App IDs → App → Continue**。
 3. Description 填 `TBox iOS`，Bundle ID 选 **Explicit**，填 `com.tbox.app`，点 **Continue → Register**。
-4. 在这个 App ID 的 **Capabilities** 勾选 **Associated Domains** 并保存，再进行第 4 步。方舟子应用链接使用这个能力，和微信支付开关独立。如果此前已经生成描述文件，请重新生成并更新 GitHub 的 `IOS_PROFILE_BASE64`。
+4. 打开已注册的 **com.tbox.app**，在 **Capabilities** 勾选 **Associated Domains** 并保存。接着去第 3 步导出证书。方舟子应用链接使用这个能力，和微信支付开关独立。如果此前已经生成描述文件，请重新生成并更新 GitHub 的 `IOS_PROFILE_BASE64`。
 
 **核对** Identifiers 里能找到完整的 `com.tbox.app`。若 Apple 提示已被其他团队占用，先核对团队；如确实要换标识，需要同步修改原生工程、Capacitor、签名校验和本手册中的标识，再创建资料。[Apple 开发者后台](https://developer.apple.com/account/resources/identifiers/list)
 
 ## 3. 从 Mac 导出 iOS 发布证书
 
-1. 打开 **钥匙串访问 → 登录 → 我的证书**，搜索 **Apple Distribution**。你之前列出的身份里，对应的是 **Apple Distribution: shaoxiong yu (8BQ285B3J2)**。
-2. 确认证书未过期。展开左侧箭头，下面应有一行**专用密钥**。选中这张证书所在的父行，右键 **导出**，选择 **个人信息交换 (.p12)**，保存为 `iOS-Distribution.p12`。
+1. 打开 **钥匙串访问 → 登录 → 我的证书**，搜索 **Apple Distribution**。你之前列表里的**第 7 个**就是 **Apple Distribution: shaoxiong yu (8BQ285B3J2)**。
+2. 在 Apple 后台 Certificates 确认该证书有效，再回到钥匙串。展开左侧箭头，下面应有一行**专用密钥**。选中这张证书所在的父行，右键 **导出**，选择 **个人信息交换 (.p12)**，保存为 `iOS-Distribution.p12`。
 3. 设置一个非空导出密码，记下来。若只有证书没有私钥，请到当初创建证书的 Mac 导出，或者由团队管理员创建新的 Apple Distribution 证书。
 4. 如果需要新建：在 Mac 的 **钥匙串访问 → 证书助理 → 从证书颁发机构请求证书**，填邮箱和常用名称，选 **存储到磁盘**。在 Apple 后台 **Certificates → ＋ → Apple Distribution** 上传 CSR，下载并双击 `.cer`，回到「我的证书」按上面步骤导出。
 
@@ -140,7 +144,7 @@ GitHub → **Actions → iOS 发包（App Store）→ Run workflow**，按下表
 base64 -i ./AuthKey_实际KeyID.p8 | tr -d '\n' | pbcopy
 ```
 
-## 8. 再跑一次 Actions，把构建上传给 Apple
+## 8. 运行 iOS Action，打包并上传给 Apple
 
 1. **Actions → iOS 发包（App Store）→ Run workflow**。分支继续选 `main`，展示版本取自该提交 `release-versions.json` 的 `ios`，构建号留空或手填更大的值，这次**勾选 upload**。
 2. 等「上传到 App Store Connect」变绿。到 **App Store Connect → Apps → 方舟 → TestFlight → iOS 构建版本**查看处理状态。这个页面可以查看上传结果，不需要开内测或邀请测试员。

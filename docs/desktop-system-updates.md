@@ -75,7 +75,7 @@ node --test scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs scripts/ope
 
 1. 先部署本次 API、迁移与管理后台。在后端配置 `TBOX_UI_PUBLIC_KEY`、`TBOX_CORE_PUBLIC_KEY` 为两套 Tauri signer 公钥文件的完整内容。自定义域名同步设置 `TBOX_DESKTOP_API_BASE`（含 `/api/v1`）。后端使用现有主站 OSS 凭证；私有下载通过一小时有效的 OSS V4 签名地址分发。
 2. GitHub 的 `desktop-release` Environment 使用已有的 `DEPLOY_DOMAIN`、`OSS_REGION`、`APP_IMPORT_TOKEN`、OSS 访问凭证。将同一对公钥分别写入同名 Variables，将两个私钥文件内容分别保存为 Secrets `TBOX_UI_PRIVATE_KEY`、`TBOX_CORE_PRIVATE_KEY`，对应口令为 `TBOX_UI_KEY_PASSWORD`、`TBOX_CORE_KEY_PASSWORD`。正式向外分发 macOS 应用时配置 Apple Developer ID 签名与公证：Variable `APPLE_SIGNING_IDENTITY`、`APPLE_TEAM_ID`，Secrets `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_PASSWORD`。生产核心工作流要求 Developer ID 身份，上传前验证归档内应用的签名、团队及公证票据。本地开发构建仍使用 ad-hoc 签名。
-3. 首次用 macOS 整包建立基线。日常主界面构建同时登记网页与 Mac 签名包，后台填写一次更新内容。仅核心工作流复用线上已批准的签名界面。
+3. 首次用 macOS 整包建立基线。日常主界面构建同时登记网页与 Mac 签名包，后台填写一次更新内容。整包工作流在 UI 与线上同号时复用线上已批准的签名界面。
 4. 在「应用管理 → 系统发布 → 主界面」（仅核心构建进入「桌面端」）检查组合，逐行填写更新内容并确认。后端复核 OSS 中的实际字节、两套签名、内置界面摘要、核心版本和 Mach-O 架构，然后在一个事务内切换生效记录。基线已变化的候选需要按新基线重建。「下载安装包」提供当前获批的核心归档，解压得到 `T方舟.app`；同一份归档也用于 Tauri Updater。渠道首次启用时需安装已内置正确公钥与检查地址的客户端。
 5. 实际客户端用 `GET /api/v1/system-updates?platform=macos&arch=aarch64&ui=…&core=…` 检查。无更新或不支持的架构返回 204。已批准的安装包入口为 `GET /api/v1/system-updates/macos/aarch64/installer`。首次安装包和更新包都在主站桶的私有 `desktop-candidates/<build>/<sha256>.*` 下，后台审核控制下载入口和版本可见性。
 
@@ -125,7 +125,7 @@ CI 将预留的界面版本和构建 ID 一起写入界面包与版本文件。�
 | 发布内容 | 修改字段 | 操作入口 |
 | --- | --- | --- |
 | 网页、PWA 和 macOS 界面 | `ui` | 主界面构建（网页、PWA、Mac） |
-| macOS 核心 | `macos.core` | macOS 仅更新核心，内置已批准的桌面界面 |
+| macOS 核心 | `macos.core` | macOS 整包发布（内置本次界面），内置已批准的桌面界面 |
 | macOS 整包 | `ui`、`macos.core` | macOS 整包发布，内置该提交构建的界面 |
 | iOS | `ios` | iOS 发包 |
 | Android | `android` | 本地原生同步及打包 |
