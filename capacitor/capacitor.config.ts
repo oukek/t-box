@@ -7,7 +7,7 @@ if (liveReloadUrl && !/^https?:\/\//.test(liveReloadUrl)) {
 }
 
 const config: CapacitorConfig = {
-  appId: 'com.tbox.app',
+  appId: process.argv.slice(2).includes('ios') ? 'cn.tboxos.ark' : 'com.tbox.app',
   appName: 'T Ark',
   webDir: 'www',
   backgroundColor: '#f4f6f8',

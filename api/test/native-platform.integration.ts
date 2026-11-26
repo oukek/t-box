@@ -37,11 +37,14 @@ try {
     cached.set(key, value)
   } }, database)
   const policy = new ApplicationMarketPolicy(source, cache)
-  assert.deepEqual(await policy.read(), { hidden: false })
+  const visible = { assistantHiddenIos: false, assistantHiddenWeb: false }
+  assert.deepEqual(await policy.read(), { hidden: false, ...visible })
   const administrator = randomUUID()
   const state = await source.getRepository(PlatformConfigurationStateEntity).findOneByOrFail({ id: 1 })
+  await policy.save({ assistantHiddenIos: true }, administrator)
   await policy.save({ hidden: true }, administrator)
-  assert.deepEqual(await new ApplicationMarketPolicy(source, cache).read(), { hidden: true })
+  const expectedPolicy = { hidden: true, assistantHiddenIos: true, assistantHiddenWeb: false }
+  assert.deepEqual(await new ApplicationMarketPolicy(source, cache).read(), expectedPolicy)
   assert.ok(cached.size >= 2)
   assert.equal((await source.getRepository(PlatformConfigurationStateEntity).findOneByOrFail({ id: 1 })).ai_revision, state.ai_revision)
   await assert.rejects(policy.save({ hidden: 'true' }, administrator), { code: 'INVALID_MARKET_SETTINGS' })
@@ -50,7 +53,7 @@ try {
   const downloadConfig = { displayName: '测试应用', iosAppStoreUrl: 'https://apps.apple.com/cn/app/id123456789', androidDownloadUrl: 'https://example.com/android' }
   await downloads.save(downloadConfig, administrator)
   assert.deepEqual(await new HostDownloadConfiguration(source, cache).read(), downloadConfig)
-  assert.deepEqual(await policy.read(), { hidden: true })
+  assert.deepEqual(await policy.read(), expectedPolicy)
   assert.equal((await source.getRepository(PlatformConfigurationStateEntity).findOneByOrFail({ id: 1 })).ai_revision, state.ai_revision)
   await assert.rejects(downloads.save({ ...downloadConfig, iosAppStoreUrl: 'https://example.com' }, administrator), { code: 'INVALID_HOST_DOWNLOADS' })
 
@@ -122,7 +125,7 @@ try {
   assert.equal(hidden.json().settings.hidden, true)
   assert.ok(hidden.json<{ data: { release: { appId: string } }[] }>().data.every((entry) => entry.release.appId !== 'native-user'))
   const publicPolicy = await app.inject({ method: 'GET', url: '/api/v1/app-market/settings' })
-  assert.deepEqual(publicPolicy.json().data, { hidden: true })
+  assert.deepEqual(publicPolicy.json().data, expectedPolicy)
   const publicDownloads = await app.inject({ method: 'GET', url: '/api/v1/host/downloads' })
   assert.equal(publicDownloads.statusCode, 200)
   assert.deepEqual(publicDownloads.json().data, downloadConfig)
@@ -132,6 +135,9 @@ try {
   assert.equal(adminLogin.statusCode, 200, adminLogin.body)
   const cookie = adminLogin.cookies[0]!
   const adminHeaders = { 'cookie': `${cookie.name}=${cookie.value}`, 'x-admin-request': '1' }
+  const policyUpdate = await app.inject({ method: 'PATCH', url: '/api/v1/admin/application-market/settings', headers: adminHeaders, payload: { assistantHiddenWeb: true, assistantHiddenIos: false } })
+  assert.equal(policyUpdate.statusCode, 200, policyUpdate.body)
+  assert.deepEqual((await app.inject('/api/v1/app-market/settings')).json().data, { hidden: true, assistantHiddenIos: false, assistantHiddenWeb: true })
   const updateDownloads = await app.inject({ method: 'PATCH', url: adminUrl, headers: adminHeaders, payload: { ...downloadConfig, displayName: '更新后的提示名称' } })
   assert.equal(updateDownloads.statusCode, 200, updateDownloads.body)
   assert.equal((await app.inject({ method: 'GET', url: '/api/v1/host/downloads' })).json().data.displayName, '更新后的提示名称')

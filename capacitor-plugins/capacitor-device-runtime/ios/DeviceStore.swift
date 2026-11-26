@@ -41,7 +41,7 @@ public final class DeviceRuntimeStore: @unchecked Sendable {
   private var state: DeviceState
   private let service: String
   private var storageFailed = false
-  public init(directory suppliedDirectory: URL? = nil, keychainService: String = "com.tbox.app.native-session") {
+  public init(directory suppliedDirectory: URL? = nil, keychainService: String = "cn.tboxos.ark.native-session") {
     service = keychainService
     let directory = suppliedDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("TBoxDevice", isDirectory: true)
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

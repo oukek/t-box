@@ -2,6 +2,10 @@
 
 `admin/` 是独立 Vue 3 + TypeScript + Vite 项目，使用自实现组件。开发端口为 5175，`pnpm dev:admin` 单独启动；构建到 `admin/dist`，不会进入 Capacitor 包。
 
+## 方舟 AI 悬浮窗
+
+进入「应用管理 → 应用发布」，在「隐藏应用市场」旁分别勾选「隐藏 iOS 方舟 AI 悬浮窗」或「隐藏网页方舟 AI 悬浮窗（含 PWA）」，再点「保存设置」。取消勾选并保存即可恢复。iPhone 上的 Safari 和添加到主屏幕的 PWA 使用网页设置，App Store 安装的方舟使用 iOS 设置。两个入口默认显示，客户端打开或回到前台读取最新配置。
+
 ## 配置关系
 
 ```mermaid

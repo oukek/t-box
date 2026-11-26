@@ -31,6 +31,7 @@ import {
   openProfile,
   startNavigation,
 } from './core/navigation'
+import { isNativeIos } from './core/platform'
 import { identity } from './core/session'
 import { observeViewport } from './core/viewport'
 import InstallDesktop from './core/web-release/InstallDesktop.vue'
@@ -87,6 +88,18 @@ function hostCompatible(appId: string) {
 let stopViewport: (() => void) | undefined
 const productionWeb = import.meta.env.PROD && !window.__TBOX_DESKTOP_KEY__ && !window.Capacitor?.isNativePlatform?.()
 const isWebHost = !window.Capacitor?.isNativePlatform?.()
+const assistantPlatform = isNativeIos() ? 'ios' : isWebHost && !window.__TBOX_DESKTOP_KEY__ ? 'web' : undefined
+const assistantHidden = computed(() => {
+  return assistantPlatform === 'ios' ? appCatalog.assistantHiddenIos : assistantPlatform === 'web' && appCatalog.assistantHiddenWeb
+})
+watch([assistantHidden, () => navigation.assistantOpen], ([hidden, open]) => {
+  if (hidden) {
+    assistantFullscreen.value = false
+    if (open) {
+      closeAssistant()
+    }
+  }
+}, { immediate: true })
 function focusWorkspace() {
   document.getElementById('workspace')?.focus()
 }
@@ -232,7 +245,7 @@ onBeforeUnmount(() => {
       />
     </template>
   </div>
-  <AssistantHost @fullscreen="assistantFullscreen = $event" />
+  <AssistantHost v-if="(!assistantPlatform || appCatalog.assistantPolicyReady) && !assistantHidden" @fullscreen="assistantFullscreen = $event" />
 </template>
 
 <style scoped>

@@ -138,7 +138,10 @@ if (platform === 'android') {
 environment.TBOX_UI_VERSION = releaseVersions.ui
 execute(['--filter', '@t-box/capacitor', 'build:web'])
 execute(['--filter', '@t-box/capacitor', 'copy:web'])
-cap('sync', ...(platform ? [platform] : []))
+// Capacitor reads one appId per invocation; sync each platform with its own config.
+for (const targetPlatform of platform ? [platform] : ['ios', 'android']) {
+  cap('sync', targetPlatform)
+}
 if (command === 'open' || (command === 'dev' && !runInDevice)) {
   cap('open', platform)
 }

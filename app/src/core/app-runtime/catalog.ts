@@ -15,15 +15,19 @@ import { clearApplicationBindings } from './resourceBindings'
 import { prefetchReleases, prepareRelease } from './resources'
 
 const policyKey = 'tbox.host.market-policy.v1'
-function cachedMarketHidden() {
+function cachedPolicy(): Partial<ApplicationMarketSettings> {
   try {
-    return JSON.parse(localStorage.getItem(policyKey) || '{}').hidden === true
+    return JSON.parse(localStorage.getItem(policyKey) || '{}') ?? {}
   } catch {
-    return false
+    return {}
   }
 }
+const cached = cachedPolicy()
 export const appCatalog = reactive({
-  marketHidden: cachedMarketHidden(),
+  assistantPolicyReady: typeof cached.assistantHiddenIos === 'boolean' && typeof cached.assistantHiddenWeb === 'boolean',
+  marketHidden: cached.hidden === true,
+  assistantHiddenIos: cached.assistantHiddenIos === true,
+  assistantHiddenWeb: cached.assistantHiddenWeb === true,
   entries: [] as MarketEntry[],
   loading: false,
   error: '',
@@ -34,16 +38,25 @@ let generation = 0
 let catalogUser: string | undefined
 export async function refreshCatalog(options: { silent?: boolean } = {}) {
   void refreshLocalApplications()
+  const epoch = ++generation
   void request<{ data: ApplicationMarketSettings }>('/app-market/settings').then(({ data }) => {
+    if (epoch !== generation) {
+      return
+    }
     const changed = appCatalog.marketHidden !== data.hidden
     appCatalog.marketHidden = data.hidden
-    localStorage.setItem(policyKey, JSON.stringify(data))
+    appCatalog.assistantHiddenIos = data.assistantHiddenIos === true
+    appCatalog.assistantHiddenWeb = data.assistantHiddenWeb === true
     if (changed) {
       appCatalog.revision++
       window.dispatchEvent(new Event('tbox:applications-changed'))
     }
-  }).catch(() => {})
-  const epoch = ++generation
+    localStorage.setItem(policyKey, JSON.stringify(data))
+  }).catch(() => {}).finally(() => {
+    if (epoch === generation) {
+      appCatalog.assistantPolicyReady = true
+    }
+  })
   const user = identity.user?.id
   const token = identity.token
   if (catalogUser !== user) {

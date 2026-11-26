@@ -12,7 +12,7 @@ export function validateNavigationConfig(value) {
   return { ...value }
 }
 export function navigationInfo(info, config) {
-  return { ...info, TBoxNavigationOrigin: config.universalLinkOrigin, CFBundleURLTypes: [...(info.CFBundleURLTypes || []).filter((entry) => entry.CFBundleURLName !== 'com.tbox.app.navigation'), { CFBundleURLName: 'com.tbox.app.navigation', CFBundleURLSchemes: ['tbox'] }] }
+  return { ...info, TBoxNavigationOrigin: config.universalLinkOrigin, CFBundleURLTypes: [...(info.CFBundleURLTypes || []).filter((entry) => entry.CFBundleURLName !== 'cn.tboxos.ark.navigation'), { CFBundleURLName: 'cn.tboxos.ark.navigation', CFBundleURLSchemes: ['tbox'] }] }
 }
 export function navigationAssociation(config, bundleId, previous = {}) {
   const details = [...(previous.applinks?.details || [])]

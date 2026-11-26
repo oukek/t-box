@@ -110,10 +110,11 @@ appendFileSync(process.env.TBOX_TEST_COMMAND_LOG, JSON.stringify({ args: process
   })
   assert.equal(run('sync').status, 0)
   const commands = f.read('commands.log').trim().split('\n').map(JSON.parse)
-  assert.equal(commands.length, 5)
+  assert.equal(commands.length, 6)
   assert.equal(commands[2].args.at(-1), 'build:web')
   assert.equal(commands[3].args.at(-1), 'copy:web')
-  assert.deepEqual(commands[4].args.slice(-2), ['cap', 'sync'])
+  assert.deepEqual(commands[4].args.slice(-2), ['sync', 'ios'])
+  assert.deepEqual(commands[5].args.slice(-2), ['sync', 'android'])
   assert.equal(commands[2].version, '1.0.15')
   for (const command of commands) {
     assert.equal(command.live, undefined)

@@ -18,6 +18,6 @@ test('iOS scheme rotation preserves other URL handlers; generated AASA scopes th
   assert.deepEqual(info.CFBundleURLTypes.map((t) => t.CFBundleURLSchemes), [['other'], [configured.appId]])
   assert.deepEqual(info.LSApplicationQueriesSchemes, ['weixin', 'weixinULAPI', 'weixinURLParamsAPI', 'other'])
   assert.deepEqual(iosWechatPlist(info, config), info)
-  assert.deepEqual(association(config, 'com.tbox.app').applinks.details, [{ appID: 'ABCDEFGHIJ.com.tbox.app', paths: ['/wechat/*'] }])
-  assert.deepEqual(association({ ...config, enabled: false }, 'com.tbox.app').applinks.details, [])
+  assert.deepEqual(association(config, 'cn.tboxos.ark').applinks.details, [{ appID: 'ABCDEFGHIJ.cn.tboxos.ark', paths: ['/wechat/*'] }])
+  assert.deepEqual(association({ ...config, enabled: false }, 'cn.tboxos.ark').applinks.details, [])
 })

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  ApplicationMarketSettings,
   ApplicationPublicationEvent,
   ManagedApplication,
   ManagedRelease,
@@ -31,7 +32,9 @@ const query = ref('')
 const error = ref('')
 const notice = ref('')
 const loading = ref(true)
-const marketHidden = ref(false)
+const policy = reactive<ApplicationMarketSettings>({ hidden: false, assistantHiddenIos: false, assistantHiddenWeb: false })
+const savedPolicy = ref({ ...policy })
+const policyChanges = computed(() => Object.fromEntries(Object.entries(policy).filter(([key, value]) => savedPolicy.value[key as keyof ApplicationMarketSettings] !== value)))
 const policySaving = ref(false)
 const policyReady = ref(false)
 async function saveMarketPolicy() {
@@ -41,8 +44,10 @@ async function saveMarketPolicy() {
   policySaving.value = true
   error.value = ''
   try {
-    await save('/application-market/settings', { hidden: marketHidden.value }, 'PATCH')
-    notice.value = marketHidden.value ? '应用市场已隐藏，用户不能自行安装应用；已安装应用仍可更新。' : '应用市场已开放'
+    const settings = await save<ApplicationMarketSettings>('/application-market/settings', policyChanges.value, 'PATCH')
+    Object.assign(policy, settings)
+    savedPolicy.value = { ...policy }
+    notice.value = '入口显示设置已保存'
   } catch (cause) {
     error.value = errorMessage(cause)
   } finally {
@@ -172,7 +177,9 @@ const policyLoadError = ref('')
 async function loadMarketPolicy() {
   policyLoadError.value = ''
   try {
-    marketHidden.value = (await request<{ hidden: boolean }>('/application-market/settings')).hidden
+    const settings = await request<ApplicationMarketSettings>('/application-market/settings')
+    Object.assign(policy, settings)
+    savedPolicy.value = { ...policy }
     policyReady.value = true
   } catch (e) {
     policyLoadError.value = errorMessage(e)
@@ -423,15 +430,16 @@ onMounted(() => {
     {{ notice }}
   </p>
   <div class="panel market-policy-panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:16px">
-    <label style="display:flex;align-items:center;gap:8px"><AdminCheckbox v-model="marketHidden" :disabled="policySaving || !policyReady" />隐藏应用市场</label>
-    <span class="muted" style="flex:1">禁止用户自行安装；已安装应用可继续使用和更新，系统应用仍自动初始化。</span>
-    <AdminButton :disabled="loading || policySaving || !policyReady" @click="saveMarketPolicy">{{ policySaving ? "保存中…" : "保存设置" }}</AdminButton>
+    <label style="display:flex;align-items:center;gap:8px"><AdminCheckbox v-model="policy.hidden" :disabled="policySaving || !policyReady" />隐藏应用市场</label>
+    <label style="display:flex;align-items:center;gap:8px"><AdminCheckbox v-model="policy.assistantHiddenIos" :disabled="policySaving || !policyReady" />隐藏 iOS 方舟 AI 悬浮窗</label>
+    <label style="display:flex;align-items:center;gap:8px"><AdminCheckbox v-model="policy.assistantHiddenWeb" :disabled="policySaving || !policyReady" />隐藏网页方舟 AI 悬浮窗（含 PWA）</label>
+    <AdminButton :disabled="policySaving || !policyReady || !Object.keys(policyChanges).length" @click="saveMarketPolicy">{{ policySaving ? "保存中…" : "保存设置" }}</AdminButton>
   </div>
   <p
     v-if="policyLoadError"
     class="alert"
     role="alert"
-  >{{ policyLoadError }} <AdminButton @click="loadMarketPolicy">重试市场设置</AdminButton></p>
+  >{{ policyLoadError }} <AdminButton @click="loadMarketPolicy">重试入口设置</AdminButton></p>
   <HostDownloadsSettings />
   <div class="publication-workspace">
     <aside class="panel application-catalog">

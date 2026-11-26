@@ -57,4 +57,4 @@ iOS 16+ 的快捷指令可以选择“打开 T方舟 应用”或“执行 T方�
 
 可选 Universal Links 在 `navigation.config.json` 配置，原生同步时自动生成关联文件并保留微信配置。完整接入及验收见 [原生能力与快捷指令](../docs/native-capabilities-and-shortcuts.md)。
 
-iOS 和 Android 的原生显示名称按系统语言区分：中文为「T方舟」，其他语言为「T Ark」。Capacitor 的默认 `appName` 使用英文名；iOS 的 `InfoPlist.strings`、Android 的 `values-zh/strings.xml` 提供中文名称。改名不改变 `com.tbox.app` 或既有快捷链接协议。
+iOS 和 Android 的原生显示名称按系统语言区分：中文为「T方舟」，其他语言为「T Ark」。Capacitor 的默认 `appName` 使用英文名；iOS 的 `InfoPlist.strings`、Android 的 `values-zh/strings.xml` 提供中文名称。iOS Bundle ID 为 `cn.tboxos.ark`，Android 包名为 `com.tbox.app`。

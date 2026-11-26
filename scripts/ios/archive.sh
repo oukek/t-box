@@ -39,7 +39,7 @@ ditto -x -k "${ipa[0]}" "$work/check"
 app=("$work/check/Payload/"*.app)
 codesign --verify --deep --strict "${app[0]}"
 plist="${app[0]}/Info.plist"
-test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$plist")" = com.tbox.app
+test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$plist")" = cn.tboxos.ark
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist")" = "$IOS_MARKETING_VERSION"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$plist")" = "$APP_BUILD_NUMBER"
 test -s "${app[0]}/public/index.html"

@@ -10,7 +10,7 @@ from pathlib import Path
 work, project = map(Path, sys.argv[1:])
 profile = plistlib.loads((work / 'profile.plist').read_bytes())
 team = os.environ['APPLE_TEAM_ID']
-bundle = 'com.tbox.app'
+bundle = 'cn.tboxos.ark'
 entitlements = profile['Entitlements']
 prefix = profile['ApplicationIdentifierPrefix'][0]
 if (team not in profile['TeamIdentifier']
@@ -18,7 +18,7 @@ if (team not in profile['TeamIdentifier']
         or entitlements.get('get-task-allow') or 'ProvisionedDevices' in profile
         or profile.get('ProvisionsAllDevices')
         or profile['ExpirationDate'] <= datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)):
-    sys.exit('请下载本团队 com.tbox.app 的有效 App Store Connect 描述文件')
+    sys.exit('请下载本团队 cn.tboxos.ark 的有效 App Store Connect 描述文件')
 
 required_domains = plistlib.loads((project.parent.parent / 'App/App.entitlements').read_bytes()).get('com.apple.developer.associated-domains', [])
 permitted_domains = entitlements.get('com.apple.developer.associated-domains', [])

@@ -5,7 +5,7 @@ import { PlatformConfigurationEntity, PlatformConfigurationHistoryEntity, Platfo
 import { ErrorCode } from '../error-codes.js'
 
 export const APPLICATION_MARKET_KEY = 'host.applicationMarket'
-const defaults: ApplicationMarketSettings = { hidden: false }
+const defaults: ApplicationMarketSettings = { hidden: false, assistantHiddenIos: false, assistantHiddenWeb: false }
 
 /** Host policy, deliberately independent of AI and individual app configuration. */
 export class ApplicationMarketPolicy {
@@ -41,30 +41,31 @@ export class ApplicationMarketPolicy {
         where: { config_key: APPLICATION_MARKET_KEY },
         ...(db ? { lock: { mode: 'pessimistic_read' as const } } : {}),
       })
-      const value = (typeof row?.value_json === 'string' ? JSON.parse(row.value_json) : row?.value_json) as { hidden?: unknown } | null
+      const value = (typeof row?.value_json === 'string' ? JSON.parse(row.value_json) : row?.value_json) as Partial<ApplicationMarketSettings> | null
       if (!value || typeof value.hidden !== 'boolean') {
         throw ErrorCode.SCHEMA_REQUIRED('应用市场配置缺失或无效，请管理员检查')
       }
-      return { hidden: value.hidden }
+      return { hidden: value.hidden, assistantHiddenIos: value.assistantHiddenIos === true, assistantHiddenWeb: value.assistantHiddenWeb === true }
     }
-    return !db && this.cache ? this.cache.current(this.source, 'host.applicationMarket', load) : load()
+    return !db && this.cache ? this.cache.current(this.source, 'host.applicationMarket.v2', load) : load()
   }
 
   async save(value: unknown, administratorId: string) {
-    if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some((key) => key !== 'hidden') || !('hidden' in value) || typeof value.hidden !== 'boolean') {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.keys(value).length || Object.entries(value).some(([key, entry]) => !Object.hasOwn(defaults, key) || typeof entry !== 'boolean')) {
       throw ErrorCode.INVALID_MARKET_SETTINGS()
     }
     await this.initialize()
-    const next = { hidden: value.hidden }
     await this.source.transaction(async (db) => {
       const state = await db.getRepository(PlatformConfigurationStateEntity).findOne({ where: { id: 1 }, lock: { mode: 'pessimistic_write' } })
       if (!state) {
         throw ErrorCode.SCHEMA_REQUIRED()
       }
+      const patch = value as Partial<ApplicationMarketSettings>
+      const next = { ...await this.read(db), ...patch }
       await db.getRepository(PlatformConfigurationEntity).update({ config_key: APPLICATION_MARKET_KEY }, { value_json: next, updated_at: new Date().toISOString() })
       const revision = Number(state.revision) + 1
       await db.getRepository(PlatformConfigurationStateEntity).update({ id: 1 }, { revision })
-      await db.getRepository(PlatformConfigurationHistoryEntity).insert({ config_key: APPLICATION_MARKET_KEY, revision, value_json: next, administrator_id: administratorId, note: next.hidden ? '隐藏应用市场，禁止用户安装' : '开放应用市场', created_at: new Date().toISOString() })
+      await db.getRepository(PlatformConfigurationHistoryEntity).insert({ config_key: APPLICATION_MARKET_KEY, revision, value_json: next, administrator_id: administratorId, note: '更新宿主入口显示设置', created_at: new Date().toISOString() })
     })
     return this.read()
   }
