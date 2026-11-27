@@ -11,9 +11,11 @@ import {
   createApplicationRequestId,
 } from '@t-box/app-contracts'
 import { AppSdkError, SdkErrorCode } from '@t-box/app-sdk'
+import { watch } from 'vue'
 import { ErrorCode } from '../../error-codes.js'
 import { request } from '../network'
 import { identity } from '../session'
+import { hasWindowBar } from '../viewport'
 import { appCatalog } from './catalog'
 import { localBaselineLaunch } from './localApplications'
 import { resolveLocalLaunch } from './localLaunch'
@@ -105,6 +107,12 @@ export function connectFrame(
       timer: ReturnType<typeof setTimeout>
     }
   >()
+  const embeddedWindow = !!frame.closest('.app-window')
+  const stopWatchingBar = watch(hasWindowBar, (visible) => {
+    if (embeddedWindow) {
+      channel.port1.postMessage({ type: 'windowBar', visible })
+    }
+  })
   let closed = false
   let ready = false
   let resolveReady!: (connection: AppConnection) => void
@@ -135,6 +143,7 @@ export function connectFrame(
       return
     }
     closed = true
+    stopWatchingBar()
     clearTimeout(timer)
     channel.port1.postMessage({
       type: 'event',
@@ -321,6 +330,7 @@ export function connectFrame(
   frame.contentWindow!.postMessage(
     {
       type: 'tbox.connect',
+      windowBar: embeddedWindow && hasWindowBar.value,
       protocol: APP_PROTOCOL,
       sdkVersion: APP_SDK_VERSION,
       nonce,

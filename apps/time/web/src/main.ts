@@ -35,6 +35,7 @@ connectAppClient({
       render: () =>
         h('main', { class: 'application-frame' }, [
           h(ApplicationHeader, {
+            applicationRoot: true,
             title: '时间',
             backLabel: 'OS',
             onBack: () => connection.client.navigation.back(),

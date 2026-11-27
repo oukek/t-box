@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import ReminderHost from '@t-box/device-reminders/ReminderHost.vue'
 import AccountSettingsPage from '@t-box/settings-web/pages/AccountSettingsPage.vue'
-import { AppIcon, BottomSheet, BrandMark, UserAvatar } from '@t-box/ui-kit'
+import { AppIcon, BrandMark, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
 import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { applicationModules } from './applications/registry'
+import AppSwitcher from './components/AppSwitcher.vue'
 import ApplicationSurface from './core/app-runtime/ApplicationSurface.vue'
 import { closeApplicationRuntimes, prepareApplicationForClose } from './core/app-runtime/bridge'
 import {
@@ -35,7 +36,7 @@ import {
 } from './core/navigation'
 import { isNativeIos } from './core/platform'
 import { identity } from './core/session'
-import { observeViewport } from './core/viewport'
+import { hasWindowBar, observeViewport } from './core/viewport'
 import InstallDesktop from './core/web-release/InstallDesktop.vue'
 import WebReleaseDialog from './core/web-release/WebReleaseDialog.vue'
 import ApplicationCapabilitiesPage from './features/applications/ApplicationCapabilitiesPage.vue'
@@ -65,9 +66,10 @@ const currentApplication = computed(() =>
     ? getApplication(navigation.application.appId)
     : undefined,
 )
-interface AppWindow { destination: NonNullable<typeof navigation.application>, revision: number, expanded: boolean }
+interface AppWindow { destination: NonNullable<typeof navigation.application>, revision: number, expanded: boolean, x: number, y: number }
 const windows = ref<AppWindow[]>([])
 const activeId = computed(() => navigation.screen === 'application' ? navigation.application?.appId : undefined)
+const onDesktop = computed(() => navigation.screen === 'applications' || !!activeId.value)
 const activeWindow = computed(() => windows.value.find((item) => item.destination.appId === activeId.value))
 watch([activeId, () => navigation.revision, () => identity.user?.id], ([id], previous) => {
   if (previous.length && previous[2] !== identity.user?.id) {
@@ -79,22 +81,42 @@ watch([activeId, () => navigation.revision, () => identity.user?.id], ([id], pre
   }
   const existing = windows.value.find((item) => item.destination.appId === id)
   if (!existing) {
-    windows.value.push({ destination, revision: navigation.revision, expanded: false })
+    windows.value.push({ destination, revision: navigation.revision, expanded: false, x: 0, y: 0 })
   } else if ((Object.keys(destination.params ?? {}).length && JSON.stringify(destination.params) !== JSON.stringify(existing.destination.params)) || previous[0] === id) {
     existing.destination = destination
     existing.revision = navigation.revision
   }
 }, { immediate: true })
-const switcherOpen = ref(false)
+const switcher = ref<InstanceType<typeof AppSwitcher>>()
+let drag: { id: number, offsetX: number, offsetY: number } | undefined
+function startDrag(event: PointerEvent, item: AppWindow) {
+  if (item.expanded || event.button !== 0 || (event.target as Element).closest('button')) {
+    return
+  }
+  const bar = event.currentTarget as HTMLElement
+  const rect = bar.parentElement!.getBoundingClientRect()
+  drag = { id: event.pointerId, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top }
+  bar.setPointerCapture(event.pointerId)
+}
+function moveWindow(event: PointerEvent, item: AppWindow) {
+  if (!drag || drag.id !== event.pointerId || item.expanded) {
+    return
+  }
+  const rect = (event.currentTarget as HTMLElement).parentElement!.getBoundingClientRect()
+  const freeX = window.innerWidth - rect.width
+  const freeY = window.innerHeight - rect.height
+  item.x = Math.min(freeX, Math.max(0, event.clientX - drag.offsetX)) - freeX / 2
+  item.y = Math.min(freeY, Math.max(0, event.clientY - drag.offsetY)) - freeY / 2
+}
 const runningApps = computed(() => windows.value.map((item) => ({
   item,
   app: getApplication(item.destination.appId),
 })))
 watch([() => identity.user?.id, () => navigation.revision], () => {
-  switcherOpen.value = false
+  switcher.value?.close()
 })
 function resumeWindow(item: AppWindow) {
-  switcherOpen.value = false
+  switcher.value?.close()
   if (activeId.value !== item.destination.appId) {
     void openApplication(item.destination)
   }
@@ -119,7 +141,7 @@ async function closeWindow(id: string) {
         navigateTab('applications')
       }
       if (!windows.value.length) {
-        switcherOpen.value = false
+        switcher.value?.close()
       }
     }
   } catch {
@@ -240,7 +262,7 @@ onBeforeUnmount(() => {
       id="workspace"
       class="workspace-plane"
       :class="{
-        'workspace-plane--desktop': navigation.screen === 'applications',
+        'workspace-plane--desktop': onDesktop,
         'workspace-plane--billing': ['wallet', 'recharge', 'pricing'].includes(
           navigation.screen,
         ),
@@ -255,15 +277,6 @@ onBeforeUnmount(() => {
           @click.prevent="navigateTab('applications')"
         ><BrandMark class="desktop-brand-mark" /><span>T方舟</span></a>
         <div class="desktop-topbar__actions">
-          <button
-            v-if="windows.length"
-            class="phone-running"
-            aria-label="切换应用"
-            aria-haspopup="dialog"
-            @click="switcherOpen = true"
-          >
-            <AppIcon name="copy" :size="17" /><span>{{ windows.length }}</span>
-          </button>
           <InstallDesktop v-if="isWebHost && !desktopShell" />
           <NotificationBell v-if="identity.user" />
           <button
@@ -297,7 +310,7 @@ onBeforeUnmount(() => {
       <ShortcutsPage v-if="navigation.screen === 'shortcuts'" />
       <PaymentHandoffPage v-if="navigation.screen === 'paymentHandoff'" :key="navigation.revision" />
       <DevicePermissionsPage v-if="navigation.screen === 'devicePermissions'" />
-      <ApplicationsPage v-show="navigation.screen === 'applications'" />
+      <ApplicationsPage v-show="onDesktop" :inert="activeId ? true : undefined" />
       <ApplicationCapabilitiesPage
         v-if="
           identity.user && navigation.screen === 'capabilities' && navigation.capabilityAppId
@@ -310,28 +323,24 @@ onBeforeUnmount(() => {
       <ResourcesPage v-if="identity.user && navigation.screen === 'resources'" />
       <MemoryPage v-if="identity.user && navigation.screen === 'memory'" :key="identity.user.id" />
       <AccountSettingsPage v-if="identity.user && navigation.screen === 'account'" />
-      <nav
-        v-if="windows.length && navigation.screen === 'applications'"
-        class="open-apps"
-        aria-label="已打开的应用"
-      >
-        <button
-          v-for="item in windows"
-          :key="item.destination.appId"
-          @click="openApplication(item.destination)"
-        >
-          {{ getApplication(item.destination.appId)?.name || item.destination.appId }}
-        </button>
-      </nav>
       <section
         v-for="item in windows"
         v-show="activeId === item.destination.appId"
         :key="item.destination.appId"
         class="app-window"
-        :class="{ expanded: item.expanded }"
+        :data-window-bar="hasWindowBar ? 'shown' : 'hidden'"
+        :class="{ 'expanded': item.expanded, 'native-desktop-window': desktopShell }"
+        :style="{ '--offset-x': item.x + 'px', '--offset-y': item.y + 'px' }"
         :aria-label="getApplication(item.destination.appId)?.name"
       >
-        <header class="app-window-bar">
+        <header
+          v-if="hasWindowBar"
+          class="app-window-bar"
+          @pointerdown="startDrag($event, item)"
+          @pointermove="moveWindow($event, item)"
+          @lostpointercapture="drag = undefined"
+          @dblclick="!($event.target as Element).closest('button') && (item.expanded = !item.expanded)"
+        >
           <div class="window-controls">
             <button
               class="close"
@@ -339,20 +348,39 @@ onBeforeUnmount(() => {
               aria-label="关闭应用"
               :disabled="returning"
               @click="closeWindow(item.destination.appId)"
-            ><span>×</span></button>
+            ><span><AppIcon name="close" :size="10" /></span></button>
             <button
               class="minimize"
               title="最小化到桌面"
               aria-label="最小化到桌面"
               @click="navigateTab('applications')"
-            ><span>−</span></button>
+            ><span><svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              aria-hidden="true"
+            ><path
+              d="M2 5h6"
+              stroke="currentColor"
+              stroke-width="1.5"
+            /></svg></span></button>
             <button
               class="maximize"
-              :title="item.expanded ? '还原窗口' : '放大窗口'"
-              :aria-label="item.expanded ? '还原窗口' : '放大窗口'"
+              :title="item.expanded ? '还原窗口' : '软件内全屏'"
+              :aria-label="item.expanded ? '还原窗口' : '软件内全屏'"
               :aria-pressed="item.expanded"
               @click="item.expanded = !item.expanded"
-            ><span>⤢</span></button>
+            ><span><svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              aria-hidden="true"
+            ><path
+              d="M2 5V2h3m3 3v3H5M2 2l6 6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+            /></svg></span></button>
           </div>
           <strong>{{ getApplication(item.destination.appId)?.name }}</strong>
           <small v-if="returnError && item === activeWindow" role="alert">{{ returnError }}</small>
@@ -360,21 +388,16 @@ onBeforeUnmount(() => {
         <div class="app-window-content"><ApplicationSurface
           :destination="item.destination"
           :open-revision="item.revision"
-          embedded
+          :embedded="hasWindowBar"
         /></div>
-        <nav class="phone-app-nav" aria-label="方舟导航">
-          <button @click="navigateTab('applications')"><AppIcon name="apps" :size="17" />桌面</button>
-          <button aria-haspopup="dialog" @click="switcherOpen = true"><AppIcon name="copy" :size="17" />切换应用</button>
-        </nav>
       </section>
     </main>
-    <BottomSheet
-      :open="switcherOpen"
-      title="已打开的应用"
-      compact
-      :busy="returning"
-      @close="switcherOpen = false"
-    >
+    <AppSwitcher v-if="windows.length && onDesktop" ref="switcher">
+      <button
+        v-if="activeId"
+        class="switch-desktop"
+        @click="switcher?.close(); navigateTab('applications')"
+      ><AppIcon name="apps" :size="17" />收起到桌面</button>
       <div class="running-list">
         <div
           v-for="{ item, app } in runningApps"
@@ -399,7 +422,7 @@ onBeforeUnmount(() => {
         </div>
         <small v-if="returnError" role="alert">{{ returnError }}</small>
       </div>
-    </BottomSheet>
+    </AppSwitcher>
     <WebReleaseDialog :enabled="productionWeb" />
     <ReminderHost />
     <NotificationCenter v-if="identity.user" />

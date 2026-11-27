@@ -4,9 +4,9 @@
   --market-accent: #28786b;
   --market-line: #e5ece9;
   width: 100%;
-  max-width: 1000px;
   margin: 0 auto;
-  padding: 20px 0 32px;
+  padding: 20px clamp(14px, 2vw, 28px) 32px;
+  box-sizing: border-box;
   color: var(--market-ink);
 }
 .market-page .application-page-header {

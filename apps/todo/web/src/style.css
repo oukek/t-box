@@ -96,8 +96,7 @@ nav button.active {
 }
 main {
   margin-left: 212px;
-  padding: 56px max(5vw, 30px);
-  max-width: 1260px;
+  padding: 32px clamp(16px, 2vw, 32px);
 }
 .heading {
   display: flex;
@@ -613,3 +612,6 @@ button {
   .day-step { min-height: 62px; padding: 10px 6px; }
 }
 @media (max-width: 730px) { .shell .brand { margin: 0; } }
+
+[data-window-bar="shown"] .shell .brand { display: none; }
+[data-window-bar="hidden"] .shell .host { width: 44px; height: 44px; padding: 0; border: 0; background: transparent; }

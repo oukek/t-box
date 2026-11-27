@@ -8,6 +8,8 @@
     "pnpm": ">=11"
   },
   "scripts": {
+    "release:ui": "node scripts/release-dashboard/server.mjs",
+    "release": "node --env-file-if-exists=.env.release.local scripts/local-release.mjs",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0",
     "check": "pnpm lint && pnpm check:apps && pnpm check:business && pnpm typecheck",
@@ -61,7 +63,7 @@
     "apps:workflow": "node scripts/generate-application-workflow.mjs",
     "pack:application": "node scripts/pack-application-release.mjs",
     "apps:submit:local": "node scripts/submit-local-applications.mjs",
-    "test:application-release": "node --test scripts/application-release.test.mjs scripts/submit-local-applications.test.mjs scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs scripts/application-resources.test.mjs",
+    "test:application-release": "node --test scripts/local-release.test.mjs scripts/application-release.test.mjs scripts/submit-local-applications.test.mjs scripts/oss-deployment.test.mjs scripts/oss-sdk.test.mjs scripts/application-resources.test.mjs",
     "deploy:web:oss": "node scripts/deploy-web-oss.mjs",
     "test:application-import": "pnpm --filter @t-box/api exec tsx test/application-build-import.integration.ts",
     "test:installation-health": "pnpm --filter @t-box/api exec tsx test/application-installation-health.integration.ts",

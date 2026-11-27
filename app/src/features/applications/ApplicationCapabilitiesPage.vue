@@ -261,7 +261,8 @@ onBeforeUnmount(() => controller?.abort())
 
 <style scoped>
 .capabilities-page {
-  max-width: 860px;
+  width: 100%;
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 10px 0 30px;
 }

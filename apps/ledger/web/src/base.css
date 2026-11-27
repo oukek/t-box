@@ -50,7 +50,3 @@ body,
   flex-direction: column;
   min-height: 100dvh;
 }
-
-.application-frame {
-  --application-content-width: 1220px;
-}

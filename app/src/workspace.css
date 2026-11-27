@@ -170,28 +170,23 @@
 .app-window-content { flex:1; min-height:0; overflow:auto; position:relative; }
 .app-window-content > .application-workspace:has(.web-application) {height:100%;}
 .app-window-content .application-launch {position:absolute;}
-.open-apps { position:absolute; bottom:max(8px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; gap:4px; max-width:90%; overflow:auto; padding:4px; border-radius:12px; background:#263448ed; z-index:3; }
-.open-apps button { white-space:nowrap; background:transparent; color:white; border:0; padding:4px 9px; cursor:pointer; }
-.workspace-plane--desktop:has(.open-apps) .desktop-bottom { margin-bottom:38px; }
-@media (min-width:800px) {
-  .app-window:not(.expanded) { inset:12px clamp(12px,2vw,32px); border-radius:12px; overflow:hidden; box-shadow:0 4px 22px #0f172a1c; }
-}
-@media (max-width:799px) { .window-controls .maximize { display:none; } }
-
-.phone-app-nav, .phone-running { display:none; }
 .running-list { display:grid; gap:2px; }
 .running-row { display:flex; align-items:center; }
 .running-row + .running-row { border-top:1px solid #e9ecf0; }
-.running-row button, .phone-app-nav button { display:flex; align-items:center; border:0; background:transparent; cursor:pointer; }
+.running-row button { display:flex; align-items:center; border:0; background:transparent; cursor:pointer; }
 .running-resume { flex:1; min-width:0; min-height:62px; gap:12px; text-align:left; color:#243247; font-size:15px; }
 .running-resume .launcher-icon { --icon-size:36px; background:#e7edf5; color:#314f72; border-radius:10px; }
 .running-resume small { margin-left:auto; color:#667488; font-size:12px; }
 .running-close { justify-content:center; width:44px; height:44px; color:#657488; }
+
+.app-window-bar { touch-action:none; user-select:none; cursor:grab; }
+.app-window-bar:active { cursor:grabbing; }
+.window-controls span svg { display:block; }
+.switch-desktop { display:flex; align-items:center; gap:10px; padding:0 10px; border:0; background:#eaf0f5; color:#34455a; border-radius:9px; width:100%; min-height:44px; cursor:pointer; }
+.app-window:not(.expanded) { --win-w:calc(100vw - clamp(56px, 9vw, 144px)); --win-h:85dvh; }
+@media (min-width:800px) {
+  .app-window[data-window-bar="shown"]:not(.expanded) { width:var(--win-w); height:var(--win-h); inset:auto; left:clamp(0px,calc((100vw - var(--win-w))/2 + var(--offset-x)),calc(100vw - var(--win-w))); top:clamp(0px,calc((100dvh - var(--win-h))/2 + var(--offset-y)),calc(100dvh - var(--win-h))); border-radius:14px; overflow:hidden; box-shadow:0 12px 55px #07182f55; }
+}
 @media (max-width:799px) {
-  .app-window-bar, .open-apps { display:none; }
-  .workspace-plane--desktop:has(.open-apps) .desktop-bottom { margin-bottom:0; }
-  .phone-app-nav { flex:none; display:flex; align-items:center; justify-content:center; gap:16px; padding:0 12px env(safe-area-inset-bottom); background:#fafbfc; border-top:1px solid #e6eaef; }
-  .phone-app-nav button { min-height:44px; padding:0 12px; gap:7px; color:#49596d; font-size:12px; }
-  .phone-app-nav button:active { color:#15283f; background:#edf1f6; border-radius:10px; }
-  .phone-running { display:inline-flex; align-items:center; justify-content:center; gap:4px; min-width:44px; min-height:44px; padding:0 5px; color:white; border:0; background:transparent; font-weight:600; font-size:12px; }
+  .native-desktop-window:not(.expanded) { width:92vw; height:90dvh; inset:auto; left:clamp(0px,calc(4vw + var(--offset-x)),8vw); top:clamp(0px,calc(5dvh + var(--offset-y)),10dvh); border-radius:12px; overflow:hidden; }
 }

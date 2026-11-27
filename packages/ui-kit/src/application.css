@@ -3,7 +3,8 @@
    teleported sheets can use the app's complete viewport. */
 .application-frame {
   width: 100%;
-  max-width: var(--application-content-width, 1080px);
+  max-width: var(--application-content-width, none);
+  box-sizing: border-box;
   margin: 0 auto;
   padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
     max(16px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));

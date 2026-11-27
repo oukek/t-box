@@ -1,5 +1,4 @@
 .calculator-page {
-  max-width: 1040px;
   margin: 0 auto;
   padding: 8px 0 24px;
   --calc-ink: #253e40;
@@ -72,7 +71,6 @@
 }
 .calc-workbench {
   min-width: 0;
-  max-width: 720px;
 }
 .calc-workbench-heading {
   position: relative;
@@ -99,7 +97,6 @@
   margin-top: 10px;
 }
 .calc-expression {
-  max-width: 560px;
   margin: 0 auto;
 }
 .calc-display {

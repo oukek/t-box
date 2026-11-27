@@ -202,7 +202,9 @@ test('unsafe object names are rejected before the SDK can send a request', async
 })
 
 test('deployment workflows install locked SDK dependencies before preflight and do not install a separate OSS binary', async () => {
-  for (const name of ['application-release', 'web-oss', 'api-pm2']) {
+  const webEntry = await readFile(new URL('../.github/workflows/web-oss.yml', import.meta.url), 'utf8')
+  assert.match(webEntry, /uses: \.\/\.github\/workflows\/desktop-release\.yml/)
+  for (const name of ['application-release', 'desktop-release', 'api-pm2']) {
     const source = await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8')
     assert.ok(!source.includes('ossutil'), name)
     const install = source.indexOf('pnpm install --frozen-lockfile')

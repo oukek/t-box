@@ -5,8 +5,11 @@ import { Modal } from '@t-box/ui-kit'
 import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { onMounted, ref } from 'vue'
 
+import CollectorDownload from './CollectorDownload.vue'
+
 const props = defineProps<{ client: AppClient, projectId?: string }>()
 const emit = defineEmits<{ claimed: [] }>()
+const collectorDownload = ref(false)
 const items = ref<CollectionItem[]>([])
 const claimed = ref<string[]>([])
 const selected = ref<string[]>([])
@@ -55,6 +58,8 @@ onMounted(load)
 
 <template>
   <section class="panel catalog-list">
+    <header v-if="!projectId" class="collection-heading"><h2>采集商品</h2><button @click="collectorDownload = true">下载采集插件</button></header>
+    <CollectorDownload v-if="collectorDownload" @close="collectorDownload = false" />
     <p v-if="error" role="alert">{{ error }}</p>
     <p class="muted">{{ projectId ? '选择个人采集表中的商品；当前项目已认领的商品不可重复选择。' : '插件确认采集后的个人商品，不随项目切换。来源图片以原链接展示。' }}</p>
     <div

@@ -224,6 +224,7 @@ watch(
 <template>
   <section class="book-hub">
     <ApplicationHeader
+      :application-root="!bookId"
       :title="bookId ? book?.name || '账本不可用' : '账本'"
       :back-label="
         tab === 'tools' && toolsRef?.hasSelection

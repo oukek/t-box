@@ -200,6 +200,7 @@ watch(() => [props.focusAppId, props.openRevision, appCatalog.revision] as const
       role="status"
     >应用市场已关闭，当前仅提供已安装应用的更新与维护。</p>
     <ApplicationHeader
+      application-root
       :title="appCatalog.marketHidden ? '应用更新' : '应用市场'"
       :back-label="tabLabel(navigation.backTo)"
       @back="backFromApplication"

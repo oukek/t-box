@@ -131,7 +131,7 @@ onMounted(() => run(() => load(true)))
       class="notice error"
       role="alert"
     >{{ error }}</p>
-    <section class="panel">
+    <section class="panel project-list">
       <div
         v-for="item in items"
         :key="item.id"

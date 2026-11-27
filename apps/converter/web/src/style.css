@@ -11,9 +11,7 @@
   background: #f5f7fb;
   color: var(--ink);
 }
-.application-frame {
-  --application-content-width: 1160px;
-}
+
 #app {
   min-height: 100dvh;
 }

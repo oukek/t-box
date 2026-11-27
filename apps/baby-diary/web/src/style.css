@@ -229,7 +229,7 @@ small {
   border-color: var(--baby-line);
 }
 .baby-app {
-  width: min(100%, 900px);
+  width: 100%;
   margin: auto;
   padding: max(10px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
     max(28px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
@@ -1338,3 +1338,8 @@ body .side-panel {
   color: var(--baby-muted);
   padding: 6px 0;
 }
+
+[data-window-bar="shown"] .app-header > .round-button,
+[data-window-bar="shown"] .app-header > h1 { display: none; }
+[data-window-bar="shown"] .app-header { justify-content: flex-end; margin-bottom: 10px; }
+[data-window-bar="hidden"] .app-header > .round-button { width: 44px; height: 44px; }

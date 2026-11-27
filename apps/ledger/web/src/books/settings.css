@@ -1,7 +1,6 @@
 .ledger-settings {
   display: grid;
   gap: 12px;
-  max-width: 780px;
   margin: 0 auto;
 }
 .settings-card {

@@ -76,6 +76,12 @@ export function connectApplication(
       }
       window.removeEventListener('message', accept)
       clearTimeout(timer)
+      function setWindowBar(visible: unknown) {
+        if (typeof visible === 'boolean' && document.documentElement) {
+          document.documentElement.dataset.windowBar = visible ? 'shown' : 'hidden'
+        }
+      }
+      setWindowBar(event.data.windowBar)
       const port = event.ports[0]!
       let beforeSystemUpdate: (() => Promise<boolean> | boolean) | undefined
       const pending = new Map<
@@ -92,9 +98,13 @@ export function connectApplication(
       port.onmessage = async ({
         data,
       }: MessageEvent<
-        BridgeRequest | BridgeResponse | ApplicationBridgeEvent | { type: 'prepareSystemUpdate', id: string }
+        BridgeRequest | BridgeResponse | ApplicationBridgeEvent | { type: 'windowBar', visible: boolean } | { type: 'prepareSystemUpdate', id: string }
       >) => {
         if (!data || closed) {
+          return
+        }
+        if (data.type === 'windowBar') {
+          setWindowBar(data.visible)
           return
         }
         if (data.type === 'event') {

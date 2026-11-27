@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>发布工作台 · T方舟</title>
+  <link rel="stylesheet" href="/page.css">
+  <script src="/page.js" type="module"></script>
+</head>
+<body>
+  <header><div class="bar"><span class="mark" aria-hidden="true">↗</span><b>T方舟</b><span class="divider"></span>发布工作台</div></header>
+  <main>
+    <aside>
+      <div class="branch" id="branch"></div>
+      <h1>发布计划</h1>
+      <p id="notes"></p>
+      <section class="progress-card">
+        <h2 id="state" role="status">正在读取计划</h2>
+        <progress id="meter" value="0" max="1" aria-label="发布进度"></progress>
+        <p id="progress"></p>
+        <p id="detail"></p>
+        <p id="error" role="alert" hidden></p>
+        <button id="start" hidden></button>
+        <button id="retry" class="secondary" hidden>续跑并重试失败任务</button>
+        <button id="review" hidden>查看并确认</button>
+      </section>
+      <p class="tip" id="tip"></p>
+    </aside>
+    <section class="graph"><div class="graph-title"><h2>执行流程</h2><button id="locate" class="text" hidden>定位当前节点 ↓</button></div><div id="flow"></div></section>
+  </main>
+  <dialog id="dialog" aria-labelledby="dialog-title"><h2 id="dialog-title"></h2><pre id="summary"></pre><footer><button class="secondary" id="cancel">暂缓</button><button id="ok">确认</button></footer></dialog>
+</body>
+</html>

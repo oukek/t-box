@@ -10,7 +10,6 @@ import { computed, onMounted, ref } from 'vue'
 import App from './App.vue'
 import Catalog from './Catalog.vue'
 import Collection from './Collection.vue'
-import CollectorDownload from './CollectorDownload.vue'
 import CreativeStudio from './CreativeStudio.vue'
 import EditDialog from './EditDialog.vue'
 
@@ -28,7 +27,6 @@ defineExpose({ beforeSystemUpdate: async () => {
 } })
 const error = ref('')
 const section = ref('projects')
-const collectorDownload = ref(false)
 const projectTab = ref('products')
 const site = ref('MY')
 const templates = ref<CreativeTemplate[]>([])
@@ -47,7 +45,9 @@ async function navigate(next: string) {
   }
   section.value = next
   current.value = undefined
-  if (next === 'assistant' && !templatesLoaded.value) await loadTemplates()
+  if (next === 'assistant' && !templatesLoaded.value) {
+    await loadTemplates()
+  }
 }
 async function projectSection(next: string) {
   if (workspace.value && !await workspace.value.flushProject()) {
@@ -93,11 +93,15 @@ async function list() {
   loadingProjects.value = true
   try {
     const rows = await props.client.api.invoke<ProjectSummary[]>('projects', { action: 'list' }, { timeoutMs: 8000 })
-    if (request !== projectListRequest) return
+    if (request !== projectListRequest) {
+      return
+    }
     projects.value = rows
     current.value = projects.value.find((p) => p.id === current.value?.id)
   } finally {
-    if (request === projectListRequest) loadingProjects.value = false
+    if (request === projectListRequest) {
+      loadingProjects.value = false
+    }
   }
 }
 async function select(id: string) {
@@ -151,16 +155,20 @@ async function submit() {
 }
 async function saveTemplates(value: CreativeTemplate[]) {
   await run(async () => {
-    if (!templatesLoaded.value) throw new Error('模板尚未读取，请重新打开小助手后再保存。')
+    if (!templatesLoaded.value) {
+      throw new Error('模板尚未读取，请重新打开小助手后再保存。')
+    }
     await props.client.api.invoke('catalog', { action: 'save-templates', templates: value })
     templates.value = value
   })
 }
 onMounted(() => {
-  void list().catch(() => { error.value = '项目列表暂时无法连接，请检查网络后刷新。' })
+  void list().catch(() => {
+    error.value = '项目列表暂时无法连接，请检查网络后刷新。'
+  })
 })
 async function loadTemplates() {
-  await props.client.api.invoke<CreativeTemplate[]>('catalog', { action: 'templates' }).then(value => {
+  await props.client.api.invoke<CreativeTemplate[]>('catalog', { action: 'templates' }).then((value) => {
     templates.value = value
     templatesLoaded.value = true
   })
@@ -168,23 +176,30 @@ async function loadTemplates() {
 </script>
 
 <template>
-  <div class="shop-app">
+  <div class="shop-app shop-projects">
     <ApplicationHeader
+      application-root
       title="电商助手"
       back-label="OS"
       @back="run(goBack)"
-    >
-      <template #actions><button @click="collectorDownload = true">下载采集插件</button></template>
-    </ApplicationHeader>
-    <CollectorDownload v-if="collectorDownload" @close="collectorDownload = false" />
-    <nav class="shop-nav toolbar catalog-navigation" aria-label="应用分区">
+    />
+    <nav class="catalog-navigation" aria-label="应用分区">
+      <button
+        :aria-current="section === 'projects' ? 'page' : undefined"
+        :class="{ selected: section === 'projects' }"
+        @click="run(() => navigate('projects'))"
+      >项目管理</button>
+      <button
+        :aria-current="section === 'collection' ? 'page' : undefined"
+        :class="{ selected: section === 'collection' }"
+        @click="run(() => navigate('collection'))"
+      >个人采集表</button>
       <button
         v-if="showCreative"
+        :aria-current="section === 'assistant' ? 'page' : undefined"
         :class="{ selected: section === 'assistant' }"
         @click="run(() => navigate('assistant'))"
       >小助手</button>
-      <button :class="{ selected: section === 'collection' }" @click="run(() => navigate('collection'))">个人采集表</button>
-      <button :class="{ selected: section === 'projects' }" @click="run(() => navigate('projects'))">项目管理</button>
     </nav>
     <p
       v-if="error && !form && !managing"
@@ -201,8 +216,8 @@ async function loadTemplates() {
     />
     <Collection v-else-if="section === 'collection'" :client="client" />
     <template v-else-if="current">
-      <div class="toolbar panel"><button @click="run(() => navigate('projects'))">← 项目列表</button><strong>{{ current.name }}</strong><span>{{ projectSites.find(s => s.value === current?.site)?.label || '站点待设置' }}</span><button @click="run(() => details(current!))">项目设置与成员</button></div>
-      <nav class="toolbar panel"><button :class="{ selected: projectTab === 'products' }" @click="run(() => projectSection('products'))">项目商品</button><button :class="{ selected: projectTab === 'pricing' }" @click="run(() => projectSection('pricing'))">计价表</button></nav>
+      <div class="project-context"><button @click="run(() => navigate('projects'))">← 项目列表</button><strong>{{ current.name }}</strong><span>{{ projectSites.find(s => s.value === current?.site)?.label || '站点待设置' }}</span><button @click="run(() => details(current!))">项目设置与成员</button></div>
+      <nav class="project-tabs"><button :class="{ selected: projectTab === 'products' }" @click="run(() => projectSection('products'))">项目商品</button><button :class="{ selected: projectTab === 'pricing' }" @click="run(() => projectSection('pricing'))">计价表</button></nav>
       <Catalog
         v-if="projectTab === 'products'"
         :key="current.id + current.site"
@@ -221,11 +236,17 @@ async function loadTemplates() {
         @projects="run(() => navigate('projects'))"
       />
     </template>
-    <main v-else class="shop-content"><section class="panel">
-      <div class="toolbar"><button @click="edit('create')">新建项目</button><button @click="edit('join')">用邀请码加入</button><button :disabled="busy" @click="run(list)">刷新</button></div>
-      <div v-if="loadingProjects && !projects.length" class="project-loading" role="status" aria-label="正在加载项目列表">
+    <main v-else class="shop-content"><section class="panel project-list">
+      <div class="project-actions"><button class="primary" @click="edit('create')">新建项目</button><button @click="edit('join')">用邀请码加入</button><button :disabled="busy" @click="run(list)">刷新</button></div>
+      <div
+        v-if="loadingProjects && !projects.length"
+        class="project-loading"
+        role="status"
+        aria-label="正在加载项目列表"
+      >
         <i v-for="row in 3" :key="row" />
       </div>
+      <p v-if="!loadingProjects && !projects.length && !error" class="muted">还没有项目，可以新建项目或用邀请码加入。</p>
       <div
         v-for="p in projects"
         :key="p.id"
@@ -310,7 +331,19 @@ async function loadTemplates() {
 </template>
 
 <style scoped>
-.project-loading { display:grid; gap:12px; padding:18px 2px; }
-.project-loading i { display:block; width:min(68%,320px); height:11px; border-radius:4px; background:#e7eaf0; }
-.project-loading i:nth-child(2) { width:min(48%,220px); }
+.project-loading {
+  display: grid;
+  gap: 12px;
+  padding: 18px 2px;
+}
+.project-loading i {
+  display: block;
+  width: min(68%, 320px);
+  height: 11px;
+  border-radius: 4px;
+  background: #e7eaf0;
+}
+.project-loading i:nth-child(2) {
+  width: min(48%, 220px);
+}
 </style>

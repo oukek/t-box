@@ -190,7 +190,7 @@ const available = await client.updates.getAvailable()
 
 宿主将独立应用 iframe 作为完整视口，移除外层页面 gutter、居中最大宽度和额外底部导航留白。应用正文自行排版；不要通过缩小 iframe 为正文留白，否则 iframe 内的 sheet、遮罩、固定元素也会一起缩进去。
 
-内置 UI 工具包提供 `@t-box/ui-kit/application.css`，导入后在正文根节点使用 `application-frame`：移动端单层 12px 左右留白，桌面端 20px，默认最大宽度 1080px，可通过 `--application-content-width` 调整，并兼顾安全区域。此容器只约束正文，不设置 transform、contain 或 overflow 来约束弹层。
+内置 UI 工具包提供 `@t-box/ui-kit/application.css`，导入后在正文根节点使用 `application-frame`：移动端单层 12px 左右留白，桌面端 20px，正文随应用窗口铺开，并兼顾安全区域。此容器只约束正文，不设置 transform、contain 或 overflow 来约束弹层。
 
 ```ts
 import '@t-box/ui-kit/base.css'

@@ -23,6 +23,8 @@ pnpm dev
 
 **第一次部署**按 [OSS 网站与 PM2 后端部署手册](docs/first-deployment.md) 操作。**网页和 Mac 已在线、准备切换统一发布并首次打 iOS 包**，直接按 [逐步操作单](docs/ios-app-store-release.md) 操作。
 
+本地执行 `pnpm release:ui` 可打开可视化发布工作台，执行 `pnpm release --plan` 可预览本批顺序。配置凭据、串行构建、确认上线和断点续跑见根目录的[更新与发布清单](更新与发布清单.md)。
+
 系统版本在根目录 [release-versions.json](release-versions.json) 修改，随代码提交。GitHub Actions 读取所选提交中的版本。网页、PWA 和 Mac 共用 `ui`，Mac 安装包版本使用 `macos.core`。
 
 | 本次改动 | 运行哪个 GitHub Action | 在哪里生效 |

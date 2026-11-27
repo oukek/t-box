@@ -39,6 +39,7 @@ connectAppClient({
           ...(ownsNavigation
             ? [
                 h(ApplicationHeader, {
+                  applicationRoot: true,
                   title: '计算器',
                   backLabel: 'OS',
                   onBack: () => connection.client.navigation.back(),

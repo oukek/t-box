@@ -1,5 +1,6 @@
 .resources-page {
-  max-width: 960px;
+  width: 100%;
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 16px 0 32px;
 }

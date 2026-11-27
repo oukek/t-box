@@ -36,12 +36,20 @@ export default defineComponent({
   min-width: 0;
   max-width: 100%;
   padding: 7px 10px;
-  border: 1px solid #dedee3;
-  border-radius: 7px;
+  border: 1px solid var(--control-line, #cfd6dd);
+  border-radius: 8px;
   box-shadow: none;
   background: #fff;
   color: inherit;
   font: inherit;
+}
+.ark-control.ark-control:not([type='checkbox']):not(.ark-control-flat):hover:where(:enabled:not(:read-only)) {
+  border-color: var(--control-hover, #a5b1bd);
+}
+.ark-control.ark-control:not([type='checkbox']):not(.ark-control-flat):focus:enabled {
+  border-color: var(--control-focus, var(--focus-border, #4e667c));
+  outline: 1px solid var(--control-focus, var(--focus-border, #4e667c));
+  outline-offset: -1px;
 }
 textarea.ark-control {
   resize: vertical;
@@ -64,7 +72,7 @@ input.ark-control[type='checkbox']:checked {
   border-color: transparent;
 }
 .ark-control:focus-visible {
-  outline: 2px solid var(--accent, #64516e);
+  outline: 1px solid var(--accent, #64516e);
   outline-offset: 1px;
 }
 </style>

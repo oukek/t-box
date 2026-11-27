@@ -6,6 +6,8 @@
   font-family: 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
   color: #263447;
   background: #f3f6f9;
+  --control-focus: #9c4a32;
+  --control-hover: #a4adb7;
   --ink: #263447;
   --muted: #68788a;
   --line: #dfe6ed;
@@ -40,9 +42,8 @@ button:disabled {
   cursor: default;
   opacity: 0.45;
 }
-button:focus-visible,
-input:focus-visible {
-  outline: 2px solid #ed542e;
+button:focus-visible {
+  outline: 1px solid #9c4a32;
   outline-offset: 2px;
 }
 input {
@@ -135,7 +136,6 @@ small {
   border-bottom-color: var(--accent);
 }
 .shop-content {
-  max-width: 1180px;
   margin: auto;
   padding: 28px 32px;
   min-height: 65dvh;
@@ -975,7 +975,7 @@ summary {
   box-shadow: none;
 }
 .pricing-table .input-cell input:focus {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .pricing-table td small {
   font-size: 10px;
@@ -1327,10 +1327,6 @@ summary {
 .catalog-list .site-row {
   gap: 12px;
 }
-.catalog-navigation {
-  justify-content: flex-start;
-  gap: 8px;
-}
 .catalog-pricing .shop-dialog-body {
   display: grid;
   gap: 12px;
@@ -1338,3 +1334,48 @@ summary {
 .catalog-price-result {
   margin-right: auto;
 }
+
+.shop-projects { --page-gutter: clamp(12px, 2vw, 28px); }
+.shop-projects > .application-page-header { padding-inline: var(--page-gutter); border-bottom: 0; }
+.catalog-navigation, .project-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: clamp(14px, 2vw, 28px);
+  padding-inline: var(--page-gutter);
+  background: white;
+  border-bottom: 1px solid var(--line);
+}
+.catalog-navigation button, .project-tabs button {
+  position: relative;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  min-height: 42px;
+  padding: 4px 2px;
+  color: #59697a;
+}
+.catalog-navigation button.selected, .project-tabs button.selected { color: #ad452b; font-weight: 650; }
+.catalog-navigation button.selected::after, .project-tabs button.selected::after {
+  content: ''; position: absolute; inset: auto 0 0; height: 2px; border-radius: 2px; background: var(--accent);
+}
+.project-context, .collection-heading, .project-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.project-context { padding: 12px var(--page-gutter); background: #fff; }
+.project-context > button:last-child, .collection-heading button { margin-left: auto; }
+.project-context > span { color: var(--muted); }
+.project-list, .catalog-list { padding: clamp(14px, 1.7vw, 24px); min-width: 0; }
+.shop-projects > .catalog-list { margin: 16px var(--page-gutter); }
+.shop-projects > .shop-content { padding-inline: var(--page-gutter); }
+.project-actions { margin-bottom: 12px; }
+.project-actions > button:last-child { margin-left: auto; }
+.collection-heading { margin-bottom: 10px; }
+.catalog-list .toolbar { margin: 12px 0 0; justify-content: flex-start; }
+.shop-projects .project-list .site-row { gap: 12px; padding-block: 12px; }
+@media (max-width: 600px) {
+  .project-list .site-row { flex-wrap: wrap; }
+  .project-list .site-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+}
+
+.shop-app .sheet-select-trigger:hover:not(:disabled),
+.shop-dialog .sheet-select-trigger:hover:not(:disabled) { border-color: var(--control-hover); color: var(--ink); }
+.shop-app .sheet-select-trigger:focus-visible,
+.shop-dialog .sheet-select-trigger:focus-visible { border-color: var(--control-focus); outline: 1px solid var(--control-focus); outline-offset: -1px; }

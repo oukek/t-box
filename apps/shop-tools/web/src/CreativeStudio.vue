@@ -233,13 +233,11 @@ async function generate() {
         <div class="paper">
           <label class="paper-field">原标题<FormControl
             v-model="title"
-            flat
             maxlength="1000"
             placeholder="输入商品标题"
           /></label>
           <label class="paper-field">原描述<FormControl
             v-model="description"
-            flat
             multiline
             rows="5"
             maxlength="12000"
@@ -418,7 +416,6 @@ async function generate() {
   display: grid;
   align-content: start;
   gap: 22px;
-  max-width: 1160px;
   padding-block: clamp(16px, 3vw, 40px);
   color: var(--paper-ink);
 }

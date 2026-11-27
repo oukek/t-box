@@ -14,7 +14,7 @@ connectAppClient({}).then((connection) => {
   })
   root.textContent = ''
   createApp({ render: () => h('main', { class: 'application-frame' }, [
-    h(ApplicationHeader, { title: '单位换算', backLabel: 'OS', onBack: () => connection.client.navigation.back() }),
+    h(ApplicationHeader, { applicationRoot: true, title: '单位换算', backLabel: 'OS', onBack: () => connection.client.navigation.back() }),
     h(ConverterPage, { client: connection.client, params: state.params, revision: state.revision }),
   ]) }).mount(root)
   connection.ready({ appNavigation: true })

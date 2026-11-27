@@ -1,8 +1,13 @@
 name: 后端部署（PM2）
 
+run-name: ${{ inputs.release_key || '后端部署（PM2）' }}
 on:
   workflow_dispatch:
     inputs:
+      release_key:
+        description: 本地发版脚本跟踪编号（手动运行请留空）
+        type: string
+        required: false
       start_services:
         description: 上传后执行数据库初始化并启动 PM2
         type: boolean
@@ -17,6 +22,7 @@ concurrency:
 
 jobs:
   package:
+    if: ${{ !inputs.release_key || startsWith(inputs.release_key, format('{0}-', github.sha)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:

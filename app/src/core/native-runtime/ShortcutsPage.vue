@@ -76,7 +76,8 @@ onMounted(load)
 
 <style scoped>
 .shortcuts-page {
-  max-width: 760px;
+  width: 100%;
+  box-sizing: border-box;
   margin: auto;
   padding: 16px;
 }

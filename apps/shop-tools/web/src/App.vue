@@ -569,8 +569,9 @@ function refreshAll() {
 <template>
   <div class="shop-app">
     <ApplicationHeader
+      :application-root="!embedded"
       :title="embedded ? '计价表' : '电商助手'"
-      back-label="OS"
+      :back-label="embedded ? '项目管理' : 'OS'"
       @back="embedded ? emit('projects') : goBack()"
     ><template #actions><button
       v-if="!embedded"

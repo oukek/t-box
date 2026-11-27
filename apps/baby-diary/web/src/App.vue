@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
     <header class="app-header">
       <button
         class="round-button"
-        aria-label="返回 OS"
+        aria-label="返回桌面"
         @click="host().navigation.back()"
       >
         <AppIcon name="left" :size="21" />

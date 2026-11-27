@@ -149,7 +149,6 @@
   min-width: 78px;
 }
 .time-laps {
-  max-width: 650px;
   margin: 15px auto;
 }
 .time-laps > header,
@@ -175,14 +174,12 @@
   text-align: right;
 }
 .time-conversion {
-  max-width: 650px;
   margin: 0 auto;
 }
 .time-conversion > .temporal-primary {
   justify-self: start;
 }
 .time-result {
-  max-width: 650px;
   margin: 22px auto;
   padding: 20px;
   background: #edf5f0;

@@ -1,8 +1,15 @@
+import { ref } from 'vue'
+import { downloadAudience } from './native-runtime/download-targets'
+
+export const hasWindowBar = ref(false)
+
 /** Account for the visual viewport when the native on-screen keyboard opens. */
 export function observeViewport(): () => void {
   const viewport = window.visualViewport
   const preventPageZoom = (event: Event) => event.preventDefault()
   const update = () => {
+    hasWindowBar.value = !!window.__TBOX_DESKTOP_KEY__ ||
+      (downloadAudience(navigator) === 'desktop' && window.innerWidth >= 800)
     const height = viewport?.height || window.innerHeight
     document.documentElement.style.setProperty('--visible-height', `${height}px`)
     const focused = document.activeElement

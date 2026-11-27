@@ -41,6 +41,7 @@ function sizeKeydown(event: KeyboardEvent) {
 <template>
   <section class="profile-page" aria-label="设置">
     <ApplicationHeader
+      application-root
       title="设置"
       :back-label="tabLabel(navigation.backTo)"
       @back="backFromApplication"
@@ -58,68 +59,70 @@ function sizeKeydown(event: KeyboardEvent) {
       </span>
       <AppIcon name="right" :size="18" />
     </button>
-    <div class="settings-group">
-      <h2>桌面</h2>
-      <div class="settings-icon-size">
-        <h3>图标大小</h3>
-        <div
-          class="settings-icon-options"
-          role="radiogroup"
-          aria-label="桌面图标大小"
-          @keydown="sizeKeydown"
-        >
-          <button
-            v-for="option in iconSizeOptions"
-            :key="option.value"
-            class="settings-icon-option"
-            :class="{ selected: preferences.iconSize === option.value }"
-            role="radio"
-            :aria-checked="preferences.iconSize === option.value"
-            :tabindex="preferences.iconSize === option.value ? 0 : -1"
-            @click="setPreference('iconSize', option.value)"
+    <div class="settings-sections">
+      <div class="settings-group">
+        <h2>桌面</h2>
+        <div class="settings-icon-size">
+          <h3>图标大小</h3>
+          <div
+            class="settings-icon-options"
+            role="radiogroup"
+            aria-label="桌面图标大小"
+            @keydown="sizeKeydown"
           >
-            <span
-              class="settings-icon-preview"
-              :style="{
-                '--preview-size': `${option.pixels / 4}px`,
-              }"
-              aria-hidden="true"
+            <button
+              v-for="option in iconSizeOptions"
+              :key="option.value"
+              class="settings-icon-option"
+              :class="{ selected: preferences.iconSize === option.value }"
+              role="radio"
+              :aria-checked="preferences.iconSize === option.value"
+              :tabindex="preferences.iconSize === option.value ? 0 : -1"
+              @click="setPreference('iconSize', option.value)"
             >
-              <i v-for="index in 6" :key="index" />
-            </span>
-            <strong>{{ option.label }}</strong>
-            <small>{{ option.description }}</small>
+              <span
+                class="settings-icon-preview"
+                :style="{
+                  '--preview-size': `${option.pixels / 4}px`,
+                }"
+                aria-hidden="true"
+              >
+                <i v-for="index in 6" :key="index" />
+              </span>
+              <strong>{{ option.label }}</strong>
+              <small>{{ option.description }}</small>
+            </button>
+          </div>
+          <p class="settings-icon-hint">图标大小固定，每行数量随屏幕宽度自动调整。</p>
+        </div>
+        <p class="settings-device-note">按账号保存，在当前设备生效。</p>
+        <WallpaperSettings />
+      </div>
+      <div class="settings-group">
+        <h2>系统集成</h2>
+        <div class="profile-menu">
+          <button class="profile-action" @click="openDevicePermissions"><span class="profile-action-icon"><AppIcon name="settings" :size="20" /></span><span>设备权限<small>管理各应用的本机能力授权</small></span><AppIcon name="right" :size="17" /></button>
+          <button class="profile-action" @click="openShortcuts"><span class="profile-action-icon"><AppIcon name="apps" :size="20" /></span><span>快捷指令<small>配置系统快捷动作</small></span><AppIcon name="right" :size="17" /></button>
+        </div>
+      </div>
+      <div class="settings-group">
+        <h2>关于</h2>
+        <div class="profile-menu">
+          <button class="profile-action" @click="openSystemVersion">
+            <span class="profile-action-icon"><AppIcon name="settings" :size="20" /></span>
+            <span>系统版本<small>查看运行版本与检查更新</small></span>
+            <span class="profile-version">v{{ appInfo.version }}</span>
+            <AppIcon name="right" :size="17" />
+          </button>
+          <button class="profile-action" @click="aboutOpen = true">
+            <span class="profile-action-icon"><AppIcon
+              name="info"
+              :size="20"
+            /></span>
+            <span>关于 {{ appInfo.name }}<small>应用信息</small></span>
+            <AppIcon name="right" :size="17" />
           </button>
         </div>
-        <p class="settings-icon-hint">图标大小固定，每行数量随屏幕宽度自动调整。</p>
-      </div>
-      <p class="settings-device-note">按账号保存，在当前设备生效。</p>
-      <WallpaperSettings />
-    </div>
-    <div class="settings-group">
-      <h2>系统集成</h2>
-      <div class="profile-menu">
-        <button class="profile-action" @click="openDevicePermissions"><span class="profile-action-icon"><AppIcon name="settings" :size="20" /></span><span>设备权限<small>管理各应用的本机能力授权</small></span><AppIcon name="right" :size="17" /></button>
-        <button class="profile-action" @click="openShortcuts"><span class="profile-action-icon"><AppIcon name="apps" :size="20" /></span><span>快捷指令<small>配置系统快捷动作</small></span><AppIcon name="right" :size="17" /></button>
-      </div>
-    </div>
-    <div class="settings-group">
-      <h2>关于</h2>
-      <div class="profile-menu">
-        <button class="profile-action" @click="openSystemVersion">
-          <span class="profile-action-icon"><AppIcon name="settings" :size="20" /></span>
-          <span>系统版本<small>查看运行版本与检查更新</small></span>
-          <span class="profile-version">v{{ appInfo.version }}</span>
-          <AppIcon name="right" :size="17" />
-        </button>
-        <button class="profile-action" @click="aboutOpen = true">
-          <span class="profile-action-icon"><AppIcon
-            name="info"
-            :size="20"
-          /></span>
-          <span>关于 {{ appInfo.name }}<small>应用信息</small></span>
-          <AppIcon name="right" :size="17" />
-        </button>
       </div>
     </div>
     <Modal
@@ -136,13 +139,37 @@ function sizeKeydown(event: KeyboardEvent) {
         <p class="profile-english-name" lang="en">{{ appInfo.englishName }}</p>
         <p>{{ appInfo.description }}</p>
         <span class="profile-version">版本 {{ appInfo.version }}</span>
-        <p><a href="https://tboxos.cn/privacy.html" target="_blank" rel="noopener noreferrer">隐私政策</a> · <a href="https://tboxos.cn/support.html" target="_blank" rel="noopener noreferrer">使用支持</a></p>
+        <p><a
+          href="https://tboxos.cn/privacy.html"
+          target="_blank"
+          rel="noopener noreferrer"
+        >隐私政策</a> · <a
+          href="https://tboxos.cn/support.html"
+          target="_blank"
+          rel="noopener noreferrer"
+        >使用支持</a></p>
       </div>
     </Modal>
   </section>
 </template>
 
 <style scoped>
+@media (min-width: 800px) {
+  .settings-sections {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    align-items: start;
+    align-content: start;
+    gap: 18px clamp(16px, 2vw, 28px);
+  }
+  .settings-sections > .settings-group {
+    margin: 0;
+    min-width: 0;
+  }
+  .settings-sections > .settings-group:first-child {
+    grid-row: span 2;
+  }
+}
 .profile-about .profile-english-name {
   margin: 4px 0 12px;
   font-size: 13px;

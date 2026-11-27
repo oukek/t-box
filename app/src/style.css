@@ -360,7 +360,7 @@
   margin: 0 2px 9px;
 }
 .application-workspace {
-  max-width: 1220px;
+  width: 100%;
   margin: 0 auto;
 }
 /* An iframe is an app viewport, not page content. Gutters outside it would also

@@ -71,6 +71,7 @@ async function reserve() {
   }
   await mkdir(work, { recursive: true })
   await writeFile(path.join(work, 'reservation.json'), JSON.stringify({ ...r, base: base?.build ?? null }))
+  console.info('Reserved system build: ' + r.build)
   const status = await api('/system-builds/desktop/' + r.build + '/status')
   if (r.core && !status.dualMacInstallers) {
     throw new Error('请先部署支持 Intel 和 DMG 的方舟后端，再构建 Mac 整包')

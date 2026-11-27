@@ -463,10 +463,10 @@ onBeforeUnmount(() => {
     <div class="brand">
       <button
         class="host"
-        aria-label="返回方舟"
-        title="返回方舟"
+        aria-label="返回桌面"
+        title="返回桌面"
         @click="client.navigation.back()"
-      ><AppIcon name="left" :size="17" /><span>返回方舟</span></button>
+      ><AppIcon name="left" :size="17" /></button>
       待办事项
     </div>
     <nav aria-label="主导航">

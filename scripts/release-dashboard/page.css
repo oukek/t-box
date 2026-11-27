@@ -1,0 +1,51 @@
+:root { color-scheme:light; --ink:#182b43; --muted:#56677a; --rule:#dce3eb; --blue:#235dbc; --paper:#f6f8fb; font:15px/1.6 "Inter",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; color:var(--ink); background:var(--paper); }
+* { box-sizing:border-box; }
+body { margin:0; }
+header { background:#fff; border-bottom:1px solid var(--rule); }
+.bar, main { width:min(1120px,92%); margin:auto; }
+.bar { height:58px; display:flex; align-items:center; gap:12px; font-size:14px; }
+.mark { display:grid; place-items:center; width:26px; height:26px; border-radius:7px; background:var(--ink); color:white; font: bold 21px/1 sans-serif; }
+.divider { height:16px; width:1px; background:var(--rule); }
+main { display:grid; grid-template-columns:minmax(235px,0.8fr) minmax(0,1.9fr); gap:clamp(30px,6vw,88px); align-items:start; padding:40px 0 80px; }
+aside { position:sticky; top:24px; }
+h1,h2,h3,p { margin:0; }
+h1 { font-size:clamp(25px,2.5vw,37px); letter-spacing:-.045em; line-height:1.25; margin:12px 0 16px; }
+h2 { font-size:18px; }
+.branch { font:13px/1.5 "IBM Plex Mono",ui-monospace,monospace; color:var(--muted); }
+#notes, #detail, #summary { white-space:pre-wrap; overflow-wrap:anywhere; }
+#notes,.tip,#progress,#detail { color:var(--muted); font-size:14px; }
+.progress-card { background:#fff; border:1px solid var(--rule); border-radius:12px; padding:19px; margin:24px 0 12px; }
+progress { appearance:none; width:100%; border:0; height:4px; border-radius:2px; background:#e3e8ef; margin:15px 0 5px; }
+progress::-webkit-progress-bar { background:#e3e8ef; }
+progress::-webkit-progress-value { background:var(--blue); }
+progress::-moz-progress-bar { background:var(--blue); }
+button { border:1px solid transparent; font:inherit; font-size:14px; font-weight:600; border-radius:7px; padding:8px 14px; background:var(--blue); color:#fff; cursor:pointer; }
+button:focus-visible, a:focus-visible { outline:2px solid #2259ce; outline-offset:3px; }
+button:disabled { opacity:.6; }
+.progress-card button { width:100%; margin-top:10px; }
+.secondary { background:#fff; color:var(--ink); border-color:var(--rule); }
+.text { background:transparent; color:var(--blue); }
+.tip { font-size:13px; }
+#detail:not(:empty),#error:not(:empty) { margin-top:10px; }
+#error { color:#a02931; overflow-wrap:anywhere; }
+.graph-title { display:flex; align-items:center; justify-content:space-between; min-height:40px; border-bottom:1px solid var(--rule); }
+h3 { font-size:13px; color:var(--muted); margin:21px 0 7px; }
+ol { margin:0; padding:0; list-style:none; }
+li { position:relative; display:flex; align-items:center; gap:13px; min-height:43px; padding:5px 12px; }
+li::before { position:absolute; content:""; width:2px; background:var(--rule); left:24px; top:0; bottom:0; }
+ol li:first-child::before { top:50%; }
+ol li:last-child::before { bottom:50%; }
+.dot { z-index:1; flex:none; width:26px; height:26px; border-radius:50%; border:1px solid #c5d0df; background:var(--paper); color:var(--muted); font:12px/24px ui-monospace,monospace; text-align:center; }
+.label { flex:1; font-weight:520; }
+.badge, li a { color:var(--muted); font-size:12px; }
+li a { color:var(--blue); }
+li[data-status=done] .dot { color:#1f6551; background:#e1ede7; border-color:#a4c9b8; }
+li[data-status=running],li[data-status=confirm],li[data-status=failed] { background:#e7eefb; border-radius:7px; }
+li[data-status=running] .dot,li[data-status=confirm] .dot { background:var(--blue); color:#fff; border-color:var(--blue); }
+li[data-status=failed] { background:#fff0ef; }
+li[data-status=failed] .badge { color:#a02931; }
+dialog { width:min(480px,92vw); padding:24px; border:1px solid var(--rule); border-radius:12px; color:var(--ink); box-shadow:0 12px 50px #132d5026; }
+dialog::backdrop { background:#13283c65; }
+pre { max-height:50dvh; overflow:auto; background:var(--paper); padding:12px; border-radius:6px; font:13px/1.55 ui-monospace,monospace; }
+footer { display:flex; justify-content:flex-end; gap:10px; }
+@media(max-width:700px) { main { grid-template-columns:1fr; gap:22px; padding-top:22px; } aside { position:static; } .progress-card { margin-top:15px; } h1 { margin:6px 0 8px; } li { padding-inline:4px; gap:9px; } li::before { left:16px; } }

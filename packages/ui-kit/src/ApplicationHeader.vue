@@ -2,6 +2,7 @@
 import { AppIcon } from '@t-box/ui-kit'
 
 defineProps<{
+  applicationRoot?: boolean
   title: string
   backLabel: string
   description?: string
@@ -11,11 +12,11 @@ defineEmits<{ back: [] }>()
 </script>
 
 <template>
-  <header class="application-page-header">
+  <header class="application-page-header" :class="{ 'application-root-header': applicationRoot }">
     <button
       class="application-page-back"
-      :aria-label="`返回${backLabel}`"
-      :title="`返回${backLabel}`"
+      :aria-label="applicationRoot && backLabel === 'OS' ? '返回桌面' : `返回${backLabel}`"
+      :title="applicationRoot && backLabel === 'OS' ? '返回桌面' : `返回${backLabel}`"
       @click="$emit('back')"
     >
       <AppIcon name="left" :size="21" />
@@ -101,5 +102,22 @@ defineEmits<{ back: [] }>()
     grid-column: auto;
     justify-content: flex-end;
   }
+}
+[data-window-bar='shown'] .application-root-header {
+  display: flex;
+  justify-content: space-between;
+  min-height: 0;
+}
+[data-window-bar='shown'] .application-root-header > .application-page-back,
+[data-window-bar='shown'] .application-root-header > .application-page-title h1,
+[data-window-bar='shown'] .application-root-header:not(:has(.application-page-actions, .application-page-title p)) {
+  display: none;
+}
+[data-window-bar='shown'] .application-root-header .application-page-actions {
+  margin-inline-start: auto;
+}
+[data-window-bar='hidden'] .application-root-header .application-page-back {
+  width: 44px;
+  height: 44px;
 }
 </style>
