@@ -1,12 +1,14 @@
-import { CreativeService, type CreativeModel } from './creative.js'
 import type { BackendInvocation, LifecycleRequest } from '@t-box/app-contracts'
 import type { ApplicationBackend } from '@t-box/app-server-sdk'
 import type { ProductPage, WorkspaceHeader } from '@t-box/shop-tools-contracts'
 import type { DataSource, EntityManager } from 'typeorm'
+import type { CreativeModel } from './creative.js'
 import { fingerprint } from '@t-box/server-foundation/persistence/operations'
 import { ShopError } from '@t-box/shop-tools-contracts'
 import { validatePatch } from '@t-box/shop-tools-core'
 import { In } from 'typeorm'
+import { ShopCatalog } from './catalog.js'
+import { CreativeService } from './creative.js'
 import { createDataService } from './data.js'
 import {
   ShopOperationEntity,
@@ -46,6 +48,7 @@ export class ShopToolsService {
   constructor(private readonly source: DataSource, models?: (r: BackendInvocation) => CreativeModel) {
     this.creative = new CreativeService(source, models)
   }
+
   private async current(
     db: EntityManager,
     r: BackendInvocation,
@@ -179,12 +182,23 @@ export class ShopToolsService {
 
   async invoke(r: BackendInvocation, signal?: AbortSignal): Promise<unknown> {
     signal?.throwIfAborted()
+    if (r.method === 'catalog') {
+      invocationKey(r.invocationId)
+      return this.source.transaction(async (db) => {
+        await this.current(db, r, 'pessimistic_write')
+        return new ShopCatalog(this.source).invoke(db, r)
+      })
+    }
     if (r.method === 'creative') {
       invocationKey(r.invocationId)
       const args = (r.arguments || {}) as Record<string, unknown>
-      const project = await this.source.transaction(async db => {
+      if (args.temporary === true) {
+        await this.source.transaction((db) => this.current(db, r, 'pessimistic_read'))
+        return this.creative.temporary(r)
+      }
+      const project = await this.source.transaction(async (db) => {
         await this.current(db, r, 'pessimistic_read')
-        return (await authorize(db, r.subject, args.projectId, ['history','get'].includes(String(args.action)) ? 'viewer' : 'editor')).project
+        return (await authorize(db, r.subject, args.projectId, ['history', 'get'].includes(String(args.action)) ? 'viewer' : 'editor')).project
       })
       return this.creative.invoke(r, project)
     }

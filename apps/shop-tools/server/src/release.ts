@@ -19,6 +19,7 @@ export const applicationRelease: AppRelease = {
     'shop-tools.workspace_rows',
     'shop-tools.workspace_patch',
     'shop-tools.projects',
+    'shop-tools.catalog',
     'shop-tools.creative',
     'files',
     'shop-tools.rates',

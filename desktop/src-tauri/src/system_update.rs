@@ -457,11 +457,23 @@ pub async fn apply_system(
                 Some(bytes.len() as u64),
                 ui_downloaded,
             );
+            let executable = std::env::current_exe().map_err(|_| "无法定位当前应用")?;
+            let bundle = executable.ancestors().find(|p| p.extension().is_some_and(|v| v == "app"))
+                .ok_or("请从应用程序目录打开方舟")?.to_path_buf();
+            if bundle.starts_with("/Volumes") || bundle.components().any(|part| part.as_os_str() == "AppTranslocation") {
+                return Err("请先将方舟拖到应用程序目录，再启动更新".into());
+            }
             tauri::async_runtime::spawn_blocking(move || candidate.install(bytes))
                 .await
                 .map_err(|_| "安装任务中断")?
                 .map_err(|_| "核心安装失败")?;
-            app.request_restart();
+            // LaunchServices should reuse the installed bundle after this PID releases the Dock tile.
+            std::process::Command::new("/bin/sh")
+                .args(["-c", r#"while kill -0 "$1" 2>/dev/null; do sleep 0.2; done; exec /usr/bin/open "$2""#, "tbox-relaunch"])
+                .arg(std::process::id().to_string()).arg(bundle)
+                .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
+                .spawn().map_err(|_| "更新已安装，请重新打开方舟")?;
+            app.exit(0);
         } else {
             updates.boot(&app);
             send("ui", "正在切换界面", ui_downloaded, Some(ui_downloaded), 0);

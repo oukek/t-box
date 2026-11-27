@@ -41,6 +41,9 @@ function fixture() {
 test('package identity is content addressed; unversioned, redirected and unsafe resource URLs cannot become local packages', () => {
   assert.equal(applicationPackage({ ...pkg('a'), integrity: `sha256-${pkg('a').digest}` })?.digest, pkg('a').digest)
   assert.equal(applicationPackage({ ...pkg('a'), integrity: 'sha256-' + '0'.repeat(64) }), undefined)
+  for (const integrity of [undefined, 'sha256-' + '0'.repeat(64)]) {
+    assert.throws(() => applicationPackage({ ...pkg('a'), integrity }, true), /缺少本地资源包摘要/)
+  }
   for (const entryUrl of ['https://evil.test/x/', `${pkg('a').entryUrl}?credentials=secret`, `https://user:password@apps.test/notes/${pkg('a').digest}/`]) {
     assert.throws(() => applicationPackage({ ...pkg('a'), entryUrl, integrity: `sha256-${pkg('a').digest}` }))
   }
@@ -133,4 +136,26 @@ test('opening the current version keeps its background update package and prunes
   assert.ok(f.prepared.has(pkg('d').digest))
   assert.ok(!f.prepared.has(pkg('b').digest))
   assert.ok(!f.prepared.has(pkg('c').digest))
+})
+
+test('desktop opens bundled or installed resources offline and never downloads on launch', async () => {
+  const prepared = new Set([pkg('a').digest])
+  const manager = new ApplicationResourceManager({
+    localLaunch: true,
+    async prepare(value) {
+      prepared.add(value.digest)
+      return 'ready'
+    },
+    async open(value) {
+      if (!prepared.has(value.digest)) {
+        throw new Error('missing package')
+      }
+      return { entryUrl: 'http://127.0.0.1/', origin: 'http://127.0.0.1', source: 'local' }
+    },
+    async remove() {},
+  }, { read: () => undefined, write() {} })
+  assert.equal((await manager.open(pkg('a'))).source, 'local')
+  await assert.rejects(manager.open(pkg('b')), /missing package/)
+  await manager.prepare(pkg('b'))
+  assert.equal((await manager.open(pkg('b'))).source, 'local')
 })

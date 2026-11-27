@@ -22,6 +22,7 @@ hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mount"
 test "$(readlink "$mount/Applications")" = /Applications
 for app in "$mount/T方舟.app" "$work/update/T方舟.app"; do
   test "$(lipo -archs "$app/Contents/MacOS/tbox-desktop")" = "$cpu"
+  test -s "$app/Contents/Resources/applications/index.json"
   codesign --verify --deep --strict "$app"
   identity="$(codesign -dv --verbose=4 "$app" 2>&1)"
   grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<< "$identity"

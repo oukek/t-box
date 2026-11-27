@@ -39,8 +39,18 @@ test('extension authentication isolates credentials and binds callbacks to its a
       return []
     } },
   } })
+  let uploads = 0
+  let failUpload = true
   globalThis.fetch = async (url, options) => {
     const path = String(url)
+    if (path.endsWith('/collector/products')) {
+      uploads++
+      assert.equal((options?.headers as Record<string, string>).Authorization, 'Bearer fixture-extension-token')
+      if (uploads === 2 && failUpload) {
+        return Response.json({ error: { message: '保存失败' } }, { status: 503 })
+      }
+      return Response.json({ data: { ids: ['saved'], count: 1 } })
+    }
     if (path.endsWith('/collector/start') && wechatDisabled) {
       return Response.json({ error: { message: 'disabled' } }, { status: 503 })
     }
@@ -112,6 +122,12 @@ test('extension authentication isolates credentials and binds callbacks to its a
     assert.equal((await retrySend('collector-qr-start')).ok, true, 'Switching away from Mac creates a fresh QR proof')
     assert.equal((await retrySend('collector-desktop-complete')).ok, false, 'Stale Mac handoff cannot replace the selected QR login')
     assert.equal((await retrySend('collector-complete')).ok, true)
+    await assert.rejects(authAction('account-collect', { userId: 'wrong', products: [{ id: 'a' }] }))
+    assert.equal(uploads, 0)
+    const partial = await authAction('account-collect', { userId: 'user', products: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] })
+    assert.deepEqual(partial, { confirmed: [0], error: '保存失败' })
+    failUpload = false
+    assert.deepEqual(await authAction('account-collect', { userId: 'user', products: [{ id: 'b' }, { id: 'c' }] }), { confirmed: [0, 1], error: '' })
   } finally {
     globalThis.fetch = previousFetch
     globalThis.chrome = previousChrome

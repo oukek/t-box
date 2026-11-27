@@ -59,3 +59,6 @@ output/
 
 # pnpm / npm pack archives
 *.tgz
+
+# Plugin package bundled with the shop application build
+apps/shop-tools/web/public/downloads/

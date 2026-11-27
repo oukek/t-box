@@ -2,9 +2,12 @@ import type { DeviceResourceState } from '@t-box/app-contracts'
 import type { ApplicationPackage, JournalStorage, ResourceAdapter, ResourceProgress } from './contracts'
 import { ErrorCode } from '../../../error-codes'
 
-export function applicationPackage(value: { appId: string, releaseId: string, entryUrl: string, integrity?: string }): ApplicationPackage | undefined {
+export function applicationPackage(value: { appId: string, releaseId: string, entryUrl: string, integrity?: string }, requireLocalPackage = false): ApplicationPackage | undefined {
   const digest = value.integrity?.replace(/^sha256-/, '')
   if (!digest || /^0{64}$/.test(digest)) {
+    if (requireLocalPackage) {
+      throw ErrorCode.INTERNAL_INVALID_APPLICATION_PACKAGE('此应用版本缺少本地资源包摘要，请联系管理员重新发布子应用')
+    }
     return
   }
   const url = new URL(value.entryUrl)
@@ -65,6 +68,9 @@ export class ApplicationResourceManager {
   async open(pkg: ApplicationPackage, progress?: (value: ResourceProgress) => void) {
     if (this.journal().quarantined.includes(pkg.entryUrl)) {
       throw ErrorCode.INTERNAL_APPLICATION_VERSION_QUARANTINED()
+    }
+    if (this.adapter.localLaunch) {
+      return this.adapter.open(pkg)
     }
     // Adapter always checks the real completion marker. Browser eviction cannot leave a false "installed" flag.
     const state = await this.prepare(pkg, progress)

@@ -158,15 +158,40 @@
   .super-app .desktop-clock {margin:2px 0 8px}
   .super-app .desktop-clock time {font-size:34px}
 }
-.app-return-bar {
-  position: sticky; top: 0; z-index: 3;
-  display:flex; align-items:center; justify-content:flex-end; gap:8px;
-  min-height:calc(38px + env(safe-area-inset-top));
-  padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 12px;
-  background:var(--app-background,#f4f6f8);
+/* Each live app owns a viewport so minimizing preserves its document and edits. */
+.app-window { position:fixed; inset:0; z-index:4; display:flex; flex-direction:column; background:var(--app-background,#f4f6f8); padding-top:env(safe-area-inset-top); }
+.app-window-bar { flex:none; min-height:36px; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; padding:0 12px; background:#f5f5f7; color:#56575c; border-bottom:1px solid #0001; font-size:12px; }
+.app-window-bar small { text-align:right; color:#953325; }
+.window-controls { display:flex; align-items:center; }
+.window-controls button { width:26px; height:32px; display:grid; place-items:center; border:0; padding:0; background:transparent; cursor:pointer; }
+.window-controls span { display:grid; place-items:center; width:15px; height:15px; border-radius:50%; line-height:1; font:bold 12px/1 sans-serif; color:#472524; background:#ff7771; }
+.minimize span { background:#f5c656; color:#594419; }
+.maximize span { background:#63cb86; color:#174e2b; }
+.app-window-content { flex:1; min-height:0; overflow:auto; position:relative; }
+.app-window-content > .application-workspace:has(.web-application) {height:100%;}
+.app-window-content .application-launch {position:absolute;}
+.open-apps { position:absolute; bottom:max(8px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; gap:4px; max-width:90%; overflow:auto; padding:4px; border-radius:12px; background:#263448ed; z-index:3; }
+.open-apps button { white-space:nowrap; background:transparent; color:white; border:0; padding:4px 9px; cursor:pointer; }
+.workspace-plane--desktop:has(.open-apps) .desktop-bottom { margin-bottom:38px; }
+@media (min-width:800px) {
+  .app-window:not(.expanded) { inset:12px clamp(12px,2vw,32px); border-radius:12px; overflow:hidden; box-shadow:0 4px 22px #0f172a1c; }
 }
-.app-return-bar button {
-  display:inline-flex; align-items:center; gap:5px; border:1px solid #d8dfe5; border-radius:16px;
-  color:#465665; background:white; padding:5px 11px; font-size:12px; cursor:pointer;
+@media (max-width:799px) { .window-controls .maximize { display:none; } }
+
+.phone-app-nav, .phone-running { display:none; }
+.running-list { display:grid; gap:2px; }
+.running-row { display:flex; align-items:center; }
+.running-row + .running-row { border-top:1px solid #e9ecf0; }
+.running-row button, .phone-app-nav button { display:flex; align-items:center; border:0; background:transparent; cursor:pointer; }
+.running-resume { flex:1; min-width:0; min-height:62px; gap:12px; text-align:left; color:#243247; font-size:15px; }
+.running-resume .launcher-icon { --icon-size:36px; background:#e7edf5; color:#314f72; border-radius:10px; }
+.running-resume small { margin-left:auto; color:#667488; font-size:12px; }
+.running-close { justify-content:center; width:44px; height:44px; color:#657488; }
+@media (max-width:799px) {
+  .app-window-bar, .open-apps { display:none; }
+  .workspace-plane--desktop:has(.open-apps) .desktop-bottom { margin-bottom:0; }
+  .phone-app-nav { flex:none; display:flex; align-items:center; justify-content:center; gap:16px; padding:0 12px env(safe-area-inset-bottom); background:#fafbfc; border-top:1px solid #e6eaef; }
+  .phone-app-nav button { min-height:44px; padding:0 12px; gap:7px; color:#49596d; font-size:12px; }
+  .phone-app-nav button:active { color:#15283f; background:#edf1f6; border-radius:10px; }
+  .phone-running { display:inline-flex; align-items:center; justify-content:center; gap:4px; min-width:44px; min-height:44px; padding:0 5px; color:white; border:0; background:transparent; font-weight:600; font-size:12px; }
 }
-.app-return-bar + .application-workspace:has(> .web-application) {height:calc(var(--visible-height,100dvh) - 38px - env(safe-area-inset-top));}

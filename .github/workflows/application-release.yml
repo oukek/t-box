@@ -75,6 +75,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build selected application and package static bundle
         run: node scripts/pack-application-release.mjs "$APPLICATION_SELECTION"
+      - name: 电商助手内含采集插件
+        if: matrix.application == 'shop-tools'
+        run: |
+          node -e "const fs = require('node:fs'); const p = JSON.parse(fs.readFileSync('apps/shop-tools/web/dist/downloads/collector.json')); fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '\n采集插件 ZIP：' + p.version + '，已包含在电商助手构建中，随后台版本审核发布。SHA-256：' + p.sha256 + '\n');"
       - name: Upload to OSS and register submitted version (never publish)
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}

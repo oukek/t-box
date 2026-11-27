@@ -14,7 +14,7 @@ import { LedgerAccess } from '@t-box/ledger-server/ledgers/access'
 import { createLedgerRows } from '@t-box/ledger-server/ledgers/create'
 import { LedgerService } from '@t-box/ledger-server/ledgers/service'
 import { StatisticsService } from '@t-box/ledger-server/statistics/service'
-import { ShopToolsService } from '@t-box/shop-tools-server'
+import { ShopCatalog, ShopToolsService } from '@t-box/shop-tools-server'
 import { TimeService } from '@t-box/time-server/service'
 import { TodoService } from '@t-box/todo-server'
 import { ResourceAccessRegistry } from '../agent/access.js'
@@ -55,6 +55,8 @@ import { CustomerSupportService } from '../support/service.js'
 import { TaskStore } from '../tasks/store.js'
 
 export class PlatformService {
+  readonly shopCatalog: ShopCatalog
+
   readonly memory: MemoryService
   readonly applicationCatalogUpdates: ApplicationCatalogMonitor
   readonly applications: ApplicationPlatform
@@ -119,6 +121,7 @@ export class PlatformService {
     this.applications.bind('calculator', calculatorBackend)
     this.applications.bind('converter', converterBackend)
     this.applications.bind('todo', new TodoService(source).backend())
+    this.shopCatalog = new ShopCatalog(source)
     this.applications.bind('shop-tools', new ShopToolsService(source, (r) => shopCreativeModel(this, configuration, r)).backend())
     this.desktop = new DesktopService(source, this.applications)
     this.calendar = new CalendarService(source, configuration?.cache)

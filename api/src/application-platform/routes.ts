@@ -165,7 +165,7 @@ export function registerApplicationPlatform(
       method: string
       arguments: unknown
     }
-  }>('/api/v1/applications/:id/invoke', async (req, reply) => {
+  }>('/api/v1/applications/:id/invoke', { bodyLimit: 1024 * 1024 }, async (req, reply) => {
     const a = await actor(req.headers.authorization)
     const b = req.body
     if (

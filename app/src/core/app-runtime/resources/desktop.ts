@@ -1,6 +1,7 @@
 import type { ApplicationPackage, ResourceAdapter, ResourceProgress } from './contracts'
 
 export class DesktopResourceAdapter implements ResourceAdapter {
+  readonly localLaunch = true
   async prepare(pkg: ApplicationPackage, progress?: (value: ResourceProgress) => void): Promise<'ready'> {
     const { Channel, invoke } = await import('@tauri-apps/api/core')
     const channel = new Channel<ResourceProgress>()

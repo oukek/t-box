@@ -246,9 +246,13 @@ export function calculate(
       sale = roundUp(price * discountFactor)
       const eligible = route.coupons.reduce((largest, rule) =>
         sale >= rule.threshold ? Math.max(largest, rule.reduction) : largest, 0)
-      if (coupon === eligible) break
+      if (coupon === eligible) {
+        break
+      }
       coupon = eligible
-      if (settings.mode === 'price') break
+      if (settings.mode === 'price') {
+        break
+      }
     }
   }
   const paid = sale - coupon
@@ -259,7 +263,9 @@ export function calculate(
   const withdraw = (revenue * n.withdraw!) / 100
   const loss = ((revenue - withdraw) * n.loss!) / 100
   const profit = (revenue - withdraw - loss - costs) / rate
-  if (paid <= 0) throw ShopError.invalid('优惠券抵扣全部售价，无法计算利润率')
+  if (paid <= 0) {
+    throw ShopError.invalid('优惠券抵扣全部售价，无法计算利润率')
+  }
   const result = {
     price,
     sale,
@@ -391,6 +397,8 @@ export function routesFrom(
     return index(a.site) - index(b.site)
   })
 }
-export * from './workspace.js'
+export { parseCatalogContent, parseCollected } from './catalog.js'
 
 export * from './creative.js'
+
+export * from './workspace.js'

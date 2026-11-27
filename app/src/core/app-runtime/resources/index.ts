@@ -51,11 +51,14 @@ export const applicationResources = new ApplicationResourceManager(
   },
 )
 type ResourceRelease = Readonly<Pick<AppRelease, 'appId' | 'releaseId' | 'runtime'>>
+export function runtimePackage(value: Parameters<typeof applicationPackage>[0]) {
+  return applicationPackage(value, import.meta.env.PROD && !!window.__TBOX_DESKTOP_KEY__)
+}
 export async function prepareRelease(release: ResourceRelease, repairQuarantined = false) {
   if (release.runtime.type !== 'web') {
     return
   }
-  const pkg = applicationPackage({ ...release, ...release.runtime })
+  const pkg = runtimePackage({ ...release, ...release.runtime })
   if (pkg) {
     if (applicationResources.journal().quarantined.includes(pkg.entryUrl)) {
       if (repairQuarantined) {

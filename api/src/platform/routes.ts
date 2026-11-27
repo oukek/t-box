@@ -36,6 +36,10 @@ export function registerPlatform(app: FastifyInstance, p: PlatformService) {
     await p.notifications.read(await principal(req), req.params.id, req.body?.read !== false)
     return reply.code(204).send()
   })
+  app.post('/api/v1/collector/products', { bodyLimit: 1600000 }, async (req) => {
+    const actor = await principal(req)
+    return { data: await p.shopCatalog.collect(p.applications.subject(actor.user.id, 'shop-tools'), (req.body as { products?: unknown })?.products) }
+  })
   app.post('/api/v1/auth/password/login', async (req, reply) => {
     reply.header('Cache-Control', 'no-store')
     return { data: await p.identity.login(req.body, req.ip, sessionDevice(deviceLabel(req.headers['user-agent']), req.headers['x-tbox-client']), true) }

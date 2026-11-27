@@ -16,8 +16,7 @@ import { refreshCatalog } from './catalog'
 import { checkDevelopmentEntry } from './developmentEntry'
 import { launchStateKey } from './launchState'
 import { localApplications } from './localApplications'
-import { applicationResources } from './resources'
-import { applicationPackage } from './resources/manager'
+import { applicationResources, runtimePackage } from './resources'
 import { LaunchRecovery } from './resources/recovery'
 import { measureLaunch } from './resources/telemetry'
 import { APPLICATION_FRAME_SANDBOX } from './sandbox'
@@ -26,7 +25,7 @@ const props = defineProps<{
   appId: string
   params: Record<string, string>
   openRevision: number
-  initializeRuntime?: (runtime: RuntimeDescriptor) => Promise<void>
+  initializeStorage?: (runtime: RuntimeDescriptor) => Promise<void>
   persistentNavigation?: boolean
 }>()
 const launch = inject(launchStateKey, undefined)
@@ -63,7 +62,7 @@ async function fail(cause: unknown, generation: number) {
   const failed = authorizedRuntime
   const rollbackUser = identity.user?.id
   const rollbackToken = identity.token
-  if (failed && identity.user && navigator.onLine) {
+  if (failed && identity.user && navigator.onLine && !(window.__TBOX_DESKTOP_KEY__ && stage.value === 'resources')) {
     try {
       const recovered = await recovery.recover(failed, {
         current: () => generation === epoch && identity.user?.id === rollbackUser && identity.token === rollbackToken,
@@ -90,7 +89,7 @@ async function fail(cause: unknown, generation: number) {
   }
   measured?.finish('failed', cause)
   updateStage('failed')
-  error.value = cause instanceof Error ? cause.message : '应用打开失败'
+  error.value = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : '应用打开失败'
   loading.value = false
   failing = false
 }
@@ -117,7 +116,7 @@ async function load() {
     }
     measured.report.releaseId = next.releaseId
     authorizedRuntime = next
-    pkg = applicationPackage(next)
+    pkg = runtimePackage(next)
     if (!pkg && !navigator.onLine) {
       throw SdkErrorCode.NETWORK_REQUIRED('当前应用使用在线开发资源。离线使用需要先安装正式构建的应用资源')
     }
@@ -138,7 +137,6 @@ async function load() {
       return
     }
     measured.report.source = local.source
-    await props.initializeRuntime?.(next)
     if (generation === epoch) {
       updateStage('loading')
       measured.mark('loading')
@@ -160,7 +158,7 @@ async function connected() {
   let attempt: ReturnType<typeof connectFrame> | undefined
   connection?.close()
   try {
-    attempt = connectFrame(frame.value, runtime.value, props.params)
+    attempt = connectFrame(frame.value, runtime.value, props.params, props.initializeStorage)
     connection = attempt
     const client = await attempt.promise
     if (generation === epoch && connection === attempt) {

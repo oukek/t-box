@@ -4,6 +4,7 @@ import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promise
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createOssClient, ossClientOptions } from '../deploy/oss/client.mjs'
+import { bundleDesktopApplications } from './bundle-desktop-applications.mjs'
 import { releaseVersions } from './release-versions.mjs'
 
 const env = process.env
@@ -132,7 +133,14 @@ async function buildCore() {
   if (process.platform !== 'darwin' || process.arch !== 'arm64' || !env.TBOX_CORE_PUBLIC_KEY || !env.TBOX_UI_PUBLIC_KEY || !env.TAURI_SIGNING_PRIVATE_KEY) {
     throw new Error('核心构建需要 Apple Silicon macOS 和签名配置')
   }
-  await writeFile(config, JSON.stringify({ productName: 'T方舟', identifier: 'cn.tboxos.desktop', version: r.core, build: { beforeBuildCommand: '', frontendDist: r.ui ? dist : path.join(work, 'embedded') }, plugins: { updater: { pubkey: env.TBOX_CORE_PUBLIC_KEY } }, bundle: { createUpdaterArtifacts: true, resources: { [metadata]: 'desktop-release.json' }, macOS: { signingIdentity: env.APPLE_SIGNING_IDENTITY } } }))
+  const bundled = path.join(work, 'applications')
+  const releases = await api('/system-builds/desktop/applications')
+  const guestResponse = await fetch(env.API_BASE_URL + '/app-market/local', { redirect: 'error', signal: AbortSignal.timeout(30000) })
+  if (!guestResponse.ok) {
+    throw new Error('无法读取公开本地应用目录')
+  }
+  await bundleDesktopApplications(bundled, env.APP_ARTIFACT_ORIGIN, releases, await guestResponse.json())
+  await writeFile(config, JSON.stringify({ productName: 'T方舟', identifier: 'cn.tboxos.desktop', version: r.core, build: { beforeBuildCommand: '', frontendDist: r.ui ? dist : path.join(work, 'embedded') }, plugins: { updater: { pubkey: env.TBOX_CORE_PUBLIC_KEY } }, bundle: { createUpdaterArtifacts: true, resources: { [metadata]: 'desktop-release.json', [bundled + '/']: 'applications/' }, macOS: { signingIdentity: env.APPLE_SIGNING_IDENTITY } } }))
   for (const arch of architectures) {
     const target = arch + '-apple-darwin'
     run('rustup', ['target', 'add', target])

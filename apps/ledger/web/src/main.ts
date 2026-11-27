@@ -17,8 +17,7 @@ import {
   resolveFinancialConsent,
 } from './financialConsent'
 import Host from './Host.vue'
-import { configureRuntime, identity, runtime } from './runtime'
-import { request } from './sdk'
+import { configureRuntime, runtime } from './runtime'
 import './base.css'
 
 const cancel = () => {
@@ -64,40 +63,6 @@ connectAppClient({
 })
   .then(async (connection) => {
     configureRuntime(connection.client, connection.context)
-    identity.user = (
-      await request<{ data: NonNullable<typeof identity.user> }>(
-        '/ledgers/session',
-      )
-    ).data
-    await loadBooks()
-    if (runtime.params.ledgerId) {
-      selectBook(runtime.params.ledgerId)
-    } else {
-      const old = await connection.client.storage.get<string>(
-        'ledger.selectedBook.v1',
-      )
-      if (old) {
-        selectBook(old)
-      }
-    }
-    watch(
-      selectedBook,
-      (book) => {
-        void connection.client.resources
-          .setBindings(
-            book
-              ? [{ appId: 'ledger', resourceType: 'book', resourceId: book.id }]
-              : [],
-          )
-          .catch(() => {})
-        if (book) {
-          void connection.client.storage
-            .set('ledger.selectedBook.v1', book.id)
-            .catch(() => {})
-        }
-      },
-      { immediate: true },
-    )
     connection.client.runtime.onInteractionCancel(cancel)
     connection.client.runtime.onClose(cancel)
     const root = document.getElementById('app')!
@@ -117,6 +82,29 @@ connectAppClient({
         connection.client.dispose()
       },
       { once: true },
+    )
+    const savedBook = runtime.params.ledgerId || await connection.client.storage.get<string>('ledger.selectedBook.v1').catch(() => null)
+    await loadBooks()
+    if (savedBook) {
+      selectBook(savedBook)
+    }
+    watch(
+      selectedBook,
+      (book) => {
+        void connection.client.resources
+          .setBindings(
+            book
+              ? [{ appId: 'ledger', resourceType: 'book', resourceId: book.id }]
+              : [],
+          )
+          .catch(() => {})
+        if (book) {
+          void connection.client.storage
+            .set('ledger.selectedBook.v1', book.id)
+            .catch(() => {})
+        }
+      },
+      { immediate: true },
     )
   })
   .catch((error) => {

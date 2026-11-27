@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { DataSource } from 'typeorm'
 import type { ApplicationBuildImports } from './build-import.js'
+import { ApplicationReleaseEntity } from '../db/records/applications-entities.js'
 import { SystemDesktopCandidate, SystemWebCandidate } from '../db/records/system-versions.js'
 
 import { desktopStorage } from '../system-releases/desktop-artifacts.js'
@@ -14,6 +15,11 @@ export function registerApplicationBuildImports(app: FastifyInstance, source: Da
   const ci = { onRequest: async (r: import('fastify').FastifyRequest) => {
     await service.authenticate(r.headers.authorization, true)
   } }
+  app.get('/api/v1/system-builds/desktop/applications', ci, async (_r, reply) => {
+    const rows = await source.getRepository(ApplicationReleaseEntity).find({ where: { published: 1, status: 'published' }, select: { definition: true } })
+    const packages = rows.map((row) => row.definition).filter((release) => release.platforms.includes('web') && release.runtime.type === 'web')
+    return reply.header('Cache-Control', 'no-store').send({ data: packages.map(({ appId, runtime }) => ({ appId, runtime })) })
+  })
   app.get('/api/v1/system-builds/desktop/base', ci, async (_r, reply) => {
     const live = await source.manager.findOneBy(SystemDesktopCandidate, { state: 'live' })
     return reply.header('Cache-Control', 'no-store').send({ data: live && { build: live.build, ui: live.ui, url: await desktopStorage().url('ui', live.ui) } })

@@ -1,7 +1,7 @@
 import type { ApplicationManifest } from '@t-box/app-contracts'
 import { applicationIcon } from './icon.js'
 
-export { ShopError } from './error-codes.js'
+export * from './catalog.js'
 export const manifest = {
   id: 'shop-tools',
   name: '电商助手',
@@ -9,7 +9,7 @@ export const manifest = {
   icon: 'apps',
   iconAsset: applicationIcon,
   color: 'orange',
-  version: '1.3.5',
+  version: '1.4.1',
   skillIds: [],
 } as const satisfies ApplicationManifest
 export const currencies = [
@@ -199,6 +199,7 @@ export interface ProductPage {
 
 export type ProjectRole = 'owner' | 'admin' | 'editor' | 'viewer'
 export interface ProjectSummary {
+  site?: string
   id: string
   name: string
   role: ProjectRole
@@ -240,3 +241,5 @@ export interface Creation {
   status: 'running' | 'finished'
   createdAt: string
 }
+
+export { ShopError } from './error-codes.js'

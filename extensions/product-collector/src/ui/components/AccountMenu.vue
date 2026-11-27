@@ -121,7 +121,7 @@ onBeforeUnmount(() => {
         </button>
       </template>
       <p class="muted">
-        商品仍为本机临时预览，尚未上传或认领到账号。
+        商品经“确认采集”保存到当前账号的个人采集表，再到项目中认领。
       </p>
       <p v-if="notice" role="status">
         {{ notice }}

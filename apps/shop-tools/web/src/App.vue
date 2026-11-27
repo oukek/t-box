@@ -43,9 +43,9 @@ import RoutePicker from './RoutePicker.vue'
 import TableViewport from './TableViewport.vue'
 import { createWorkspaceStore } from './workspace'
 
-const CreativeStudio = defineAsyncComponent(() => import('./CreativeStudio.vue'))
-const props = defineProps<{ client: AppClient, project: ProjectSummary, showCreative: boolean }>()
+const props = defineProps<{ client: AppClient, project: ProjectSummary, showCreative: boolean, embedded?: boolean }>()
 const emit = defineEmits<{ projects: [] }>()
+const CreativeStudio = defineAsyncComponent(() => import('./CreativeStudio.vue'))
 const readonly = computed(() => props.project.role === 'viewer')
 const workspaceStore = createWorkspaceStore(props.client, props.project.id)
 const actionsOpen = ref(false)
@@ -67,7 +67,7 @@ const leaving = ref(false)
 let editSequence = 0
 let dirty = false
 const section = ref<'operations' | 'assistant'>('operations')
-const page = ref('home')
+const page = ref(props.embedded ? 'calculator' : 'home')
 const config = ref<Config>(defaultConfig())
 const quote = ref<Quote | null>(null)
 const first = newSheet('商品定价 1')
@@ -569,10 +569,11 @@ function refreshAll() {
 <template>
   <div class="shop-app">
     <ApplicationHeader
-      title="电商助手"
+      :title="embedded ? '计价表' : '电商助手'"
       back-label="OS"
-      @back="goBack"
+      @back="embedded ? emit('projects') : goBack()"
     ><template #actions><button
+      v-if="!embedded"
       class="project-switch"
       :aria-label="project.name + ' · 项目管理'"
       @click="emit('projects')"

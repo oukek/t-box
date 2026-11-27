@@ -17,7 +17,11 @@ export class LaunchRecovery {
     }
     this.attempted.add(runtime.releaseId)
     ports.started()
-    await this.resources.prepare(previous)
+    if (this.resources.adapter.localLaunch) {
+      await this.resources.adapter.open(previous)
+    } else {
+      await this.resources.prepare(previous)
+    }
     // Downloads can outlive navigation/logout. Never commit a mutation for the next account or a stale opening.
     if (!ports.current()) {
       return false

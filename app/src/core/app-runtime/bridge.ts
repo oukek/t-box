@@ -52,6 +52,9 @@ export async function descriptor(appId: string, options: { online?: boolean } = 
     }
   }
   local ||= baseline
+  if (!local && !options.online && import.meta.env.PROD && window.__TBOX_DESKTOP_KEY__) {
+    throw SdkErrorCode.NETWORK_REQUIRED('此设备还没有当前账号的安装信息，请联网同步应用市场后再打开')
+  }
   const result = local
     ? { data: local }
     : await request<{ data: RuntimeDescriptor }>(
@@ -87,7 +90,9 @@ export function connectFrame(
   frame: HTMLIFrameElement,
   runtime: RuntimeDescriptor,
   params: Record<string, string>,
+  initializeStorage?: (runtime: RuntimeDescriptor) => Promise<void>,
 ) {
+  let storageReady: Promise<void> | undefined
   const channel = new MessageChannel()
   const nonce = createApplicationRequestId()
   const userId = identity.user?.id
@@ -96,6 +101,7 @@ export function connectFrame(
     {
       resolve(v: unknown): void
       reject(e: Error): void
+      validateTool: boolean
       timer: ReturnType<typeof setTimeout>
     }
   >()
@@ -195,7 +201,7 @@ export function connectFrame(
             pending.delete(id)
             reject(ErrorCode.INTERNAL_APPLICATION_TOOL_TIMEOUT())
           }, timeoutMs)
-          pending.set(id, { resolve, reject, timer: timeout })
+          pending.set(id, { resolve, reject, timer: timeout, validateTool: message.type === 'request' })
           channel.port1.postMessage({ ...message, id })
         })
       }
@@ -244,7 +250,9 @@ export function connectFrame(
       clearTimeout(p.timer)
       pending.delete(data.id)
       try {
-        await current()
+        if (p.validateTool) {
+          await current()
+        }
       } catch (e) {
         p.reject(
           e instanceof Error
@@ -271,6 +279,14 @@ export function connectFrame(
     try {
       if (JSON.stringify(r.args).length > applicationPayloadLimit(r.method)) {
         throw ErrorCode.INTERNAL_APPLICATION_REQUEST_TOO_LARGE()
+      }
+      // Only storage calls wait for legacy data. The page can mount and connect immediately.
+      if (initializeStorage && ['storage.get', 'storage.set', 'storage.remove'].includes(r.method)) {
+        storageReady ??= initializeStorage(runtime)
+        await storageReady
+        if (closed || identity.user?.id !== userId) {
+          return
+        }
       }
       const value = await transport.call(r.method as HostMethod, r.args, {
         idempotencyKey: r.options?.idempotencyKey ?? r.id,
@@ -320,6 +336,12 @@ export function connectFrame(
     [channel.port2],
   )
   return { promise, close: () => close() }
+}
+export async function prepareApplicationForClose(appId: string) {
+  const client = await connections.get(appId)?.promise
+  if (client?.prepareSystemUpdate && await client.prepareSystemUpdate() !== true) {
+    throw new Error('请先保存当前应用的修改')
+  }
 }
 export async function prepareApplicationsForSystemUpdate() {
   await Promise.all(Array.from(connections.values(), async ({ promise }) => {

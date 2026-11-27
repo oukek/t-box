@@ -103,6 +103,15 @@ export async function loadLocalApplications() {
         localApplications.releases = parsePublicLocalCatalog(JSON.parse(raw), allowed, location.origin)
       }
     } catch { /* Corrupt metadata never blocks the login screen or grants access. */ }
+    if (window.__TBOX_DESKTOP_KEY__) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const index = await invoke<string>('bundled_applications', { key: window.__TBOX_DESKTOP_KEY__ })
+        const shipped = parsePublicLocalCatalog(JSON.parse(index), allowed, location.origin)
+        const cached = new Set(localApplications.releases.map((release) => release.appId))
+        localApplications.releases = [...localApplications.releases, ...shipped.filter((release) => !cached.has(release.appId))]
+      } catch { /* Earlier cores only have the device cache. */ }
+    }
     if (localApplications.releases.length || window.__TBOX_DESKTOP_KEY__) {
       void refreshLocalApplications()
     } else {

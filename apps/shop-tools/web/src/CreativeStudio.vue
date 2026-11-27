@@ -9,17 +9,17 @@ import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import EditDialog from './EditDialog.vue'
 
-const props = defineProps<{ client: AppClient, project: ProjectSummary, templates: CreativeTemplate[], visible: boolean }>()
-const emit = defineEmits<{ templates: [templates: CreativeTemplate[]] }>()
+const props = defineProps<{ client: AppClient, project?: ProjectSummary, temporary?: boolean, initial?: Partial<CreativeInput>, templates: CreativeTemplate[], visible: boolean }>()
+const emit = defineEmits<{ templates: [templates: CreativeTemplate[]], apply: [creation: Creation] }>()
 const fields = ['title', 'description', 'image'] as const
 const labels = { title: '标题', description: '描述', image: '图片' }
 const hints = { title: '例如：保留品牌和型号，80 字以内', description: '例如：按材质、尺寸、使用场景分点写', image: '例如：白底主图，保留包装，图中文字改为英文' }
 const defaults = (): CreativeRules => ({ title: '', description: '', image: '', language: '' })
-const rules = ref(defaults())
+const rules = ref(props.initial?.rules ? { ...props.initial.rules } : defaults())
 const selected = ref<CreativeInput['fields']>(['title', 'description'])
-const title = ref('')
-const description = ref('')
-const imageId = ref('')
+const title = ref(props.initial?.title || '')
+const description = ref(props.initial?.description || '')
+const imageId = ref(props.initial?.imageId || '')
 const sourceUrl = ref('')
 const resultUrl = ref('')
 const originalUrl = ref('')
@@ -28,7 +28,7 @@ const templatesOpen = ref(false)
 const removing = ref<CreativeTemplate | null>(null)
 const draft = ref<CreativeTemplate | null>(null)
 const result = ref<Creation | null>(null)
-const readOnly = computed(() => props.project.role === 'viewer')
+const readOnly = computed(() => props.project?.role === 'viewer')
 const error = ref('')
 const busy = ref(false)
 const options = computed(() => [{ label: '自定义要求', value: '' }, ...props.templates.map((t) => ({ label: t.name, value: t.id }))])
@@ -71,7 +71,7 @@ function saveTemplate() {
   }
 }
 function call<T>(action: string, extra: Record<string, unknown> = {}) {
-  return props.client.api.invoke<T>('creative', { projectId: props.project.id, action, ...extra })
+  return props.client.api.invoke<T>('creative', { projectId: props.project?.id, temporary: !!props.temporary, action, ...extra })
 }
 function replaceUrl(slot: typeof sourceUrl, value: string) {
   if (slot.value) {
@@ -110,7 +110,10 @@ async function preview(id: string) {
 async function refresh() {
   clearTimeout(timer)
   try {
-    history.value = await call<Summary[]>('history')
+    history.value = props.temporary ? (result.value ? [{ ...result.value, title: result.value.input.title, language: result.value.input.rules.language }] : []) : await call<Summary[]>('history')
+    if (props.temporary && result.value?.status === 'running') {
+      await preview(result.value.id)
+    }
     if (!live) {
       return
     }
@@ -203,7 +206,7 @@ async function generate() {
     if (submission?.payload !== payload) {
       submission = { payload, key: crypto.randomUUID() }
     }
-    const job = await props.client.api.invoke<{ id: string }>('creative', { projectId: props.project.id, action: 'create', input }, { idempotencyKey: submission.key })
+    const job = await props.client.api.invoke<{ id: string }>('creative', { projectId: props.project?.id, temporary: !!props.temporary, action: 'create', input }, { idempotencyKey: submission.key })
     submission = undefined
     await preview(job.id)
     await refresh()
@@ -217,6 +220,8 @@ async function generate() {
 
 <template>
   <main class="shop-content creative-studio">
+    <p v-if="temporary" class="notice">临时创作，不保存到商品库或创作历史；关闭后不保留本次内容。</p>
+
     <p
       v-if="error"
       role="alert"
@@ -261,7 +266,7 @@ async function generate() {
         </div>
       </section>
       <section class="recipe">
-        <header class="studio-heading"><AppIcon name="settings" /><h2>创作设置</h2><button class="quiet" @click="templatesOpen = true">项目模板</button></header>
+        <header class="studio-heading"><AppIcon name="settings" /><h2>创作设置</h2><button class="quiet" @click="templatesOpen = true">创作模板</button></header>
         <div class="settings-pair">
           <div class="setting"><span>创作模板</span><SheetSelect
             :model-value="chosen"
@@ -312,8 +317,8 @@ async function generate() {
           ><AppIcon name="sparkle" :size="16" />{{ pending ? '正在创作…' : '一键优化' }}</button></footer>
       </section>
     </div>
-    <div v-else class="readonly-tools"><button @click="templatesOpen = true">项目模板</button></div>
-    <section class="past"><div class="studio-heading"><AppIcon name="history" /><h2>我的创作记录</h2><button class="quiet" @click="refresh"><AppIcon name="refresh" :size="14" />刷新</button></div>
+    <div v-else class="readonly-tools"><button @click="templatesOpen = true">创作模板</button></div>
+    <section v-if="!temporary" class="past"><div class="studio-heading"><AppIcon name="history" /><h2>我的创作记录</h2><button class="quiet" @click="refresh"><AppIcon name="refresh" :size="14" />刷新</button></div>
       <p v-if="!history.length" class="empty-history">完成优化后，可在这里查看原稿与各次创作结果。</p>
       <div
         v-for="item in history"
@@ -352,6 +357,10 @@ async function generate() {
         <div v-if="resultUrl"><img :src="resultUrl" alt="优化后商品图"><a :href="resultUrl" download="商品优化图.png">下载图片</a></div>
       </div>
       <template #footer><button
+        v-if="!temporary && result?.status === 'finished' && !result.errors.length"
+        class="primary"
+        @click="emit('apply', result)"
+      >创建商品新版本</button><button
         v-if="!readOnly && result"
         :disabled="!!result.input.imageId && !originalUrl"
         @click="reuseOriginal"
@@ -359,7 +368,7 @@ async function generate() {
     </Modal>
     <Modal
       :open="templatesOpen"
-      title="项目创作模板"
+      title="创作模板"
       class="shop-dialog"
       @close="templatesOpen = false"
     ><div class="shop-dialog-body">

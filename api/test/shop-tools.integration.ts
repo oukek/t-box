@@ -13,7 +13,7 @@ import {
   newRow,
   newSheet,
 } from '@t-box/shop-tools-core'
-import { shopToolsSchema, ShopToolsService } from '@t-box/shop-tools-server'
+import { ShopCatalog, shopToolsSchema, ShopToolsService } from '@t-box/shop-tools-server'
 import mysql from 'mysql2/promise'
 import { getConfig } from '../src/config.js'
 import { createDataSource } from '../src/db/data-source.js'
@@ -40,7 +40,7 @@ try {
   const runner = source.createQueryRunner()
   await runner.connect()
   try {
-    assert.equal(await extendDatabase(runner, [shopToolsSchema]), 3)
+    assert.equal(await extendDatabase(runner, [shopToolsSchema]), 4)
     assert.equal(await extendDatabase(runner, [shopToolsSchema]), 0)
   } finally {
     await runner.release()
@@ -52,8 +52,13 @@ try {
   )
   let textCalls = 0
   const service = new ShopToolsService(source, () => ({
-    async text() { textCalls++; return { title: 'Travel cup' } },
-    async image() { throw new Error('测试图片服务失败') },
+    async text() {
+      textCalls++
+      return { title: 'Travel cup' }
+    },
+    async image() {
+      throw new Error('测试图片服务失败')
+    },
   }))
   const subject = 'a'.repeat(64)
   const other = 'b'.repeat(64)
@@ -312,7 +317,7 @@ try {
   const projectRead = (actor: string, id: string) =>
     service.invoke(request(actor, 'workspace_get', { projectId: id }, randomUUID(), actor === subject ? 2 : 1)) as Promise<WorkspaceHeader>
   assert.equal((await projectRead(subject, subject)).revision, revision + 1)
-  const { id: projectId } = await projectCall(subject, 'create', { name: '团队' }) as { id: string }
+  const { id: projectId } = await projectCall(subject, 'create', { name: '团队', site: 'MY' }) as { id: string }
   assert.equal((await projectRead(subject, projectId)).revision, 0)
   await assert.rejects(projectRead(other, projectId), { code: 'SHOP_PROJECT_DENIED' })
   const { code } = await projectCall(subject, 'invite', { projectId, role: 'viewer' }) as { code: string }
@@ -332,8 +337,10 @@ try {
   let result: Creation | null = null
   for (let i = 0; i < 100; i++) {
     result = await service.invoke(request(subject, 'creative', get, randomUUID(), 2)) as Creation
-    if (result.status === 'finished') break
-    await new Promise(resolve => setTimeout(resolve, 20))
+    if (result.status === 'finished') {
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
   }
   assert.equal(textCalls, 1)
   assert.equal(result?.status, 'finished')
@@ -346,6 +353,42 @@ try {
   assert.equal((await projectRead(subject, projectId)).revision, 1)
   await projectCall(subject, 'remove', { projectId, subject: other })
   await assert.rejects(projectRead(other, projectId), { code: 'SHOP_PROJECT_DENIED' })
+  // Collection ownership, duplicate claims, version conflicts and temporary generation.
+  const catalog = new ShopCatalog(source)
+  const collected = { id: 'source-a', platform: '1688', platformName: '1688', sourceId: 'item-a', sourceUrl: 'https://example.com/item-a', title: '收纳盒', description: '来源描述', capturedAt: new Date().toISOString(), price: { amount: '10', currency: 'CNY' }, assets: [], attributes: [], packaging: [], variants: [{ id: 'sku-1', sku: 'WHITE', price: '10', currency: 'CNY', images: [], attributes: [{ name: '颜色', value: '白色' }] }] }
+  const imported = await catalog.collect(subject, [collected])
+  assert.deepEqual(await catalog.collect(subject, [collected]), imported)
+  const cat = <T = unknown>(actor: string, action: string, args: Record<string, unknown> = {}) => service.invoke(request(actor, 'catalog', { action, projectId, ...args }, randomUUID(), actor === subject ? 2 : 1)) as Promise<T>
+  assert.equal((await cat<{ items: unknown[] }>(other, 'collection')).items.length, 0)
+  await assert.rejects(cat(other, 'claim', { ids: imported.ids }), { code: 'SHOP_PROJECT_DENIED' })
+  await Promise.all([cat(subject, 'claim', { ids: imported.ids }), cat(subject, 'claim', { ids: imported.ids })])
+  const products = await cat<{ items: { id: string }[] }>(subject, 'list')
+  assert.equal(products.items.length, 1)
+  const item = await cat<import('@t-box/shop-tools-contracts').CatalogDetail>(subject, 'get', { id: products.items[0]!.id })
+  const version = item.versions[0]!
+  assert.equal(version.content.skus[0]!.cost, 10)
+  assert.equal(version.content.skus[0]!.sourceSkuId, 'sku-1')
+  const changed = { ...version.content, title: '修改后的商品' }
+  await cat(subject, 'save', { id: item.product.id, versionId: version.id, revision: 0, name: version.name, content: changed })
+  await assert.rejects(cat(subject, 'save', { id: item.product.id, versionId: version.id, revision: 0, name: version.name, content: changed }), { code: 'SHOP_CONFLICT' })
+  const second = await cat<{ id: string }>(subject, 'version', { id: item.product.id, versionId: version.id, revision: 1 })
+  assert.ok(second.id)
+  const updated = await cat<import('@t-box/shop-tools-contracts').CatalogDetail>(subject, 'get', { id: item.product.id })
+  assert.equal(updated.versions.length, 2)
+  assert.equal(updated.product.modified, true)
+  assert.equal((await cat<{ items: import('@t-box/shop-tools-contracts').CollectionItem[] }>(subject, 'collection')).items[0]!.data.title, collected.title)
+  await assert.rejects(cat(subject, 'set-site', { site: 'TH' }))
+  const before = await source.getRepository('ShopToolsCreation').count()
+  const temporary = await service.invoke(request(subject, 'creative', { temporary: true, action: 'create', input: { ...input, imageId: '', fields: ['title'] } }, randomUUID(), 2)) as { id: string }
+  for (let i = 0; i < 100; i++) {
+    const rec = await service.invoke(request(subject, 'creative', { temporary: true, action: 'get', id: temporary.id }, randomUUID(), 2)) as Creation
+    if (rec.status === 'finished') {
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  assert.equal(await source.getRepository('ShopToolsCreation').count(), before)
+  assert.equal(await service.invoke(request(other, 'creative', { temporary: true, action: 'get', id: temporary.id })), null)
   console.log(
     'Shop tools MySQL integration passed: extension replay, account isolation, durable rows/config, CAS concurrency, idempotency, pagination, rollback, installation fencing and data retention.',
   )

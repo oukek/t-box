@@ -219,7 +219,6 @@ watch(
     }
   },
 )
-void loadBooks()
 </script>
 
 <template>

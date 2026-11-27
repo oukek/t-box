@@ -87,6 +87,20 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (!embedded) {
       throw new Error('请从采集箱操作')
     }
+    if (message.action === 'confirm-collect') {
+      if (!Array.isArray(message.ids) || !message.ids.length || message.ids.length > 200) {
+        throw new Error('请选择要确认采集的商品')
+      }
+      const products = state.products.filter((p) => message.ids.includes(p.id))
+      if (products.length !== new Set(message.ids).size) {
+        throw new Error('商品已变化，请重新选择')
+      }
+      const result = await authAction('account-collect', { products, userId: message.userId }) as { confirmed: number[], error: string }
+      return { ids: result.confirmed.map((i) => products[i]!.id), error: result.error }
+    }
+    if (message.action === 'account-collect') {
+      throw new Error('请使用确认采集入口')
+    }
     if (message.action === 'account' || message.action?.startsWith('account-')) {
       return authAction(message.action, message)
     }

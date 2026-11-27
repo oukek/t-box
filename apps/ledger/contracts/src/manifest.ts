@@ -48,6 +48,6 @@ export const ledgerManifest = {
   icon: 'ledger',
   iconAsset: applicationIcon,
   color: 'teal',
-  version: '1.1.4',
+  version: '1.1.5',
   skillIds: ['bookkeeping'],
 } as const satisfies ApplicationManifest

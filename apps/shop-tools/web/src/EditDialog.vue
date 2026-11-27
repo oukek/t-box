@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Modal } from '@t-box/ui-kit'
 
-defineProps<{ open: boolean, title: string, long?: boolean, busy?: boolean }>()
+defineProps<{ open: boolean, title: string, long?: boolean, busy?: boolean, readonly?: boolean }>()
 defineEmits<{ close: [], save: [] }>()
 </script>
 
@@ -16,6 +16,7 @@ defineEmits<{ close: [], save: [] }>()
   >
     <div class="shop-dialog-body"><slot /></div>
     <template #footer><button :disabled="busy" @click="$emit('close')">取消</button><button
+      v-if="!readonly"
       class="primary"
       :disabled="busy"
       @click="$emit('save')"

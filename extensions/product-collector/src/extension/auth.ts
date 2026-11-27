@@ -16,7 +16,7 @@ async function api<T>(path: string, body?: unknown, token?: string, method = bod
   const response = await fetch(`${API}${path}`, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000), credentials: 'omit' })
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw Object.assign(new Error(error?.message || '账号服务暂时不可用，请重试'), { status: response.status })
+    throw Object.assign(new Error(error?.error?.message || error?.message || '账号服务暂时不可用，请重试'), { status: response.status })
   }
   return response.status === 204 ? undefined as T : (await response.json()).data
 }
@@ -57,6 +57,23 @@ export async function authAction(action: string, message: Record<string, unknown
         }
         throw error
       }
+    }
+    if (action === 'account-collect') {
+      const saved = await account()
+      if (!saved || message.userId !== saved.user.id) {
+        throw new Error('账号已变化，请重新确认登录账号')
+      }
+      const products = message.products as unknown[]
+      const confirmed: number[] = []
+      for (let i = 0; i < products.length; i++) {
+        try {
+          await api('/collector/products', { products: [products[i]] }, saved.token)
+          confirmed.push(i)
+        } catch (e) {
+          return { confirmed, error: e instanceof Error ? e.message : '上传失败，请重试未完成商品' }
+        }
+      }
+      return { confirmed, error: '' }
     }
     if (action === 'account-candidate') {
       const tabs = await chrome.tabs.query({ url: `${SITE}/*` })

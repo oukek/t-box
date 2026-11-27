@@ -7,6 +7,7 @@ export interface ApplicationPackage {
 export interface ResourceProgress { completed: number, total: number, bytes: number }
 export interface ResourceLocation { entryUrl: string, origin: string, source: 'local' | 'network' | 'development' }
 export interface ResourceAdapter {
+  readonly localLaunch?: boolean
   prepare(pkg: ApplicationPackage, progress?: (value: ResourceProgress) => void): Promise<'ready' | 'unsupported'>
   open(pkg: ApplicationPackage): Promise<ResourceLocation>
   remove(pkg: ApplicationPackage): Promise<void>

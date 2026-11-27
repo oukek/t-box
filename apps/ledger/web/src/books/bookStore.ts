@@ -1,6 +1,7 @@
 import type { Ledger } from '@t-box/ledger-contracts'
 import { computed, reactive, readonly } from 'vue'
 import { identity } from '../runtime'
+import { request } from '../sdk'
 import { booksApi } from './booksApi'
 
 const state = reactive({
@@ -30,6 +31,13 @@ export async function loadBooks() {
   state.loading = true
   state.error = ''
   try {
+    if (!identity.user) {
+      const session = await request<{ data: { id: string, username: string, nickname: string } }>('/ledgers/session')
+      if (current !== generation) {
+        return
+      }
+      identity.user = session.data
+    }
     const { data } = await booksApi.list()
     if (current !== generation) {
       return

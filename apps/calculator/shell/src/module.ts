@@ -22,7 +22,7 @@ export function createCalculatorShellModule(
     navigation: 'shell',
     parseParams: parseCalculatorParams,
     props: (params, context) => ({
-      initializeRuntime: migrateHistory,
+      initializeStorage: migrateHistory,
       appId: 'calculator',
       params,
       openRevision: context.openRevision,

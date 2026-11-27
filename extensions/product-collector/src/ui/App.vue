@@ -23,6 +23,38 @@ const stopRequested = ref(false)
 const error = ref('')
 const notice = ref('')
 const deleteOpen = ref(false)
+const confirmUser = ref<{ id: string, nickname: string } | null>(null)
+const uploaded = ref<string[]>([])
+async function prepareCollect() {
+  error.value = ''
+  try {
+    confirmUser.value = await request('account')
+    if (!confirmUser.value) {
+      throw new Error('请先在右上角登录方舟，再确认采集')
+    }
+  } catch (e) {
+    error.value = String(e)
+  }
+}
+async function collect() {
+  if (!confirmUser.value || busy.value) {
+    return
+  }
+  busy.value = true
+  error.value = ''
+  try {
+    const data = await request<{ ids: string[], error: string }>('confirm-collect', { ids: selected.value, userId: confirmUser.value.id })
+    uploaded.value = [...new Set([...uploaded.value, ...data.ids])]
+    selected.value = selected.value.filter((id) => !data.ids.includes(id))
+    notice.value = `已确认采集 ${data.ids.length} 件到 ${confirmUser.value.nickname} 的个人采集表。`
+    error.value = data.error
+    confirmUser.value = null
+  } catch (e) {
+    error.value = String(e)
+  } finally {
+    busy.value = false
+  }
+}
 const visible = computed(() => state.value.products.filter((p) => `${p.title} ${p.sourceId} ${p.platformName}`.toLowerCase().includes(search.value.toLowerCase())))
 const allChecked = computed(() => !!visible.value.length && visible.value.every((p) => selected.value.includes(p.id)))
 watch([keyword, pageSize], () => {
@@ -113,6 +145,22 @@ async function remove() {
 </script>
 
 <template>
+  <Modal
+    :open="!!confirmUser"
+    title="确认采集到方舟"
+    :busy="busy"
+    @close="confirmUser = null"
+  >
+    <p>
+      将所选 {{ selected.length }} 件商品保存到 {{ confirmUser?.nickname }} 的个人采集表，不直接归属项目。重复确认不会重复创建商品。
+    </p><template #footer>
+      <button :disabled="busy" @click="confirmUser = null">
+        取消
+      </button><button :disabled="busy" @click="collect">
+        {{ busy ? '正在保存…' : '确认采集' }}
+      </button>
+    </template>
+  </Modal>
   <main class="inbox">
     <header class="inbox-header">
       <div>
@@ -123,7 +171,7 @@ async function remove() {
         </span>
       </div>
       <span class="muted">
-        临时预览 · 关闭浏览器后清除 · 尚未上传方舟
+        预览为临时资料 · 确认采集后保存到方舟个人采集表
       </span>
       <AccountMenu />
     </header>
@@ -208,6 +256,13 @@ async function remove() {
     </p>
     <section aria-label="临时商品预览">
       <div class="toolbar preview-toolbar">
+        <button
+          class="primary"
+          :disabled="busy || !selected.length"
+          @click="prepareCollect"
+        >
+          确认采集 {{ selected.length }} 件
+        </button>
         <strong>
           预览 {{ state.products.length }} / 200 件
         </strong>

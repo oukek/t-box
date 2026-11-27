@@ -1271,8 +1271,70 @@ summary {
 }
 
 @media (max-width: 600px) {
-  .shop-app .application-page-title h1 { white-space: nowrap; }
-  .project-switch { max-width: 24vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shop-app .application-page-title h1 {
+    white-space: nowrap;
+  }
+  .project-switch {
+    max-width: 24vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .project-switch .project-caption,
-  .shop-app .cloud-status:not(.save-warning) { display: none; }
+  .shop-app .cloud-status:not(.save-warning) {
+    display: none;
+  }
+}
+
+.catalog-item {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.catalog-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.catalog-images img {
+  max-width: 160px;
+  max-height: 160px;
+  object-fit: contain;
+}
+.catalog-images figure {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.catalog-table {
+  overflow: auto;
+  max-width: 100%;
+}
+.catalog-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.catalog-table th,
+.catalog-table td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  min-width: 110px;
+}
+.catalog-table small {
+  display: block;
+}
+.catalog-list .site-row {
+  gap: 12px;
+}
+.catalog-navigation {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.catalog-pricing .shop-dialog-body {
+  display: grid;
+  gap: 12px;
+}
+.catalog-price-result {
+  margin-right: auto;
 }

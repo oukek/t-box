@@ -12,6 +12,45 @@ export interface CreativeModel {
   image(input: CreativeInput, signal: AbortSignal): Promise<string>
 }
 export class CreativeService {
+  private readonly ephemeral = new Map<string, { subject: string, expires: number, record: Creation }>()
+  async temporary(r: BackendInvocation) {
+    const args = r.arguments as Record<string, unknown>
+    for (const [id, item] of this.ephemeral) {
+      if (item.expires < Date.now()) {
+        this.ephemeral.delete(id)
+      }
+    }
+    if (args.action === 'history') {
+      return [...this.ephemeral.values()].filter((x) => x.subject === r.subject).map(({ record }) => ({ ...record, title: record.input.title, language: record.input.rules.language }))
+    }
+    if (args.action === 'get') {
+      const entry = this.ephemeral.get(String(args.id))
+      return entry?.subject === r.subject ? entry.record : null
+    }
+    if (args.action !== 'create' || !this.model) {
+      throw ShopError.invalid('创作服务不可用')
+    }
+    const input = parseCreativeInput(args.input)
+    const id = fingerprint(['temporary', r.subject, r.invocationId])
+    const prior = this.ephemeral.get(id)
+    if (prior) {
+      if (fingerprint(prior.record.input) !== fingerprint(input)) {
+        throw ShopError.replay()
+      }
+      return { id }
+    }
+    if (this.ephemeral.size >= 200) {
+      throw ShopError.invalid('临时创作任务繁忙，请稍后重试')
+    }
+    const record: Creation = { id, input, output: {}, status: 'running', errors: [], createdAt: new Date().toISOString() }
+    this.ephemeral.set(id, { subject: r.subject, expires: Date.now() + 30 * 60000, record })
+    void this.generate(record, this.model(r), false).catch(() => {
+      record.errors.push('任务中断')
+      record.status = 'finished'
+    })
+    return { id }
+  }
+
   constructor(private source: DataSource, private model?: (r: BackendInvocation) => CreativeModel) {}
 
   async invoke(r: BackendInvocation, project: string) {
@@ -57,7 +96,7 @@ export class CreativeService {
     return { id }
   }
 
-  private async generate(entry: Creation, model: CreativeModel) {
+  private async generate(entry: Creation, model: CreativeModel, persist = true) {
     const repo = this.source.getRepository(CreativeEntity)
     const signal = AbortSignal.timeout(10 * 60000)
     const operations: [string, () => Promise<Creation['output']>][] = []
@@ -73,8 +112,12 @@ export class CreativeService {
       } catch (e) {
         entry.errors.push(label + '生成失败，' + (e instanceof Error ? e.message.slice(0, 200) : '请重试'))
       }
-      await repo.update(entry.id, { output: entry.output, errors: entry.errors })
+      if (persist) {
+        await repo.update(entry.id, { output: entry.output, errors: entry.errors })
+      }
     }
-    await repo.update(entry.id, { status: 'finished' })
+    if (persist) {
+      await repo.update(entry.id, { status: 'finished' })
+    }
   }
 }

@@ -2,8 +2,9 @@ import type { BackendInvocation } from '@t-box/app-contracts'
 import type { ProjectRole, ProjectSummary } from '@t-box/shop-tools-contracts'
 import type { EntityManager } from 'typeorm'
 import { fingerprint } from '@t-box/server-foundation/persistence/operations'
-import { ShopError } from '@t-box/shop-tools-contracts'
+import { projectSites, ShopError } from '@t-box/shop-tools-contracts'
 import { In, MoreThan } from 'typeorm'
+import { CatalogEntity, ProjectSiteEntity } from './catalog-entities.js'
 import { InviteEntity, MemberEntity, ProjectEntity, ShopWorkspaceEntity } from './entities.js'
 
 const ranks = { viewer: 0, editor: 1, admin: 2, owner: 3 }
@@ -39,14 +40,19 @@ export async function projects(db: EntityManager, r: BackendInvocation) {
     }
     const memberships = await db.findBy(MemberEntity, { subject })
     const rows = await db.findBy(ProjectEntity, { id: In(memberships.map((m) => m.project)) })
-    return rows.map((p) => ({ ...p, role: memberships.find((m) => m.project === p.id)!.role } satisfies ProjectSummary))
+    const sites = await db.find(ProjectSiteEntity, { where: { project: In(rows.map((p) => p.id)) } })
+    return rows.map((p) => ({ ...p, site: sites.find((s) => s.project === p.id)?.site, role: memberships.find((m) => m.project === p.id)!.role } satisfies ProjectSummary))
       .sort((a, b) => Number(b.id === subject) - Number(a.id === subject) || a.name.localeCompare(b.name))
   }
   if (arg.action === 'create') {
     const id = fingerprint(['shop-project', subject, r.invocationId])
     const title = name(arg.name)
+    if (!projectSites.some((s) => s.value === arg.site)) {
+      throw ShopError.invalid('请选择国家站点')
+    }
     if (!await db.existsBy(ProjectEntity, { id })) {
       await db.insert(ProjectEntity, { id, name: title })
+      await db.insert(ProjectSiteEntity, { project: id, site: String(arg.site) })
       await db.insert(MemberEntity, { project: id, subject, name: '创建者', role: 'owner' })
       await db.insert(ShopWorkspaceEntity, { subject: id, generation: 1, releaseId: 'project', active: true, revision: 0, metadata: null, config: null, history: null, updatedAt: new Date() })
     }
@@ -70,8 +76,11 @@ export async function projects(db: EntityManager, r: BackendInvocation) {
       throw ShopError.invalid('你已是此项目成员')
     }
     await db.insert(MemberEntity, { project: invite.project, subject, name: name(arg.name), role: invite.role })
-    if (invite.remaining === 1) await db.delete(InviteEntity, { id })
-    else await db.update(InviteEntity, { id }, { remaining: invite.remaining - 1 })
+    if (invite.remaining === 1) {
+      await db.delete(InviteEntity, { id })
+    } else {
+      await db.update(InviteEntity, { id }, { remaining: invite.remaining - 1 })
+    }
     return { id: invite.project }
   }
   const project = projectId(arg.projectId)
@@ -82,9 +91,21 @@ export async function projects(db: EntityManager, r: BackendInvocation) {
     return { members: await db.findBy(MemberEntity, { project }), invites: ranks[caller.role] >= 2 ? await db.findBy(InviteEntity, { project, expiresAt: MoreThan(new Date()) }) : [] }
   }
   if (arg.action === 'leave') {
-    if (caller.role === 'owner') throw ShopError.denied()
+    if (caller.role === 'owner') {
+      throw ShopError.denied()
+    }
     await db.delete(MemberEntity, { project, subject })
   } else if (arg.action === 'rename') {
+    if (arg.site !== undefined) {
+      if (!projectSites.some((s) => s.value === arg.site)) {
+        throw ShopError.invalid('国家站点无效')
+      }
+      const prior = await db.findOneBy(ProjectSiteEntity, { project })
+      if (prior && prior.site !== arg.site && await db.existsBy(CatalogEntity, { project })) {
+        throw ShopError.invalid('已有商品的项目不能切换站点，请新建项目')
+      }
+      await db.upsert(ProjectSiteEntity, { project, site: String(arg.site) }, ['project'])
+    }
     await db.update(ProjectEntity, { id: project }, { name: name(arg.name) })
   } else if (arg.action === 'invite' && canGrant(arg.role)) {
     const days = Number(arg.days ?? 1)

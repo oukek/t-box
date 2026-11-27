@@ -280,7 +280,7 @@ onMounted(() => {
         target.value = ''
         checks.defer()
         message.value = outcome
-        systemVersionOpen.value = true
+        systemVersionOpen.value = outcome !== '更新完成'
       } else if (offline) {
         desktopNetwork()
       } else {
@@ -370,8 +370,8 @@ onBeforeUnmount(() => {
         @click="close"
       >{{ error && desktop ? '返回旧版' : '稍后' }}</button>
       <button
-        class="button"
-        :class="target ? 'button-secondary' : 'button-primary'"
+        v-if="!target"
+        class="button button-primary"
         :disabled="checking"
         @click="check(true)"
       >检查更新</button>

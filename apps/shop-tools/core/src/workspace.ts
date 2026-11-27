@@ -1,4 +1,3 @@
-import { parseTemplates } from './creative.js'
 import type {
   Config,
   Coupon,
@@ -8,6 +7,7 @@ import type {
   WorkspaceState,
 } from '@t-box/shop-tools-contracts'
 import { inputs, outputs, ShopError } from '@t-box/shop-tools-contracts'
+import { parseTemplates } from './creative.js'
 import { clone, validateBook } from './index.js'
 
 const bytes = (value: unknown) =>
@@ -21,7 +21,9 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 export function validateCoupons(value: unknown): Coupon[] {
-  if (!Array.isArray(value)) throw ShopError.invalid('优惠券列表格式无效')
+  if (!Array.isArray(value)) {
+    throw ShopError.invalid('优惠券列表格式无效')
+  }
   return value.map((entry) => {
     const { threshold, reduction } = object(entry)
     if (typeof threshold !== 'number' || typeof reduction !== 'number' ||
@@ -186,7 +188,9 @@ function historyRoute(value: unknown) {
     'region',
     'label',
   ]) {
-    if ((k === 'coupon' || k === 'paid') && r[k] === undefined) continue
+    if ((k === 'coupon' || k === 'paid') && r[k] === undefined) {
+      continue
+    }
     if (typeof r[k] !== 'string' || r[k].length > 2000) {
       throw ShopError.invalid('结果记录物流信息无效')
     }
@@ -226,13 +230,17 @@ function historyResult(value: unknown) {
     'revenue',
     'pricingExchange',
   ]) {
-    if ((k === 'coupon' || k === 'paid') && r[k] === undefined) continue
+    if ((k === 'coupon' || k === 'paid') && r[k] === undefined) {
+      continue
+    }
     if (typeof r[k] !== 'number' || !Number.isFinite(r[k])) {
       throw ShopError.invalid('结果记录金额无效')
     }
   }
   for (const k of ['sellerFormula', 'buyerFormula']) {
-    if ((k === 'coupon' || k === 'paid') && r[k] === undefined) continue
+    if ((k === 'coupon' || k === 'paid') && r[k] === undefined) {
+      continue
+    }
     if (typeof r[k] !== 'string' || r[k].length > 10000) {
       throw ShopError.invalid('结果记录公式无效')
     }

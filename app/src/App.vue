@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import ReminderHost from '@t-box/device-reminders/ReminderHost.vue'
 import AccountSettingsPage from '@t-box/settings-web/pages/AccountSettingsPage.vue'
-import { AppIcon, BrandMark, UserAvatar } from '@t-box/ui-kit'
+import { AppIcon, BottomSheet, BrandMark, UserAvatar } from '@t-box/ui-kit'
 import ApplicationHeader from '@t-box/ui-kit/ApplicationHeader.vue'
+import LauncherIcon from '@t-box/ui-kit/LauncherIcon.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { applicationModules } from './applications/registry'
 import ApplicationSurface from './core/app-runtime/ApplicationSurface.vue'
-import { closeApplicationRuntimes, prepareApplicationsForSystemUpdate } from './core/app-runtime/bridge'
+import { closeApplicationRuntimes, prepareApplicationForClose } from './core/app-runtime/bridge'
 import {
   appCatalog,
   isInstalled,
@@ -27,6 +28,7 @@ import {
   closeAssistant,
   navigateTab,
   navigation,
+  openApplication,
   openDevicePermissions,
   openProfile,
   startNavigation,
@@ -63,12 +65,46 @@ const currentApplication = computed(() =>
     ? getApplication(navigation.application.appId)
     : undefined,
 )
+interface AppWindow { destination: NonNullable<typeof navigation.application>, revision: number, expanded: boolean }
+const windows = ref<AppWindow[]>([])
+const activeId = computed(() => navigation.screen === 'application' ? navigation.application?.appId : undefined)
+const activeWindow = computed(() => windows.value.find((item) => item.destination.appId === activeId.value))
+watch([activeId, () => navigation.revision, () => identity.user?.id], ([id], previous) => {
+  if (previous.length && previous[2] !== identity.user?.id) {
+    windows.value = []
+  }
+  const destination = navigation.application
+  if (!id || !destination) {
+    return
+  }
+  const existing = windows.value.find((item) => item.destination.appId === id)
+  if (!existing) {
+    windows.value.push({ destination, revision: navigation.revision, expanded: false })
+  } else if ((Object.keys(destination.params ?? {}).length && JSON.stringify(destination.params) !== JSON.stringify(existing.destination.params)) || previous[0] === id) {
+    existing.destination = destination
+    existing.revision = navigation.revision
+  }
+}, { immediate: true })
+const switcherOpen = ref(false)
+const runningApps = computed(() => windows.value.map((item) => ({
+  item,
+  app: getApplication(item.destination.appId),
+})))
+watch([() => identity.user?.id, () => navigation.revision], () => {
+  switcherOpen.value = false
+})
+function resumeWindow(item: AppWindow) {
+  switcherOpen.value = false
+  if (activeId.value !== item.destination.appId) {
+    void openApplication(item.destination)
+  }
+}
 const returning = ref(false)
 const returnError = ref('')
 watch(() => navigation.revision, () => {
   returnError.value = ''
 })
-async function returnToDesktop() {
+async function closeWindow(id: string) {
   if (returning.value) {
     return
   }
@@ -76,13 +112,19 @@ async function returnToDesktop() {
   returning.value = true
   returnError.value = ''
   try {
-    await prepareApplicationsForSystemUpdate()
+    await prepareApplicationForClose(id)
     if (navigation.revision === revision) {
-      navigateTab('applications')
+      windows.value = windows.value.filter((item) => item.destination.appId !== id)
+      if (activeId.value === id) {
+        navigateTab('applications')
+      }
+      if (!windows.value.length) {
+        switcherOpen.value = false
+      }
     }
   } catch {
     if (navigation.revision === revision) {
-      returnError.value = '请先保存或结束当前编辑，再返回桌面。'
+      returnError.value = '请先在应用内保存或结束编辑，再关闭应用。'
     }
   } finally {
     returning.value = false
@@ -213,6 +255,15 @@ onBeforeUnmount(() => {
           @click.prevent="navigateTab('applications')"
         ><BrandMark class="desktop-brand-mark" /><span>T方舟</span></a>
         <div class="desktop-topbar__actions">
+          <button
+            v-if="windows.length"
+            class="phone-running"
+            aria-label="切换应用"
+            aria-haspopup="dialog"
+            @click="switcherOpen = true"
+          >
+            <AppIcon name="copy" :size="17" /><span>{{ windows.length }}</span>
+          </button>
           <InstallDesktop v-if="isWebHost && !desktopShell" />
           <NotificationBell v-if="identity.user" />
           <button
@@ -260,23 +311,95 @@ onBeforeUnmount(() => {
       <MemoryPage v-if="identity.user && navigation.screen === 'memory'" :key="identity.user.id" />
       <AccountSettingsPage v-if="identity.user && navigation.screen === 'account'" />
       <nav
-        v-if="navigation.screen === 'application'"
-        class="app-return-bar"
-        aria-label="方舟导航"
+        v-if="windows.length && navigation.screen === 'applications'"
+        class="open-apps"
+        aria-label="已打开的应用"
       >
-        <small v-if="returnError" role="alert">{{ returnError }}</small>
         <button
-          type="button"
-          :disabled="returning"
-          @click="returnToDesktop"
-        ><AppIcon name="apps" :size="15" />{{ returning ? '正在返回…' : '返回桌面' }}</button>
+          v-for="item in windows"
+          :key="item.destination.appId"
+          @click="openApplication(item.destination)"
+        >
+          {{ getApplication(item.destination.appId)?.name || item.destination.appId }}
+        </button>
       </nav>
-      <ApplicationSurface
-        v-if="navigation.screen === 'application' && navigation.application"
-        :destination="navigation.application"
-        :open-revision="navigation.revision"
-      />
+      <section
+        v-for="item in windows"
+        v-show="activeId === item.destination.appId"
+        :key="item.destination.appId"
+        class="app-window"
+        :class="{ expanded: item.expanded }"
+        :aria-label="getApplication(item.destination.appId)?.name"
+      >
+        <header class="app-window-bar">
+          <div class="window-controls">
+            <button
+              class="close"
+              title="关闭应用"
+              aria-label="关闭应用"
+              :disabled="returning"
+              @click="closeWindow(item.destination.appId)"
+            ><span>×</span></button>
+            <button
+              class="minimize"
+              title="最小化到桌面"
+              aria-label="最小化到桌面"
+              @click="navigateTab('applications')"
+            ><span>−</span></button>
+            <button
+              class="maximize"
+              :title="item.expanded ? '还原窗口' : '放大窗口'"
+              :aria-label="item.expanded ? '还原窗口' : '放大窗口'"
+              :aria-pressed="item.expanded"
+              @click="item.expanded = !item.expanded"
+            ><span>⤢</span></button>
+          </div>
+          <strong>{{ getApplication(item.destination.appId)?.name }}</strong>
+          <small v-if="returnError && item === activeWindow" role="alert">{{ returnError }}</small>
+        </header>
+        <div class="app-window-content"><ApplicationSurface
+          :destination="item.destination"
+          :open-revision="item.revision"
+          embedded
+        /></div>
+        <nav class="phone-app-nav" aria-label="方舟导航">
+          <button @click="navigateTab('applications')"><AppIcon name="apps" :size="17" />桌面</button>
+          <button aria-haspopup="dialog" @click="switcherOpen = true"><AppIcon name="copy" :size="17" />切换应用</button>
+        </nav>
+      </section>
     </main>
+    <BottomSheet
+      :open="switcherOpen"
+      title="已打开的应用"
+      compact
+      :busy="returning"
+      @close="switcherOpen = false"
+    >
+      <div class="running-list">
+        <div
+          v-for="{ item, app } in runningApps"
+          :key="item.destination.appId"
+          class="running-row"
+        >
+          <button class="running-resume" @click="resumeWindow(item)">
+            <LauncherIcon
+              :icon="app?.icon || 'apps'"
+              :icon-variant="app?.iconVariant"
+              :icon-asset="app?.iconAsset"
+            />
+            <span>{{ app?.name || item.destination.appId }}</span>
+            <small v-if="activeId === item.destination.appId">当前</small>
+          </button>
+          <button
+            class="running-close"
+            :disabled="returning"
+            :aria-label="'关闭' + (app?.name || item.destination.appId)"
+            @click="closeWindow(item.destination.appId)"
+          ><AppIcon name="close" :size="17" /></button>
+        </div>
+        <small v-if="returnError" role="alert">{{ returnError }}</small>
+      </div>
+    </BottomSheet>
     <WebReleaseDialog :enabled="productionWeb" />
     <ReminderHost />
     <NotificationCenter v-if="identity.user" />

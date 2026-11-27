@@ -26,6 +26,17 @@ interface Artifact {
   fileCount: number
   bytes: number
 }
+function collectorDownloadUrl(entry: ManagedRelease) {
+  if (entry.release.appId !== 'shop-tools' || entry.release.runtime.type !== 'web' || entry.readiness.development) {
+    return ''
+  }
+  // Download assets ship with shop-tools 1.4.1 and later, not historical builds.
+  const [major = 0, minor = 0, patch = 0] = entry.release.manifest.version.split('.').map(Number)
+  if (!(major > 1 || (major === 1 && (minor > 4 || (minor === 4 && patch >= 1))))) {
+    return ''
+  }
+  return new URL('downloads/index.html', entry.release.runtime.entryUrl).href
+}
 const applications = ref<ManagedApplication[]>([])
 const selectedId = ref('')
 const query = ref('')
@@ -557,6 +568,13 @@ onMounted(() => {
               <AdminButton :disabled="busy" @click="edit(entry, false, true)">选择产物创建发布草稿</AdminButton>
             </div>
             <div v-else>
+              <a
+                v-if="collectorDownloadUrl(entry)"
+                :href="collectorDownloadUrl(entry)"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="admin-button"
+              >采集插件下载与安装</a>
               <AdminButton
                 v-if="entry.status === 'draft'"
                 :disabled="busy"

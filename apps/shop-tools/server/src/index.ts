@@ -1,8 +1,8 @@
 import type { ApplicationModule } from '@t-box/app-server-sdk'
 import { manifest } from '@t-box/shop-tools-contracts'
 
-export { createDataService } from './data.js'
-export { shopToolsEntities } from './entities.js'
+export { ShopCatalog } from './catalog.js'
+export type { CreativeModel } from './creative.js'
 export function createShopToolsModule(): ApplicationModule {
   return {
     id: 'shop-tools',
@@ -15,8 +15,10 @@ export function createShopToolsModule(): ApplicationModule {
   }
 }
 
+export { createDataService } from './data.js'
+export { shopToolsEntities } from './entities.js'
 export { applicationRelease } from './release.js'
-export { shopToolsSchema } from './schema.js'
-export { ShopToolsService } from './workspace.js'
 
-export type { CreativeModel } from './creative.js'
+export { shopToolsSchema } from './schema.js'
+
+export { ShopToolsService } from './workspace.js'

@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 struct Desktop {
     root: PathBuf,
+    bundled: PathBuf,
     key: String,
     servers: Mutex<HashMap<PathBuf, PackageServer>>,
     writes: Mutex<()>,
@@ -35,6 +36,22 @@ fn authorize<'a>(desktop: &'a Desktop, key: &str) -> Result<&'a Desktop, String>
     } else {
         Err("仅允许方舟主窗口操作本地资源".into())
     }
+}
+
+fn bundled_package(state: &Desktop, pkg: &Package) -> Option<PathBuf> {
+    let dir = pkg.directory(&state.bundled, origin()).ok()?;
+    (fs::read_to_string(dir.with_extension("complete"))
+        .ok()
+        .as_deref()
+        == Some(&pkg.digest)
+        && dir.join("index.html").is_file())
+    .then_some(dir)
+}
+
+#[tauri::command]
+fn bundled_applications(key: String, state: State<'_, Arc<Desktop>>) -> Result<String, String> {
+    authorize(&state, &key)?;
+    fs::read_to_string(state.bundled.join("index.json")).map_err(|_| "未找到内置应用目录".into())
 }
 
 #[tauri::command]
@@ -65,7 +82,7 @@ async fn prepare_package(
     let state = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
         let dir = pkg.directory(&state.root, origin())?;
-        if packages::ready(&dir, &pkg.digest) {
+        if packages::ready(&dir, &pkg.digest) || bundled_package(&state, &pkg).is_some() {
             return Ok(());
         }
         let _guard = state.writes.lock().map_err(|_| "资源缓存不可用")?;
@@ -89,9 +106,11 @@ fn open_package(
 ) -> Result<String, String> {
     authorize(&state, &key)?;
     let dir = pkg.directory(&state.root, origin())?;
-    if !packages::ready(&dir, &pkg.digest) {
-        return Err("请先完成资源下载".into());
-    }
+    let dir = if packages::ready(&dir, &pkg.digest) {
+        dir
+    } else {
+        bundled_package(&state, &pkg).ok_or("请先在应用市场下载或修复此版本")?
+    };
     let mut servers = state.servers.lock().map_err(|_| "本地服务不可用")?;
     if let Some(server) = servers.get(&dir) {
         return Ok(server.url.clone());
@@ -154,6 +173,7 @@ fn main() {
             let root = app.path().app_local_data_dir()?.join("applications");
             app.manage(Arc::new(Desktop {
                 root,
+                bundled: app.path().resource_dir()?.join("applications"),
                 key: key.clone(),
                 servers: Mutex::default(),
                 writes: Mutex::default(),
@@ -173,6 +193,7 @@ fn main() {
             system_ready,
             desktop_login_identity,
             desktop_version,
+            bundled_applications,
             prepare_package,
             open_package,
             remove_package,

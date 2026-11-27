@@ -1,9 +1,11 @@
 import type { DatabaseSchema } from '@t-box/server-foundation/persistence/schema'
+import { catalogExtension } from './catalog-entities.js'
 // Added as an extension of the platform applications schema, preserving its frozen baseline.
 export const shopToolsSchema: DatabaseSchema = {
   id: 'shop-tools',
   tables: [],
   extensions: [
+    catalogExtension,
     {
       id: '2026-11-15.shop-tools-workspaces',
       tables: [

@@ -1,12 +1,6 @@
-import type { Creation } from '@t-box/shop-tools-contracts'
-import type {
-  Config,
-  Product,
-  ProjectRole,
-  WorkspaceMetadata,
-  WorkspaceState,
-} from '@t-box/shop-tools-contracts'
+import type { Config, Creation, Product, ProjectRole, WorkspaceMetadata, WorkspaceState } from '@t-box/shop-tools-contracts'
 import { EntitySchema } from 'typeorm'
+import { catalogEntities } from './catalog-entities.js'
 
 export interface StoredWorkspace {
   subject: string
@@ -98,20 +92,26 @@ export const InviteEntity = new EntitySchema<{ id: string, project: string, role
     id: { type: 'char', length: 64, primary: true },
     project: { type: 'char', length: 64 },
     role: { type: 'varchar', length: 10 },
-    remaining: { type: 'int' }, expiresAt: { type: 'datetime', precision: 3, name: 'expires_at' },
+    remaining: { type: 'int' },
+    expiresAt: { type: 'datetime', precision: 3, name: 'expires_at' },
   },
 })
 export const CreativeEntity = new EntitySchema<Creation & { subject: string, project: string }>({
-  name: 'ShopToolsCreation', tableName: 'shop_tools_creations',
+  name: 'ShopToolsCreation',
+  tableName: 'shop_tools_creations',
   columns: {
     id: { type: 'char', length: 64, primary: true },
-    subject: { type: 'char', length: 64 }, project: { type: 'char', length: 64 },
+    subject: { type: 'char', length: 64 },
+    project: { type: 'char', length: 64 },
     createdAt: { name: 'created_at', type: 'varchar', length: 24 },
-    status: { type: 'varchar', length: 12 }, input: { type: 'json' },
-    output: { type: 'json' }, errors: { type: 'json' },
+    status: { type: 'varchar', length: 12 },
+    input: { type: 'json' },
+    output: { type: 'json' },
+    errors: { type: 'json' },
   },
 })
 export const shopToolsEntities = [
+  ...catalogEntities,
   CreativeEntity,
   ProjectEntity,
   MemberEntity,
