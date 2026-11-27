@@ -9,7 +9,7 @@ export const root = fileURLToPath(new URL('../', import.meta.url))
 export const statePath = resolve(root, command('git', ['-C', root, 'rev-parse', '--git-path', 'tbox-local-release.json']))
 export const versionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/
 export function planKey(plan) {
-  return createHash('sha256').update(JSON.stringify([plan.branch, plan.ui, plan.deployApi, plan.notes, Object.entries(plan.applications)])).digest('hex')
+  return createHash('sha256').update(JSON.stringify([plan.branch, plan.ui, plan.deployApi, plan.notes, Object.entries(plan.applications), ...(plan.uiAfterApi ? [true] : [])])).digest('hex')
 }
 
 export function releaseState() {
@@ -35,6 +35,9 @@ export async function loadPlan() {
   const apps = await discoverApplications(root)
   if (typeof plan.branch !== 'string' || !plan.branch || typeof plan.deployApi !== 'boolean' || typeof plan.notes !== 'string' || !plan.notes.trim() || plan.notes.length > 1000 || !plan.applications || Array.isArray(plan.applications) || typeof plan.applications !== 'object') {
     throw new Error('请检查 release-plan.json 的分支、应用、部署开关和更新说明')
+  }
+  if (plan.uiAfterApi !== undefined && (typeof plan.uiAfterApi !== 'boolean' || (plan.uiAfterApi && (!plan.deployApi || !plan.ui)))) {
+    throw new Error('uiAfterApi 需要同时启用 UI 和后端部署')
   }
   const steps = []
   const targets = []
@@ -80,4 +83,28 @@ export async function loadPlan() {
     throw new Error('没有要发布的组件')
   }
   return { plan, steps, targets }
+}
+
+// Include transitive workspace packages bundled into this application's Web build.
+export function appInputsChanged(id, changed) {
+  const sources = new Map()
+  for (const file of globSync(['apps/*/*/package.json', 'packages/*/package.json', 'shared/package.json'], { cwd: root })) {
+    const pkg = JSON.parse(readFileSync(resolve(root, file), 'utf8'))
+    sources.set(pkg.name, { file, deps: Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }) })
+  }
+  const directories = new Set(['apps/' + id + '/'])
+  const visited = new Set()
+  function visit(pkg) {
+    if (!pkg || visited.has(pkg.file)) {
+      return
+    }
+    visited.add(pkg.file)
+    directories.add(pkg.file.slice(0, -'package.json'.length))
+    for (const dep of pkg.deps) {
+      visit(sources.get(dep))
+    }
+  }
+  visit([...sources.values()].find((pkg) => pkg.file === 'apps/' + id + '/web/package.json'))
+  return changed.some((path) => [...directories].some((dir) => path.startsWith(dir)) ||
+    !/^(?:apps\/|docs\/|scripts\/(?:local-release|release-dashboard\/)|release-plan\.json$|[^/]+\.md$)/.test(path))
 }

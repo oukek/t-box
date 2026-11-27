@@ -105,3 +105,56 @@ test('release URL errors name the missing or malformed setting without echoing i
   assert.throws(() => httpsUrl('invalid-value', 'TBOX_RELEASE_WEB'), /TBOX_RELEASE_WEB 格式错误/)
   assert.equal(httpsUrl('https://example.com/api/v1/', 'TBOX_RELEASE_API'), 'https://example.com/api/v1')
 })
+
+test('parallel build graph caps app jobs, waits at joins and retries only failed or unstarted work', async () => {
+  const { executeGraph, releaseGraph } = await import('./local-release-graph.mjs')
+  const apps = Array.from({ length: 6 }, (_, i) => ({ key: 'a' + i, id: 'a' + i, kind: 'app', inputs: { application: 'App' } }))
+  const graph = releaseGraph({ plan: { ui: '1.0.1' }, steps: [...apps, { key: 'api', kind: 'api' }, { key: 'ui', kind: 'ui' }], targets: [] })
+  const done = new Set(['prepare'])
+  const attempts = []
+  let peak = 0
+  let active = 0
+  let fail = true
+  const work = async (n) => {
+    assert.ok(n.deps.every((id) => done.has(id)))
+    attempts.push(n.id)
+    if (n.pool === 'app') {
+      peak = Math.max(peak, ++active)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active--
+    }
+    if (fail && n.id === 'build-a1') {
+      throw new Error('fixture failure')
+    }
+    done.add(n.id)
+  }
+  await assert.rejects(executeGraph(graph, done, work, () => {}), /fixture failure/)
+  assert.equal(peak, 3)
+  assert.ok(done.has('build-ui') && done.has('build-a5') && !done.has('build-api') && !done.has('approve'))
+  fail = false
+  attempts.length = 0
+  await executeGraph(graph, done, work, () => {})
+  assert.deepEqual(attempts, ['build-a1', 'build-api', 'approve', 'publish-ui'])
+})
+test('uses the producing reusable workflow job for the UI receipt', async () => {
+  const { workflowReceipt } = await import('./local-release-github.mjs')
+  const build = '00000000-0000-4000-8000-000000000001'
+  const receipt = await workflowReceipt('owner/repo', { id: 1, jobs: [{ id: 42, steps: [{ name: '获取线上基线并预留版本', conclusion: 'success' }] }] }, { kind: 'ui' }, async (args) => {
+    assert.deepEqual(args, ['api', 'repos/owner/repo/actions/jobs/42/logs'])
+    return 'Reserved system build: ' + build
+  })
+  assert.equal(receipt, build)
+})
+
+test('a reused deployment cannot open the approval gate before a changed dependency finishes', async () => {
+  const { executeGraph } = await import('./local-release-graph.mjs')
+  const nodes = [{ id: 'changed', deps: [] }, { id: 'reused', deps: ['changed'] }, { id: 'approve', deps: ['reused'] }]
+  const order = []
+  await executeGraph(nodes, ['reused'], async (n) => {
+    if (n.id === 'changed') {
+      await new Promise((resolve) => setTimeout(resolve, 3))
+    }
+    order.push(n.id)
+  }, () => {})
+  assert.deepEqual(order, ['changed', 'approve'])
+})

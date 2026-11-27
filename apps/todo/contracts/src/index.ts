@@ -8,7 +8,7 @@ export const manifest = {
   icon: 'task',
   iconAsset: applicationIcon,
   color: 'violet',
-  version: '1.1.5',
+  version: '1.1.6',
   skillIds: [],
 } as const satisfies ApplicationManifest
 export * from './model.js'

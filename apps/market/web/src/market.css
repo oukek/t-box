@@ -530,7 +530,7 @@
 }
 @media (max-width: 640px) {
   .market-page {
-    padding: 0 0 24px;
+    padding: 12px max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
   .market-page .application-page-header {
     margin-bottom: 12px;

@@ -69,12 +69,12 @@ const apps = computed(() =>
       : []
   }),
 )
-const viewport = ref({ width: innerWidth, height: innerHeight })
+const viewportWidth = ref(innerWidth)
 const shelf = ref<HTMLElement>()
 const shelfHeight = ref(0)
 let observer: ResizeObserver | undefined
 const measure = () => {
-  viewport.value = { width: innerWidth, height: innerHeight }
+  viewportWidth.value = innerWidth
   shelfHeight.value = shelf.value?.clientHeight ?? 0
 }
 onMounted(() => {
@@ -89,19 +89,15 @@ onBeforeUnmount(() => {
   observer?.disconnect()
   window.removeEventListener('resize', measure)
 })
-const narrow = computed(() => viewport.value.width <= 620)
-const dock = computed(() => narrow.value && viewport.value.height >= 550 && !editing.value
-  ? ['todo', 'ledger', 'calendar'].flatMap((id) => apps.value.filter((app) => app.manifest.id === id))
-  : [])
-const gridApps = computed(() => apps.value.filter((app) => !dock.value.includes(app)))
+const narrow = computed(() => viewportWidth.value <= 620)
 const capacity = computed(() => {
   const size = desktopIconSizes[preferences.iconSize].pixels
   const rows = Math.max(1, Math.min(narrow.value ? 4 : 2, Math.floor((shelfHeight.value + 12) / (size + 42))))
   return (narrow.value ? 4 : 5) * rows
 })
 const page = ref(0)
-const pages = computed(() => Math.max(1, Math.ceil(gridApps.value.length / capacity.value)))
-const visibleApps = computed(() => editing.value ? gridApps.value : gridApps.value.slice(page.value * capacity.value, (page.value + 1) * capacity.value))
+const pages = computed(() => Math.max(1, Math.ceil(apps.value.length / capacity.value)))
+const visibleApps = computed(() => editing.value ? apps.value : apps.value.slice(page.value * capacity.value, (page.value + 1) * capacity.value))
 watch(pages, (count) => {
   page.value = Math.min(page.value, count - 1)
 })
@@ -295,8 +291,8 @@ const status = computed(() =>
         </article>
       </div>
     </div>
-    <footer class="desktop-bottom">
-      <nav v-if="pages > 1 && !editing" aria-label="桌面分页">
+    <footer v-if="pages > 1 && !editing" class="desktop-bottom">
+      <nav aria-label="桌面分页">
         <button
           :disabled="page === 0"
           aria-label="上一页"
@@ -309,29 +305,6 @@ const status = computed(() =>
           @click="turn(1)"
         >›</button>
       </nav>
-      <div
-        v-if="dock.length"
-        class="desktop-dock"
-        aria-label="常用应用"
-      >
-        <button
-          v-for="app in dock"
-          :key="app.manifest.id"
-          class="desktop-app-launch"
-          :aria-label="'打开' + app.manifest.name"
-          @click="launch(app)"
-          @keydown="keyboard($event, app.manifest.id)"
-          @contextmenu.prevent="beginEditing"
-        >
-          <LauncherIcon
-            :app-id="app.manifest.id"
-            :icon="app.manifest.icon"
-            :icon-asset="app.manifest.iconAsset"
-            :icon-variant="app.manifest.iconVariant"
-          />
-          <span class="desktop-app-name">{{ app.manifest.name }}</span>
-        </button>
-      </div>
     </footer>
     <p
       v-if="status || editing"

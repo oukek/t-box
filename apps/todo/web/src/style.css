@@ -370,8 +370,8 @@ dialog::backdrop {
     border: 0;
     padding: 15px 20px 0;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 10px;
   }
   .brand {
     font-size: 13px;
@@ -387,30 +387,25 @@ dialog::backdrop {
     font-size: 11px;
   }
   nav {
-    position: fixed;
-    inset: auto 0 0;
-    z-index: 2;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    background: #fffffff7;
-    border-top: 1px solid var(--line);
-    padding: 7px 5px max(8px, env(safe-area-inset-bottom));
-    gap: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
   }
   nav button {
-    flex-direction: column;
+    min-height: 44px;
     justify-content: center;
-    padding: 3px;
-    gap: 2px;
-    font-size: 11px;
+    gap: 4px;
+    padding: 4px 2px;
+    font-size: 12px;
   }
   nav button.active {
-    background: transparent;
+    background: var(--wash);
     color: var(--accent);
   }
   main {
     margin: 0;
-    padding: 28px 20px 88px;
+    padding: 22px 20px max(24px, env(safe-area-inset-bottom));
   }
   .heading {
     margin-bottom: 22px;
@@ -610,6 +605,9 @@ button {
 .day-plan > .plain { margin-top: 8px; }
 @media (max-width: 730px) {
   .day-step { min-height: 62px; padding: 10px 6px; }
+}
+@media (max-width: 360px) {
+  .shell nav button svg { display: none; }
 }
 @media (max-width: 730px) { .shell .brand { margin: 0; } }
 

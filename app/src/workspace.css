@@ -140,8 +140,6 @@
 .desktop-bottom nav { display:flex; justify-content:center; align-items:center; font-size:12px; gap:8px; font-variant-numeric:tabular-nums; }
 .desktop-bottom nav button { min-width:44px; height:36px; background:none; border:0; color:white; font-size:22px; }
 .desktop-bottom nav button:disabled { opacity:.35; }
-.desktop-dock { --icon-size: 44px; display:flex; justify-content:space-evenly; border-top:1px solid #ffffff40; width:min(100%,335px); margin:auto; padding:10px 0 0; }
-.desktop-dock button { max-width:90px; }
 @media(max-width:620px){
   .super-app .desktop-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .super-app .desktop-clock { align-items:flex-start; margin:clamp(10px,3vh,35px) 5px clamp(18px,4.5vh,40px); }

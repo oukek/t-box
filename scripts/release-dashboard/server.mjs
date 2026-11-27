@@ -2,6 +2,7 @@ import { fork } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
+import { nodeDone, releaseGraph } from '../local-release-graph.mjs'
 import { completedPlan, loadPlan, planKey, releaseState, root, statePath, statePlanKey } from '../local-release-plan.mjs'
 
 const token = randomUUID()
@@ -19,43 +20,44 @@ async function snapshot() {
   const matches = state && statePlanKey(state) === key
   const batch = matches ? state : null
   const busy = !!worker || existsSync(statePath + '.lock')
-  const blocked = (state && !state.complete && !matches) || (worker && activeKey !== key)
+  const revise = !!state && !state.complete && !matches
+  const blocked = (revise && busy && !worker) || (worker && activeKey !== key)
   const receipt = completedPlan(state, key)
   const complete = !!receipt
-  const failed = activeKey === key && failure
-  const nodes = []
-  function node(id, group, label, done, link) {
-    nodes.push({ id, group, label, link, status: complete ? 'done' : (failed && id === activeNode) ? 'failed' : (worker && activeNode === id) ? (prompt ? 'confirm' : 'running') : done ? 'done' : 'pending' })
-  }
-  node('prepare', '准备', '检查配置并提交到 ' + plan.branch, batch?.pushed)
-  for (const step of steps) {
-    const run = batch?.runs[step.key]
-    node('build-' + step.key, '构建与部署', step.label, run?.done, run?.id && 'https://github.com/' + batch.repo + '/actions/runs/' + run.id)
-  }
-  node('approve', '上线', '核对候选并确认上线', batch?.approved)
-  if (plan.ui) {
-    node('publish-ui', '上线', '发布主界面 ' + plan.ui, batch?.ui?.verified)
-  }
-  for (const t of targets) {
-    const name = steps.find((s) => s.id === t.id)?.inputs.application.split(' (')[0] || ({ market: '应用市场', profile: '设置' })[t.id] || t.id
-    node('publish-' + t.id, '上线', '发布' + name + ' ' + t.version, batch?.targets.find((v) => v.id === t.id)?.verified)
-  }
-  // A separate CLI or a reopened dashboard can follow persisted checkpoints too.
-  if (!worker && busy && !complete && matches) {
-    const next = nodes.find((n) => n.status === 'pending')
-    if (next) {
-      next.status = 'running'
+  const nodes = releaseGraph({ plan, steps, targets }).map((n) => {
+    const progress = batch?.progress?.[n.id]
+    const run = n.step && batch?.runs[n.step.key]
+    let status = 'pending'
+    if (complete || nodeDone(n, batch)) {
+      status = 'done'
+    } else if (prompt && activeNode === n.id) {
+      status = 'confirm'
+    } else if (progress?.status === 'failed') {
+      status = 'failed'
+    } else if (busy && (progress?.status === 'running' || (worker && activeNode === n.id))) {
+      status = 'running'
+    } else if (!busy && progress?.status === 'running') {
+      status = 'paused'
+    } else if (activeKey === key && failure && activeNode === n.id && !batch?.progress) {
+      status = 'failed'
+    }
+    return { id: n.id, label: n.label, lane: n.lane, deps: n.deps, status, reason: progress?.error, failures: progress?.failures, jobs: run?.jobs, attempt: run?.attempt, actionStatus: run?.status, updated: run?.updatedAt, syncError: run?.syncError, reusedFrom: run?.reusedFrom, link: run?.id && 'https://github.com/' + batch.repo + '/actions/runs/' + run.id }
+  })
+  for (const n of nodes) {
+    if (n.status === 'pending' && n.deps.some((id) => ['failed', 'blocked'].includes(nodes.find((v) => v.id === id)?.status))) {
+      n.status = 'blocked'
     }
   }
-  return { key, token, plan, nodes, complete, completedAt: receipt?.at, busy, blocked: !!blocked, resume: !!batch && !complete, failed, prompt, sha: receipt?.sha || batch?.sha }
+  const failed = (activeKey === key && failure) || nodes.filter((n) => n.status === 'failed').map((n) => n.reason).filter(Boolean).join('\n')
+  return { key, token, plan, nodes, complete, completedAt: receipt?.at, busy, blocked: !!blocked, revise, resume: !!batch && !complete, failed, prompt, sha: receipt?.sha || batch?.sha }
 }
 
-function start(key, resume, retry) {
+function start(key, resume, retry, revise) {
   activeKey = key
   activeNode = 'prepare'
   failure = null
   prompt = null
-  worker = fork(new URL('../local-release.mjs', import.meta.url), [...(resume ? ['--resume'] : []), ...(retry ? ['--retry'] : [])], {
+  worker = fork(new URL('../local-release.mjs', import.meta.url), [...(revise ? ['--revise'] : []), ...(resume ? ['--resume'] : []), ...(retry ? ['--retry'] : [])], {
     cwd: root,
     execArgv: ['--env-file-if-exists=.env.release.local'],
     env: { ...process.env, TBOX_EXPECT_PLAN: key },
@@ -84,7 +86,7 @@ function start(key, resume, retry) {
   })
 }
 
-const assets = { '/': ['index.html', 'text/html'], '/page.css': ['page.css', 'text/css'], '/page.js': ['page.js', 'text/javascript'] }
+const assets = { '/': ['index.html', 'text/html'], '/page.css': ['page.css', 'text/css'], '/page.js': ['page.js', 'text/javascript'], '/graph.js': ['graph.js', 'text/javascript'] }
 const server = createServer(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store')
   res.setHeader('Content-Security-Policy', 'default-src \'self\'; frame-ancestors \'none\'; base-uri \'none\'; form-action \'none\'')
@@ -127,7 +129,7 @@ const server = createServer(async (req, res) => {
       throw new Error('计划已执行或已变化，请刷新页面')
     }
     if (req.url === '/start' && !state.busy && !worker) {
-      start(state.key, state.resume, state.resume && input.retry === true)
+      start(state.key, state.resume && input.revise !== true, state.resume && input.retry === true, state.revise || (state.resume && input.revise === true))
     } else if (req.url === '/answer' && worker && prompt && prompt.id === input.id) {
       const id = prompt.id
       prompt = null

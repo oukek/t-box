@@ -1,7 +1,10 @@
+import { drawGraph, inspectNode } from './graph.js'
+
 const byId = (id) => document.getElementById(id)
-const labels = { done: '已完成', running: '执行中', confirm: '待确认', pending: '待执行', failed: '已停止' }
+byId('hide-inspect').onclick = () => byId('inspect').close()
 let state
 let decision
+let selected
 let previousFlow
 let seenPrompt
 let sending = false
@@ -32,44 +35,29 @@ function render(s) {
   byId('error').hidden = !s.failed
   byId('error').textContent = s.failed || ''
   byId('start').hidden = s.complete || s.blocked || s.busy
-  byId('start').textContent = s.resume ? '继续本次发布' : '开始发布…'
+  byId('start').textContent = s.revise ? '核对修订计划…' : s.resume ? '继续本次发布' : '开始发布…'
+  byId('revise').hidden = byId('start').hidden || !s.resume || !s.nodes.some((n) => n.status === 'failed')
   byId('review').hidden = !s.prompt || s.blocked
-  byId('retry').hidden = byId('start').hidden || !s.resume
+  byId('retry').hidden = byId('start').hidden || !s.resume || !s.nodes.some((n) => n.status === 'failed')
   byId('locate').hidden = !live
   const signature = JSON.stringify(s.nodes)
   if (signature !== previousFlow) {
     previousFlow = signature
     const flow = byId('flow')
     flow.replaceChildren()
-    let group
-    let list
-    s.nodes.forEach((n, i) => {
-      if (group !== n.group) {
-        group = n.group
-        const heading = document.createElement('h3')
-        heading.textContent = group
-        list = document.createElement('ol')
-        flow.append(heading, list)
-      }
-      const li = document.createElement('li')
-      li.dataset.status = n.status
-      li.id = 'node-' + n.id
-      for (const [name, value] of [['dot', n.status === 'done' ? '✓' : i + 1], ['label', n.label], ['badge', labels[n.status]]]) {
-        const span = document.createElement('span')
-        span.className = name
-        span.textContent = String(value)
-        li.append(span)
-      }
-      if (n.link) {
-        const a = document.createElement('a')
-        a.href = n.link
-        a.textContent = 'Actions ↗'
-        a.target = '_blank'
-        a.rel = 'noreferrer'
-        li.append(a)
-      }
-      list.append(li)
+    drawGraph(flow, s.nodes, (n) => {
+      selected = n.id
+      inspectNode(n, s.nodes)
+      byId('inspect').showModal()
     })
+    if (selected && byId('inspect').open) {
+      const n = s.nodes.find((v) => v.id === selected)
+      if (n) {
+        inspectNode(n, s.nodes)
+      } else {
+        byId('inspect').close()
+      }
+    }
   }
   if (decision && (decision.key !== s.key || s.complete || s.blocked || (decision.data.id && decision.data.id !== s.prompt?.id))) {
     byId('dialog').close()
@@ -91,13 +79,14 @@ async function refresh() {
   }
   render(s)
 }
-function start(retry) {
-  dialog(state.resume ? '继续执行本次计划？' : '开始本次发布？', [state.plan.notes, ...state.nodes.filter((n) => n.status !== 'done').map((n) => '→ ' + n.label)].join('\n'), { path: '/start', data: { retry }, key: state.key })
+function start(retry, revise = false) {
+  dialog((revise || state.revise) ? '使用当前工作区修订本批次？' : state.resume ? '继续执行本次计划？' : '开始本次发布？', [state.plan.notes, ...state.nodes.filter((n) => n.status !== 'done').map((n) => '→ ' + n.label)].join('\n'), { path: '/start', data: { retry, revise }, key: state.key })
 }
 byId('start').onclick = () => start(false)
 byId('retry').onclick = () => start(true)
+byId('revise').onclick = () => start(false, true)
 byId('review').onclick = confirmPrompt
-byId('locate').onclick = () => document.querySelector('li:is([data-status="running"],[data-status="confirm"],[data-status="failed"])')?.scrollIntoView({ block: 'center' })
+byId('locate').onclick = () => document.querySelector('.graph-node:is([data-status="running"],[data-status="confirm"],[data-status="failed"])')?.scrollIntoView({ block: 'center' })
 byId('cancel').onclick = () => byId('dialog').close()
 byId('dialog').onclose = () => {
   decision = null

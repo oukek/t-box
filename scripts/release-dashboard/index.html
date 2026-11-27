@@ -22,12 +22,14 @@
         <p id="error" role="alert" hidden></p>
         <button id="start" hidden></button>
         <button id="retry" class="secondary" hidden>续跑并重试失败任务</button>
+        <button id="revise" class="secondary" hidden>使用修复后的代码…</button>
         <button id="review" hidden>查看并确认</button>
       </section>
       <p class="tip" id="tip"></p>
     </aside>
-    <section class="graph"><div class="graph-title"><h2>执行流程</h2><button id="locate" class="text" hidden>定位当前节点 ↓</button></div><div id="flow"></div></section>
+    <section class="graph"><div class="graph-title"><h2>执行流程</h2><button id="locate" class="text" hidden>定位当前节点 ↓</button></div><div class="board"><div id="flow"></div></div></section>
   </main>
+  <dialog id="inspect" aria-labelledby="inspect-title"><div class="inspect-head"><h2 id="inspect-title"></h2><button id="hide-inspect" class="secondary">关闭</button></div><div id="inspect-body"></div></dialog>
   <dialog id="dialog" aria-labelledby="dialog-title"><h2 id="dialog-title"></h2><pre id="summary"></pre><footer><button class="secondary" id="cancel">暂缓</button><button id="ok">确认</button></footer></dialog>
 </body>
 </html>

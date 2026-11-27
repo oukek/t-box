@@ -49,3 +49,47 @@ dialog::backdrop { background:#13283c65; }
 pre { max-height:50dvh; overflow:auto; background:var(--paper); padding:12px; border-radius:6px; font:13px/1.55 ui-monospace,monospace; }
 footer { display:flex; justify-content:flex-end; gap:10px; }
 @media(max-width:700px) { main { grid-template-columns:1fr; gap:22px; padding-top:22px; } aside { position:static; } .progress-card { margin-top:15px; } h1 { margin:6px 0 8px; } li { padding-inline:4px; gap:9px; } li::before { left:16px; } }
+
+/* The layout follows dependency depth. Connectors use actual card coordinates. */
+main { display:block; width:min(1680px,96%); padding:22px 0 48px; }
+aside { position:static; display:grid; grid-template-columns:minmax(200px,1fr) minmax(300px,.8fr); column-gap:32px; }
+.branch, h1, #notes { grid-column:1; }
+h1 { margin:5px 0; font-size:28px; }
+.progress-card { grid-row:1 / 5; grid-column:2; margin:0; padding:12px 17px; }
+.progress-card h2 { font-size:16px; }
+.progress-card button { width:auto; margin-right:7px; padding:5px 12px; }
+.progress-card progress { margin:4px 0; }
+.graph { margin-top:18px; }
+.board { overflow:auto; padding:0 2px 12px; }
+#flow { isolation:isolate; position:relative; display:flex; gap:24px; width:100%; min-width:max-content; padding:32px 4px 10px; align-items:stretch; }
+#flow svg { position:absolute; inset:0; width:100%; height:100%; z-index:-1; pointer-events:none; }
+#flow path { fill:none; stroke:#c8d2e0; stroke-width:1.4; }
+#flow path.passed { stroke:#87b7ac; }
+.graph-col { width:clamp(128px,13vw,190px); flex:1; display:flex; flex-direction:column; justify-content:center; gap:5px; }
+.column-title { position:absolute; top:0; margin:0; color:#65778c; font-size:12px; }
+.graph-node { padding:6px 9px; border:1px solid #ccd7e2; border-radius:7px; background:#fff; color:#273c53; text-align:left; line-height:1.3; cursor:pointer; }
+.graph-node:hover,.graph-node:focus-visible { border-color:#417ac9; box-shadow:0 1px 5px #24426520; }
+.node-name,.node-status { display:block; overflow-wrap:anywhere; }
+.node-name {font-size:13px; }
+.node-status { margin-top:2px; font-size:11px; color:#65778c; font-weight:500; }
+.graph-node[data-status=done] { border-color:#a2c4ba; background:#f3faf7; }
+.graph-node[data-status=done] small { color:#356d60; }
+.graph-node:is([data-status=running],[data-status=confirm]) { border-color:#437ed3; background:#e9f1ff; }
+.graph-node[data-status=failed],.failure-note { border-color:#d09487; background:#ffede8; color:#8a3327; }
+#inspect { width:min(600px,94vw); max-height:85dvh; overflow:auto; }
+.inspect-head,.job-step { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.inspection-status { margin:10px 0; font-weight:600; }
+.prereqs,.job-step small { font-size:13px; color:var(--muted); }
+.failure-note { margin:8px 0; padding:8px 10px; border-radius:6px; }
+.job-step { padding:7px 0; border-bottom:1px solid var(--rule); font-size:13px; }
+.job-step span { overflow-wrap:anywhere; } .job-step small {white-space:nowrap;}
+.job-step.in_progress { color:#235dbc; font-weight:650; }
+.job-step.failure { color:#a02931; }
+@media(max-width:700px) {
+  aside { display:block; } .progress-card { margin-top:14px; }
+  #flow { flex-direction:column; gap:34px; min-width:0; padding-top:24px; }
+  .graph-col { position:relative; width:100%; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .graph-col:has(.graph-node:only-of-type) { display:flex; align-items:center; }
+  .graph-col:has(.graph-node:only-of-type) .graph-node { min-width:48%; }
+  .column-title { top:-20px; left:0; background:var(--paper); }
+}

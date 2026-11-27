@@ -474,6 +474,7 @@ onBeforeUnmount(() => {
         v-for="(t, i) in tabs"
         :key="t"
         :class="{ active: tab === i }"
+        :aria-current="tab === i ? 'page' : undefined"
         @click="go(i)"
       >
         <AppIcon :name="icons[i]" />{{ t }}
