@@ -15,6 +15,7 @@ import {
   ShopProductEntity,
   ShopWorkspaceEntity,
 } from './entities.js'
+import { OptimizationService } from './optimization.js'
 
 import { authorize, projects } from './projects.js'
 
@@ -45,8 +46,10 @@ function invocationKey(value: unknown): asserts value is string {
 export class ShopToolsService {
   private readonly data = createDataService()
   private readonly creative: CreativeService
+  private readonly optimization: OptimizationService
   constructor(private readonly source: DataSource, models?: (r: BackendInvocation) => CreativeModel) {
     this.creative = new CreativeService(source, models)
+    this.optimization = new OptimizationService(source, models)
   }
 
   private async current(
@@ -184,6 +187,10 @@ export class ShopToolsService {
     signal?.throwIfAborted()
     if (r.method === 'catalog') {
       invocationKey(r.invocationId)
+      if (String((r.arguments as { action?: string })?.action).startsWith('ai-')) {
+        await this.source.transaction((db) => this.current(db, r, 'pessimistic_read'))
+        return this.optimization.invoke(r)
+      }
       return this.source.transaction(async (db) => {
         await this.current(db, r, 'pessimistic_write')
         return new ShopCatalog(this.source).invoke(db, r)

@@ -3,11 +3,14 @@ import type { CreativeModel } from '@t-box/shop-tools-server'
 import type { ConfigurationService } from '../admin/service.js'
 import type { PlatformService } from '../platform/service.js'
 import { randomUUID } from 'node:crypto'
+import sharp from 'sharp'
 import { DatabaseChatProvider } from '../admin/runtime.js'
 import { applicationActor } from '../application-platform/actor-context.js'
 import { publicRunError } from '../chat/errors.js'
 import { ErrorCode } from '../error-codes.js'
 import { ApplicationFiles } from '../resources/application-files.js'
+import { downloadImage } from '../resources/image-output.js'
+import { catalogImagePrompt, catalogTextPrompt } from './shop-optimization-prompts.js'
 
 export function shopCreativeModel(platform: PlatformService, configuration: ConfigurationService | undefined, r: BackendInvocation): CreativeModel {
   const actor = applicationActor.getStore()
@@ -26,6 +29,44 @@ export function shopCreativeModel(platform: PlatformService, configuration: Conf
     return content
   }
   return {
+    async catalogText(input, signal) {
+      const model = await new DatabaseChatProvider(configuration, platform.billing, platform.providerConcurrency).forRun({ supportsVision: false })
+      const { snapshot, slots } = input
+      let output = ''
+      try {
+        await model.next({ history: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({ country: snapshot.country, language: snapshot.rules.language, projectRequirements: snapshot.rules.prompt, taskRequirements: snapshot.supplement, source: { title: snapshot.source.title, description: snapshot.source.description, skus: snapshot.source.skus.filter((s) => slots.some((slot) => slot.skuId === s.id)).map((s) => ({ id: s.id, name: s.name, code: s.code })) }, slots: slots.map((s) => ({ id: s.id, text: s.text, skuId: s.skuId })) }) }] }], instructions: catalogTextPrompt, tools: [], signal, onDelta: (v) => {
+          output += v
+        }, localDate: new Date().toISOString().slice(0, 10), execution: { operationId: randomUUID(), userId: actor.user.id, agentId: 'shop-tools', purpose: 'response' } })
+      } catch (e) {
+        throw new Error(publicRunError(e).message)
+      }
+      try {
+        return JSON.parse(output.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))
+      } catch {
+        throw new Error('模型未返回有效的结构化结果，请重试')
+      }
+    },
+    async catalogImage(input, asset, signal, authorizeFile) {
+      try {
+        const bytes = asset.fileId ? (await platform.resources.readForApplication(asset.fileId, () => authorizeFile(asset.fileId!))).bytes : await downloadImage(asset.url, signal)
+        const normalized = await sharp(bytes, { limitInputPixels: 40_000_000 }).rotate().resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true }).png().toBuffer()
+        const original = await files.upload(actor, 'shop-tools', '商品原图.png', normalized)
+        const { snapshot } = input
+        const sku = snapshot.source.skus.find((s) => s.id === asset.skuId)
+        const prompt = catalogImagePrompt + '\n' + JSON.stringify({ country: snapshot.country, language: snapshot.rules.language, projectRequirements: snapshot.rules.prompt, taskRequirements: snapshot.supplement, assetId: asset.id, position: asset.position, role: sku ? 'SKU 图片' : '商品图片', sku: sku ? { id: sku.id, name: sku.name, code: sku.code } : null, title: snapshot.source.title, description: snapshot.source.description.slice(0, 8000) })
+        const generated = await platform.images.forRun(actor, signal)({ prompt, resourceIds: [original.id], tier: '1k' }, true)
+        const id = generated.resources[0]!.id
+        await files.grantCreatedResource(actor, 'shop-tools', r.generation, id)
+        return id
+      } catch (e) {
+        throw new Error(publicRunError(e).message)
+      }
+    },
+    async catalogPreview(id, authorizeFile) {
+      const file = await platform.resources.readForApplication(id, () => authorizeFile(id))
+      const bytes = await sharp(file.bytes, { limitInputPixels: 40_000_000 }).rotate().resize({ width: 1000, height: 1000, fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()
+      return { mime: 'image/webp', base64: bytes.toString('base64') }
+    },
     async text(input, signal) {
       const fields = input.fields.filter((f) => f !== 'image')
       const image = input.imageId ? await original(input.imageId) : null

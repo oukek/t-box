@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { AppClient } from '@t-box/app-sdk'
 import type { CollectionItem } from '@t-box/shop-tools-contracts'
-import { Modal } from '@t-box/ui-kit'
 import FormControl from '@t-box/ui-kit/FormControl.vue'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import CollectionDetail from './CollectionDetail.vue'
 
 import CollectorDownload from './CollectorDownload.vue'
 
@@ -17,6 +17,11 @@ const offset = ref<number | null>(0)
 const busy = ref(false)
 const error = ref('')
 const detail = ref<CollectionItem>()
+const search = ref('')
+const visible = computed(() => items.value.filter((item) => `${item.data.title} ${item.data.sourceId} ${item.data.platformName}`.toLowerCase().includes(search.value.trim().toLowerCase())))
+function thumbnail(item: CollectionItem) {
+  return item.data.assets.find((a) => a.role === 'main')?.url || item.data.variants.flatMap((s) => s.images)[0] || ''
+}
 async function load() {
   if (offset.value === null) {
     return
@@ -62,10 +67,15 @@ onMounted(load)
     <CollectorDownload v-if="collectorDownload" @close="collectorDownload = false" />
     <p v-if="error" role="alert">{{ error }}</p>
     <p class="muted">{{ projectId ? '选择个人采集表中的商品；当前项目已认领的商品不可重复选择。' : '插件确认采集后的个人商品，不随项目切换。来源图片以原链接展示。' }}</p>
+    <div class="toolbar collection-toolbar"><strong>已加载 {{ items.length }} 件</strong><FormControl
+      v-model="search"
+      placeholder="筛选已加载商品"
+      aria-label="筛选已加载商品"
+    /></div>
     <div
-      v-for="item in items"
+      v-for="item in visible"
       :key="item.id"
-      class="site-row"
+      class="collection-product-row"
     >
       <FormControl
         v-if="projectId"
@@ -75,9 +85,21 @@ onMounted(load)
         :aria-label="'认领 ' + item.data.title"
         @change="toggle(item.id, ($event.target as HTMLInputElement).checked)"
       />
-      <div class="catalog-item"><strong>{{ item.data.title }}</strong><small>{{ item.data.platformName }} · {{ item.data.variants.length }} 个 SKU · {{ item.data.price.currency || '币种待确认' }} {{ item.data.price.amount || '价格待确认' }}</small><small v-if="claimed.includes(item.id)">本项目已认领</small></div>
-      <button @click="detail = item">查看原商品</button>
+      <button class="collection-product-cell" @click="detail = item">
+        <span class="collection-product-thumb"><img
+          v-if="thumbnail(item)"
+          :src="thumbnail(item)"
+          alt=""
+          loading="lazy"
+          referrerpolicy="no-referrer"
+        ><span v-else>暂无图片</span></span>
+        <span><strong>{{ item.data.title }}</strong><small>{{ item.data.platformName }} · {{ item.data.sourceId || '编号未获取' }}</small></span>
+      </button>
+      <div class="collection-row-price"><strong>{{ item.data.price.amount === null ? '价格未获取' : `${item.data.price.currency || '币种待核对'} ${item.data.price.amount}` }}</strong><small>{{ item.data.variants.length }} 条规格 · {{ item.data.assets.length }} 项媒体</small></div>
+      <span v-if="claimed.includes(item.id)" class="collection-claimed">本项目已认领</span>
+      <button @click="detail = item">查看详情</button>
     </div>
+    <p v-if="items.length && !visible.length">没有匹配的商品，试试其他关键词。</p>
     <p v-if="!busy && !items.length">还没有商品，请在插件中选择商品并点击“确认采集”。</p>
     <div class="toolbar"><button
       v-if="offset !== null"
@@ -89,32 +111,99 @@ onMounted(load)
       :disabled="busy || !selected.length"
       @click="claim"
     >确认认领 {{ selected.length }} 件</button></div>
-    <Modal
-      :open="!!detail"
-      title="原商品资料"
-      @close="detail = undefined"
-    >
-      <div v-if="detail" class="shop-dialog-body">
-        <h3>{{ detail.data.title }}</h3><p style="white-space: pre-wrap">{{ detail.data.description }}</p>
-        <a
-          v-if="detail.data.sourceUrl"
-          :href="detail.data.sourceUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-        >查看来源</a>
-        <div class="catalog-images"><img
-          v-for="asset in detail.data.assets.filter(a => a.role === 'main' || a.role === 'detail').slice(0, 30)"
-          :key="asset.url"
-          :src="asset.url"
-          loading="lazy"
-          alt="来源商品图片"
-        ></div>
-        <div
-          v-for="sku in detail.data.variants"
-          :key="sku.id"
-          class="site-row"
-        ><span>{{ sku.attributes.map(a => a.name + ': ' + a.value).join(' / ') || sku.sku || sku.id }}</span><span>{{ sku.currency }} {{ sku.price }}</span></div>
-      </div>
-    </Modal>
+    <CollectionDetail :product="detail?.data || null" @close="detail = undefined" />
   </section>
 </template>
+
+<style scoped>
+.collection-toolbar {
+  justify-content: space-between;
+  margin-block: 16px;
+}
+.collection-toolbar :deep(input) {
+  max-width: 280px;
+}
+.collection-product-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid #edf1f4;
+}
+.collection-product-cell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 0;
+  gap: 16px;
+}
+.collection-product-thumb {
+  width: 70px;
+  height: 76px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f2f5f7;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: #718391;
+  font-size: 11px;
+}
+.collection-product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.collection-product-cell > span:last-child {
+  min-width: 0;
+}
+.collection-product-cell strong {
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.65;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.collection-product-cell small,
+.collection-row-price small {
+  display: block;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.collection-row-price {
+  min-width: 125px;
+}
+.collection-row-price strong {
+  font:
+    500 14px 'SFMono-Regular',
+    monospace;
+}
+.collection-claimed {
+  font-size: 11px;
+  padding: 4px 7px;
+  background: #edf6f2;
+  color: #19735b;
+  border-radius: 5px;
+}
+@media (max-width: 600px) {
+  .collection-product-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .collection-product-cell {
+    flex-basis: calc(100% - 48px);
+  }
+  .collection-row-price {
+    flex: 1;
+  }
+  .collection-toolbar :deep(input) {
+    max-width: 100%;
+  }
+}
+</style>

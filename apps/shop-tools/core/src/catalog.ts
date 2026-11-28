@@ -37,13 +37,22 @@ export function parseCollected(value: unknown): CollectedProduct {
   const money = (n: unknown) => n === null || n === undefined ? null : text(String(n), 80)
   return { id: text(v.id, 200, true), platform: text(v.platform, 80, true), platformName: text(v.platformName, 100), sourceId: text(v.sourceId, 200), sourceUrl: url(v.sourceUrl), title: text(v.title, 1000, true), description: text(v.description, 100000), capturedAt: text(v.capturedAt, 80), price: { amount: money(v.price?.amount), currency: v.price?.currency ? text(v.price.currency, 8) : null }, assets: array<CollectedProduct['assets'][number]>(v.assets ?? [], 500).map((a) => ({ url: url(a.url), role: text(a.role, 30) })), attributes: pairs(v.attributes), packaging: pairs(v.packaging), variants: array<SourceSku>(v.variants ?? [], 1000).map((a) => ({ id: text(a.id, 200, true), sku: text(a.sku ?? '', 200), attributes: pairs(a.attributes), price: money(a.price), currency: a.currency ? text(a.currency, 8) : null, images: array<string>(a.images ?? [], 100).map(url) })) }
 }
-export function parseCatalogContent(value: unknown, currency: string): CatalogContent {
+export function parseCatalogContent(value: unknown, currency: string, previous?: CatalogContent): CatalogContent {
   const v = value as CatalogContent
   if (!v || !Array.isArray(v.skus) || !v.skus.length) {
     throw ShopError.invalid('至少保留一个 SKU')
   }
   const ids = new Set<string>()
-  return { title: text(v.title, 1000, true), description: text(v.description, 100000), images: array<string>(v.images, 500).map(url), ...(v.imageFileId ? { imageFileId: text(v.imageFileId, 200) } : {}), skus: array<CatalogSku>(v.skus, 1000).map((s) => {
+  const mediaIds = new Set<string>()
+  if (v.media !== undefined) {
+    for (const a of array<import('@t-box/shop-tools-contracts').CatalogMedia>(v.media, 10000)) {
+      if (!a || typeof a.id !== 'string' || mediaIds.has(a.id) || !a.id.startsWith('image:') || !Number.isSafeInteger(a.position) || a.position < -1 || a.position > 10000 || (a.skuId !== null && !v.skus.some((s) => s.id === a.skuId))) {
+        throw ShopError.invalid('图片标识、位置或所属 SKU 无效')
+      }
+      mediaIds.add(a.id)
+    }
+  }
+  return { title: text(v.title, 1000, true), description: text(v.description, 100000), images: array<string>(v.images, 500).map(url), ...(v.media ? { media: array<import('@t-box/shop-tools-contracts').CatalogMedia>(v.media, 10000).map((a) => ({ id: text(a.id, 160, true), skuId: a.skuId === null ? null : text(a.skuId, 80, true), position: Number(a.position), url: url(a.url), ...(a.fileId ? { fileId: text(a.fileId, 80, true) } : {}) })) } : previous?.media ? { media: previous.media } : {}), videos: array<string>(v.videos === undefined ? previous?.videos ?? [] : v.videos, 500).map(url), ...(v.imageFileId ? { imageFileId: text(v.imageFileId, 200) } : {}), skus: array<CatalogSku>(v.skus, 1000).map((s) => {
     const id = text(s.id, 80, true)
     if (ids.has(id)) {
       throw ShopError.invalid('SKU 标识重复')
@@ -66,6 +75,14 @@ export function parseCatalogContent(value: unknown, currency: string): CatalogCo
       }
       pricing = { ...pricing, sheetId: text(pricing.sheetId, 80), sheetName: text(pricing.sheetName, 100), result, time: new Date().toISOString() }
     }
-    return { id, code: text(s.code, 200), name: text(s.name, 1000, true), sourceSkuId: s.sourceSkuId === null ? null : text(s.sourceSkuId, 200), cost: s.cost, price: s.price, currency, pricing }
+    return { id, images: array<string>(s.images === undefined ? previous?.skus.find((old) => old.id === id)?.images ?? [] : s.images, 100).map(url), code: text(s.code, 200), name: text(s.name, 1000, true), sourceSkuId: s.sourceSkuId === null ? null : text(s.sourceSkuId, 200), cost: s.cost, price: s.price, currency, pricing }
+  }) }
+}
+
+/** Hydrate only absent legacy fields; never match by row position or restore deliberately removed media. */
+export function restoreCatalogMedia(content: CatalogContent, source?: CollectedProduct): CatalogContent {
+  return { ...content, videos: content.videos ?? [...new Set(source?.assets.filter((a) => a.role === 'video').map((a) => a.url) ?? [])], skus: content.skus.map((sku) => {
+    const matches = sku.sourceSkuId ? source?.variants.filter((v) => v.id === sku.sourceSkuId) ?? [] : []
+    return { ...sku, images: sku.images ?? (matches.length === 1 ? [...matches[0]!.images] : []) }
   }) }
 }

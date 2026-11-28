@@ -397,8 +397,10 @@ export function routesFrom(
     return index(a.site) - index(b.site)
   })
 }
-export { parseCatalogContent, parseCollected } from './catalog.js'
+export { parseCatalogContent, parseCollected, restoreCatalogMedia } from './catalog.js'
 
 export * from './creative.js'
+
+export * from './optimization.js'
 
 export * from './workspace.js'

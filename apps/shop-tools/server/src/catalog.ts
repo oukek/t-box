@@ -3,7 +3,7 @@ import type { CatalogContent, CollectedProduct } from '@t-box/shop-tools-contrac
 import type { DataSource, EntityManager } from 'typeorm'
 import { fingerprint } from '@t-box/server-foundation/persistence/operations'
 import { projectSites, ShopError } from '@t-box/shop-tools-contracts'
-import { parseCatalogContent, parseCollected, parseTemplates } from '@t-box/shop-tools-core'
+import { catalogMedia, parseCatalogContent, parseCollected, parseTemplates, restoreCatalogMedia } from '@t-box/shop-tools-core'
 import { AssistantSettingsEntity, CatalogEntity, CollectionEntity, ProjectSiteEntity, VersionEntity } from './catalog-entities.js'
 import { CreativeEntity, ShopWorkspaceEntity } from './entities.js'
 import { authorize } from './projects.js'
@@ -114,8 +114,10 @@ export class ShopCatalog {
     if (!product) {
       throw ShopError.denied()
     }
+    const source = await db.findOneBy(CollectionEntity, { id: product.source })
     if (a.action === 'get') {
-      return { product, versions: await db.find(VersionEntity, { where: { product: product.id }, order: { createdAt: 'ASC', id: 'ASC' } }) }
+      const versions = await db.find(VersionEntity, { where: { product: product.id }, order: { createdAt: 'ASC', id: 'ASC' } })
+      return { product, versions: versions.map((v) => ({ ...v, content: restoreCatalogMedia(v.content, source?.data) })) }
     }
     if (!site) {
       throw ShopError.invalid('请配置项目站点')
@@ -135,7 +137,7 @@ export class ShopCatalog {
       if (await db.existsBy(VersionEntity, { id })) {
         return { id }
       }
-      const content = structuredClone(version.content)
+      const content = structuredClone(restoreCatalogMedia(version.content, source?.data))
       if (a.creationId) {
         const creation = await db.findOneBy(CreativeEntity, { id: String(a.creationId), subject: r.subject, project })
         if (!creation || creation.status !== 'finished' || creation.errors.length) {
@@ -154,7 +156,16 @@ export class ShopCatalog {
       await db.update(CatalogEntity, { id: product.id }, { modified: true })
       return { id }
     }
-    const content = parseCatalogContent(a.content, site.currency)
+    const previous = restoreCatalogMedia(version.content, source?.data)
+    const content = parseCatalogContent(a.content, site.currency, previous)
+    const allowed = catalogMedia(previous)
+    if (content.media?.some((asset) => asset.fileId && !allowed.some((old) => old.id === asset.id && old.fileId === asset.fileId && old.skuId === asset.skuId))) {
+      throw ShopError.denied()
+    }
+    if (content.imageFileId && content.imageFileId !== previous.imageFileId) {
+      throw ShopError.denied()
+    }
+    content.media = catalogMedia(content)
     if (typeof a.name !== 'string' || !a.name.trim() || a.name.length > 80) {
       throw ShopError.invalid('版本名称无效')
     }
@@ -165,6 +176,6 @@ export class ShopCatalog {
 
   private initial(data: CollectedProduct, currency: string): CatalogContent {
     const sources = data.variants.length ? data.variants : [{ id: '', sku: '', attributes: [], price: data.price.amount, currency: data.price.currency, images: [] }]
-    return { title: data.title, description: data.description, images: data.assets.filter((a) => a.role === 'main' || a.role === 'detail').map((a) => a.url), skus: sources.map((s) => ({ id: crypto.randomUUID(), code: s.sku, name: s.attributes.map((a) => `${a.name}: ${a.value}`).join(' / ') || '默认规格', sourceSkuId: s.id || null, cost: s.currency === 'CNY' && s.price !== null && Number.isFinite(Number(s.price)) && Number(s.price) >= 0 ? Number(s.price) : null, currency, price: null, pricing: null })) }
+    return { title: data.title, description: data.description, videos: [...new Set(data.assets.filter((a) => a.role === 'video').map((a) => a.url))], images: data.assets.filter((a) => a.role === 'main' || a.role === 'detail').map((a) => a.url), skus: sources.map((s) => ({ id: crypto.randomUUID(), images: [...s.images], code: s.sku, name: s.attributes.map((a) => `${a.name}: ${a.value}`).join(' / ') || '默认规格', sourceSkuId: s.id || null, cost: s.currency === 'CNY' && s.price !== null && Number.isFinite(Number(s.price)) && Number(s.price) >= 0 ? Number(s.price) : null, currency, price: null, pricing: null })) }
   }
 }

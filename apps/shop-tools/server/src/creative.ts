@@ -1,5 +1,5 @@
 import type { BackendInvocation } from '@t-box/app-contracts'
-import type { Creation, CreativeInput } from '@t-box/shop-tools-contracts'
+import type { CatalogMedia, Creation, CreativeInput, OptimizationModelInput } from '@t-box/shop-tools-contracts'
 import type { DataSource } from 'typeorm'
 import { fingerprint } from '@t-box/server-foundation/persistence/operations'
 import { ShopError } from '@t-box/shop-tools-contracts'
@@ -8,6 +8,10 @@ import { CreativeEntity } from './entities.js'
 import { authorize } from './projects.js'
 
 export interface CreativeModel {
+  catalogText?(input: OptimizationModelInput, signal: AbortSignal): Promise<Record<string, string>>
+  catalogImage?(input: OptimizationModelInput, asset: CatalogMedia, signal: AbortSignal, authorizeFile: (id: string) => Promise<void>): Promise<string>
+  catalogPreview?(id: string, authorizeFile: (id: string) => Promise<void>): Promise<{ mime: string, base64: string }>
+
   text(input: CreativeInput, signal: AbortSignal): Promise<Partial<Record<'title' | 'description', string>>>
   image(input: CreativeInput, signal: AbortSignal): Promise<string>
 }

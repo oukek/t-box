@@ -12,6 +12,7 @@ import {
   metadataOf,
   newRow,
   newSheet,
+  optimizationSlots,
 } from '@t-box/shop-tools-core'
 import { ShopCatalog, shopToolsSchema, ShopToolsService } from '@t-box/shop-tools-server'
 import mysql from 'mysql2/promise'
@@ -30,7 +31,8 @@ const control = await mysql.createConnection({
   password: config.password,
   connectTimeout: 5000,
 })
-// native-sql: isolated test database DDL; the random guarded name never targets an application database.
+// native-sql: isolated test database DDL;
+// the random guarded name never targets an application database.
 await control.query(
   `CREATE DATABASE ${database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
 )
@@ -40,7 +42,7 @@ try {
   const runner = source.createQueryRunner()
   await runner.connect()
   try {
-    assert.equal(await extendDatabase(runner, [shopToolsSchema]), 4)
+    assert.equal(await extendDatabase(runner, [shopToolsSchema]), 5)
     assert.equal(await extendDatabase(runner, [shopToolsSchema]), 0)
   } finally {
     await runner.release()
@@ -51,7 +53,23 @@ try {
       .every((m) => m.foreignKeys.length === 0),
   )
   let textCalls = 0
+  let catalogTextCalls = 0
+  let imageAttempts = 0
   const service = new ShopToolsService(source, () => ({
+    async catalogText(input) {
+      catalogTextCalls++
+      return Object.fromEntries([...input.slots].reverse().map((s) => [s.id, 'Translated ' + s.text]))
+    },
+    async catalogImage() {
+      if (++imageAttempts === 1) {
+        throw new Error('图片失败')
+      }
+      return 'generated-file'
+    },
+    async catalogPreview(id, authorize) {
+      await authorize(id)
+      return { mime: 'image/webp', base64: 'test' }
+    },
     async text() {
       textCalls++
       return { title: 'Travel cup' }
@@ -355,7 +373,7 @@ try {
   await assert.rejects(projectRead(other, projectId), { code: 'SHOP_PROJECT_DENIED' })
   // Collection ownership, duplicate claims, version conflicts and temporary generation.
   const catalog = new ShopCatalog(source)
-  const collected = { id: 'source-a', platform: '1688', platformName: '1688', sourceId: 'item-a', sourceUrl: 'https://example.com/item-a', title: '收纳盒', description: '来源描述', capturedAt: new Date().toISOString(), price: { amount: '10', currency: 'CNY' }, assets: [], attributes: [], packaging: [], variants: [{ id: 'sku-1', sku: 'WHITE', price: '10', currency: 'CNY', images: [], attributes: [{ name: '颜色', value: '白色' }] }] }
+  const collected = { id: 'source-a', platform: '1688', platformName: '1688', sourceId: 'item-a', sourceUrl: 'https://example.com/item-a', title: '收纳盒', description: '来源描述', capturedAt: new Date().toISOString(), price: { amount: '10', currency: 'CNY' }, assets: [{ role: 'video', url: 'https://example.com/product.mp4' }], attributes: [], packaging: [], variants: [{ id: 'sku-1', sku: 'WHITE', price: '10', currency: 'CNY', images: ['https://example.com/white.jpg'], attributes: [{ name: '颜色', value: '白色' }] }] }
   const imported = await catalog.collect(subject, [collected])
   assert.deepEqual(await catalog.collect(subject, [collected]), imported)
   const cat = <T = unknown>(actor: string, action: string, args: Record<string, unknown> = {}) => service.invoke(request(actor, 'catalog', { action, projectId, ...args }, randomUUID(), actor === subject ? 2 : 1)) as Promise<T>
@@ -368,6 +386,8 @@ try {
   const version = item.versions[0]!
   assert.equal(version.content.skus[0]!.cost, 10)
   assert.equal(version.content.skus[0]!.sourceSkuId, 'sku-1')
+  assert.deepEqual(version.content.skus[0]!.images, ['https://example.com/white.jpg'])
+  assert.deepEqual(version.content.videos, ['https://example.com/product.mp4'])
   const changed = { ...version.content, title: '修改后的商品' }
   await cat(subject, 'save', { id: item.product.id, versionId: version.id, revision: 0, name: version.name, content: changed })
   await assert.rejects(cat(subject, 'save', { id: item.product.id, versionId: version.id, revision: 0, name: version.name, content: changed }), { code: 'SHOP_CONFLICT' })
@@ -375,9 +395,58 @@ try {
   assert.ok(second.id)
   const updated = await cat<import('@t-box/shop-tools-contracts').CatalogDetail>(subject, 'get', { id: item.product.id })
   assert.equal(updated.versions.length, 2)
+  for (const saved of updated.versions) {
+    assert.deepEqual(saved.content.skus[0]!.images, ['https://example.com/white.jpg'])
+    assert.deepEqual(saved.content.videos, ['https://example.com/product.mp4'])
+  }
   assert.equal(updated.product.modified, true)
   assert.equal((await cat<{ items: import('@t-box/shop-tools-contracts').CollectionItem[] }>(subject, 'collection')).items[0]!.data.title, collected.title)
   await assert.rejects(cat(subject, 'set-site', { site: 'TH' }))
+  const productId = item.product.id
+  const settings = await cat<import('@t-box/shop-tools-contracts').ProjectPrompt>(subject, 'ai-settings')
+  const savedRules = await cat<import('@t-box/shop-tools-contracts').ProjectPrompt>(subject, 'ai-save-settings', { revision: settings.revision, rules: { language: '英语', prompt: '白底，保留商品事实' } })
+  await assert.rejects(cat(subject, 'ai-save-settings', { revision: 0, rules: settings }), { code: 'SHOP_CONFLICT' })
+  const choices = Object.fromEntries(optimizationSlots(updated.versions[0]!.content).map((s) => [s.id, { mode: 'optimize' }]))
+  const start = request(subject, 'catalog', { action: 'ai-start', projectId, productId, versionId: version.id, revision: 1, rulesRevision: savedRules.revision, choices, supplement: '' }, randomUUID(), 2)
+  const started = await service.invoke(start) as { id: string }
+  assert.deepEqual(await service.invoke(start), started)
+  await assert.rejects(service.invoke({ ...start, arguments: { ...start.arguments as object, supplement: 'different' } }), { code: 'SHOP_REPLAY_CONFLICT' })
+  const waitJob = async () => {
+    for (let i = 0; i < 200; i++) {
+      const j = await cat<import('@t-box/shop-tools-contracts').OptimizationJob>(subject, 'ai-get', { productId, jobId: started.id })
+      if (j.status === 'finished') {
+        return j
+      }
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    throw new Error('optimization timeout')
+  }
+  const failedJob = await waitJob()
+  assert.equal(catalogTextCalls, 1)
+  const failedIds = Object.keys(failedJob.results).filter((id) => failedJob.results[id]!.status === 'failed')
+  assert.equal(failedIds.length, 1)
+  await assert.rejects(cat(subject, 'ai-apply', { productId, jobId: started.id, edits: {} }))
+  await cat(subject, 'ai-save-settings', { revision: savedRules.revision, rules: { language: '泰语', prompt: '修改后的要求' } })
+  await cat(subject, 'ai-retry', { productId, jobId: started.id, ids: failedIds })
+  const complete = await waitJob()
+  assert.equal(complete.snapshot.rules.language, '英语')
+  assert.equal(catalogTextCalls, 1)
+  assert.equal(imageAttempts, 2)
+  const applied = await cat<{ id: string }>(subject, 'ai-apply', { productId, jobId: started.id, edits: { title: '确认标题' } })
+  assert.deepEqual(await cat(subject, 'ai-apply', { productId, jobId: started.id, edits: {} }), applied)
+  const final = await cat<import('@t-box/shop-tools-contracts').CatalogDetail>(subject, 'get', { id: productId })
+  assert.equal(final.versions.length, 3)
+  const optimized = final.versions.find((v) => v.id === applied.id)!
+  assert.equal(optimized.content.title, '确认标题')
+  assert.equal(optimized.content.skus[0]!.id, version.content.skus[0]!.id)
+  assert.equal(optimized.content.media![0]!.skuId, version.content.skus[0]!.id)
+  assert.equal(optimized.content.media![0]!.fileId, 'generated-file')
+  assert.equal(optimized.content.skus[0]!.cost, 10)
+  assert.deepEqual(optimized.content.videos, version.content.videos)
+  assert.equal(final.versions.find((v) => v.id === version.id)!.content.title, changed.title)
+  await cat(subject, 'ai-image', { productId, fileId: 'generated-file' })
+  await assert.rejects(cat(subject, 'ai-image', { productId, fileId: 'unrelated-file' }), { code: 'SHOP_PROJECT_DENIED' })
+  await assert.rejects(cat(other, 'ai-get', { productId, jobId: started.id }), { code: 'SHOP_PROJECT_DENIED' })
   const before = await source.getRepository('ShopToolsCreation').count()
   const temporary = await service.invoke(request(subject, 'creative', { temporary: true, action: 'create', input: { ...input, imageId: '', fields: ['title'] } }, randomUUID(), 2)) as { id: string }
   for (let i = 0; i < 100; i++) {

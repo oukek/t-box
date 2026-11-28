@@ -1,4 +1,5 @@
 import type { Product, Result, Route, Settings } from './index.js'
+import type { CatalogMedia } from './optimization.js'
 
 export const projectSites = [
   { value: 'MY', label: '马来西亚 · Shopee MY', currency: 'MYR' },
@@ -28,8 +29,8 @@ export interface CollectedProduct {
 }
 export interface CollectionItem { id: string, data: CollectedProduct, createdAt: string }
 export interface PricingSnapshot { sheetId: string, sheetName: string, row: Product, settings: Settings, route: Route, result: Result, time: string }
-export interface CatalogSku { id: string, code: string, name: string, sourceSkuId: string | null, cost: number | null, price: number | null, currency: string, pricing: PricingSnapshot | null }
-export interface CatalogContent { title: string, description: string, images: string[], imageFileId?: string, skus: CatalogSku[] }
+export interface CatalogSku { id: string, code: string, name: string, sourceSkuId: string | null, images?: string[], cost: number | null, price: number | null, currency: string, pricing: PricingSnapshot | null }
+export interface CatalogContent { title: string, description: string, images: string[], imageFileId?: string, media?: CatalogMedia[], videos?: string[], skus: CatalogSku[] }
 export interface CatalogProduct { id: string, project: string, source: string, title: string, modified: boolean, createdAt: string }
 export interface CatalogVersion { id: string, product: string, name: string, revision: number, content: CatalogContent, createdAt: string }
 export interface CatalogDetail { product: CatalogProduct, versions: CatalogVersion[] }

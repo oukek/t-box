@@ -1,7 +1,7 @@
 import type { CatalogContent, CollectedProduct, Route } from '@t-box/shop-tools-contracts'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { calculate, defaultConfig, newRow, parseCatalogContent, parseCollected } from '../core/src/index.js'
+import { calculate, defaultConfig, newRow, parseCatalogContent, parseCollected, restoreCatalogMedia } from '../core/src/index.js'
 
 const source: CollectedProduct = { id: 'id', platform: '1688', platformName: '1688', sourceId: 'source', sourceUrl: 'https://example.com/item', title: '商品', description: '描述', capturedAt: '2026-11-27', price: { amount: '12', currency: 'CNY' }, assets: [], attributes: [], packaging: [], variants: [] }
 test('collection whitelist strips unrelated data and rejects executable URLs or oversized SKU lists', () => {
@@ -24,4 +24,19 @@ test('pricing snapshot must match currency, original cost and recomputed sale pr
   tampered.skus[0]!.price = 1
   assert.throws(() => parseCatalogContent(tampered, 'MYR'))
   assert.throws(() => parseCatalogContent({ ...content, skus: [content.skus[0], content.skus[0]] }, 'MYR'))
+})
+
+test('legacy media follows source SKU identity, preserves explicit removals, and survives old-client saves', () => {
+  const original: CollectedProduct = { ...source, assets: [{ role: 'video', url: 'https://example.com/video.mp4' }], variants: ['red', 'blue'].map((id) => ({ id, sku: id, attributes: [], price: '10', currency: 'CNY', images: [`https://example.com/${id}.jpg`] })) }
+  const content: CatalogContent = { title: '商品', description: '', images: [], skus: ['blue', 'red', null].map((id, i) => ({ id: String(i), code: '', name: '规格', sourceSkuId: id, cost: null, price: null, currency: 'MYR', pricing: null })) }
+  const hydrated = restoreCatalogMedia(content, original)
+  assert.deepEqual(hydrated.skus.map((s) => s.images), [['https://example.com/blue.jpg'], ['https://example.com/red.jpg'], []])
+  assert.deepEqual(hydrated.videos, ['https://example.com/video.mp4'])
+  assert.deepEqual(parseCatalogContent(content, 'MYR', hydrated), parseCatalogContent(hydrated, 'MYR'))
+  hydrated.skus[0]!.images = []
+  hydrated.videos = []
+  assert.deepEqual(restoreCatalogMedia(hydrated, original), hydrated)
+  assert.throws(() => parseCatalogContent({ ...hydrated, videos: ['javascript:alert(1)'] }, 'MYR'))
+  assert.throws(() => parseCatalogContent({ ...hydrated, skus: [{ ...hydrated.skus[0], images: ['data:text/html,bad'] }] }, 'MYR'))
+  assert.deepEqual(parseCatalogContent({ ...hydrated, skus: [hydrated.skus[1]!, hydrated.skus[0]!] }, 'MYR').skus.map((s) => s.images), [['https://example.com/red.jpg'], []])
 })

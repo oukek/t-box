@@ -9,7 +9,7 @@ export const manifest = {
   icon: 'apps',
   iconAsset: applicationIcon,
   color: 'orange',
-  version: '1.4.2',
+  version: '1.5.0',
   skillIds: [],
 } as const satisfies ApplicationManifest
 export const currencies = [
@@ -243,3 +243,5 @@ export interface Creation {
 }
 
 export { ShopError } from './error-codes.js'
+
+export * from './optimization.js'

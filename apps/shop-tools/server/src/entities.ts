@@ -1,6 +1,7 @@
 import type { Config, Creation, Product, ProjectRole, WorkspaceMetadata, WorkspaceState } from '@t-box/shop-tools-contracts'
 import { EntitySchema } from 'typeorm'
 import { catalogEntities } from './catalog-entities.js'
+import { OptimizationEntity, PromptEntity } from './optimization-entities.js'
 
 export interface StoredWorkspace {
   subject: string
@@ -112,6 +113,8 @@ export const CreativeEntity = new EntitySchema<Creation & { subject: string, pro
 })
 export const shopToolsEntities = [
   ...catalogEntities,
+  PromptEntity,
+  OptimizationEntity,
   CreativeEntity,
   ProjectEntity,
   MemberEntity,

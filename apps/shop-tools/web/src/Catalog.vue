@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import type { AppClient } from '@t-box/app-sdk'
-import type { CatalogDetail, CatalogProduct, CatalogVersion, Creation, PricingSnapshot, ProjectSummary } from '@t-box/shop-tools-contracts'
+import type { CatalogDetail, CatalogProduct, CatalogVersion, PricingSnapshot, ProjectSummary } from '@t-box/shop-tools-contracts'
 import { projectSites } from '@t-box/shop-tools-contracts'
-import { clone } from '@t-box/shop-tools-core'
+import { catalogMedia, clone } from '@t-box/shop-tools-core'
 import { Modal, SheetSelect } from '@t-box/ui-kit'
 import FormControl from '@t-box/ui-kit/FormControl.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import CatalogImage from './CatalogImage.vue'
 import Collection from './Collection.vue'
-import CreativeStudio from './CreativeStudio.vue'
 import EditDialog from './EditDialog.vue'
+import ProductOptimization from './ProductOptimization.vue'
+import ProductVideos from './ProductVideos.vue'
 import SkuPricing from './SkuPricing.vue'
 
 const props = defineProps<{ client: AppClient, project: ProjectSummary, showCreative: boolean }>()
@@ -21,6 +23,13 @@ const claiming = ref(false)
 const detail = ref<CatalogDetail>()
 const draft = ref<CatalogVersion>()
 const ai = ref(false)
+const optimizer = ref<InstanceType<typeof ProductOptimization>>()
+async function closeAI() {
+  try {
+    await optimizer.value?.flush()
+    ai.value = false
+  } catch {}
+}
 const pricing = ref<number | null>(null)
 const skuSearch = ref('')
 const skuPage = ref(0)
@@ -64,10 +73,6 @@ async function open(id: string, versionId?: string) {
     URL.revokeObjectURL(previewUrl.value)
   }
   previewUrl.value = ''
-  if (draft.value.content.imageFileId) {
-    const file = await props.client.files.read(draft.value.content.imageFileId)
-    previewUrl.value = URL.createObjectURL(file.blob)
-  }
 }
 const dirty = computed(() => !!draft.value && JSON.stringify(draft.value) !== JSON.stringify(detail.value?.versions.find((v) => v.id === draft.value?.id)))
 async function save() {
@@ -77,17 +82,24 @@ async function save() {
   await load(true)
 }
 let versionKey: string | undefined
-async function version(creation?: Creation) {
+async function version() {
   if (dirty.value) {
     error.value = '请先保存当前商品修改，再创建版本'
     return
   }
   versionKey ||= crypto.randomUUID()
-  const { id } = await call<{ id: string }>('version', { id: detail.value!.product.id, versionId: draft.value!.id, revision: draft.value!.revision, ...(creation ? { creationId: creation.id } : {}) }, versionKey)
+  const { id } = await call<{ id: string }>('version', { id: detail.value!.product.id, versionId: draft.value!.id, revision: draft.value!.revision }, versionKey)
   versionKey = undefined
   ai.value = false
   await open(detail.value!.product.id, id)
   await load(true)
+}
+function removeImage(id: string) {
+  const content = draft.value!.content
+  const media = catalogMedia(content).filter((a) => a.id !== id)
+  content.media = media
+  delete content.imageFileId
+  content.images = media.filter((a) => !a.skuId).map((a) => a.url)
 }
 function resetPrice(index: number) {
   const sku = draft.value!.content.skus[index]!
@@ -194,15 +206,14 @@ onMounted(() => run(() => load(true)))
           rows="5"
           :readonly="readonly"
         /></label>
-        <div class="catalog-images"><img
-          v-if="previewUrl"
-          :src="previewUrl"
-          alt="AI 优化商品图片"
-        ><figure v-for="(url, index) in draft.content.images" :key="url + index"><img
-          :src="url"
+        <div class="catalog-images"><figure v-for="asset in catalogMedia(draft.content).filter(a => !a.skuId)" :key="asset.id"><CatalogImage
+          :client="client"
+          :project-id="project.id"
+          :product-id="detail.product.id"
+          :asset="asset"
           alt="商品图片"
-          loading="lazy"
-        ><button v-if="!readonly" @click="draft.content.images.splice(index, 1)">移除图片</button></figure></div>
+        /><button v-if="!readonly" @click="removeImage(asset.id)">移除图片</button></figure></div>
+        <ProductVideos :urls="draft.content.videos || []" />
         <div class="toolbar"><label class="field">筛选 SKU<FormControl
           v-model="skuSearch"
           placeholder="规格 / 编码"
@@ -210,9 +221,17 @@ onMounted(() => run(() => load(true)))
         /></label><span>{{ filtered.length }} 个 SKU</span><button
           v-if="!readonly"
           :disabled="draft.content.skus.length >= 1000"
-          @click="draft.content.skus.push({ id: newId(), code: '', name: '自定义规格', sourceSkuId: null, cost: null, price: null, currency, pricing: null }); skuSearch = ''; skuPage = Math.floor((draft.content.skus.length - 1) / 20)"
+          @click="draft.content.skus.push({ id: newId(), code: '', name: '自定义规格', sourceSkuId: null, images: [], cost: null, price: null, currency, pricing: null }); skuSearch = ''; skuPage = Math.floor((draft.content.skus.length - 1) / 20)"
         >添加 SKU</button></div>
-        <div class="catalog-table"><table><thead><tr><th>规格 / 自有编码</th><th>成本 CNY</th><th>折前售价 {{ currency }}</th><th>操作</th></tr></thead><tbody><tr v-for="{ sku, index } in visible" :key="sku.id"><td><FormControl
+        <div class="catalog-table"><table><thead><tr><th>SKU 图片</th><th>规格 / 自有编码</th><th>成本 CNY</th><th>折前售价 {{ currency }}</th><th>操作</th></tr></thead><tbody><tr v-for="{ sku, index } in visible" :key="sku.id"><td><div v-if="sku.images?.length" class="catalog-sku-images"><CatalogImage
+          v-for="asset in catalogMedia(draft.content).filter(a => a.skuId === sku.id)"
+          :key="asset.id"
+          :client="client"
+          :project-id="project.id"
+          :product-id="detail.product.id"
+          :asset="asset"
+          :alt="sku.name"
+        /></div><small v-else>暂无规格图</small></td><td><FormControl
           v-model="sku.name"
           :readonly="readonly"
           aria-label="SKU 规格"
@@ -228,7 +247,7 @@ onMounted(() => run(() => load(true)))
           :readonly="readonly"
           aria-label="采购成本人民币"
           @input="resetPrice(index)"
-        /><small v-if="sku.cost === null">需确认人民币成本</small></td><td>{{ sku.price === null ? '待定价' : sku.price }}<small v-if="sku.pricing">已保存计价参数</small></td><td><button :disabled="readonly || busy" @click="pricing = index">{{ sku.pricing ? '改价' : '算价' }}</button><button :disabled="readonly || busy" @click="draft.content.skus.splice(index, 1); skuPage = Math.min(skuPage, Math.max(0, Math.ceil(filtered.length / 20) - 1))">移除</button></td></tr></tbody></table></div>
+        /><small v-if="sku.cost === null">需确认人民币成本</small></td><td>{{ sku.price === null ? '待定价' : sku.price }}<small v-if="sku.pricing">已保存计价参数</small></td><td><button :disabled="readonly || busy" @click="pricing = index">{{ sku.pricing ? '改价' : '算价' }}</button><button :disabled="readonly || busy" @click="draft.content.media = draft.content.media?.filter(a => a.skuId !== sku.id); draft.content.skus.splice(index, 1); skuPage = Math.min(skuPage, Math.max(0, Math.ceil(filtered.length / 20) - 1))">移除</button></td></tr></tbody></table></div>
         <div class="toolbar"><button :disabled="skuPage === 0" @click="skuPage--">上一页</button><span>{{ skuPage + 1 }} / {{ Math.max(1, Math.ceil(filtered.length / 20)) }}</span><button :disabled="(skuPage + 1) * 20 >= filtered.length" @click="skuPage++">下一页</button></div>
       </template>
     </EditDialog>
@@ -245,15 +264,39 @@ onMounted(() => run(() => load(true)))
       :open="ai"
       title="AI 优化 · 创建商品新版本"
       class="shop-dialog shop-dialog-long"
-      @close="ai = false"
-    ><CreativeStudio
-      v-if="ai && draft"
+      @close="closeAI"
+    ><ProductOptimization
+      v-if="ai && draft && detail"
+      ref="optimizer"
       :client="client"
       :project="project"
-      :templates="[]"
-      visible
-      :initial="{ title: draft.content.title, description: draft.content.description, imageId: draft.content.imageFileId || '', rules: { title: '', description: '', image: '', language: ({ MY: '马来语', SG: '英语', TH: '泰语', TW: '繁体中文', ID: '印尼语', PH: '英语', VN: '越南语', BR: '葡萄牙语' } as Record<string, string>)[project.site || ''] || '' } }"
-      @apply="run(() => version($event))"
+      :version="draft"
+      :product-id="detail.product.id"
+      @apply="run(async() => { ai = false;await open(detail!.product.id, $event.id);await load(true) })"
     /></Modal>
   </main>
 </template>
+
+<style scoped>
+.catalog-sku-images {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 140px;
+  max-height: 148px;
+  overflow: auto;
+}
+.catalog-sku-images a {
+  display: block;
+  width: 60px;
+  height: 60px;
+}
+.catalog-sku-images img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border: 1px solid #dfe7ec;
+  border-radius: 6px;
+  background: #f8fafb;
+}
+</style>
