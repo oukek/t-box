@@ -1,8 +1,8 @@
 {
   "branch": "main",
-  "ui": "1.3.8",
+  "ui": "1.3.9",
   "deployApi": false,
-  "notes": "修复 Mac 电商助手采集图片、SKU 图片和视频加载\n恢复桌面及应用图标的鼠标右键菜单\nMac 新增开发者工具菜单，支持 Option + Command + I",
+  "notes": "修复 Mac 自动更新安装完成后无法退出、卡在等待重启的问题\n安装成功后显示重启阶段，下载和安装期间继续保留关闭保护",
   "applications": {},
-  "macosCore": "1.0.6"
+  "macosCore": "1.0.7"
 }

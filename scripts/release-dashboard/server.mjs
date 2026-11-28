@@ -1,9 +1,8 @@
 import { fork } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { nodeDone, releaseGraph } from '../local-release-graph.mjs'
-import { completedPlan, loadPlan, planKey, releaseState, root, statePath, statePlanKey } from '../local-release-plan.mjs'
+import { readPreview } from './read-preview.mjs'
 
 const token = randomUUID()
 let worker
@@ -12,23 +11,31 @@ let activeNode
 let failure
 let prompt
 let origin
+let activeView
 
 async function snapshot() {
-  const { plan, steps, targets } = await loadPlan()
-  const key = planKey(plan)
-  const state = releaseState()
-  const matches = state && statePlanKey(state) === key
-  const batch = matches ? state : null
-  const busy = !!worker || existsSync(statePath + '.lock')
-  const revise = !!state && !state.complete && !matches
-  const blocked = (revise && busy && !worker) || (worker && activeKey !== key)
-  const receipt = completedPlan(state, key)
+  const pinned = worker ? activeView : undefined
+  const data = await readPreview(pinned)
+  if ((pinned && !worker) || (!pinned && worker)) {
+    return snapshot()
+  }
+  const { plan, key } = data.view
+  const { state, batch, receipt } = data
+  const busy = !!worker || data.locked
+  const revise = !!state && !state.complete && !batch
+  const blocked = (revise && busy && !worker) || (worker && data.changed)
   const complete = !!receipt
-  const nodes = releaseGraph({ plan, steps, targets }).map((n) => {
+  if (!busy && activeKey && activeKey !== key) {
+    failure = null
+    prompt = null
+    activeNode = null
+    activeKey = undefined
+  }
+  const nodes = data.graph.map((n) => {
     const progress = batch?.progress?.[n.id]
     const run = n.step && batch?.runs[n.step.key]
     let status = 'pending'
-    if (complete || nodeDone(n, batch)) {
+    if (complete || n.done) {
       status = 'done'
     } else if (prompt && activeNode === n.id) {
       status = 'confirm'
@@ -49,16 +56,17 @@ async function snapshot() {
     }
   }
   const failed = (activeKey === key && failure) || nodes.filter((n) => n.status === 'failed').map((n) => n.reason).filter(Boolean).join('\n')
-  return { key, token, plan, nodes, complete, completedAt: receipt?.at, busy, blocked: !!blocked, revise, resume: !!batch && !complete, failed, prompt, sha: receipt?.sha || batch?.sha }
+  return { context: data, key, token, plan, nodes, complete, completedAt: receipt?.at, busy, blocked: !!blocked, revise, resume: !!batch && !complete, failed, prompt, sha: receipt?.sha || batch?.sha }
 }
 
-function start(key, resume, retry, revise) {
+function start(context, key, resume, retry, revise) {
+  activeView = context.view
   activeKey = key
   activeNode = 'prepare'
   failure = null
   prompt = null
   worker = fork(new URL('../local-release.mjs', import.meta.url), [...(revise ? ['--revise'] : []), ...(resume ? ['--resume'] : []), ...(retry ? ['--retry'] : [])], {
-    cwd: root,
+    cwd: context.root,
     execArgv: ['--env-file-if-exists=.env.release.local'],
     env: { ...process.env, TBOX_EXPECT_PLAN: key },
     stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
@@ -109,7 +117,8 @@ const server = createServer(async (req, res) => {
     }
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     if (req.method === 'GET' && req.url === '/status') {
-      res.end(JSON.stringify(await snapshot()))
+      const { context: _context, ...status } = await snapshot()
+      res.end(JSON.stringify(status))
       return
     }
     if (req.method !== 'POST' || req.headers.origin !== origin || req.headers['x-release-token'] !== token) {
@@ -129,7 +138,7 @@ const server = createServer(async (req, res) => {
       throw new Error('计划已执行或已变化，请刷新页面')
     }
     if (req.url === '/start' && !state.busy && !worker) {
-      start(state.key, state.resume && input.revise !== true, state.resume && input.retry === true, state.revise || (state.resume && input.revise === true))
+      start(state.context, state.key, state.resume && input.revise !== true, state.resume && input.retry === true, state.revise || (state.resume && input.revise === true))
     } else if (req.url === '/answer' && worker && prompt && prompt.id === input.id) {
       const id = prompt.id
       prompt = null

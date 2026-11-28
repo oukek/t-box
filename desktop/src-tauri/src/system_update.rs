@@ -96,6 +96,7 @@ pub struct Updates {
     journal: Mutex<Journal>,
     offer: Mutex<Option<Plan>>,
     pub busy: AtomicBool,
+    relaunch_requested: AtomicBool,
 }
 
 fn ui_key() -> &'static str {
@@ -144,7 +145,13 @@ impl Updates {
             journal: Mutex::new(journal),
             offer: Mutex::default(),
             busy: AtomicBool::new(false),
+            relaunch_requested: AtomicBool::new(false),
         }
+    }
+    pub fn prevents_exit(&self, code: Option<i32>) -> bool {
+        self.busy.load(Ordering::Acquire)
+            && code != Some(tauri::RESTART_EXIT_CODE)
+            && !(code == Some(0) && self.relaunch_requested.load(Ordering::Acquire))
     }
     fn save(&self, j: &Journal) -> Result<(), String> {
         system_ui::atomic(
@@ -463,6 +470,7 @@ pub async fn apply_system(
             if bundle.starts_with("/Volumes") || bundle.components().any(|part| part.as_os_str() == "AppTranslocation") {
                 return Err("请先将方舟拖到应用程序目录，再启动更新".into());
             }
+            let installed_bytes = bytes.len() as u64;
             tauri::async_runtime::spawn_blocking(move || candidate.install(bytes))
                 .await
                 .map_err(|_| "安装任务中断")?
@@ -473,6 +481,10 @@ pub async fn apply_system(
                 .arg(std::process::id().to_string()).arg(bundle)
                 .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
                 .spawn().map_err(|_| "更新已安装，请重新打开方舟")?;
+            // The relaunch helper waits for this PID. Permit only the installer-initiated
+            // exit after installation and helper startup both succeeded.
+            updates.relaunch_requested.store(true, Ordering::Release);
+            send("core", "安装完成，正在重启方舟", installed_bytes, Some(installed_bytes), ui_downloaded);
             app.exit(0);
         } else {
             updates.boot(&app);
@@ -501,7 +513,24 @@ pub async fn apply_system(
 
 #[cfg(test)]
 mod tests {
-    use super::newer;
+    use super::{newer, Updates};
+    use crate::system_ui::Active;
+    use std::sync::atomic::Ordering;
+    #[test]
+    fn installation_exit_is_allowed_only_after_relaunch_is_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        let updates = Updates::new(dir.path().to_path_buf(), Active::default());
+        assert!(!updates.prevents_exit(Some(0)));
+        updates.busy.store(true, Ordering::Release);
+        assert!(updates.prevents_exit(None));
+        assert!(updates.prevents_exit(Some(0)));
+        assert!(!updates.prevents_exit(Some(tauri::RESTART_EXIT_CODE)));
+        updates.relaunch_requested.store(true, Ordering::Release);
+        assert!(!updates.prevents_exit(Some(0)));
+        assert!(updates.prevents_exit(None));
+        assert!(updates.prevents_exit(Some(1)));
+    }
+
     #[test]
     fn compares_arbitrary_length_decimal_components() {
         assert!(newer("1.1.15", "1.1.9").unwrap());

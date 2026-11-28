@@ -222,8 +222,7 @@ fn main() {
         .expect("run T Ark")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
-                if code != Some(tauri::RESTART_EXIT_CODE)
-                    && app.state::<Updates>().busy.load(std::sync::atomic::Ordering::Acquire)
+                if app.state::<Updates>().prevents_exit(code)
                 {
                     api.prevent_exit();
                 }
