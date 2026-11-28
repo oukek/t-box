@@ -15,7 +15,7 @@ export function releaseGraph({ plan, steps, targets }) {
   const ends = nodes.filter((n) => n.step && !nodes.some((next) => next.deps.includes(n.id)))
   nodes.push({ id: 'approve', label: '核验候选 · 确认上线', lane: '确认', deps: ends.map((n) => n.id) })
   if (plan.ui) {
-    nodes.push({ id: 'publish-ui', label: '发布主界面 ' + plan.ui, lane: '上线', deps: ['approve'] })
+    nodes.push({ id: 'publish-ui', label: plan.macosCore ? `发布主界面 ${plan.ui} + Mac 核心 ${plan.macosCore}` : '发布主界面 ' + plan.ui, lane: '上线', deps: ['approve'] })
   }
   for (const t of targets) {
     const app = steps.find((s) => s.id === t.id)

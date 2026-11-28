@@ -63,7 +63,7 @@ const server = createServer(async (req, res) => {
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Content-Security-Policy':
-        'default-src \'none\'; script-src \'self\'; worker-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; connect-src \'self\'; font-src \'self\'; base-uri \'none\'; form-action \'none\'; frame-src \'none\'; object-src \'none\'',
+        `default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:${appId === 'shop-tools' ? ' https:' : ''}; media-src 'self' blob:${appId === 'shop-tools' ? ' https:' : ''}; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'`,
     })
     res.end(req.method === 'HEAD' ? undefined : bytes)
   } catch {

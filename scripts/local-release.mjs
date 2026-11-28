@@ -74,7 +74,7 @@ async function run() {
   for (const n of releaseGraph({ plan, steps, targets }).filter((n) => n.step)) {
     console.info(n.label + ' ← ' + n.deps.join('、'))
   }
-  console.info('上线范围：' + [plan.ui && '主界面 ' + plan.ui, ...targets.map((t) => t.id + ' ' + t.version)].filter(Boolean).join('、'))
+  console.info('上线范围：' + [plan.ui && '主界面 ' + plan.ui, plan.macosCore && 'Mac 核心 ' + plan.macosCore, ...targets.map((t) => t.id + ' ' + t.version)].filter(Boolean).join('、'))
   console.info('更新说明：\n' + plan.notes)
   if (args.includes('--plan')) {
     return
@@ -166,14 +166,14 @@ async function run() {
       let ui
       if (plan.ui) {
         const listing = await request('/system-releases')
-        if (sameHostInputs && state.ui?.version === plan.ui && state.runs.ui?.done) {
+        if (sameHostInputs && state.ui?.version === plan.ui && (state.ui.coreVersion ?? null) === (plan.macosCore ?? null) && state.runs.ui?.done) {
           const row = systemTarget(listing, state.ui)
           reused.ui = state.runs.ui
           ui = { ...state.ui, verified: row.state === 'live' && state.ui.verified }
         } else if (listing.interrupted || (listing.current && !newer(plan.ui, listing.current.version))) {
           throw new Error('主界面版本未高于线上，或有中断的发布待恢复')
         }
-        ui ??= { version: plan.ui, expected: listing.current?.build ?? null }
+        ui ??= { version: plan.ui, ...(plan.macosCore && { coreVersion: plan.macosCore }), expected: listing.current?.build ?? null }
       }
       const status = git('status', '--porcelain', '--untracked-files=all')
       console.info(repo, plan.branch, api, web, '\n' + (status || '工作区已提交'))

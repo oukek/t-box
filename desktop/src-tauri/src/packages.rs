@@ -219,6 +219,7 @@ mod tests {
         let local = PackageServer::start(
             first.directory(root.path(), &origin).unwrap(),
             &first.digest,
+            &first.app_id,
         )
         .unwrap();
         assert_eq!(

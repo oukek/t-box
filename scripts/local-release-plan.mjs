@@ -9,7 +9,7 @@ export const root = fileURLToPath(new URL('../', import.meta.url))
 export const statePath = resolve(root, command('git', ['-C', root, 'rev-parse', '--git-path', 'tbox-local-release.json']))
 export const versionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/
 export function planKey(plan) {
-  return createHash('sha256').update(JSON.stringify([plan.branch, plan.ui, plan.deployApi, plan.notes, Object.entries(plan.applications), ...(plan.uiAfterApi ? [true] : [])])).digest('hex')
+  return createHash('sha256').update(JSON.stringify([plan.branch, plan.ui, plan.deployApi, plan.notes, Object.entries(plan.applications), ...(plan.uiAfterApi ? [true] : []), ...(plan.macosCore ? [{ macosCore: plan.macosCore }] : [])])).digest('hex')
 }
 
 export function releaseState() {
@@ -38,6 +38,10 @@ export async function loadPlan() {
   }
   if (plan.uiAfterApi !== undefined && (typeof plan.uiAfterApi !== 'boolean' || (plan.uiAfterApi && (!plan.deployApi || !plan.ui)))) {
     throw new Error('uiAfterApi 需要同时启用 UI 和后端部署')
+  }
+  const versions = JSON.parse(readFileSync(resolve(root, 'release-versions.json'), 'utf8'))
+  if (plan.macosCore !== undefined && (!plan.ui || typeof plan.macosCore !== 'string' || !versionPattern.test(plan.macosCore) || plan.macosCore !== versions.macos.core)) {
+    throw new Error('macosCore 必须匹配 release-versions.json，且同时指定新的 UI 版本进行整包发布')
   }
   const steps = []
   const targets = []
@@ -77,7 +81,7 @@ export async function loadPlan() {
     if (plan.ui !== JSON.parse(readFileSync(resolve(root, 'release-versions.json'), 'utf8')).ui) {
       throw new Error('计划的 UI 版本必须匹配 release-versions.json')
     }
-    steps.push({ key: 'ui', kind: 'ui', label: '构建共享 UI ' + plan.ui, workflow: 'web-oss.yml', inputs: {} })
+    steps.push({ key: 'ui', kind: 'ui', label: plan.macosCore ? `构建 Mac 整包 ${plan.macosCore} · 主界面 ${plan.ui}` : '构建共享 UI ' + plan.ui, workflow: plan.macosCore ? 'desktop-release.yml' : 'web-oss.yml', inputs: {} })
   }
   if (!steps.length) {
     throw new Error('没有要发布的组件')

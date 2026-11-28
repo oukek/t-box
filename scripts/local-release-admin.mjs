@@ -86,8 +86,8 @@ export async function publishApp(request, target, notes) {
 
 export function systemTarget(list, target) {
   const row = list.candidates.find((r) => r.build === target.receipt)
-  if (!row || row.version !== target.version || !row.shared || row.coreVersion) {
-    throw new Error('后台缺少本次网页、PWA 和 Mac 的共享 UI 候选')
+  if (!row || row.version !== target.version || !row.shared || (row.coreVersion ?? null) !== (target.coreVersion ?? null)) {
+    throw new Error('后台缺少版本完全匹配的共享 UI / Mac 核心候选')
   }
   if (row.state === 'live' && list.current?.build === row.build) {
     return row

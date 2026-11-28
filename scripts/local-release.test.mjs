@@ -158,3 +158,20 @@ test('a reused deployment cannot open the approval gate before a changed depende
   }, () => {})
   assert.deepEqual(order, ['changed', 'approve'])
 })
+
+test('joint release verifies exact core version and cannot reuse a UI-only candidate', async () => {
+  const { planKey, loadPlan } = await import('./local-release-plan.mjs')
+  const base = { branch: 'main', ui: '1.3.8', deployApi: false, notes: '联合发布', applications: {} }
+  assert.notEqual(planKey(base), planKey({ ...base, macosCore: '1.0.6' }))
+  const target = { version: '1.3.8', coreVersion: '1.0.6', receipt: 'joint', expected: null }
+  const row = { build: 'joint', version: '1.3.8', coreVersion: '1.0.6', shared: true, state: 'pending' }
+  assert.equal(systemTarget({ current: null, candidates: [row] }, target), row)
+  for (const coreVersion of [null, '1.0.5', '1.0.7']) {
+    assert.throws(() => systemTarget({ current: null, candidates: [{ ...row, coreVersion }] }, target))
+  }
+  const { plan, steps } = await loadPlan()
+  if (plan.macosCore) {
+    assert.equal(steps.filter((s) => s.kind === 'ui').length, 1)
+    assert.equal(steps.find((s) => s.kind === 'ui').workflow, 'desktop-release.yml')
+  }
+})

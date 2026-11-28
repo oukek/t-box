@@ -190,16 +190,6 @@ watch([assistantHidden, () => navigation.assistantOpen], ([hidden, open]) => {
     }
   }
 }, { immediate: true })
-function desktopContextMenu(event: MouseEvent) {
-  if (navigation.screen !== 'applications' || (!isWebHost && !desktopShell) || (event.target instanceof Element && event.target.closest('dialog'))) {
-    return
-  }
-  event.preventDefault()
-  // Touch long-press and the keyboard menu key still enter icon arrangement.
-  if (event.button === 2 && (event as PointerEvent).pointerType !== 'touch') {
-    event.stopPropagation()
-  }
-}
 function focusWorkspace() {
   document.getElementById('workspace')?.focus()
 }
@@ -268,7 +258,6 @@ onBeforeUnmount(() => {
         ),
       }"
       tabindex="-1"
-      @contextmenu.capture="desktopContextMenu"
     >
       <header v-if="navigation.screen === 'applications'" class="desktop-topbar">
         <a

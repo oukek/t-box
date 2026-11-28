@@ -115,7 +115,7 @@ fn open_package(
     if let Some(server) = servers.get(&dir) {
         return Ok(server.url.clone());
     }
-    let server = PackageServer::start(dir.clone(), &pkg.digest)?;
+    let server = PackageServer::start(dir.clone(), &pkg.digest, &pkg.app_id)?;
     let url = server.url.clone();
     servers.insert(dir, server);
     Ok(url)
@@ -165,6 +165,11 @@ fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
+            let menu = tauri::menu::Menu::default(app.handle())?;
+            let inspector = tauri::menu::MenuItem::with_id(app, "developer-tools", "开发者工具", true, Some("CmdOrCtrl+Alt+I"))?;
+            let developer = tauri::menu::Submenu::with_items(app, "开发", true, &[&inspector])?;
+            menu.append(&developer)?;
+            app.set_menu(menu)?;
             let system_dir = app.path().app_local_data_dir()?.join("system");
             app.manage(Updates::new(system_dir, active));
             app.state::<Updates>().boot(app.handle());
@@ -182,6 +187,7 @@ fn main() {
                 "if (window === window.top && location.protocol === 'tauri:' && location.hostname === 'localhost') Object.defineProperty(window,'__TBOX_DESKTOP_KEY__',{{value:'{key}'}});"
             );
             tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
+                .devtools(true)
                 .initialization_script(initialization)
                 .build()?;
             Ok(())
@@ -198,6 +204,13 @@ fn main() {
             open_package,
             remove_package,
         ])
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "developer-tools" {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_devtools_open() { window.close_devtools(); } else { window.open_devtools(); }
+                }
+            }
+        })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.state::<Updates>().busy.load(std::sync::atomic::Ordering::Acquire) {

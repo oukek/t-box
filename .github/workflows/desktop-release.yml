@@ -1,6 +1,12 @@
 name: macOS 整包发布（内置本次界面）
+run-name: ${{ inputs.release_key || 'macOS 整包发布（内置本次界面）' }}
 on:
   workflow_dispatch:
+    inputs:
+      release_key:
+        description: 本地发版脚本跟踪编号（手动运行请留空）
+        type: string
+        required: false
   workflow_call:
     inputs:
       components:
@@ -13,6 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   candidate:
+    if: ${{ !inputs.release_key || startsWith(inputs.release_key, format('{0}-', github.sha)) }}
     runs-on: macos-15
     timeout-minutes: 150
     environment: desktop-release

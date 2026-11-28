@@ -165,6 +165,12 @@ function beginEditing() {
     editing.value = true
   }
 }
+function iconContextMenu(event: MouseEvent) {
+  if ((event as PointerEvent).pointerType === 'touch') {
+    event.preventDefault()
+    beginEditing()
+  }
+}
 function desktopClick(event: MouseEvent) {
   if (editing.value && event.target instanceof Element && !event.target.closest('.desktop-grid, .desktop-control, dialog, .desktop-feedback')) {
     finish()
@@ -179,7 +185,7 @@ function move(appId: string, direction: number) {
   desktop.reorder(order.value)
 }
 function keyboard(event: KeyboardEvent, appId: string) {
-  if (event.key === 'F2' || event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+  if (event.key === 'F2') {
     event.preventDefault()
     beginEditing()
     return
@@ -269,7 +275,7 @@ const status = computed(() =>
             @pointerdown="sort.start($event, app.manifest.id)"
             @keydown="keyboard($event, app.manifest.id)"
             @click="launch(app)"
-            @contextmenu.prevent="beginEditing"
+            @contextmenu="iconContextMenu"
           >
             <LauncherIcon
               :app-id="app.manifest.id"
