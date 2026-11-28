@@ -145,7 +145,7 @@ async function buildCore() {
   for (const arch of architectures) {
     const target = arch + '-apple-darwin'
     run('rustup', ['target', 'add', target])
-    run('pnpm', ['--filter', '@t-box/desktop', 'exec', 'tauri', 'build', '--target', target, '--bundles', 'app,dmg', '--config', config], { PATH: '/usr/bin:' + env.PATH, TBOX_UPDATE_ENDPOINT: env.API_BASE_URL + '/system-updates', TBOX_ARTIFACT_ORIGIN: env.APP_ARTIFACT_ORIGIN })
+    run('pnpm', ['--filter', '@t-box/desktop', 'exec', 'tauri', 'build', '--target', target, '--bundles', 'app,dmg', '--config', config], { PATH: path.join(root, 'scripts/macos-tools') + ':/usr/bin:' + env.PATH, TBOX_DMG_OUTPUT_DIR: path.join(bundleDir(arch), 'dmg'), TBOX_UPDATE_ENDPOINT: env.API_BASE_URL + '/system-updates', TBOX_ARTIFACT_ORIGIN: env.APP_ARTIFACT_ORIGIN })
     const dmg = await installerFile(arch)
     run('bash', ['scripts/verify-macos-bundle.sh', arch, updateFile(arch), dmg])
     const installerTag = r.core + (arch === 'aarch64' ? '-dmg.arm64' : '-dmg.intel')

@@ -1,0 +1,35 @@
+#!/bin/bash
+set -u
+
+# Tauri's DMG script invokes hdiutil through PATH. Only retry its private,
+# writable staging image; other hdiutil operations retain their exact behavior.
+binary="${TBOX_HDIUTIL_BIN:-/usr/bin/hdiutil}"
+output="${@: -1}"
+if [[ "${1:-}" != create || -z "${TBOX_DMG_OUTPUT_DIR:-}" || "$output" != "$TBOX_DMG_OUTPUT_DIR"/rw.*.dmg ]]; then
+  exec "$binary" "$@"
+fi
+errors="$(mktemp "${TMPDIR:-/tmp}/tbox-hdiutil.XXXXXX")" || exit 1
+trap 'rm -f "$errors"' EXIT
+attempt=1
+while true; do
+  if [[ "$attempt" -eq 1 ]]; then
+    args=("$@")
+  else
+    # A failed create may leave a partial staging image. Overwrite only this
+    # same private output on retry; never unmount or delete unrelated volumes.
+    args=(create -ov "${@:2}")
+  fi
+  if "$binary" "${args[@]}" 2>"$errors"; then
+    cat "$errors" >&2
+    exit 0
+  else
+    status=$?
+  fi
+  cat "$errors" >&2
+  if [[ "$attempt" -ge 4 ]] || ! grep -Fq 'hdiutil: create failed - Resource busy' "$errors"; then
+    exit "$status"
+  fi
+  echo "DMG staging image is busy; retry $attempt/3 after a short delay." >&2
+  sleep "${TBOX_DMG_RETRY_DELAY:-$((attempt * 5))}"
+  attempt=$((attempt + 1))
+done
